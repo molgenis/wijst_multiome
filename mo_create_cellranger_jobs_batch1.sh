@@ -37,7 +37,7 @@ LANES=('230105_lane1' '230105_lane2' '230105_lane3' '230105_lane4' \
 
 
 CORES='22'
-MEMORY_GB='190'
+MEMORY_GB='128'
 TMP_SIZE='512mb'
 RUNTIME='23:59:59'
 
@@ -75,10 +75,7 @@ for lane in ${LANES[*]}
 '> ${JOB_LOC}
 
     # do the prerequisites
-    echo 'mkdir -p '${OUTPUT_LOC_TMP}'/'${lane}'/' >> ${JOB_LOC}
     echo 'mkdir -p '${OUTPUT_LOC_FULL}'/' >> ${JOB_LOC}
-    echo 'mkdir -p '${OUTPUT_LOC_TMP}'/' >> ${JOB_LOC}
-    echo 'cd '${OUTPUT_LOC_TMP}'/' >> ${JOB_LOC}
 
     # for compatibility with older clusters, we need this
     echo 'export TENX_IGNORE_DEPRECATED_OS=1' >> ${JOB_LOC}
