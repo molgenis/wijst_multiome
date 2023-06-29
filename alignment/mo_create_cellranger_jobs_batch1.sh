@@ -77,6 +77,9 @@ for lane in ${LANES[*]}
     # do the prerequisites
     echo 'mkdir -p '${OUTPUT_LOC_FULL}'/' >> ${JOB_LOC}
 
+    # go to that directory
+    echo 'cd '${OUTPUT_LOC_FULL}'' >> ${JOB_LOC}
+
     # for compatibility with older clusters, we need this
     echo 'export TENX_IGNORE_DEPRECATED_OS=1' >> ${JOB_LOC}
 
@@ -88,6 +91,7 @@ for lane in ${LANES[*]}
 --localmem='${MEMORY_GB}' \
 --fastqs='${SEQUENCE_DIR_FULL}' \
 --sample='${samples}' \
+--chemistry=ARC-v1 \
 ' >> ${JOB_LOC}
 
 done
