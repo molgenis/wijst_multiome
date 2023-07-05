@@ -78,7 +78,7 @@ for lane in ${LANES[*]}
     echo 'mkdir -p '${OUTPUT_LOC_FULL}'/' >> ${JOB_LOC}
 
     # go to that directory
-    echo 'cd '${OUTPUT_LOC_FULL}'' >> ${JOB_LOC}
+    echo 'cd '${OUTPUT_LOC}'' >> ${JOB_LOC}
 
     # for compatibility with older clusters, we need this
     echo 'export TENX_IGNORE_DEPRECATED_OS=1' >> ${JOB_LOC}
