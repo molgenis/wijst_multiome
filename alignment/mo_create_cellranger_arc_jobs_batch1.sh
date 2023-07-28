@@ -6,8 +6,8 @@
 #Author       	: Roy Oelen
 ###################################################################
 
-CELLRANGER_LOC='/groups/umcg-franke-scrna/tmp02/software/cellranger-7.1.0/cellranger'
-REFDATA_LOC='/groups/umcg-franke-scrna/tmp02/external_datasets/refdata-cellranger-GRCh38-3.0.0/'
+CELLRANGER_LOC='/groups/umcg-franke-scrna/tmp02/software/cellranger-arc-2.0.2/cellranger-arc'
+REFDATA_LOC='/groups/umcg-franke-scrna/tmp02/external_datasets/refdata-cellranger-arc-GRCh38-2020-A-2.0.0/'
 SAMPLE_SHEET_LOC='/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/metadata/mo_sample_sheet_batch1.tsv'
 OUTPUT_LOC='/groups/umcg-franke-scrna/tmp02/projects/multiome/processed/joint/alignment/b38/'
 JOB_DIR='/groups/umcg-franke-scrna/tmp02/projects/multiome/processed/joint/alignment/jobs/b38/'
