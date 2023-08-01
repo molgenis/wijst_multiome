@@ -29,7 +29,7 @@ all_original_psam_loc <- '/groups/umcg-franke-scrna/tmp01/projects/multiome/proc
 all_new_psam_loc <- '/groups/umcg-franke-scrna/tmp01/projects/multiome/processed/genotype/ugli/unimputed/chr_all.psam'
 all_psam <- read.table(all_original_psam_loc, header = T, sep = '\t', check.names = F, comment.char = '')
 # we remove the sex column, as it is empty right now
-all_psam[['SEX']] <- NA
+all_psam[['SEX']] <- 0
 # needs to be numeric?
 all_psam[['PAT']] <- 0
 all_psam[['MAT']] <- 0
