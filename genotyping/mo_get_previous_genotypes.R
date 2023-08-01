@@ -184,9 +184,14 @@ sample_to_lane_condition[!is.na(sample_to_lane_condition[['UGLI_ID']]) & sample_
 sample_to_lane_condition[sample_to_lane_condition[['UGLI_FINAL']] == '' & is.na(sample_to_lane_condition[['GSA_ID']]), ]
 
 # restrict to what we need
-sample_to_lane_condition <- sample_to_lane_condition[, c('Sample', 'Lane', 'Condition', 'GSA_ID', 'availability', 'UGLI_ID')]
+sample_to_lane_condition <- sample_to_lane_condition[, c('Sample', 'Lane', 'Condition', 'GSA_ID', 'availability', 'UGLI_FINAL')]
 
 # check which one we are missing
 for (id in unique(sample_to_lane_condition[sample_to_lane_condition[['UGLI_FINAL']] == '' & is.na(sample_to_lane_condition[['GSA_ID']]), 'Sample'])) {
   print(id)
 }
+
+# get the final list of UGLI genotypes
+ugli_participants <- unique(sample_to_lane_condition[['UGLI_FINAL']][sample_to_lane_condition[['UGLI_FINAL']] != ''])
+# write that
+write.table(data.frame(x = ugli_participants), '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/metadata/mo_ugli_participants.txt', row.names = F, col.name = F, quote = F)
