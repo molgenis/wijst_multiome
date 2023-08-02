@@ -157,6 +157,8 @@ lldeep_to_psuedo_mapping_loc <- '/groups/umcg-lifelines/rsc01/releases/deep_link
 
 # the age/sex file for the DEEP participants
 deep_age_sex_loc <- '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/metadata/mo_age_sex_deep.tsv'
+# and the long covid one
+long_age_sex_loc <- '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/metadata/mo_age_sex_long.tsv'
 
 # read the files
 sample_to_lane_condition_unsplit <- read.table(sample_to_lane_condition_unsplit_loc, header = T, sep = '\t')
@@ -247,6 +249,12 @@ sample_to_lane_condition[grepl('^DEEP', sample_to_lane_condition[['Sample']]), '
 # and sex
 sample_to_lane_condition[grepl('^DEEP', sample_to_lane_condition[['Sample']]) & sample_to_lane_condition[['deep_safe_column']] %in% deep_age_sex[deep_age_sex[['sex']] == 'M', 'sample'], 'Seks'] <- 'male'
 sample_to_lane_condition[grepl('^DEEP', sample_to_lane_condition[['Sample']]) & sample_to_lane_condition[['deep_safe_column']] %in% deep_age_sex[deep_age_sex[['sex']] == 'F', 'sample'], 'Seks'] <- 'female'
+# same for the long covid samples
+long_age_sex <- read.table(long_age_sex_loc, sep = '\t', header = T)
+sample_to_lane_condition[grepl('^LONG', sample_to_lane_condition[['Sample']]), 'Age'] <- long_age_sex[match(sample_to_lane_condition[grepl('^LONG', sample_to_lane_condition[['Sample']]), 'Sample'], long_age_sex[['sample']]), 'age']
+sample_to_lane_condition[grepl('^LONG', sample_to_lane_condition[['Sample']]) & sample_to_lane_condition[['Sample']] %in% long_age_sex[long_age_sex[['sex']] == 'M', 'sample'], 'Seks'] <- 'male'
+sample_to_lane_condition[grepl('^LONG', sample_to_lane_condition[['Sample']]) & sample_to_lane_condition[['Sample']] %in% long_age_sex[long_age_sex[['sex']] == 'F', 'sample'], 'Seks'] <- 'female'
+
 
 # create an age+sex file for the UGLI participants
 age_sex_ugli <- unique(sample_to_lane_condition[!is.na(sample_to_lane_condition[['UGLI_FINAL']]) & sample_to_lane_condition[['UGLI_FINAL']] != '',  c('UGLI_FINAL', 'Seks', 'Age')])
