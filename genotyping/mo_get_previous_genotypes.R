@@ -242,3 +242,8 @@ age_sex_ugli <- unique(sample_to_lane_condition[!is.na(sample_to_lane_condition[
 colnames(age_sex_ugli) <- c('sample', 'sex', 'age')
 # write the table
 write.table(age_sex_ugli, '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/metadata/mo_age_sex_ugli.tsv', sep = '\t', row.names = F, col.names = T, quote = F)
+
+# also one for the new GSA participants
+age_sex_mo <- unique(sample_to_lane_condition[!is.na(sample_to_lane_condition[['GSA_ID']]) & sample_to_lane_condition[['GSA_ID']] != '',  c('GSA_ID', 'Seks', 'Age')])
+colnames(age_sex_mo) <- c('sample', 'sex', 'age')
+write.table(age_sex_mo, '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/metadata/mo_age_sex_batch12.tsv', sep = '\t', row.names = F, col.names = T, quote = F)
