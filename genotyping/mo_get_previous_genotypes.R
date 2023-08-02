@@ -155,6 +155,9 @@ pseudo_int_to_ugli_mapping_loc <- '/groups/umcg-lifelines/tmp01/releases/gsa_lin
 # and finally the DEEP mapping
 lldeep_to_psuedo_mapping_loc <- '/groups/umcg-lifelines/rsc01/releases/deep_linkage_files/v1/DEEP_linkage_file_cluster.dat'
 
+# the age/sex file for the DEEP participants
+deep_age_sex_loc <- '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/metadata/mo_age_sex_deep.tsv'
+
 # read the files
 sample_to_lane_condition_unsplit <- read.table(sample_to_lane_condition_unsplit_loc, header = T, sep = '\t')
 sample_to_ugli <- read.table(sample_to_ugli_loc, header = T, sep = '\t')
@@ -235,6 +238,15 @@ write.table(
     x = unique(sample_to_lane_condition[['UGLI_FINAL']][!is.na(sample_to_lane_condition[['UGLI_FINAL']])]),
     y = unique(sample_to_lane_condition[['UGLI_FINAL']][!is.na(sample_to_lane_condition[['UGLI_FINAL']])])
   ), '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/metadata/mo_ugli_plinkfilter.tsv', row.names = F, col.names = F, quote = F)
+
+
+# read the deep age/sex file
+deep_age_sex <- read.table(deep_age_sex_loc, sep = '\t', header = T)
+# add the age for the deep participants that we don't have it yet
+sample_to_lane_condition[grepl('^DEEP', sample_to_lane_condition[['Sample']]), 'Age'] <- deep_age_sex[match(sample_to_lane_condition[grepl('^DEEP', sample_to_lane_condition[['Sample']]), 'deep_safe_column'], deep_age_sex[['sample']]), 'age']
+# and sex
+sample_to_lane_condition[grepl('^DEEP', sample_to_lane_condition[['Sample']]) & sample_to_lane_condition[['deep_safe_column']] %in% deep_age_sex[deep_age_sex[['sex']] == 'M', 'sample'], 'Seks'] <- 'male'
+sample_to_lane_condition[grepl('^DEEP', sample_to_lane_condition[['Sample']]) & sample_to_lane_condition[['deep_safe_column']] %in% deep_age_sex[deep_age_sex[['sex']] == 'F', 'sample'], 'Seks'] <- 'female'
 
 # create an age+sex file for the UGLI participants
 age_sex_ugli <- unique(sample_to_lane_condition[!is.na(sample_to_lane_condition[['UGLI_FINAL']]) & sample_to_lane_condition[['UGLI_FINAL']] != '',  c('UGLI_FINAL', 'Seks', 'Age')])
