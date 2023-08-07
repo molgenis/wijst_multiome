@@ -6,11 +6,11 @@
 #Author       	: Roy Oelen, Martijn Vochteloo
 ###################################################################
 
-LANE_DIR='/groups/umcg-franke-scrna/tmp02/projects/multiome/processed/rna/alignment/b38/include_introns/'
-JOB_DIR='/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/ambient_rna_correction/CellBender/jobs/rna/b38/include_introns/'
-OUTPUT_DIR='/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/ambient_rna_correction/CellBender/output/rna/b38/include_introns/'
+LANE_DIR='/groups/umcg-franke-scrna/tmp02/projects/multiome/processed/joint/alignment/b38/include_introns/'
+JOB_DIR='/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/ambient_rna_correction/CellBender/jobs/joint/b38/include_introns/'
+OUTPUT_DIR='/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/ambient_rna_correction/CellBender/output/joint/b38/include_introns/'
 OUTPUT_FILE_APPPEND='cellbent_feature_bc_matrix.h5'
-INPUT_FILE_APPEND='raw_feature_bc_matrix.h5'
+INPUT_FILE_APPEND='outs/raw_feature_bc_matrix.h5'
 
 # these are the lanes to run through cellranger
 LANES=('230105_lane1' '230105_lane2' '230105_lane3' '230105_lane4' \
