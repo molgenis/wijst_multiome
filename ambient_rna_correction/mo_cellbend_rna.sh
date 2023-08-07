@@ -6,7 +6,7 @@
 #Author       	: Roy Oelen, Martijn Vochteloo
 ###################################################################
 
-LANE_DIR='/groups/umcg-franke-scrna/tmp02/projects/multiome/processed/joint/alignment/b38/include_introns/'
+LANE_DIR='/groups/umcg-franke-scrna/tmp02/projects/multiome/processed/joint/alignment/b38/'
 JOB_DIR='/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/ambient_rna_correction/CellBender/jobs/joint/b38/include_introns/'
 OUTPUT_DIR='/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/ambient_rna_correction/CellBender/output/joint/b38/include_introns/'
 OUTPUT_FILE_APPPEND='cellbent_feature_bc_matrix.h5'
