@@ -7,10 +7,14 @@
 ###################################################################
 
 LANE_DIR='/groups/umcg-franke-scrna/tmp02/projects/multiome/processed/joint/alignment/b38/'
-JOB_DIR='/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/ambient_rna_correction/CellBender/jobs/joint/b38/include_introns/'
-OUTPUT_DIR='/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/ambient_rna_correction/CellBender/output/joint/b38/include_introns/'
+JOB_DIR='/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/ambient_rna_correction/CellBender/jobs/joint/b38/include_introns/expectcells/'
+OUTPUT_DIR='/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/ambient_rna_correction/CellBender/output/joint/b38/include_introns/expectcells/'
 OUTPUT_FILE_APPPEND='cellbent_feature_bc_matrix.h5'
 INPUT_FILE_APPEND='outs/raw_feature_bc_matrix.h5'
+CELL_NUMBERS_LOC='/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/metadata/mo_cell_numbers.tsv'
+
+# option for setting expect_cells
+SET_EXPECTED_CELLS=1
 
 # these are the lanes to run through cellranger
 LANES=('230105_lane1' '230105_lane2' '230105_lane3' '230105_lane4' \
@@ -32,7 +36,7 @@ LANES=('230105_lane1' '230105_lane2' '230105_lane3' '230105_lane4' \
 '230302_lane1' '230302_lane2' '230302_lane3' '230302_lane4' \
 '230302_lane5' '230302_lane6' '230302_lane7' '230302_lane8' \
 '230316_lane1' '230316_lane2' '230316_lane3' '230316_lane4' \
-'230316_lane5' '230316_lane6' '230316_lane7' '230316_lane8' \
+'230316_lane5' '230316_lane6' '230316_lane7' \
 )
 
 
@@ -78,18 +82,31 @@ for lane in ${LANES[*]}
 '> ${JOB_LOC}
 
     # load environment
-    echo 'conda activate cellbender_env' >> ${JOB_LOC}
+    echo '~/miniconda3/bin/activate cellbender_env' >> ${JOB_LOC}
 
     # and CUDA
     echo 'ml CUDA/11.7.0' >> ${JOB_LOC}
 
     # build the job
-    echo 'cellbender \
+    echo '~/miniconda3/envs/cellbender_env/bin/cellbender \
  remove-background \
   --input='${INPUT_FILE_FULL}' \
-  --output='${OUTPUT_FILE_FULL}' \
-  --cuda 
-' >> ${JOB_LOC}
+  --output='${OUTPUT_FILE_FULL}' \' >> ${JOB_LOC}
+
+    # add the expected cells as a parameter if requested
+    if [ ${SET_EXPECTED_CELLS} -eq 1 ]
+    then
+      # grab the data for this lane
+      lane_data=$(grep ${lane} ${CELL_NUMBERS_LOC})
+
+      # the cells are the second entry
+      nr_cells=$(echo ${lane_data} | awk '{print $2}')
+
+      # add that parameter to the bash script
+      echo '  --expected-cells='${nr_cells}' \' >> ${JOB_LOC}
+    fi
+
+    echo '  --cuda' >> ${JOB_LOC}
 
 done
 
