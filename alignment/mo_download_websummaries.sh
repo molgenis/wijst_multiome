@@ -8,7 +8,7 @@
 ###################################################################
 
 
-LANES_DIR="/groups/umcg-franke-scrna/tmp02/projects/multiome/processed/rna/alignment/b38/include_introns/"
+LANES_DIR="/groups/umcg-franke-scrna/tmp02/projects/multiome/processed/joint/alignment/b38/"
 LANE_SUMMARY_APPEND="outs/web_summary.html"
 LOCAL_DIR="~/mo_web_summaries/"
 

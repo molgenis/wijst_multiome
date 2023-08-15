@@ -145,3 +145,26 @@ imputation:
 #         --export ALL \
 #         --time=23:59:59" \
 #   > $LOG/nohup_`date +%Y%m%d.%H:%M:%S`.log &
+
+# 10      MO1805-A        0       1       PROBLEM 0.9986  
+# 23      MO193   0       1       PROBLEM 0.9957  
+# 26      MO221   0       2       PROBLEM -0.006616
+# 42      MO1403-1A       0       1       PROBLEM 0.9991  
+# 52      MO218   0       1       PROBLEM 0.9971  
+# 58      MO222   0       2       PROBLEM -0.05067
+# 74      MO1949-A        0       2       PROBLEM 0.01787 
+# 76      MO57    2       1       PROBLEM 0.9986  
+# 82      MO1719-1A       0       2       PROBLEM 0.03367 
+# 90      MO223   0       2       PROBLEM -0.1195 
+# 100     MO214   1       2       PROBLEM -0.03794
+# 106     MO1652-1A       0       2       PROBLEM 0.006367
+# 114     MO1728-1A       0       1       PROBLEM 0.9959  
+# 122     MO224   0       1       PROBLEM 0.9983  
+# 138     MO219   0       2       PROBLEM 0.01407 
+# 146     MO2210-A        0       1       PROBLEM 0.9985  
+# 154     MO225   0       2       PROBLEM 0.04921 
+# 159     MO209   2       1       PROBLEM 0.9973  
+# 170     MO220   0       2       PROBLEM 0.01148 
+# 178     MO2452-A        0       2       PROBLEM 0.0229  
+# 181     MO78    1       2       PROBLEM 0.008514
+# 186     MO226   0       2       PROBLEM 0.006479
