@@ -1,7 +1,7 @@
 #!/usr/bin/env Rscript
 ############################################################################################################################
 # Authors: Roy Oelen
-# Name: mo_create_ugli_psam.R
+# Name: mo_create_batch2_psam.R
 # Function: 
 ############################################################################################################################
 
@@ -20,19 +20,21 @@
 ####################
 
 # metadata file location
-metadata_loc <- '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/metadata/mo_age_sex_ugli.tsv'
+metadata_loc <- '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/metadata/mo_age_sex_batch12.tsv'
 # read the metadata file
 metadata <- read.table(metadata_loc, sep = '\t', header = T)
 
 # create the required psam file
-all_original_psam_loc <- '/groups/umcg-franke-scrna/tmp01/projects/multiome/processed/genotype/ugli/unimputed/chr_all.psam.original'
-all_new_psam_loc <- '/groups/umcg-franke-scrna/tmp01/projects/multiome/processed/genotype/ugli/unimputed/chr_all.psam'
+all_original_psam_loc <- '/groups/umcg-franke-scrna/tmp01/projects/multiome/processed/genotype/GSA2023_1044_025_V3/unimputed/GSA2022_1044_025_V3.psam.original'
+all_new_psam_loc <- '/groups/umcg-franke-scrna/tmp01/projects/multiome/processed/genotype/GSA2023_1044_025_V3/unimputed/GSA2022_1044_025_V3.psam'
 all_psam <- read.table(all_original_psam_loc, header = T, sep = '\t', check.names = F, comment.char = '')
 # we remove the sex column, as it is empty right now
 all_psam[['SEX']] <- 0
 # needs to be numeric?
 all_psam[['PAT']] <- 0
 all_psam[['MAT']] <- 0
+# rename IID
+all_psam[['IID']] <- paste('MO', all_psam[['IID']], sep = '')
 # grab the sex from the metadata
 all_psam_sex <- metadata[match(all_psam[['IID']], metadata[['sample']]), 'sex']
 # create the empty sex column in the psam

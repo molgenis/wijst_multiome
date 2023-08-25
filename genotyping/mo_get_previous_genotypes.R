@@ -2,7 +2,7 @@
 ############################################################################################################################
 # Authors: Roy Oelen, Maryna Korshevniuk
 # Name: mo_get_previous_genotypes.R
-# Function: 
+# Function: update the sample sheet to the correct format, collect previously genotyped individuals, create age/sex metadata
 ############################################################################################################################
 
 ####################
@@ -14,6 +14,13 @@
 # Functions        #
 ####################
 
+#' split the rows up where the lane column has multiple entires
+#' 
+#' @param unsplit_table the table where the lane column can have multiple lanes
+#' @param lane_column which column contains the lanes
+#' @param split the character to split by
+#' @returns the same table, but with the lane column only containing one lane, with a row for each lane
+#' sample_to_lane_condition <- split_lanes(unsplit_table  = sample_to_lane_condition_unsplit, lane_column = 'Lane', split = ', ')
 split_lanes <- function(unsplit_table, lane_column='lane', split=',') {
   # check how many original rows we have
   original_nrow <- nrow(unsplit_table)
@@ -55,7 +62,13 @@ split_lanes <- function(unsplit_table, lane_column='lane', split=',') {
   return(split_table)
 }
 
-
+#' for entries in the table missing the GSA_ID, see if the table contains another entry for that sample, where the GSA_ID was given, and use that GSA_ID
+#' 
+#' @param sample_condition_table the table containing the samples and the GSA IDs
+#' @param gsa_column the column containing the GSA ID
+#' @param sample_column the column containing the sample name
+#' @returns the same table, with the GSA IDs filled where possible
+#' sample_to_lane_condition <- get_matched_gsa_id(sample_to_lane_condition)
 get_matched_gsa_id <- function(sample_condition_table, gsa_column='GSA_ID', sample_column='Sample') {
   # get the gsa IDs we have
   gsa_ids <- unique(sample_condition_table[[gsa_column]])
@@ -84,7 +97,16 @@ get_matched_gsa_id <- function(sample_condition_table, gsa_column='GSA_ID', samp
   return(sample_condition_table)
 }
 
-
+#' for samples from the LifeLines DEEP cohort, add the 8-number pseudo ID
+#' 
+#' @param sample_condition_table the table containing the samples and the unformatted LifeLines DEEP IDs
+#' @param deep_to_pseudo_id the table mapping LifeLines DEEP IDs to the the 8-number pseudo ID
+#' @param deep_column the column containing the sample name in the unformatted LifeLines DEEP format
+#' @param genotype_column the column to place the 8-number pseudo ID
+#' @param deep_to_pseudo_id_deep_column the column in deep_to_pseudo_id that contains the formatted LifeLines DEEP ID
+#' @param deep_to_pseudo_id_pseudo_column the column in deep_to_pseudo_id that contains the 8-number pseudo ID
+#' @returns the same table, with the formatted LineLines DEEP name in 'deep_safe_column', and the 'genotype_column' updated with the 8-number pseudo ID where possible
+#' sample_to_lane_condition <- add_sample_id_for_deep(sample_to_lane_condition, lldeep_to_psuedo_mapping)
 add_sample_id_for_deep <- function(sample_condition_table, deep_to_pseudo_id, deep_column='Sample', genotype_column='Genotype', deep_to_pseudo_id_deep_column='LLDEEP_ID', deep_to_pseudo_id_pseudo_column='PSEUDOIDEXT') {
   # we need to pad zeroes to the beginning of the NEXT IDs
   sample_condition_table[['deep_safe_column']] <- apply(sample_condition_table, 1, function(x){
@@ -132,6 +154,11 @@ pseudo_int_to_ext_loc <- '/groups/umcg-lifelines/tmp01/releases/pheno_lifelines_
 pseudo_int_to_ugli_mapping_loc <- '/groups/umcg-lifelines/tmp01/releases/gsa_linkage_files/v1/gsa_linkage_file.dat'
 # and finally the DEEP mapping
 lldeep_to_psuedo_mapping_loc <- '/groups/umcg-lifelines/rsc01/releases/deep_linkage_files/v1/DEEP_linkage_file_cluster.dat'
+
+# the age/sex file for the DEEP participants
+deep_age_sex_loc <- '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/metadata/mo_age_sex_deep.tsv'
+# and the long covid one
+long_age_sex_loc <- '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/metadata/mo_age_sex_long.tsv'
 
 # read the files
 sample_to_lane_condition_unsplit <- read.table(sample_to_lane_condition_unsplit_loc, header = T, sep = '\t')
@@ -183,15 +210,60 @@ sample_to_lane_condition[!is.na(sample_to_lane_condition[['UGLI_ID']]) & sample_
 # see if we are missing anything still 
 sample_to_lane_condition[sample_to_lane_condition[['UGLI_FINAL']] == '' & is.na(sample_to_lane_condition[['GSA_ID']]), ]
 
-# restrict to what we need
-sample_to_lane_condition <- sample_to_lane_condition[, c('Sample', 'Lane', 'Condition', 'GSA_ID', 'availability', 'UGLI_FINAL')]
-
 # check which one we are missing
-for (id in unique(sample_to_lane_condition[sample_to_lane_condition[['UGLI_FINAL']] == '' & is.na(sample_to_lane_condition[['GSA_ID']]), 'Sample'])) {
+for (id in unique(sample_to_lane_condition[
+  (is.na(sample_to_lane_condition[['UGLI_FINAL']]) | sample_to_lane_condition[['UGLI_FINAL']] == '') & 
+  (is.na(sample_to_lane_condition[['GSA_ID']]) | is.na(sample_to_lane_condition[['GSA_ID']]) == '')
+  , 'Sample'])) {
   print(id)
 }
 
-# get the final list of UGLI genotypes
-ugli_participants <- unique(sample_to_lane_condition[['UGLI_FINAL']][sample_to_lane_condition[['UGLI_FINAL']] != ''])
-# write that
-write.table(data.frame(x = ugli_participants), '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/metadata/mo_ugli_participants.txt', row.names = F, col.name = F, quote = F)
+# create a new final column
+sample_to_lane_condition[['sample']] <- NA
+# update the GSA ID to have the actual GSA format
+sample_to_lane_condition[!is.na(sample_to_lane_condition[['GSA_ID']]) & sample_to_lane_condition[['GSA_ID']] != '', 'GSA_ID'] <- paste('MO', sample_to_lane_condition[!is.na(sample_to_lane_condition[['GSA_ID']]) & sample_to_lane_condition[['GSA_ID']] != '', 'GSA_ID'], sep = '')
+# use gsa where possible
+sample_to_lane_condition[!is.na(sample_to_lane_condition[['GSA_ID']]) & sample_to_lane_condition[['GSA_ID']] != '', 'sample'] <- sample_to_lane_condition[!is.na(sample_to_lane_condition[['GSA_ID']]) & sample_to_lane_condition[['GSA_ID']] != '', 'GSA_ID']
+# UGLI where we can
+sample_to_lane_condition[!is.na(sample_to_lane_condition[['UGLI_FINAL']]) & sample_to_lane_condition[['UGLI_FINAL']] != '', 'sample'] <- sample_to_lane_condition[!is.na(sample_to_lane_condition[['UGLI_FINAL']]) & sample_to_lane_condition[['UGLI_FINAL']] != '', 'UGLI_FINAL']
+
+# subset to what we need from a sample sheet
+sample_sheet <- sample_to_lane_condition[, c('Lane', 'Condition', 'sample')]
+# rename columns
+colnames(sample_sheet) <- c('lane', 'condition', 'sample')
+# write the resulting sample sheet
+write.table(sample_sheet, '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/metadata/mo_sample_sheet_final.tsv', sep = '\t', row.names = F, col.names = T, quote = F)
+
+# get a list of the UGLI participants, to use as a subsetting list for the UGLI genotype data
+write.table(
+  data.frame(
+    x = unique(sample_to_lane_condition[['UGLI_FINAL']][!is.na(sample_to_lane_condition[['UGLI_FINAL']])]),
+    y = unique(sample_to_lane_condition[['UGLI_FINAL']][!is.na(sample_to_lane_condition[['UGLI_FINAL']])])
+  ), '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/metadata/mo_ugli_plinkfilter.tsv', row.names = F, col.names = F, quote = F)
+
+
+# read the deep age/sex file
+deep_age_sex <- read.table(deep_age_sex_loc, sep = '\t', header = T)
+# add the age for the deep participants that we don't have it yet
+sample_to_lane_condition[grepl('^DEEP', sample_to_lane_condition[['Sample']]), 'Age'] <- deep_age_sex[match(sample_to_lane_condition[grepl('^DEEP', sample_to_lane_condition[['Sample']]), 'deep_safe_column'], deep_age_sex[['sample']]), 'age']
+# and sex
+sample_to_lane_condition[grepl('^DEEP', sample_to_lane_condition[['Sample']]) & sample_to_lane_condition[['deep_safe_column']] %in% deep_age_sex[deep_age_sex[['sex']] == 'M', 'sample'], 'Seks'] <- 'male'
+sample_to_lane_condition[grepl('^DEEP', sample_to_lane_condition[['Sample']]) & sample_to_lane_condition[['deep_safe_column']] %in% deep_age_sex[deep_age_sex[['sex']] == 'F', 'sample'], 'Seks'] <- 'female'
+# same for the long covid samples
+long_age_sex <- read.table(long_age_sex_loc, sep = '\t', header = T)
+sample_to_lane_condition[grepl('^LONG', sample_to_lane_condition[['Sample']]), 'Age'] <- long_age_sex[match(sample_to_lane_condition[grepl('^LONG', sample_to_lane_condition[['Sample']]), 'Sample'], long_age_sex[['sample']]), 'age']
+sample_to_lane_condition[grepl('^LONG', sample_to_lane_condition[['Sample']]) & sample_to_lane_condition[['Sample']] %in% long_age_sex[long_age_sex[['sex']] == 'M', 'sample'], 'Seks'] <- 'male'
+sample_to_lane_condition[grepl('^LONG', sample_to_lane_condition[['Sample']]) & sample_to_lane_condition[['Sample']] %in% long_age_sex[long_age_sex[['sex']] == 'F', 'sample'], 'Seks'] <- 'female'
+
+
+# create an age+sex file for the UGLI participants
+age_sex_ugli <- unique(sample_to_lane_condition[!is.na(sample_to_lane_condition[['UGLI_FINAL']]) & sample_to_lane_condition[['UGLI_FINAL']] != '',  c('UGLI_FINAL', 'Seks', 'Age')])
+# set other column names
+colnames(age_sex_ugli) <- c('sample', 'sex', 'age')
+# write the table
+write.table(age_sex_ugli, '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/metadata/mo_age_sex_ugli.tsv', sep = '\t', row.names = F, col.names = T, quote = F)
+
+# also one for the new GSA participants
+age_sex_mo <- unique(sample_to_lane_condition[!is.na(sample_to_lane_condition[['GSA_ID']]) & sample_to_lane_condition[['GSA_ID']] != '',  c('GSA_ID', 'Seks', 'Age')])
+colnames(age_sex_mo) <- c('sample', 'sex', 'age')
+write.table(age_sex_mo, '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/metadata/mo_age_sex_batch12.tsv', sep = '\t', row.names = F, col.names = T, quote = F)
