@@ -77,7 +77,7 @@ for lane in ${LANES[*]} ; do
         gunzip -c ${LANES_DIR}/${lane_id}/${LANE_BARCODE_APPEND} > ${output_folder}/barcodes.tsv
         export SINGULARITY_BINDPATH=\"/groups/umcg-franke-scrna/tmp02/projects/multiome/,/groups/umcg-franke-scrna/tmp02/external_datasets/,/groups/umcg-franke-scrna/tmp02/software/ \"
         singularity exec ${SOUPOR_IMAGE} souporcell_pipeline.py \
--i ${LANES_DIR}/${lane_id}/outs/possorted_genome_bam.bam \
+-i ${LANES_DIR}/${lane_id}/${LANE_READGROUP_APPEND} \
 -b ${output_folder}/barcodes.tsv \
 -f ${GENOME_LOC} \
 -t 8 \
