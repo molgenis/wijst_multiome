@@ -7,8 +7,13 @@
 ###################################################################
 
 LANE_DIR='/groups/umcg-franke-scrna/tmp02/projects/multiome/processed/joint/alignment/b38/'
+#LANE_DIR='/groups/umcg-franke-scrna/tmp02/projects/multiome/processed/rna/alignment/b38/include_introns/'
 JOB_DIR='/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/ambient_rna_correction/CellBender/jobs/joint/b38/include_introns/expectcells/'
+#JOB_DIR='/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/ambient_rna_correction/CellBender/jobs/joint/b38/include_introns/'
+#JOB_DIR='/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/ambient_rna_correction/CellBender/jobs/rna/b38/include_introns/'
 OUTPUT_DIR='/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/ambient_rna_correction/CellBender/output/joint/b38/include_introns/expectcells/'
+#OUTPUT_DIR='/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/ambient_rna_correction/CellBender/output/joint/b38/include_introns/'
+#OUTPUT_DIR='/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/ambient_rna_correction/CellBender/jobs/rna/b38/include_introns/'
 OUTPUT_FILE_APPPEND='cellbent_feature_bc_matrix.h5'
 INPUT_FILE_APPEND='outs/raw_feature_bc_matrix.h5'
 CELL_NUMBERS_LOC='/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/metadata/mo_cell_numbers.tsv'
@@ -41,7 +46,7 @@ LANES=('230105_lane1' '230105_lane2' '230105_lane3' '230105_lane4' \
 
 
 CORES='4'
-MEMORY_GB='8'
+MEMORY_GB='24'
 TMP_SIZE='512mb'
 RUNTIME='23:59:59'
 NR_OF_GPUS='2'
@@ -62,7 +67,7 @@ for lane in ${LANES[*]}
 
     # and the output file
     OUTPUT_FILE_FULL=${OUTPUT_LOC_FULL}'/'${OUTPUT_FILE_APPPEND}
-    
+
     # the input file as well
     INPUT_FILE_FULL=${LANE_DIR}'/'${lane}'/'${INPUT_FILE_APPEND}
 
@@ -109,7 +114,6 @@ for lane in ${LANES[*]}
     echo '  --cuda' >> ${JOB_LOC}
 
 done
-
 
 # required environment set up like this:
 # conda create -n cellbender_env python=3.10
