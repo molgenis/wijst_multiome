@@ -10,7 +10,7 @@
 LANES_DIR="/groups/umcg-franke-scrna/tmp02/projects/multiome/processed/joint/alignment/b38/"
 LANE_READGROUP_APPEND="outs/gex_possorted_bam.bam"
 BARCODE_DIR="/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/demultiplexing/souporcell/barcodes/"
-GENOTYPES_LOC=""
+GENOTYPES_LOC="/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/genotype/imputed_hg38_info_filled_genfiltered_mmaf005.vcf.gz"
 OUTPUT_DIR="/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/demultiplexing/popscle_tools_filtered/alignment/filtered_alignment/"
 JOB_DIR="/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/demultiplexing/popscle_tools_filtered/alignment/jobs/"
 FILTER_CMD="/groups/umcg-franke-scrna/tmp02/software/popscle_helper_tools/filter_bam_file_for_popscle_dsc_pileup.sh"
@@ -41,10 +41,10 @@ for dir in "$LANES_DIR"/*lane*/ ; do
 #SBATCH --export=NONE
 #SBATCH --get-user-env=L
 	set -e
-        
+
         ml SAMtools
         ml BEDTools
-        
+
         ${FILTER_CMD} \\
                 ${original_bam_loc} \\
                 ${barcode_loc} \\
@@ -52,3 +52,4 @@ for dir in "$LANES_DIR"/*lane*/ ; do
                 ${filtered_bam_loc}
         " > ${output_job}
 done
+
