@@ -8,7 +8,7 @@
 #SBATCH --nodes=1
 #SBATCH --export=NONE
 #SBATCH --get-user-env=L
-#SBATCH --tmp=512gb
+#SBATCH --tmp=512mb
 
 ###################################################################
 #Script Name	  : mo_subset_for_genotype_correlations_SBATCH.sh
@@ -18,7 +18,7 @@
 ###################################################################
 
 # the location of the full genotype file
-FULL_GENO_FILE='/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/genotype/imputed_hg38_all_anc.vcf.gz'
+FULL_GENO_FILE='/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/genotype/imputed_hg38_all_anc_mmaf005_chrprepend.vcf.gz'
 # where we want the subsetted genotypes
 GENOTYPE_LANE_LOC='/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/genotype/genotype_per_lane/'
 # the prepend of the genotype files
