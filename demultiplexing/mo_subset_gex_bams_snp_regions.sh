@@ -48,7 +48,6 @@ for dir in "$LANES_DIR"/*lane*/ ; do
 
         ml SAMtools
         #ml BEDTools
-        alias bedtools="/groups/umcg-franke-scrna/tmp02/software/bedtools/bedtools.static"
         export PATH="/groups/umcg-franke-scrna/tmp02/software/bedtools/:'$PATH'"
 
         ${FILTER_CMD} \\
