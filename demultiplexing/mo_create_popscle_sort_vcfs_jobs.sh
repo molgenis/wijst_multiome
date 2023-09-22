@@ -60,13 +60,13 @@ for dir in "$LANES_DIR"/*lane*/ ; do
         ${SORT_CMD} \\
                 ${filtered_bam_loc} \\
                 ${genotype_filter_loc}.gz \\
-                > ${genotype_sorted_loc} \\
+                > ${genotype_sorted_zipped_loc} \\
 
-        bgzip -c ${genotype_sorted_loc} > ${genotype_sorted_zipped_loc}
+        #bgzip -c ${genotype_sorted_loc} > ${genotype_sorted_zipped_loc}
 
         tabix -p vcf ${genotype_sorted_zipped_loc}
 
-        rm ${genotype_sorted_loc}
+        #rm ${genotype_sorted_loc}
 
         rm -r ${genotype_sorted_tmp_directory}
 
