@@ -27,14 +27,16 @@ for dir in "$LANES_DIR"/*lane*/ ; do
     # where the BAM is with our sort error
     filtered_bam_loc=${FILTERED_BAM_DIR}"/mo_"${lane_id}"_genofiltered_gex_possorted_bam.bam"
     # where we place the sorted VCF
-    genotype_sorted_loc=${OUTPUT_DIR}"mo_bamsorted_"${lane_id}"_maf005.vcf"
+    genotype_sorted_loc=${OUTPUT_DIR}"mo_gex_bamsorted_"${lane_id}"_maf005.vcf"
     # and which we will zip
-    genotype_sorted_zipped_loc=${OUTPUT_DIR}"mo_bamsorted_"${lane_id}"_maf005.vcf.gz"
+    genotype_sorted_zipped_loc=${OUTPUT_DIR}"mo_gex_bamsorted_"${lane_id}"_maf005.vcf.gz"
+    # create a temporary sorting directory
+    genotype_sorted_tmp_directory=${OUTPUT_DIR}"mo_gex_bamsorted_"${lane_id}"_maf005_tmp/"
 
     echo -e "#!/usr/bin/env bash
-#SBATCH --job-name=vcf_sort_${lane_id}
-#SBATCH --output=vcf_sort_${lane_id}.out
-#SBATCH --error=vcf_sort_${lane_id}.err
+#SBATCH --job-name=vcf_sort_gex_${lane_id}
+#SBATCH --output=vcf_sort_gex_${lane_id}.out
+#SBATCH --error=vcf_sort_gex_${lane_id}.err
 #SBATCH --time=23:59:00
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=8gb
@@ -45,16 +47,28 @@ for dir in "$LANES_DIR"/*lane*/ ; do
 	set -e
 
         ml SAMtools
-        ml BEDTools
+        export PATH="/groups/umcg-franke-scrna/tmp02/software/bedtools/:'$PATH'"
         ml BCFtools
+        ml HTSlib
+
+        bgzip -c ${genotype_filter_loc} > ${genotype_filter_loc}.gz
+        tabix -p vcf ${genotype_filter_loc}.gz
+
+        mkdir -p ${genotype_sorted_tmp_directory}
+        TMPDIR=${genotype_sorted_tmp_directory}
 
         ${SORT_CMD} \\
                 ${filtered_bam_loc} \\
-                ${genotype_filter_loc} \\
-                > ${genotype_sorted_loc} \\
+                ${genotype_filter_loc}.gz \\
+                > ${genotype_sorted_zipped_loc} \\
 
-                bgzip -c ${genotype_sorted_loc} > ${genotype_sorted_zipped_loc}
+        #bgzip -c ${genotype_sorted_loc} > ${genotype_sorted_zipped_loc}
 
-                rm ${genotype_sorted_loc}
+        tabix -p vcf ${genotype_sorted_zipped_loc}
+
+        #rm ${genotype_sorted_loc}
+
+        rm -r ${genotype_sorted_tmp_directory}
+
         " > ${output_job}
 done
