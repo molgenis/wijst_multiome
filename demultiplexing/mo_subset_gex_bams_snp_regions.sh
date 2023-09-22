@@ -13,7 +13,7 @@ BARCODE_DIR="/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/demultipl
 GENOTYPE_LANE_LOC='/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/genotype/genotype_per_lane/'
 GENOTYPE_LANE_PREPEND='mo_'
 GENOTYPE_LANE_FILTERED_APPEND='_maf005.vcf'
-OUTPUT_DIR="/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/demultiplexing/popscle_tools_filtered/alignment/filtered_alignment/"
+OUTPUT_DIR="/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/demultiplexing/popscle_tools_filtered/alignment/filtered_gex_alignment/"
 JOB_DIR="/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/demultiplexing/popscle_tools_filtered/alignment/jobs/"
 FILTER_CMD="/groups/umcg-franke-scrna/tmp02/software/popscle_helper_tools/filter_bam_file_for_popscle_dsc_pileup.sh"
 

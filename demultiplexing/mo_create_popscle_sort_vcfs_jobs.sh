@@ -45,15 +45,21 @@ for dir in "$LANES_DIR"/*lane*/ ; do
 	set -e
 
         ml SAMtools
-        ml BEDTools
+        export PATH="/groups/umcg-franke-scrna/tmp02/software/bedtools/:'$PATH'"
         ml BCFtools
+        ml HTSlib
+
+        bgzip -c ${genotype_filter_loc} > ${genotype_filter_loc}.gz
+        tabix -p vcf ${genotype_filter_loc}.gz
 
         ${SORT_CMD} \\
                 ${filtered_bam_loc} \\
-                ${genotype_filter_loc} \\
+                ${genotype_filter_loc}.gz \\
                 > ${genotype_sorted_loc} \\
 
                 bgzip -c ${genotype_sorted_loc} > ${genotype_sorted_zipped_loc}
+
+                tabix -p vcf ${genotype_sorted_zipped_loc}
 
                 rm ${genotype_sorted_loc}
         " > ${output_job}
