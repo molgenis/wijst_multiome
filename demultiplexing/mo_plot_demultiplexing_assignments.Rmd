@@ -202,18 +202,59 @@ sample_many_colours <- function(number_of_colours, use_sampling=F, color_indices
   return(colours_to_return)
 }
 
+#' get a vector of as distinct possible colours, but with more possibilities ()
+#' 
+#' @param number_of_colours how many colours to return
+#' @param use_sampling whether or not to randomly extract the colours instead of grabbing the first n colours
+#' @param color_indices (optional, not used by default) if specific colours are needed, supply the indices of the colours here. Use 'get_available_colours_grid' to get the colours and their indices
+#' @returns a vector of colours
+#' 
+sample_tons_of_colors <- function(number_of_colours, use_sampling=F, color_indices=NULL) {
+  # get colours available to device
+  all_colours <- grDevices::colors()
+  # remove gray
+  all_colours <- all_colours[grep('gr(a|e)y', all_colours, invert = T)]
+  # check how many are possible
+  max_possible_colours <- length(all_colours)
+  if (is.null(number_of_colours)) {
+    message('no number of colors supplied, assuming color indices have been')
+  }
+  else if (number_of_colours > max_possible_colours) {
+    message(paste('requesting more colours than is possible: ', as.character(number_of_colours), ' vs ', max_possible_colours, ', returning max possible', sep = ''))
+    number_of_colours <- max_possible_colours
+  }
+  colours_to_return <- NULL
+  # specific colours we like (the indices)
+  if (!is.null(color_indices)) {
+    colours_to_return <- all_colours[color_indices]
+  }
+  # or use sampling
+  else if (use_sampling) {
+    colours_to_return <- sample(all_colours, number_of_colours)
+  }
+  # or the first x colours
+  else {
+    colours_to_return <- all_colours[1 : number_of_colours]
+  }
+  return(colours_to_return)
+}
+
 
 #' get a grid showing the available colours and their indices
 #' 
 #' @param many use the 'many' method to get the colours
+#' @param tons use the 'tons' method to get the colours
 #' @returns a ggplot grid showing the available colours and their indices
 #' 
-get_available_colours_grid <- function(many=T) {
+get_available_colours_grid <- function(many=T, tons=F) {
   colours_possible <- NULL
   # get from the many method
   if (many) {
     # ask for unreasonable amount
     colours_possible <- sample_many_colours(1000)
+  }
+  else if(tons) {
+    colours_possible <- sample_tons_of_colors(1000)
   }
   # get how many colours we actually have
   available_colours <- length(colours_possible)
@@ -269,8 +310,10 @@ plot_demux_assignments <- function(demux_assignments, lane_column='lane', assign
   }
   # summarize numbers
   demux_numbers <- data.frame(table(demux_assignments[, c(lane_column, assignment_colummn)]))
-  # make the assignment a factor so that it is always in the same order
-  demux_numbers[[assignment_colummn]] <- as.factor(demux_numbers[[assignment_colummn]])
+  # make the assignment a factor so that it is always in the same order, but put ambigous and multiplet always last
+  demux_possible_assignments <- as.character(unique(demux_numbers[[assignment_colummn]]))
+  demux_no_amb_or_multi <- demux_possible_assignments[!(demux_possible_assignments %in% c('ambiguous', 'multiplet'))]
+  demux_numbers[[assignment_colummn]] <- factor(demux_numbers[[assignment_colummn]], levels = c(demux_no_amb_or_multi, 'ambiguous', 'multiplet'))
   # make the plot
   p <- NULL
   # depending on if we want to do fractions, we need to do extra work
@@ -288,7 +331,13 @@ plot_demux_assignments <- function(demux_assignments, lane_column='lane', assign
     # get the unique possible assigments
     possible_assignments <- unique(demux_numbers[[assignment_colummn]])
     # get an equal amount of colours
-    possible_colours <- sample_many_colours(length(possible_assignments), use_sampling = use_sampling, color_indices = color_indices)
+    possible_colours <- NULL
+    if(length(possible_assignments) > 74) {
+      possible_colours <- sample_tons_of_colors(length(possible_assignments), use_sampling = use_sampling, color_indices = color_indices)
+    }
+    else {
+      possible_colours <- sample_many_colours(length(possible_assignments), use_sampling = use_sampling, color_indices = color_indices)
+    }
     # put into a list
     colour_mapping <- as.list(possible_colours)
     names(colour_mapping) <- possible_assignments
@@ -324,7 +373,7 @@ plot_demux_assignments <- function(demux_assignments, lane_column='lane', assign
 
 ```
 
-```{r setup, include=FALSE}
+```{r setup, include=TRUE, fig.width=10, fig.height=10}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 ####################
@@ -337,13 +386,16 @@ demux_prepend <- ''
 demux_append <- '.best'
 souporcell_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/demultiplexing/souporcell/souporcell_output/'
 
-
+# let's check the colours available, as we need some later
+get_available_colours_grid(many = T)
 ```
 
-```{r setup, include=TRUE, fig.width=20, fig.height=10}
+```{r demuxlet, include=TRUE, fig.width=20, fig.height=10}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
+# get the assignments
 demux_assignments <- get_demux_assignments(demuxlet_output_loc)
+# plot both the absolute numbers and the fractions, supplying the colours I like from the available colours
 plot_grid(
   plot_demux_assignments(demux_assignments, color_indices = c(1,2,3,4,5,6,7,8,9,17,26)),
   plot_demux_assignments(demux_assignments, to_fractions = T, color_indices = c(1,2,3,4,5,6,7,8,9,17,26))
