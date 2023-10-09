@@ -17,7 +17,7 @@ JOB_DIR="/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/demultiplexin
 SOUPOR_IMAGE="/groups/umcg-franke-scrna/tmp02/software/sc-eqtlgen-consortium-pipeline/wg1/WG1-pipeline-QC_wgpipeline.simg"
 GENOME_LOC="/groups/umcg-franke-scrna/tmp02/external_datasets/refdata-cellranger-GRCh38-3.0.0/fasta/genome.fa"
 #SAMPLE_SHEET_LOC='/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/metadata/lpmcv2_sample_sheet_full.tsv'
-COMMON_VARIANTS_LOC='/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/genotype/imputed_hg38_all_anc_mmaf005_chrprepend.vcf.gz'
+COMMON_VARIANTS_LOC='/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/genotype/imputed_hg38_all_anc_mmaf005_chrprepend.vcf'
 
 LANES=('230105_lane1' '230105_lane2' '230105_lane3' '230105_lane4' \
 '230105_lane5' '230105_lane6' '230105_lane7' '230105_lane8' \

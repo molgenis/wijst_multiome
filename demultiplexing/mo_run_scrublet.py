@@ -61,3 +61,10 @@ assignment.to_csv(scrub_save_loc, index=False, sep='\t')
 
 # and make plot
 scrub.plot_histogram();
+
+
+# python mo_run_scrublet.py \
+# -l /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/2023_09_12_cellbender-v0.3.0/default-run/230105_lane1/ \
+# -o /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/demultiplexing/scrublet/scrublet_output/mo_scrublet_230105_lane1.tsv \
+# -r 0.1 \
+# -m 0.85
