@@ -15,7 +15,7 @@ LANE_BARCODE_APPEND="outs/filtered_feature_bc_matrix/barcodes.tsv.gz"
 OUTPUT_DIR="/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/demultiplexing/souporcell/souporcell_output/"
 JOB_DIR="/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/demultiplexing/souporcell/jobs/"
 SOUPOR_IMAGE="/groups/umcg-franke-scrna/tmp02/software/sc-eqtlgen-consortium-pipeline/wg1/WG1-pipeline-QC_wgpipeline.simg"
-GENOME_LOC="/groups/umcg-franke-scrna/tmp02/external_datasets/refdata-cellranger-GRCh38-3.0.0/fasta/genome.fa"
+GENOME_LOC="/groups/umcg-franke-scrna/tmp02/external_datasets/refdata-cellranger-arc-GRCh38-2020-A-2.0.0/fasta/genome.fa"
 #SAMPLE_SHEET_LOC='/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/metadata/lpmcv2_sample_sheet_full.tsv'
 COMMON_VARIANTS_LOC='/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/genotype/imputed_hg38_all_anc_mmaf005_chrprepend.vcf'
 
