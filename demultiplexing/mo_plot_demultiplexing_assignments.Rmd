@@ -89,6 +89,51 @@ get_demux_assignments <- function(demuxlet_output_loc, lanes=NULL, demux_prepend
   return(all_demux)
 }
 
+get_soup_assignments <- function(soup_output_loc, lanes=NULL, soup_append='clusters.tsv') {
+  # first put each result in a list of tables
+  result_per_lane <- list()
+  # get which lanes to check
+  if (is.null(lanes)) {
+    # if not supplied we will try to use regex
+    lane_files <- list.dirs(path = soup_output_loc, full.names = F, recursive = F)
+    lanes <- basename(lane_files)
+  }
+  # check each lane
+  for (lane in lanes) {
+    # get the full path
+    full_soup_path <- paste(soup_output_loc, '/', lane, '/', soup_append, sep = '')
+    # check if the file exists
+    if (file.exists(full_soup_path)) {
+      # read the file
+      soup_lane <- read.table(full_soup_path, sep = '\t', header = T)
+      # get the bare barcode and the barcode+lane
+      barcodes_short <- gsub('(-\\d+)', '', soup_lane$barcode)
+      barcodes_lane <- paste(barcodes_short, rep(lane, times = length(barcodes_short)), sep = '_')
+      # get the final assignment as well
+      final_assignments <- as.character(soup_lane$assignment)
+      # but overwrite where it should be a doublet
+      final_assignments[!is.na(soup_lane$status) & soup_lane$status == 'doublet'] <- 'multiplet'
+      final_assignments[!is.na(soup_lane$status) & soup_lane$status == 'unassigned'] <- 'ambiguous'
+      # put the new variables in a dataframe
+      soup_additional <- data.frame(
+        lane = rep(lane, times = length(barcodes_short)),
+        barcode_bare = barcodes_short,
+        barcode_lane = barcodes_lane,
+        assignment = final_assignments
+      )
+      # now add this to the existing demuxlet output
+      soup_lane <- cbind(soup_additional, soup_lane)
+      result_per_lane[[lane]] <- soup_lane
+    }
+    else{
+      message(paste('lane ', lane, ' does not exist at location ', full_soup_path, ', skipped', sep = ''))
+    }
+  }
+  # combine the outputs
+  all_soup <- do.call('rbind', result_per_lane)
+  return(all_soup)
+}
+
 
 #' add the rank of each participant of every lane, based on how many cells this participant took in this lane
 #' 
@@ -385,6 +430,7 @@ demuxlet_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoin
 demux_prepend <- ''
 demux_append <- '.best'
 souporcell_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/demultiplexing/souporcell/souporcell_output/'
+souporcell_append <- 'clusters.tsv'
 
 # let's check the colours available, as we need some later
 get_available_colours_grid(many = T)
@@ -395,9 +441,21 @@ knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # get the assignments
 demux_assignments <- get_demux_assignments(demuxlet_output_loc)
-# plot both the absolute numbers and the fractions, supplying the colours I like from the available colours
+# plot both the absolute numbers and the fractions, supplying the colours I like from the available colours (parameter color_indices can be kept empty)
 plot_grid(
   plot_demux_assignments(demux_assignments, color_indices = c(1,2,3,4,5,6,7,8,9,17,26)),
   plot_demux_assignments(demux_assignments, to_fractions = T, color_indices = c(1,2,3,4,5,6,7,8,9,17,26))
+)
+```
+
+```{r soup, include=TRUE, fig.width=20, fig.height=10}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# get the assignments
+soup_assignments <- get_soup_assignments(souporcell_output_loc)
+# plot
+plot_grid(
+  plot_demux_assignments(soup_assignments),
+  plot_demux_assignments(soup_assignments, to_fractions = T)
 )
 ```
