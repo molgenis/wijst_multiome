@@ -14,7 +14,7 @@ BAM_DIR="/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/demultiplexin
 INDIVIDUAL_GENOTYPES="/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/genotype/genotype_per_lane/"
 OUTPUT_DIR="/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/demultiplexing/demuxlet/demuxlet_output/"
 JOB_DIR="/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/demultiplexing/demuxlet/jobs/"
-DEMUXLET_CMD="singularity exec --bind /groups/umcg-franke/tmp02/ /groups/umcg-franke-scrna/tmp02/software/sc-eqtlgen-consortium-pipeline/wg1/wg1-pipeline-20230308_2.simg popscle demuxlet"
+DEMUXLET_CMD="singularity exec --bind /groups/umcg-franke-scrna/tmp02/ /groups/umcg-franke-scrna/tmp02/software/sc-eqtlgen-consortium-pipeline/wg1/wg1-pipeline-20230308_2.simg popscle demuxlet"
 
 #parameters used
 TAG_GROUP="CB"

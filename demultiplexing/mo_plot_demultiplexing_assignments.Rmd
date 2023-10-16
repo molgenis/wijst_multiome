@@ -1,0 +1,461 @@
+---
+title: "mo_plot_demultiplexing_assignments"
+author: "Roy Oelen"
+date: "2023-09-29"
+output: html_document
+---
+
+```{r header, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+#!/usr/bin/env Rscript
+############################################################################################################################
+# Authors: Roy Oelen
+# Name: mo_plot_demultiplexing_assignments.Rmd
+# Function: plot output from demultiplexing tools
+############################################################################################################################
+```
+
+```{r libraries, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+####################
+# libraries        #
+####################
+
+library(ggplot2)
+library(cowplot)
+library(RColorBrewer)
+
+
+```
+
+```{r functions, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+####################
+# Functions        #
+####################
+
+#' get the number eGenes per cell type from EMP output
+#' 
+#' @param demuxlet_output_loc base location of the demuxlet output
+#' @param lanes which lanes to analyse (optional, if omitted, will do a list.files to discover lanes)
+#' @param demux_prepend what the output file per lane is prepended with (optional, empty string by default)
+#' @param demux_append what the output file per lane is appended with (optional, '.best')
+#' @returns a dataframe with the demuxlet output of all the lanes, combined with a lane and lane+barcode column added
+#' 
+get_demux_assignments <- function(demuxlet_output_loc, lanes=NULL, demux_prepend='', demux_append='.best') {
+  # first put each result in a list of tables
+  result_per_lane <- list()
+  # get which lanes to check
+  if (is.null(lanes)) {
+    # if not supplied we will try to use regex
+    lane_files <- list.files(path = demuxlet_output_loc, pattern = paste(demux_prepend, '*', demux_append, sep = ''), full.names = F)
+    lanes <- sub(pattern = "(.*)\\..*$", replacement = "\\1", lane_files)
+  }
+  # check each lane
+  for (lane in lanes) {
+    # get the full path
+    full_demux_path <- paste(demuxlet_output_loc, '/', demux_prepend, lane, demux_append, sep = '')
+    # check if the file exists
+    if (file.exists(full_demux_path)) {
+      # read the file
+      demux_lane <- read.table(full_demux_path, header = T, sep = '\t')
+      # get the bare barcode and the barcode+lane
+      barcodes_short <- gsub('(-\\d+)', '', demux_lane$BARCODE)
+      barcodes_lane <- paste(barcodes_short, rep(lane, times = length(barcodes_short)), sep = '_')
+      # get the final assignment as well
+      final_assignments <- as.character(demux_lane$SNG.BEST.GUESS)
+      # but overwrite where it should be a doublet
+      final_assignments[!is.na(demux_lane$DROPLET.TYPE) & demux_lane$DROPLET.TYPE == 'DBL'] <- 'multiplet'
+      final_assignments[!is.na(demux_lane$DROPLET.TYPE) & demux_lane$DROPLET.TYPE == 'AMB'] <- 'ambiguous'
+      # put the new variables in a dataframe
+      demux_additional <- data.frame(
+        lane = rep(lane, times = length(barcodes_short)),
+        barcode_bare = barcodes_short,
+        barcode_lane = barcodes_lane,
+        assignment = final_assignments
+      )
+      # now add this to the existing demuxlet output
+      demux_lane <- cbind(demux_additional, demux_lane)
+      result_per_lane[[lane]] <- demux_lane
+    }
+    else{
+      message(paste('lane ', lane, ' does not exist at location ', full_demux_path, ', skipped', sep = ''))
+    }
+  }
+  # combine the outputs
+  all_demux <- do.call('rbind', result_per_lane)
+  return(all_demux)
+}
+
+get_soup_assignments <- function(soup_output_loc, lanes=NULL, soup_append='clusters.tsv') {
+  # first put each result in a list of tables
+  result_per_lane <- list()
+  # get which lanes to check
+  if (is.null(lanes)) {
+    # if not supplied we will try to use regex
+    lane_files <- list.dirs(path = soup_output_loc, full.names = F, recursive = F)
+    lanes <- basename(lane_files)
+  }
+  # check each lane
+  for (lane in lanes) {
+    # get the full path
+    full_soup_path <- paste(soup_output_loc, '/', lane, '/', soup_append, sep = '')
+    # check if the file exists
+    if (file.exists(full_soup_path)) {
+      # read the file
+      soup_lane <- read.table(full_soup_path, sep = '\t', header = T)
+      # get the bare barcode and the barcode+lane
+      barcodes_short <- gsub('(-\\d+)', '', soup_lane$barcode)
+      barcodes_lane <- paste(barcodes_short, rep(lane, times = length(barcodes_short)), sep = '_')
+      # get the final assignment as well
+      final_assignments <- as.character(soup_lane$assignment)
+      # but overwrite where it should be a doublet
+      final_assignments[!is.na(soup_lane$status) & soup_lane$status == 'doublet'] <- 'multiplet'
+      final_assignments[!is.na(soup_lane$status) & soup_lane$status == 'unassigned'] <- 'ambiguous'
+      # put the new variables in a dataframe
+      soup_additional <- data.frame(
+        lane = rep(lane, times = length(barcodes_short)),
+        barcode_bare = barcodes_short,
+        barcode_lane = barcodes_lane,
+        assignment = final_assignments
+      )
+      # now add this to the existing demuxlet output
+      soup_lane <- cbind(soup_additional, soup_lane)
+      result_per_lane[[lane]] <- soup_lane
+    }
+    else{
+      message(paste('lane ', lane, ' does not exist at location ', full_soup_path, ', skipped', sep = ''))
+    }
+  }
+  # combine the outputs
+  all_soup <- do.call('rbind', result_per_lane)
+  return(all_soup)
+}
+
+
+#' add the rank of each participant of every lane, based on how many cells this participant took in this lane
+#' 
+#' @param demux_assignments the demuxlet output file of all lanes as returned by 'get_demux_assignments'
+#' @param lane_column which column contains the lane of the cell
+#' @param assignment_colummn which column to add with the rank of the participant
+#' @returns the input dataframe, with a new columm containing the rank of the participant in each lane
+#' 
+assignments_to_rankings <- function(demux_assignments, lane_column='lane', assignment_colummn='assignment') {
+  # do this per lane first
+  ranked_per_lane <- list()
+  for (lane in unique(demux_assignments[[lane_column]])) {
+    # subset to that lane
+    demux_assignments_lane <- demux_assignments[demux_assignments[[lane_column]] == lane, ]
+    # get the numbers of each assignment
+    demux_assignments_lane_numbers <- data.frame(table(demux_assignments_lane[[assignment_colummn]]))
+    # remove the multiplet
+    demux_assignments_lane_numbers <- demux_assignments_lane_numbers[demux_assignments_lane_numbers[['Var1']] != 'multiplet' & demux_assignments_lane_numbers[['Var1']] != 'ambiguous', ]
+    # now order by the number of cells
+    demux_assignments_lane_numbers <- demux_assignments_lane_numbers[order(demux_assignments_lane_numbers[['Freq']]), ]
+    # add the ranking
+    demux_assignments_lane_numbers[['rank']] <- as.character(1:nrow(demux_assignments_lane_numbers))
+    # add the multiplets back
+    demux_assignments_lane_numbers <- rbind(demux_assignments_lane_numbers, data.frame(Var1 = c('ambiguous', 'multiplet'), Freq = c(NA, NA), rank = c('ambiguous', 'multiplet')))
+    # replace the assignment with the rank
+    demux_assignments_lane[[assignment_colummn]] <- demux_assignments_lane_numbers[match(demux_assignments_lane[[assignment_colummn]], demux_assignments_lane_numbers$Var1), 'rank']
+    # put back in the list
+    ranked_per_lane[[lane]] <- demux_assignments_lane
+  }
+  # merge
+  ranked_assignments <- do.call('rbind', ranked_per_lane)
+  return(ranked_assignments)
+}
+
+
+#' add the the fraction of cells belonging to each participant in every lane
+#' 
+#' @param demux_assignment_numbers the demuxlet output file of all lanes as returned by 'get_demux_assignments'
+#' @param lane_column which column contains the lane of the cell
+#' @param assignment_colummn which column to add with the rank of the participant
+#' @param cell_number_column which column contains the number of cells
+#' @returns a dataframe containing the number of cells for each participant in each lane
+#' 
+demux_numbers_to_fractions <- function(demux_assignment_numbers, lane_column='lane', assignment_colummn='assignment', cell_number_column='Freq') {
+  # we will do this per lane again
+  fraction_per_lane <- list()
+  # check each lane
+  for (lane in unique(demux_assignment_numbers[[lane_column]])) {
+    # subset to that lane
+    demux_assignments_lane <- demux_assignment_numbers[demux_assignment_numbers[[lane_column]] == lane, ]
+    # calculate the total number of cells
+    cell_total <- sum(demux_assignments_lane[[cell_number_column]])
+    # divide each number with the sum
+    demux_assignments_lane[['fraction']] <- demux_assignments_lane[[cell_number_column]] / cell_total
+    # add result back into list
+    fraction_per_lane[[lane]] <- demux_assignments_lane
+  }
+  # combine the datafames in the list
+  all_fractions <- do.call('rbind', fraction_per_lane)
+  return(all_fractions)
+}
+
+
+#' get a vector of as distinct possible colours
+#' 
+#' @param number_of_colours how many colours to return
+#' @param use_sampling whether or not to randomly extract the colours instead of grabbing the first n colours
+#' @param color_indices (optional, not used by default) if specific colours are needed, supply the indices of the colours here. Use 'get_available_colours_grid' to get the colours and their indices
+#' @returns a vector of colours
+#' 
+sample_many_colours <- function(number_of_colours, use_sampling=F, color_indices=NULL) {
+  # get all colours from the 'quality' palettes
+  quality_colour_palettes <- brewer.pal.info[brewer.pal.info[['category']] == 'qual', ]
+  # save each palette
+  colours_per_palette <- list()
+  # apply over each palette
+  for (i in 1:nrow(quality_colour_palettes)) {
+    # get the name of the palette
+    palette_name <- rownames(quality_colour_palettes)[i]
+    # get the number of colours in the palette
+    palette_max_colours <- quality_colour_palettes[i, 'maxcolors']
+    # use brewer.pal to get all colours
+    colours_palette <- brewer.pal(palette_max_colours, palette_name)
+    # put result in the list
+    colours_per_palette[[palette_name]] <- colours_palette
+  }
+  # merge all palettes
+  all_colours <- do.call('c', colours_per_palette)
+  # randomly get colours from the palette
+  max_possible_colours <- length(all_colours)
+  if (is.null(number_of_colours)) {
+    message('no number of colors supplied, assuming color indices have been')
+  }
+  else if (number_of_colours > max_possible_colours) {
+    message(paste('requesting more colours than is possible: ', as.character(number_of_colours), ' vs ', max_possible_colours, ', returning max possible', sep = ''))
+    number_of_colours <- max_possible_colours
+  }
+  colours_to_return <- NULL
+  # specific colours we like (the indices)
+  if (!is.null(color_indices)) {
+    colours_to_return <- all_colours[color_indices]
+  }
+  # or use sampling
+  else if (use_sampling) {
+    colours_to_return <- sample(all_colours, number_of_colours)
+  }
+  # or the first x colours
+  else {
+    colours_to_return <- all_colours[1 : number_of_colours]
+  }
+  return(colours_to_return)
+}
+
+#' get a vector of as distinct possible colours, but with more possibilities ()
+#' 
+#' @param number_of_colours how many colours to return
+#' @param use_sampling whether or not to randomly extract the colours instead of grabbing the first n colours
+#' @param color_indices (optional, not used by default) if specific colours are needed, supply the indices of the colours here. Use 'get_available_colours_grid' to get the colours and their indices
+#' @returns a vector of colours
+#' 
+sample_tons_of_colors <- function(number_of_colours, use_sampling=F, color_indices=NULL) {
+  # get colours available to device
+  all_colours <- grDevices::colors()
+  # remove gray
+  all_colours <- all_colours[grep('gr(a|e)y', all_colours, invert = T)]
+  # check how many are possible
+  max_possible_colours <- length(all_colours)
+  if (is.null(number_of_colours)) {
+    message('no number of colors supplied, assuming color indices have been')
+  }
+  else if (number_of_colours > max_possible_colours) {
+    message(paste('requesting more colours than is possible: ', as.character(number_of_colours), ' vs ', max_possible_colours, ', returning max possible', sep = ''))
+    number_of_colours <- max_possible_colours
+  }
+  colours_to_return <- NULL
+  # specific colours we like (the indices)
+  if (!is.null(color_indices)) {
+    colours_to_return <- all_colours[color_indices]
+  }
+  # or use sampling
+  else if (use_sampling) {
+    colours_to_return <- sample(all_colours, number_of_colours)
+  }
+  # or the first x colours
+  else {
+    colours_to_return <- all_colours[1 : number_of_colours]
+  }
+  return(colours_to_return)
+}
+
+
+#' get a grid showing the available colours and their indices
+#' 
+#' @param many use the 'many' method to get the colours
+#' @param tons use the 'tons' method to get the colours
+#' @returns a ggplot grid showing the available colours and their indices
+#' 
+get_available_colours_grid <- function(many=T, tons=F) {
+  colours_possible <- NULL
+  # get from the many method
+  if (many) {
+    # ask for unreasonable amount
+    colours_possible <- sample_many_colours(1000)
+  }
+  else if(tons) {
+    colours_possible <- sample_tons_of_colors(1000)
+  }
+  # get how many colours we actually have
+  available_colours <- length(colours_possible)
+  # we need to put that into a square grid, so we need to get the square root, to know how many rows and columns
+  nrow_and_ncol <- sqrt(available_colours)
+  # and we need to round that up of course
+  nrow_and_ncol <- ceiling(nrow_and_ncol)
+  # so we'll have a total number of blocks
+  total_cells <- nrow_and_ncol * nrow_and_ncol
+  # let's see how many colours we are off from that number of cells
+  cells_no_colour_number <- total_cells - available_colours
+  # we will just add white for those
+  cells_no_colour <- rep('white', times = cells_no_colour_number)
+  # add that to the colours we have
+  colours_possible <- c(colours_possible, cells_no_colour)
+  # create each combination of x and y
+  indices_grid <- expand.grid(as.character(1 : nrow_and_ncol), as.character(1 : nrow_and_ncol))
+  # add the index and colour name
+  indices_grid[['index_colour']] <- paste(c(1:total_cells), colours_possible, sep = '\n')
+  # make mapping of colours
+  colours_to_use <- as.list(colours_possible)
+  names(colours_to_use) <- indices_grid[['index_colour']]
+  # now plot
+  p <- ggplot(data = indices_grid, mapping = aes(x = Var1, y = Var2, fill = index_colour)) + 
+    geom_tile() + 
+    geom_text(aes(label=index_colour)) + 
+    scale_fill_manual(values = colours_to_use) + 
+    theme(legend.position = 'none')
+  return(p)
+}
+
+#' plot the demuxlet assignments
+#' 
+#' @param demux_assignments the demuxlet output file of all lanes as returned by 'get_demux_assignments'
+#' @param lane_column which column contains the lane of the cell (optional, 'lane' by default)
+#' @param assignment_colummn which column contains the sample assignment of the cell (optional, 'assignment' by default)
+#' @param assignment_to_ranking use instead of the sample assignment, the rank of the sample (optional, T by default)
+#' @param ylim supply the y limits as vector (optional)
+#' @param pointless remove ticks on the bottom of plot (optional, default F)
+#' @param legendless remove the legend (optional, default F)
+#' @param paper_style add extra whitespace to plot (optional, default T)
+#' @param angle_labels angle the x axis labels 90 degrees (optional, default T)
+#' @param to_fractions plot fraction of cells belonging to sample in each lane instead of number of cells (optional, default F)
+#' @param use_distinct_colours use the distinct colour palette instead of ggplot defaults (optional, default T)
+#' @param use_sampling randomly sample colours from the distinct colour palette (optional, default F)
+#' @param color_indices supply specific indices relating to colours to use from the distinct colour palette. Use 'get_available_colours_grid' to get the colours and their indices (optional, unused by default)
+#' @returns plot with demuxlet cell numbers or fraction of each sample in each lane
+#' 
+plot_demux_assignments <- function(demux_assignments, lane_column='lane', assignment_colummn='assignment', assignment_to_ranking=T, ylim=NULL, pointless=F, legendless=F, paper_style=T, angle_labels=T, to_fractions=F, use_distinct_colours=T, use_sampling=F, color_indices=NULL) {
+  # replace the assignment with ranks if requested
+  if (assignment_to_ranking) {
+    demux_assignments <- assignments_to_rankings(demux_assignments, lane_column = lane_column, assignment_colummn = assignment_colummn)
+  }
+  # summarize numbers
+  demux_numbers <- data.frame(table(demux_assignments[, c(lane_column, assignment_colummn)]))
+  # make the assignment a factor so that it is always in the same order, but put ambigous and multiplet always last
+  demux_possible_assignments <- as.character(unique(demux_numbers[[assignment_colummn]]))
+  demux_no_amb_or_multi <- demux_possible_assignments[!(demux_possible_assignments %in% c('ambiguous', 'multiplet'))]
+  demux_numbers[[assignment_colummn]] <- factor(demux_numbers[[assignment_colummn]], levels = c(demux_no_amb_or_multi, 'ambiguous', 'multiplet'))
+  # make the plot
+  p <- NULL
+  # depending on if we want to do fractions, we need to do extra work
+  if (to_fractions) {
+    # calculate fractions
+    demux_numbers <- demux_numbers_to_fractions(demux_numbers, lane_column = lane_column, assignment_colummn = assignment_colummn, cell_number_column = 'Freq')
+    # make plot
+    p <- ggplot(data = NULL, mapping = aes(x = demux_numbers[[lane_column]], y = demux_numbers[['fraction']], fill = demux_numbers[[assignment_colummn]])) + geom_bar(position='stack', stat='identity') + xlab(lane_column) + ylab('fraction of cells')
+  }
+  else{
+    p <- ggplot(data = NULL, mapping = aes(x = demux_numbers[[lane_column]], y = demux_numbers[['Freq']], fill = demux_numbers[[assignment_colummn]])) + geom_bar(position='stack', stat='identity') + xlab(lane_column) + ylab('number of cells')
+  }
+  # use distinct colours if requested
+  if (use_distinct_colours) {
+    # get the unique possible assigments
+    possible_assignments <- unique(demux_numbers[[assignment_colummn]])
+    # get an equal amount of colours
+    possible_colours <- NULL
+    if(length(possible_assignments) > 74) {
+      possible_colours <- sample_tons_of_colors(length(possible_assignments), use_sampling = use_sampling, color_indices = color_indices)
+    }
+    else {
+      possible_colours <- sample_many_colours(length(possible_assignments), use_sampling = use_sampling, color_indices = color_indices)
+    }
+    # put into a list
+    colour_mapping <- as.list(possible_colours)
+    names(colour_mapping) <- possible_assignments
+    # add to plot
+    p <- p + scale_fill_manual(values = colour_mapping)
+  }
+  # add legend based on rank or assignment
+  if (assignment_to_ranking) {
+    p <- p + guides(fill=guide_legend(title='assignment rank'))
+  }
+  else{
+    p <- p + guides(fill=guide_legend(title='assignment'))
+  }
+  # with some options
+  if(!is.null(ylim)){
+    p <- p + ylim(ylim)
+  }
+  if(pointless){
+    p <- p + theme(axis.text.x=element_blank(), 
+                   axis.ticks = element_blank())
+  }
+  if(legendless){
+    p <- p + theme(legend.position = 'none')
+  }
+  if (paper_style) {
+    p <- p + theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+  }
+  if (angle_labels) {
+    p <- p + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+  }
+  return(p)
+}
+
+```
+
+```{r setup, include=TRUE, fig.width=10, fig.height=10}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+####################
+# Main Code        #
+####################
+
+# location of output
+demuxlet_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/demultiplexing/demuxlet/demuxlet_output/gex/'
+demux_prepend <- ''
+demux_append <- '.best'
+souporcell_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/demultiplexing/souporcell/souporcell_output/'
+souporcell_append <- 'clusters.tsv'
+
+# let's check the colours available, as we need some later
+get_available_colours_grid(many = T)
+```
+
+```{r demuxlet, include=TRUE, fig.width=20, fig.height=10}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# get the assignments
+demux_assignments <- get_demux_assignments(demuxlet_output_loc)
+# plot both the absolute numbers and the fractions, supplying the colours I like from the available colours (parameter color_indices can be kept empty)
+plot_grid(
+  plot_demux_assignments(demux_assignments, color_indices = c(1,2,3,4,5,6,7,8,9,17,26)),
+  plot_demux_assignments(demux_assignments, to_fractions = T, color_indices = c(1,2,3,4,5,6,7,8,9,17,26))
+)
+```
+
+```{r soup, include=TRUE, fig.width=20, fig.height=10}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# get the assignments
+soup_assignments <- get_soup_assignments(souporcell_output_loc)
+# plot
+plot_grid(
+  plot_demux_assignments(soup_assignments),
+  plot_demux_assignments(soup_assignments, to_fractions = T)
+)
+```

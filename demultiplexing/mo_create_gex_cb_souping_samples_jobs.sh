@@ -1,7 +1,7 @@
 #!/bin/bash
 
 ###################################################################
-#Script Name	  : mo_create_souping_samples_jobs.sh
+#Script Name	  : mo_create_gex_cb_souping_samples_jobs.sh
 #Description	  : create sbatch jobs for Souporcell
 #Args           :
 #Author       	: Roy Oelen
@@ -11,9 +11,10 @@
 #directory and file listings
 LANES_DIR="/groups/umcg-franke-scrna/tmp02/projects/multiome/processed/joint/alignment/b38/"
 LANE_READGROUP_APPEND="outs/gex_possorted_bam.bam"
-LANE_BARCODE_APPEND="outs/filtered_feature_bc_matrix/barcodes.tsv.gz"
-OUTPUT_DIR="/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/demultiplexing/souporcell/souporcell_output/"
-JOB_DIR="/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/demultiplexing/souporcell/jobs/"
+LANE_BARCODE_DIR="/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/2023_09_12_cellbender-v0.3.0/final_output"
+LANE_BARCODE_APPEND="cellbender_remove_background_output_cell_barcodes.csv"
+OUTPUT_DIR="/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/demultiplexing/souporcell/souporcell_output/gex/cellbent/"
+JOB_DIR="/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/demultiplexing/souporcell/jobs/gex/cellbent/"
 SOUPOR_IMAGE="/groups/umcg-franke-scrna/tmp02/software/sc-eqtlgen-consortium-pipeline/wg1/WG1-pipeline-QC_wgpipeline.simg"
 GENOME_LOC="/groups/umcg-franke-scrna/tmp02/external_datasets/refdata-cellranger-arc-GRCh38-2020-A-2.0.0/fasta/genome.fa"
 #SAMPLE_SHEET_LOC='/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/metadata/lpmcv2_sample_sheet_full.tsv'
@@ -41,6 +42,8 @@ LANES=('230105_lane1' '230105_lane2' '230105_lane3' '230105_lane4' \
 '230316_lane5' '230316_lane6' '230316_lane7' \
 )
 
+# create job directory
+mkdir -p ${JOB_DIR}
 
 for lane in ${LANES[*]} ; do
 
@@ -49,16 +52,8 @@ for lane in ${LANES[*]} ; do
     mkdir -p ${output_folder}
     output_job=${JOB_DIR}/soup_${lane_id}_SBATCH.sh
 
-    # grab the data for this lane
-#    lane_data=$(grep ${lane} ${SAMPLE_SHEET_LOC})
-#
-#    # the samples are the second entry
-#    samples=$(echo ${lane_data} | awk '{print $3}')
-#    # split samples by comma
-#    IFS=',' read -r -a array <<< "${samples}"
-#    echo ${#array[@]}
-#    # get the length of the array
-#    nr_of_samples=${#array[@]}
+    # get the barcode location
+    BARCODE_LOC=${LANE_BARCODE_DIR}'/'${lane}'/'${LANE_BARCODE_APPEND}
     nr_of_samples=8
 
     echo -e "#!/usr/bin/env bash
@@ -74,11 +69,10 @@ for lane in ${LANES[*]} ; do
 #SBATCH --get-user-env=L
         set -e
         cd ${output_folder}
-        gunzip -c ${LANES_DIR}/${lane_id}/${LANE_BARCODE_APPEND} > ${output_folder}/barcodes.tsv
         export SINGULARITY_BINDPATH=\"/groups/umcg-franke-scrna/tmp02/projects/multiome/,/groups/umcg-franke-scrna/tmp02/external_datasets/,/groups/umcg-franke-scrna/tmp02/software/ \"
         singularity exec ${SOUPOR_IMAGE} souporcell_pipeline.py \
 -i ${LANES_DIR}/${lane_id}/${LANE_READGROUP_APPEND} \
--b ${output_folder}/barcodes.tsv \
+-b ${BARCODE_LOC} \
 -f ${GENOME_LOC} \
 -t 8 \
 -o ${output_folder}/ \
