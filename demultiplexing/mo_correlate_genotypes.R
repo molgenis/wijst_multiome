@@ -19,6 +19,9 @@ library(vcfR)
 library(Seurat)
 # libraries to do plots
 library(ggplot2)
+# and get colors
+library(RColorBrewer)
+
 
 ####################
 # Functions        #
@@ -119,10 +122,15 @@ get_correlation_matrix_per_lane <- function(souporcell_output_loc, genotypes_loc
     cluster_loc <- paste(souporcell_output_loc, lane, '/cluster_genotypes.vcf', sep = '')
     # paste together the genotype loc
     geno_loc <- paste(genotypes_loc, genotype_prepend, lane, genotype_append, sep = '')
-    # get the result
-    correlations_lane <- correlate_genotypes(geno_loc, cluster_loc)
-    # store the result in the list
-    correlations_per_lane[[lane]] <- correlations_lane
+    if(file.exists(cluster_loc) & file.exists(geno_loc)) {
+      # get the result
+      correlations_lane <- correlate_genotypes(geno_loc, cluster_loc)
+      # store the result in the list
+      correlations_per_lane[[lane]] <- correlations_lane
+    }
+    else{
+      warning(paste('skipped lane', lane, 'due to no input for the clusters or reference VCF'))
+    }
   }
   return(correlations_per_lane)
 }
@@ -207,58 +215,237 @@ check_nclusters_vs_ndonors <- function(metadata, lane_column='lane', cluster_col
 }
 
 
-add_inflammation_status <- function(seurat_object, sample_sheet, metadata_table, inflammation_column='inflammation_status', lane_column='lane', sample_column='donor_final'){
-  # set the inflammation status empty
-  seurat_object@meta.data[[inflammation_column]] <- NA
-  # check each lane
-  for(lane in lanes){
-    # get the samples
-    samples <- get_samples_in_lane(lane, sample_sheet, metadata_table)
-    # get the inflammation by splitting on the comma, for that row
-    inflammation <- strsplit(sample_sheet[sample_sheet[['lane']] == lane, 'inflammation_status'], ',')[[1]]
-    # set a matching list
-    inflammation_dict <- as.list(inflammation)
-    names(inflammation_dict) <- samples
-    # now get the donors that are in the in the Seurat metadata for that lane
-    samples_in_metadata <- unique(seurat_object@meta.data[seurat_object@meta.data[[lane_column]] == lane, sample_column])
-    # check each of the samples in the metadata
-    for(sample in samples_in_metadata){
-      # check if we have the status for this sample
-      if(sample %in% names(inflammation_dict)){
-        # get the inflammation status for that sample
-        inflammation_status_sample <- inflammation_dict[[sample]]
-        # add to the metadata
-        seurat_object@meta.data[seurat_object@meta.data[[lane_column]] == lane &
-                                  seurat_object@meta.data[[sample_column]] == sample, inflammation_column] <- inflammation_status_sample
-      }
+#' get a vector of as distinct possible colours
+#' 
+#' @param number_of_colours how many colours to return
+#' @param use_sampling whether or not to randomly extract the colours instead of grabbing the first n colours
+#' @param color_indices (optional, not used by default) if specific colours are needed, supply the indices of the colours here. Use 'get_available_colours_grid' to get the colours and their indices
+#' @returns a vector of colours
+#' 
+sample_many_colours <- function(number_of_colours, use_sampling=F, color_indices=NULL) {
+  # get all colours from the 'quality' palettes
+  quality_colour_palettes <- brewer.pal.info[brewer.pal.info[['category']] == 'qual', ]
+  # save each palette
+  colours_per_palette <- list()
+  # apply over each palette
+  for (i in 1:nrow(quality_colour_palettes)) {
+    # get the name of the palette
+    palette_name <- rownames(quality_colour_palettes)[i]
+    # get the number of colours in the palette
+    palette_max_colours <- quality_colour_palettes[i, 'maxcolors']
+    # use brewer.pal to get all colours
+    colours_palette <- brewer.pal(palette_max_colours, palette_name)
+    # put result in the list
+    colours_per_palette[[palette_name]] <- colours_palette
+  }
+  # merge all palettes
+  all_colours <- do.call('c', colours_per_palette)
+  # randomly get colours from the palette
+  max_possible_colours <- length(all_colours)
+  if (is.null(number_of_colours)) {
+    message('no number of colors supplied, assuming color indices have been')
+  }
+  else if (number_of_colours > max_possible_colours) {
+    message(paste('requesting more colours than is possible: ', as.character(number_of_colours), ' vs ', max_possible_colours, ', returning max possible', sep = ''))
+    number_of_colours <- max_possible_colours
+  }
+  colours_to_return <- NULL
+  # specific colours we like (the indices)
+  if (!is.null(color_indices)) {
+    colours_to_return <- all_colours[color_indices]
+  }
+  # or use sampling
+  else if (use_sampling) {
+    colours_to_return <- sample(all_colours, number_of_colours)
+  }
+  # or the first x colours
+  else {
+    colours_to_return <- all_colours[1 : number_of_colours]
+  }
+  return(colours_to_return)
+}
+
+#' get a vector of as distinct possible colours, but with more possibilities ()
+#' 
+#' @param number_of_colours how many colours to return
+#' @param use_sampling whether or not to randomly extract the colours instead of grabbing the first n colours
+#' @param color_indices (optional, not used by default) if specific colours are needed, supply the indices of the colours here. Use 'get_available_colours_grid' to get the colours and their indices
+#' @returns a vector of colours
+#' 
+sample_tons_of_colors <- function(number_of_colours, use_sampling=F, color_indices=NULL) {
+  # get colours available to device
+  all_colours <- grDevices::colors()
+  # remove gray
+  all_colours <- all_colours[grep('gr(a|e)y', all_colours, invert = T)]
+  # check how many are possible
+  max_possible_colours <- length(all_colours)
+  if (is.null(number_of_colours)) {
+    message('no number of colors supplied, assuming color indices have been')
+  }
+  else if (number_of_colours > max_possible_colours) {
+    message(paste('requesting more colours than is possible: ', as.character(number_of_colours), ' vs ', max_possible_colours, ', returning max possible', sep = ''))
+    number_of_colours <- max_possible_colours
+  }
+  colours_to_return <- NULL
+  # specific colours we like (the indices)
+  if (!is.null(color_indices)) {
+    colours_to_return <- all_colours[color_indices]
+  }
+  # or use sampling
+  else if (use_sampling) {
+    colours_to_return <- sample(all_colours, number_of_colours)
+  }
+  # or the first x colours
+  else {
+    colours_to_return <- all_colours[1 : number_of_colours]
+  }
+  return(colours_to_return)
+}
+
+
+#' get a grid showing the available colours and their indices
+#' 
+#' @param many use the 'many' method to get the colours
+#' @param tons use the 'tons' method to get the colours
+#' @returns a ggplot grid showing the available colours and their indices
+#' 
+get_available_colours_grid <- function(many=T, tons=F) {
+  colours_possible <- NULL
+  # get from the many method
+  if (many) {
+    # ask for unreasonable amount
+    colours_possible <- sample_many_colours(1000)
+  }
+  else if(tons) {
+    colours_possible <- sample_tons_of_colors(1000)
+  }
+  # get how many colours we actually have
+  available_colours <- length(colours_possible)
+  # we need to put that into a square grid, so we need to get the square root, to know how many rows and columns
+  nrow_and_ncol <- sqrt(available_colours)
+  # and we need to round that up of course
+  nrow_and_ncol <- ceiling(nrow_and_ncol)
+  # so we'll have a total number of blocks
+  total_cells <- nrow_and_ncol * nrow_and_ncol
+  # let's see how many colours we are off from that number of cells
+  cells_no_colour_number <- total_cells - available_colours
+  # we will just add white for those
+  cells_no_colour <- rep('white', times = cells_no_colour_number)
+  # add that to the colours we have
+  colours_possible <- c(colours_possible, cells_no_colour)
+  # create each combination of x and y
+  indices_grid <- expand.grid(as.character(1 : nrow_and_ncol), as.character(1 : nrow_and_ncol))
+  # add the index and colour name
+  indices_grid[['index_colour']] <- paste(c(1:total_cells), colours_possible, sep = '\n')
+  # make mapping of colours
+  colours_to_use <- as.list(colours_possible)
+  names(colours_to_use) <- indices_grid[['index_colour']]
+  # now plot
+  p <- ggplot(data = indices_grid, mapping = aes(x = Var1, y = Var2, fill = index_colour)) + 
+    geom_tile() + 
+    geom_text(aes(label=index_colour)) + 
+    scale_fill_manual(values = colours_to_use) + 
+    theme(legend.position = 'none')
+  return(p)
+}
+
+#' add the rank of each participant of every lane, based on their correlations
+#' 
+#' @param correlation_table the table containing the correlations
+#' @param correlation_column which column contains correlation number
+#' @param lane_column which column contains the lane of the cell
+#' @returns the input dataframe, with a new columm containing the rank of the participant in each lane
+#' 
+samples_to_rankings <- function(correlation_table, sample_column='best_match_sample', correlation_column='best_match_correlation', lane_column='lane') {
+  # we'll first do this per lane
+  ranked_correlations_per_lane <- list()
+  # going through the lanes
+  for (lane in unique(correlation_table[[lane_column]])) {
+    # subset to that lane
+    correlations_lane <- correlation_table[correlation_table[[lane_column]] == lane, ]
+    # order this per correlation
+    correlations_lane <- correlations_lane[order(correlations_lane[[correlation_column]]), ]
+    # change to rank
+    correlations_lane[[sample_column]] <- as.character(1:nrow(correlations_lane))
+    # put in the list
+    ranked_correlations_per_lane[[lane]] <- correlations_lane
+  }
+  # merge them all
+  ranked_correlations <- do.call('rbind', ranked_correlations_per_lane)
+  return(ranked_correlations)
+}
+
+#' plot the demuxlet assignments
+#' 
+#' @param correlations_table table with correlations and samples
+#' @param sample_column the sample names
+#' @param correlation_column column containing the correlation to plot
+#' @param lane_column which column contains the lane of the cell (optional, 'lane' by default)
+#' @param assignment_to_ranking use instead of the sample assignment, the rank of the sample (optional, T by default)
+#' @param ylim supply the y limits as vector (optional)
+#' @param pointless remove ticks on the bottom of plot (optional, default F)
+#' @param legendless remove the legend (optional, default F)
+#' @param paper_style add extra whitespace to plot (optional, default T)
+#' @param angle_labels angle the x axis labels 90 degrees (optional, default T)
+#' @param to_fractions plot fraction of cells belonging to sample in each lane instead of number of cells (optional, default F)
+#' @param use_distinct_colours use the distinct colour palette instead of ggplot defaults (optional, default T)
+#' @param use_sampling randomly sample colours from the distinct colour palette (optional, default F)
+#' @param color_indices supply specific indices relating to colours to use from the distinct colour palette. Use 'get_available_colours_grid' to get the colours and their indices (optional, unused by default)
+#' @returns plot with correlations in each lane
+#' 
+plot_correlations_per_lane <- function(correlations_table, sample_column='best_match_sample', correlation_column='best_match_correlation', lane_column='lane', assignment_to_ranking=T, ylim=NULL, pointless=F, legendless=F, paper_style=T, angle_labels=T, to_fractions=F, use_distinct_colours=T, use_sampling=F, color_indices=NULL) {
+  # convert to ranks if requested
+  if (assignment_to_ranking) {
+    correlations_table <- samples_to_rankings(correlations_table, sample_column = sample_column, correlation_column = correlation_column, lane_column = lane_column)
+  }
+  # order the samples alphabetically
+  correlations_table[[sample_column]] <- factor(correlations_table[[sample_column]], levels = sort(unique(correlations_table[[sample_column]])))
+  # initialize the plot
+  p <- ggplot(data = NULL, mapping = aes(x = correlations_table[[lane_column]], y = correlations_table[[correlation_column]], fill = correlations_table[[sample_column]])) + geom_bar(position='stack', stat='identity') + xlab(lane_column) + ylab('correlations')
+  # use distinct colours if requested
+  if (use_distinct_colours) {
+    # get the unique possible assigments
+    possible_assignments <- unique(correlations_table[[sample_column]])
+    # get an equal amount of colours
+    possible_colours <- NULL
+    if(length(possible_assignments) > 74) {
+      possible_colours <- sample_tons_of_colors(length(possible_assignments), use_sampling = use_sampling, color_indices = color_indices)
     }
+    else {
+      possible_colours <- sample_many_colours(length(possible_assignments), use_sampling = use_sampling, color_indices = color_indices)
+    }
+    # put into a list
+    colour_mapping <- as.list(possible_colours)
+    names(colour_mapping) <- possible_assignments
+    # add to plot
+    p <- p + scale_fill_manual(values = colour_mapping)
   }
-  return(seurat_object)
-}
-
-
-gsa_ids_to_sample_sheet <- function(sample_sheet, metadata_table, participants_sheet_column='samples', metadata_participant_column='Biopsy.storage.ID', metadata_gsa_column='GSA.sample.ID') {
-  # create a new vector with th pasted GSA IDs
-  gsa_rows <- rep(NA, times = nrow(sample_sheet))
-  # now check each row
-  for (i in 1:nrow(sample_sheet)) {
-    # extract the biopsy IDs
-    biopsy_ids_row_string <- sample_sheet[i, participants_sheet_column]
-    # split them by the comma
-    biopsy_ids_row <- strsplit(biopsy_ids_row_string, ',')[[1]]
-    # now search all the GSA IDs for those
-    gsa_ids_row <- metadata_table[match(biopsy_ids_row, metadata_table[[metadata_participant_column]]), metadata_gsa_column]
-    # turn into a string
-    gsa_ids_row_string <- paste(gsa_ids_row, collapse = ',')
-    # put it into the vector
-    gsa_rows[i] <- gsa_ids_row_string
+  # add legend based on rank or assignment
+  if (assignment_to_ranking) {
+    p <- p + guides(fill=guide_legend(title='sample rank'))
   }
-  # add the result to the table
-  sample_sheet[['genoid']] <- gsa_rows
-  return(sample_sheet)
+  else{
+    p <- p + guides(fill=guide_legend(title='sample'))
+  }
+  # with some options
+  if(!is.null(ylim)){
+    p <- p + ylim(ylim)
+  }
+  if(pointless){
+    p <- p + theme(axis.text.x=element_blank(), 
+                   axis.ticks = element_blank())
+  }
+  if(legendless){
+    p <- p + theme(legend.position = 'none')
+  }
+  if (paper_style) {
+    p <- p + theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+  }
+  if (angle_labels) {
+    p <- p + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+  }
+  return(p)
 }
-
-
 
 ####################
 # Main Code        #
@@ -292,5 +479,14 @@ lanes <- c('230105_lane1', '230105_lane2', '230105_lane3', '230105_lane4',
 
 # get the correlations per lane
 correlations_per_lane <- get_correlation_matrix_per_lane(souporcell_output_loc, genotypes_loc, lanes)
+# Warning messages:
+#   1: In get_correlation_matrix_per_lane(souporcell_output_loc, genotypes_loc,  :
+#   skipped lane 230223_lane7 due to no input for the clusters or reference VCF
+#   2: In get_correlation_matrix_per_lane(souporcell_output_loc, genotypes_loc,  :
+#   skipped lane 230223_lane8 due to no input for the clusters or reference VCF
 # get the best correlations
 best_correlations <- get_best_correlations(correlations_per_lane)
+# save the results
+saveRDS(correlations_per_lane, '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/demultiplexing/souporcell/assignments/mo_souporcell_gex_uncorrected.rds')
+write.table(best_correlations, '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/demultiplexing/souporcell/assignments/mo_souporcell_gex_uncorrected_best_assignments.tsv', sep = '\t', row.names = F, col.names = T, quote = F)
+plot_correlations_per_lane(best_correlations)
