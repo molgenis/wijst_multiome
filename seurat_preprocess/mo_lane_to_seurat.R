@@ -66,7 +66,7 @@ add_data <- function(lane, base_counts_dir, matrix_dir='', min.cells = 0, min.fe
 ####################
 
 # we will use Seurat version 5
-#options(Seurat.object.assay.version = 'v5')
+options(Seurat.object.assay.version = 'v5')
 
 
 ####################
@@ -99,12 +99,19 @@ lanes <- c('230105_lane1', '230105_lane2', '230105_lane3', '230105_lane4',
 # location of the deconstructed matrices
 deconstructed_corrected_matrices_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/scanpy_preprocess_samples/deconstructed/'
 
-# create list of objects
-object_per_lane <- list()
+# location of where to place the objects
+seurat_objects_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/seurat_preprocess_samples/objects'
+
 # check each lane
 for (lane in lanes) {
-  object_per_lane[[lane]] <- add_data(lane, deconstructed_corrected_matrices_loc)
+  # print progress
+  print(paste('processing lane: ', lane, sep = ''))
+  
+  try({
+    # create the object
+    object_lane <- add_data(lane, deconstructed_corrected_matrices_loc)
+    # write the result
+    object_loc <- paste(seurat_objects_loc, '/', 'mo_', lane, '.rds', sep = '')
+    saveRDS(object_lane, object_loc)
+  })
 }
-# merge all of them
-object_merged <- merge(object_per_lane[[1]], object_per_lane[2 : length(object_per_lane)])
-object_merged <- UpdateSeuratObject(object_merged)
