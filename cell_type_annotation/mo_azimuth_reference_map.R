@@ -38,7 +38,7 @@ do_reference_mapping <- function(reference, query){
     query = query,
     reference = reference,
     refdata = list(
-      cell_type_1M_2022 = "cell_type",
+      cell_type_1M_2022 = "cell_type"
     ),
     reference.reduction = "pca",
     reduction.model = "umap"
@@ -94,7 +94,7 @@ reference <- RunPCA(reference)
 # set seed
 set.seed(1337)
 # umap
-reference <- RunUMAP(reference, dims = 1:30)
+reference <- RunUMAP(reference, dims = 1:30, return.model = T)
 # knn
 reference <- FindNeighbors(reference, dims = 1:30)
 # find clusters
@@ -119,7 +119,7 @@ for (lane in lanes) {
     # pca
     object_lane <- RunPCA(object_lane)
     # umap
-    object_lane <- RunUMAP(object_lane, dims = 1:30)
+    object_lane <- RunUMAP(object_lane, dims = 1:30, return.model = T)
     # knn
     object_lane <- FindNeighbors(object_lane, dims = 1:30)
     # find clusters
@@ -127,7 +127,7 @@ for (lane in lanes) {
     # do reference mapping
     object_lane <- do_reference_mapping(reference, object_lane)
     # we'll save the cell type
-    cell_type_prediction_lane <- data.frame(barcode = rownames(object_lane@meta.data), cell_type = object_lane@meta.data[['cell_type_1M_2022']], score = object_lane@meta.data[['cell_type_1M_2022.score']])
+    cell_type_prediction_lane <- data.frame(barcode = rownames(object_lane@meta.data), cell_type = object_lane@meta.data[['predicted.cell_type_1M_2022']], score = object_lane@meta.data[['predicted.cell_type_1M_2022.score']])
     cell_type_predictions_list[[lane]] <- cell_type_prediction_lane
     # save result
     result_loc <- paste(paste(seurat_objects_loc, '/', 'mo_', lane, '_azi_1m_v3.rds', sep = ''))

@@ -38,10 +38,27 @@ pearson_correlation <- function(df, ref_df, clust_df){
 }
 
 # method taken from https://github.com/sc-eQTLgen-consortium/WG1-pipeline-QC/blob/master/Demultiplexing/includes/Snakefile_souporcell.smk
-correlate_genotypes <- function(ref_geno_loc, cluster_geno_loc){
-  ref_geno <- read.vcfR(ref_geno_loc)
-  cluster_geno <- read.vcfR(cluster_geno_loc)
-  
+correlate_genotypes <- function(ref_geno_loc=NULL, cluster_geno_loc=NULL, ref_geno_vcfr=NULL, cluster_geno_vcfr=NULL){
+  ref_geno <- NULL
+  if (!is.null(ref_geno_vcfr)) {
+    ref_geno <- ref_geno_vcfr
+  }
+  else if (!is.null(ref_geno_loc)) {
+    ref_geno <- read.vcfR(ref_geno_loc)
+  }
+  else {
+    stop('supply either reference VCF location, or vcfR object')
+  }
+  cluster_geno <- NULL
+  if (!is.null(cluster_geno_vcfr)) {
+    cluster_geno <- cluster_geno_vcfr
+  }
+  else if (!is.null(cluster_geno_loc)) {
+    cluster_geno <- read.vcfR(cluster_geno_loc)
+  }
+  else {
+    stop('supply either cluster VCF location, or vcfR object')
+  }
   ########## Convert to tidy data frame ##########
   ref_geno_tidy <- as_tibble(extract.gt(element = "DS",ref_geno, IDtoRowNames =F))
   ref_geno_tidy$ID <- paste0(ref_geno@fix[,'CHROM'],":", ref_geno@fix[,'POS'],"_", ref_geno@fix[,'REF'], "_",ref_geno@fix[,'ALT'])
@@ -447,6 +464,89 @@ plot_correlations_per_lane <- function(correlations_table, sample_column='best_m
   return(p)
 }
 
+get_missing_participants_per_lane <- function(best_correlations, participant_per_lane_loc, participant_per_lane_loc_prepend='', participant_per_lane_loc_apppend='.txt', lane_column='lane', donor_column='best_match_sample') {
+  # get the lanes from the correlation table
+  lanes <- unique(best_correlations[[lane_column]])
+  # and we need to know how many lanes we have
+  nlanes <- length(lanes)
+  # create a dataframe to store the participants that are
+  participants_missing_per_lane = data.frame(lane = rep(NA, times = nlanes), missing = rep(NA, times = nlanes))
+  # now check each lane, by index
+  for (i in 1 : nlanes) {
+    # extract lane
+    lane = lanes[i]
+    # get the participants
+    participants_matched <- unique(best_correlations[best_correlations[[lane_column]] == lane, donor_column])
+    # get the location of the annotation that has the partipants per lane
+    parts_per_lane_loc_lane <- paste(participant_per_lane_loc, participant_per_lane_loc_prepend, '/', lane, participant_per_lane_loc_apppend, sep = '')
+    # get the participants
+    parts_should_be_in_lane <- read.table(parts_per_lane_loc_lane, header = F)$V1
+    # get what is missing
+    parts_missing <- setdiff(parts_should_be_in_lane, participants_matched)
+    # add to the dataframe
+    participants_missing_per_lane[i, 'lane'] <- lane
+    participants_missing_per_lane[i, 'missing'] <- paste(parts_missing, collapse = ',')
+  }
+  return(participants_missing_per_lane)
+}
+
+
+create_assignment_per_barcode <- function(souporcell_output_loc, best_assignments, lanes) {
+  # we will initially store per lane
+  best_match_per_barcode_lane <- list()
+  # we will check each lane
+  for (lane in lanes) {
+    # paste together the souporcell clusters file
+    barcode_clusters_loc <- paste(souporcell_output_loc, '/', lane, '/clusters.tsv', sep = '')
+    # check if the file exists
+    if (file.exists(barcode_clusters_loc)) {
+      # read the file
+      barcode_clusters <- read.table(barcode_clusters_loc, header = T, sep = '\t')
+      # add the lane as explicit column
+      barcode_clusters_lane <- rep(lane, times = nrow(barcode_clusters))
+      # add the bare barcode
+      barcodes_short_cluster <- gsub('(-\\d+)', '', barcode_clusters[['barcode']])
+      barcodes_lane_cluster <- paste(barcodes_short_cluster, rep(lane, times = length(barcodes_short_cluster)), sep = '_')
+      # subset the best assignments to this lane
+      barcodes_assignments <- best_assignments[best_assignments[['lane']] == lane, ]
+      # check if we have those assignments
+      if (nrow(barcodes_assignments) > 0) {
+        # create the dataframe
+        assignment_table_full <- data.frame(
+          lane = barcode_clusters_lane,
+          barcode_lane = barcodes_lane_cluster,
+          barcode = barcodes_short_cluster,
+          barcode_original = barcode_clusters[['barcode']],
+          status = barcode_clusters[['status']],
+          cluster = barcode_clusters[['assignment']]
+        )
+        # make the cluster a character vector, because in souporcell the cluster can be formatted as '0/7' for doublets
+        barcodes_assignments[['cluster']] <- as.character(barcodes_assignments[['cluster']])
+        # join this onto the assignments that we have
+        assignment_table_full <- merge(assignment_table_full, barcodes_assignments, by = c('lane', 'cluster'), all = T)
+        # now add back the info from the original souporcell output, that we didn't already have
+        assignment_table_full <- cbind(assignment_table_full, # add to original table
+                                       barcode_clusters[match(assignment_table_full[['barcode_original']], barcode_clusters[['barcode']]), # match to original by barcode
+                                                        setdiff(colnames(barcode_clusters), c('barcode', 'status', 'assignment'))]) # get all columns, except the ones we specify
+        # add to list
+        best_match_per_barcode_lane[[lane]] <- assignment_table_full
+      }
+      else{
+        warning(paste('skipping', lane, 'because correlations are missing'))
+      }
+    }
+    else{
+      warning(paste('skipping', lane, 'because file is missing at', barcode_clusters_loc))
+    }
+
+  }
+  # merge everything
+  full_assignments <- do.call('rbind', best_match_per_barcode_lane)
+  # order by lane, then cluster
+  full_assignments <- full_assignments[order(full_assignments[['lane']], full_assignments[['cluster']]), ]
+  return(full_assignments)
+}
+
 ####################
 # Main Code        #
 ####################
@@ -489,4 +589,41 @@ best_correlations <- get_best_correlations(correlations_per_lane)
 # save the results
 saveRDS(correlations_per_lane, '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/demultiplexing/souporcell/assignments/mo_souporcell_gex_uncorrected.rds')
 write.table(best_correlations, '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/demultiplexing/souporcell/assignments/mo_souporcell_gex_uncorrected_best_assignments.tsv', sep = '\t', row.names = F, col.names = T, quote = F)
+
+# plot what the best correlations look like
 plot_correlations_per_lane(best_correlations)
+
+# check how many samples per lane are assigned (should be 8 unique ones every time)
+samples_per_lane <- unique(best_correlations[, c('lane', 'best_match_sample')])
+nsample_per_lane <- data.frame(table(samples_per_lane[['lane']]))
+
+# get which samples are missing
+samples_missing_per_lane <- get_missing_participants_per_lane(best_correlations, '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/metadata/participant_per_lane/')
+write.table(samples_missing_per_lane[samples_missing_per_lane$missing != '', ], '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/demultiplexing/souporcell/assignments/mo_souporcell_gex_uncorrected_missings.tsv', row.names = F,col.names = T, quote = F, sep = '\t')
+
+# check some correlations
+ref_geno_all_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/genotype/imputed_hg38_all_anc_mmaf005_chrprepend.vcf.gz'
+ref_geno_all <- read.vcfR(ref_geno_all_loc)
+# we'll save for each lane
+vs_all_per_lane <- list()
+# check lanes with missing participants
+for (lane in unique(samples_missing_per_lane[samples_missing_per_lane$missing != '', 'lane'])) {
+  # calculate correlations
+  correlations_vs_all <- correlate_genotypes(
+    ref_geno_vcfr = ref_geno_all, 
+    cluster_geno_loc = paste('/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/demultiplexing/souporcell/souporcell_output/', lane, '/cluster_genotypes.vcf', sep = ''),
+    ref_geno_loc = NULL,
+    cluster_geno_vcfr = NULL
+  )
+  # add to list
+  vs_all_per_lane[[lane]] <- correlations_vs_all
+}
+
+# add correlation data
+correlation_mapping_per_barcode <- create_assignment_per_barcode(souporcell_output_loc, best_correlations, lanes = lanes)
+write.table(correlation_mapping_per_barcode, '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/demultiplexing/souporcell/assignments/mo_souporcell_gex_uncorrected_sample_matched.tsv', row.names = F,col.names = T, quote = F, sep = '\t')
+
+# try again with the gex data
+correlations_per_lane <- get_correlation_matrix_per_lane('/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/demultiplexing/souporcell/souporcell_output/gex/cellbent/', genotypes_loc, lanes, genotype_prepend = '', genotype_append = '')
+
+                              
