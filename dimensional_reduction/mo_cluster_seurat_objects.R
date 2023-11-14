@@ -17,6 +17,91 @@ library(Seurat)
 # Functions        #
 ####################
 
+nc2022_predictions_to_lower_res_mapping <- function() {
+  high_to_low <- list()
+  high_to_low[['reg CD4T']] <- 'CD4T'
+  high_to_low[['mono 1']] <- 'monocyte'
+  high_to_low[['B']] <- 'B'
+  high_to_low[['memory CD8T']] <- 'CD8T'
+  high_to_low[['unknown']] <- 'unknown'
+  high_to_low[['mono 4']] <- 'monocyte'
+  high_to_low[['mono 2']] <- 'monocyte'
+  high_to_low[['plasma B']] <- 'plasmablast'
+  high_to_low[['mono 3']] <- 'monocyte'
+  high_to_low[['naive CD4T']] <- 'CD4T'
+  high_to_low[['pDC']] <- 'DC'
+  high_to_low[['mDC']] <- 'DC'
+  high_to_low[['NKbright']] <- 'NK'
+  high_to_low[['hemapoietic stem']] <- 'hemapoietic_stem'
+  high_to_low[['NKdim']] <- 'NK'
+  high_to_low[['th2 CD4T']] <- 'CD4T'
+  high_to_low[['memory CD8T left and naive CD8T right']] <- 'CD8T'
+  high_to_low[['th1 CD4T']] <- 'CD4T'
+  high_to_low[['megakaryocyte']] <- 'megakaryocyte'
+  high_to_low[['naive CD4T transitioning to stim']] <- 'CD4T'
+  high_to_low[['naive CD8T']] <- 'CD8T'
+  high_to_low[['NK']] <- 'NK'
+  high_to_low[['double negative T']] <- 'dnT'
+  high_to_low[['T helper']] <- 'T_helper'
+  high_to_low[['megakaryocytes']] <- 'megakaryocyte'
+  high_to_low[['cyto CD4T']] <- 'CD4T'
+  return(high_to_low)
+}
+
+
+# add metadata that is based on existing incomplete metadata in the seurat object
+add_imputed_meta_data <- function(seurat_object, column_to_transform, column_to_reference, column_to_create){
+  # add the column
+  seurat_object@meta.data[[column_to_create]] <- NA
+  # go through the grouping we have for the entire object
+  for(group in unique(seurat_object@meta.data[!is.na(seurat_object@meta.data[[column_to_transform]]), column_to_transform])){
+    # subset to get only this group
+    seurat_group <- seurat_object[, !is.na(seurat_object@meta.data[[column_to_transform]]) & seurat_object@meta.data[[column_to_transform]] == group]
+    best_group <- 'unknown'
+    best_number <- 0
+    # check against the reference column
+    for(reference in unique(seurat_group@meta.data[[column_to_reference]])){
+      # we don't care for the NA reference, if we had all data, we wouldn't need to do this anyway
+      if(is.na(reference) == F){
+        # grab the number of cells in this group, with this reference
+        number_of_reference_in_group <- nrow(seurat_group@meta.data[!(is.na(seurat_group@meta.data[[column_to_reference]])) & seurat_group@meta.data[[column_to_reference]] == reference,])
+        correctpercent <- number_of_reference_in_group/ncol(seurat_group)
+        print(paste(group,"matches", reference, correctpercent,sep=" "))
+        # update numbers if better match
+        if(number_of_reference_in_group > best_number){
+          best_number <- number_of_reference_in_group
+          best_group <- reference
+        }
+      }
+    }
+    print(paste("setting ident:",best_group,"for group", group, sep=" "))
+    # set this best identity
+    seurat_object@meta.data[!is.na(seurat_object@meta.data[[column_to_transform]]) & seurat_object@meta.data[[column_to_transform]] == group, column_to_create] <- best_group
+    # force cleanup
+    rm(seurat_group)
+  }
+  return(seurat_object)
+}
+
+
+add_conditions <- function(seurat_object, condition_mapping, lane_column_mapping='lane', sample_column_mapping='sample', condition_column_mapping='condition', lane_column_metadata='lane', sample_column_metadata='soup_best_match_sample', condition_column_metadata='condition') {
+  # add the metadata column
+  seurat_object@meta.data[[condition_column_metadata]] <- NA
+  # check each row
+  for (row_i in 1 : nrow(condition_mapping)) {
+    # get the lane
+    lane <- condition_mapping[row_i, lane_column_mapping]
+    sample <- condition_mapping[row_i, sample_column_mapping]
+    condition <- condition_mapping[row_i, condition_column_mapping]
+    if (!is.na(lane) & !is.na(sample)) {
+      # set the condition
+      seurat_object@meta.data[!is.na(seurat_object@meta.data[[lane_column_metadata]]) & seurat_object@meta.data[[lane_column_metadata]] == lane &
+                                !is.na(seurat_object@meta.data[[sample_column_metadata]]) & seurat_object@meta.data[[sample_column_metadata]] == sample
+                              , condition_column_metadata] <- condition
+    }
+  }
+  return(seurat_object)
+}
 
 ####################
 # Settings         #
@@ -31,7 +116,7 @@ options(Seurat.object.assay.version = 'v5')
 ####################
 
 # location of where to place the objects
-seurat_objects_loc <- '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/archr_preprocess_samples/objects/'
+seurat_objects_loc <- '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/seurat_preprocess_samples//objects/'
 
 # get the object
 object_loc_souped <- paste(seurat_objects_loc, 'mo_all_souped_20231109.rds', sep = '')
@@ -75,6 +160,7 @@ nrow(object_all@meta.data)
 # subset by nFeature
 object_all <- object_all[, !is.na(object_all@meta.data[['nFeature_RNA_mad']]) & object_all@meta.data[['nFeature_RNA_mad']] == "NotOutlier"]
 nrow(object_all@meta.data)
+# 790233
 
 # backup the old clusters and reductions
 object_all@meta.data[['RNA_snn_res.1.2_unfiltered']] <- object_all@meta.data[['RNA_snn_res.1.2']]
@@ -91,3 +177,38 @@ object_all <- FindClusters(object_all, resolution = 1.2)
 # save result
 object_all_cluster_filtered_loc <- paste(seurat_objects_loc, 'mo_all_souped_clus_filtered_20231109.rds', sep = '')
 saveRDS(object_all, object_all_cluster_filtered_loc)
+
+# get location of cell type annotation
+cell_type_predictions_loc <- '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/cell_type_assignment/azimuth/NC2022_v3/mo_azimuth_ct_nc2022_v2.tsv'
+# read annotation
+cell_type_predictions <- read.table(cell_type_predictions_loc, header = T, sep = '\t', row.names = 1)
+# add lower resolution predictions
+cell_type_predictions[['cell_type_lowerres']] <- as.vector(unlist(nc2022_predictions_to_lower_res_mapping()[cell_type_predictions[['cell_type']]]))
+# change column name for score
+colnames(cell_type_predictions)[2] <- 'cell_type_score'
+# add to the object
+object_all <- AddMetaData(object_all, cell_type_predictions['cell_type'])
+object_all <- AddMetaData(object_all, cell_type_predictions['cell_type_score'])
+object_all <- AddMetaData(object_all, cell_type_predictions['cell_type_lowerres'])
+
+# add imputed annotation for cell types
+object_all <- add_imputed_meta_data(object_all, column_to_transform = 'seurat_clusters', column_to_reference = 'cell_type_lowerres', column_to_create = 'cell_type_lowerres_imputed')
+
+# set the NA values
+object_all@meta.data[is.na(object_all@meta.data[['cell_type']]), 'cell_type'] <- 'unmapped'
+
+# save result
+object_all_cluster_filtered_ctd_loc <- paste(seurat_objects_loc, 'mo_all_souped_clus_filtered_ctd_20231114.rds', sep = '')
+saveRDS(object_all, object_all_cluster_filtered_ctd_loc)
+
+# get the condition mapping
+condition_mapping_loc <- '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/metadata/mo_sample_sheet_final.tsv'
+condition_mapping <- read.table(condition_mapping_loc, header = T, sep = '\t')
+# add this information
+object_all <- add_conditions(object_all, condition_mapping)
+# we will add an imputed version as well
+object_all <- add_imputed_meta_data(object_all, column_to_transform = 'seurat_clusters', column_to_reference = 'condition', column_to_create = 'condition_imputed')
+
+# save the result
+object_all_cluster_filtered_ctd_cond_loc <- paste(seurat_objects_loc, 'mo_all_souped_clus_filtered_ctd_cond_20231114.rds', sep = '')
+saveRDS(object_all, object_all_cluster_filtered_ctd_cond_loc)
