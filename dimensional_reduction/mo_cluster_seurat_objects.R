@@ -103,6 +103,32 @@ add_conditions <- function(seurat_object, condition_mapping, lane_column_mapping
   return(seurat_object)
 }
 
+
+get_color_coding_dict <- function(){
+  # set the condition colors
+  color_coding <- list()
+  # set the cell type colors
+  color_coding[["Bulk"]] <- "black"
+  color_coding[["CD4T"]] <- "#153057"
+  color_coding[["CD8T"]] <- "#009DDB"
+  color_coding[["monocyte"]] <- "#EDBA1B"
+  color_coding[["NK"]] <- "#E64B50"
+  color_coding[["B"]] <- "#71BC4B"
+  color_coding[["DC"]] <- "#965EC8"
+  color_coding[["CD4+ T"]] <- "#153057"
+  color_coding[["CD8+ T"]] <- "#009DDB"
+  # other cell type colors
+  color_coding[["HSPC"]] <- "#009E94"
+  color_coding[["platelet"]] <- "#9E1C00"
+  color_coding[["plasmablast"]] <- "#DB8E00"
+  color_coding[["other T"]] <- "#FF63B6"
+  # stimulations
+  color_coding[['UT']] <- 'lightgrey'
+  color_coding[['24hCa']] <- 'forestgreen'
+  return(color_coding)
+}
+
+
 ####################
 # Settings         #
 ####################
