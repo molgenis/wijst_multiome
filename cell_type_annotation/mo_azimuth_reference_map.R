@@ -106,7 +106,7 @@ saveRDS(reference, '/groups/umcg-franke-scrna/tmp02/releases/wijst-2020-hg38/v1/
 cell_type_predictions_list <- list()
 
 # check each lane
-for (lane in lanes) {
+for (lane in c('230127_lane7', '230202_lane3', '230202_lane6', '230216_lane4', '230216_lane5', '230223_lane2', '230223_lane6', '230302_lane5', '230302_lane7')) {
   # print progress
   print(paste('processing lane: ', lane, sep = ''))
   # read the object
