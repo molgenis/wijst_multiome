@@ -22,7 +22,9 @@ library(ArchR)
 # Settings         #
 ####################
 
+# this is the reference genome
 addArchRGenome('hg38')
+# the number of threads to use
 addArchRThreads(threads = 4) 
 
 
@@ -91,5 +93,35 @@ rna_metadata <- read.table(rna_metadata_loc, header = T, sep = '\t')
 # add column as it is in the ArchR data
 rna_metadata[['archr_barcode']] <- paste(rna_metadata[['lane']], rna_metadata[['barcode_1']], sep = '#')
 
+# add some metadata we got from the rna metadata
+for (metadata_col in c('lane', 'soup_best_match_sample', 'soup_best_match_correlation', 'cell_type', 'cell_type_score', 'cell_type_lowerres', 'cell_type_lowerres_imputed', 'condition', 'condition_imputed')) {
+  mo_peaks <- addCellColData(ArchRProj = mo_peaks, data = rna_metadata[[metadata_col]],
+                             cells = rna_metadata[['archr_barcode']], name = metadata_col)
+}
 
+# filter the doublets
+mo_peaks <- filterDoublets(mo_peaks)
 
+# do the LSI in lieu of PCA
+mo_peaks <- addIterativeLSI(
+  ArchRProj = mo_peaks,
+  useMatrix = "TileMatrix", 
+  name = "IterativeLSI", 
+  iterations = 2, 
+  clusterParams = list(
+    resolution = c(1.2), 
+    sampleCells = 10000, 
+    n.start = 10
+  ), 
+  varFeatures = 25000, 
+  dimsToUse = 1:30
+)
+
+# then do clustering
+mo_peaks <- addClusters(
+  input = mo_peaks,
+  reducedDims = "IterativeLSI",
+  method = "Seurat",
+  name = "archr_clusters",
+  resolution = 1.2
+)

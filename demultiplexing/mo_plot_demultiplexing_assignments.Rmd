@@ -51,7 +51,9 @@ get_demux_assignments <- function(demuxlet_output_loc, lanes=NULL, demux_prepend
   if (is.null(lanes)) {
     # if not supplied we will try to use regex
     lane_files <- list.files(path = demuxlet_output_loc, pattern = paste(demux_prepend, '*', demux_append, sep = ''), full.names = F)
-    lanes <- sub(pattern = "(.*)\\..*$", replacement = "\\1", lane_files)
+    #lanes <- sub(pattern = "(.*)\\..*$", replacement = "\\1", lane_files)
+    lanes <- sub(pattern = demux_prepend, replacement = '', lane_files)
+    lanes <- sub(pattern = demux_append, replacement = '', lane_files)
   }
   # check each lane
   for (lane in lanes) {
@@ -88,6 +90,62 @@ get_demux_assignments <- function(demuxlet_output_loc, lanes=NULL, demux_prepend
   all_demux <- do.call('rbind', result_per_lane)
   return(all_demux)
 }
+
+
+#' get the number eGenes per cell type from EMP output
+#' 
+#' @param freemuxlet_output_loc base location of the demuxlet output
+#' @param lanes which lanes to analyse (optional, if omitted, will do a list.files to discover lanes)
+#' @param freemux_prepend what the output file per lane is prepended with (optional, empty string by default)
+#' @param freemux_append what the output file per lane is appended with (optional, '.best')
+#' @returns a dataframe with the demuxlet output of all the lanes, combined with a lane and lane+barcode column added
+#' 
+get_freemux_assignments <- function(freemuxlet_output_loc, lanes=NULL, freemux_prepend='', freemux_append='_mo_freemux_atac_cluster_correlations.tsv') {
+  # first put each result in a list of tables
+  result_per_lane <- list()
+  # get which lanes to check
+  if (is.null(lanes)) {
+    # if not supplied we will try to use regex
+    lane_files <- list.files(path = freemuxlet_output_loc, pattern = paste(freemux_prepend, '*', freemux_append, sep = ''), full.names = F)
+    lanes <- sub(pattern = freemux_prepend, replacement = "", lane_files)
+    lanes <- sub(pattern = freemux_append, replacement = "", lane_files)
+  }
+  # check each lane
+  for (lane in lanes) {
+    # get the full path
+    full_freemux_path <- paste(freemuxlet_output_loc, '/', freemux_prepend, lane, freemux_append, sep = '')
+    # check if the file exists
+    if (file.exists(full_freemux_path)) {
+      # read the file
+      freemux_lane <- read.table(full_freemux_path, header = T, sep = '\t', row.names = 1)
+      # get the bare barcode and the barcode+lane
+      barcodes_short <- gsub('(-\\d+)', '', freemux_lane$BARCODE)
+      barcodes_lane <- paste(barcodes_short, rep(lane, times = length(barcodes_short)), sep = '_')
+      # get the final assignment as well
+      final_assignments <- as.character(freemux_lane$cluster)
+      # but overwrite where it should be a doublet
+      final_assignments[!is.na(freemux_lane$DROPLET.TYPE) & freemux_lane$DROPLET.TYPE == 'DBL'] <- 'multiplet'
+      final_assignments[!is.na(freemux_lane$DROPLET.TYPE) & freemux_lane$DROPLET.TYPE == 'AMB'] <- 'ambiguous'
+      # put the new variables in a dataframe
+      freemux_additional <- data.frame(
+        lane = rep(lane, times = length(barcodes_short)),
+        barcode_bare = barcodes_short,
+        barcode_lane = barcodes_lane,
+        assignment = final_assignments
+      )
+      # now add this to the existing freemuxlet output
+      freemux_lane <- cbind(freemux_additional, freemux_lane)
+      result_per_lane[[lane]] <- freemux_lane
+    }
+    else{
+      message(paste('lane ', lane, ' does not exist at location ', full_freemux_path, ', skipped', sep = ''))
+    }
+  }
+  # combine the outputs
+  all_freemux <- do.call('rbind', result_per_lane)
+  return(all_freemux)
+}
+
 
 get_soup_assignments <- function(soup_output_loc, lanes=NULL, soup_append='clusters.tsv') {
   # first put each result in a list of tables
@@ -416,6 +474,174 @@ plot_demux_assignments <- function(demux_assignments, lane_column='lane', assign
   return(p)
 }
 
+#' get the overlaps of cells between assignments in two tools
+#' 
+#' @param assignments_reference assignments of tool number one
+#' @param assignments_against assignments of tool number two
+#' @param reference_lane_column column of tool one, that represents the lane
+#' @param against_lane_column column of tool two, that represents the lane
+#' @param reference_barcode_column column of tool one, that represents the cell barcode
+#' @param against_barcode_column column of tool two, that represents the cell barcode
+#' @param reference_assignment_column column of tool one, that represents the assignment
+#' @param against_assignment_column column of tool two, that represents the assignment
+#'
+#' @returns number of cells for each combination of assignments in both tools
+#' 
+get_cell_overlaps <- function(assignments_reference, 
+                              assignments_against, 
+                              reference_lane_column='lane', 
+                              against_lane_column='lane', 
+                              reference_barcode_column='barcode_lane',
+                              against_barcode_column='barcode_lane',
+                              reference_assignment_column='assignment',
+                              against_assignment_column='assignment') {
+  # we will store everything in a list first
+  per_lane <- list()
+  # get the lanes
+  lanes_reference <- unique(assignments_reference[[reference_lane_column]])
+  lanes_against <- unique(assignments_against[[against_lane_column]])
+  # check each lane
+  for (lane in intersect(lanes_reference, lanes_against)) {
+    # get the data for that lane
+    reference_lane <- assignments_reference[assignments_reference[[reference_lane_column]] == lane, ]
+    against_lane <- assignments_against[assignments_against[[against_lane_column]] == lane, ]
+    # create the confusion table
+    vs_table <- expand.grid(unique(reference_lane[[reference_assignment_column]]), unique(against_lane[[against_assignment_column]]))
+    # set the column names
+    colnames(vs_table) <- c('reference', 'against')
+    # add lane
+    vs_table <- cbind(data.frame(lane = rep(lane, times = nrow(vs_table))), vs_table)
+    # add some columns
+    vs_table[['ncells']] <- 0
+    vs_table[['fraction_reference']] <- 0
+    # check each row
+    for (row_i in 1 : nrow(vs_table)) {
+      # get the reference assignment
+      ref_assignment <- vs_table[row_i, 'reference']
+      # and what it is in the other
+      ag_assignment <- vs_table[row_i, 'against']
+      # get the cells in the ref
+      cells_ref <- reference_lane[reference_lane[[reference_assignment_column]] == ref_assignment, reference_barcode_column]
+      # and the ones in the other
+      cells_ag <- against_lane[against_lane[[against_assignment_column]] == ag_assignment, against_barcode_column]
+      # check which in both
+      cells_both <- intersect(cells_ref, cells_ag)
+      # check what fraction of the ref cells are in this ag for this combination
+      cells_ag_in_ref <- length(cells_both) / length(cells_ref)
+      # add to the table
+      vs_table[row_i, 'ncells'] <- length(cells_both)
+      vs_table[row_i, 'fraction_reference'] <- cells_ag_in_ref
+    }
+    per_lane[[lane]] <- vs_table
+  }
+  # add all together
+  all_lanes <- do.call('rbind', per_lane)
+  return(all_lanes)
+}
+
+
+#' get the best overlaps of cells between assignments in two tools
+#' 
+#' @param demux_overlap overlap table of each tool
+#' @param lane_column column that represents the lane
+#' @param reference_column column that represent which was the reference assignment
+#' @param fraction_column column that represents the overlap between assignmets in both tools
+#'
+#' @returns a table with for each lane and reference assignment, what the best overlap number was
+#' 
+get_best_assignments <- function(demux_overlap, lane_column='lane', reference_column='reference', fraction_column='fraction_reference') {
+  # save result per lane
+  best_per_lane <- list()
+  # check each lane
+  for (lane in unique(demux_overlap[[lane_column]])) {
+    # subset to the lane
+    demux_overlap_lane <- demux_overlap[demux_overlap[[lane_column]] == lane, ]
+    # create the table with just the unique ones
+    best_matches_lane <- data.frame(reference = unique(demux_overlap_lane[[reference_column]]))
+    # check each
+    best_matches_lane[['best_overlap']] <- apply(best_matches_lane, 1, function(x) {
+      # get the reference
+      reference <- x[[reference_column]]
+      best_overlap <- max(
+        demux_overlap_lane[demux_overlap_lane[[reference_column]] == reference, fraction_column]
+      )
+      return(best_overlap)
+    })
+    # add the lane
+    best_matches_lane <- cbind(data.frame(lane = rep(lanes, times = nrow(best_matches_lane))), best_matches_lane)
+    # add to list
+    best_per_lane[[lane]] <- best_matches_lane
+  }
+  # merge all
+  best_all <- do.call('rbind', best_per_lane)
+  return(best_all)
+}
+
+
+#' plot the best overlaps
+#' 
+#' @param best_assignment_scores a table with for each lane and reference assignment, what the best overlap number was
+#' @param lane_column which column contains the lane of the cell (optional, 'lane' by default)
+#' @param reference_column which column contains the sample assignment of the cell (optional, 'assignment' by default)
+#' @param best_overlap_column use instead of the sample assignment, the rank of the sample (optional, T by default)
+#' @param ylim supply the y limits as vector (optional)
+#' @param pointless remove ticks on the bottom of plot (optional, default F)
+#' @param legendless remove the legend (optional, default F)
+#' @param paper_style add extra whitespace to plot (optional, default T)
+#' @param angle_labels angle the x axis labels 90 degrees (optional, default T)
+#' @param use_distinct_colours use the distinct colour palette instead of ggplot defaults (optional, default T)
+#' @param use_sampling randomly sample colours from the distinct colour palette (optional, default F)
+#' @param color_indices supply specific indices relating to colours to use from the distinct colour palette. Use 'get_available_colours_grid' to get the colours and their indices (optional, unused by default)
+#' @returns plot with demuxlet cell numbers or fraction of each sample in each lane
+#' 
+plot_best_overlaps <- function(best_assignment_scores, lane_column='lane', reference_column='reference', best_overlap_column='best_overlap', ylim=NULL, pointless=F, legendless=F, paper_style=T, angle_labels=T, use_distinct_colours=T, use_sampling=F, color_indices=NULL) {
+  # order the reference
+  non_clus <- setdiff(unique(best_assignment_scores[[reference_column]]), c('ambiguous', 'multiplet'))
+  non_clus <- non_clus[order(non_clus)]
+  best_assignment_scores[[reference_column]] <- factor(best_assignment_scores[[reference_column]], levels = c(non_clus, 'ambiguous', 'multiplet'))
+  # start the plot
+  p <- ggplot(data = NULL, mapping = aes(x = best_assignment_scores[[lane_column]], y = best_assignment_scores[[best_overlap_column]], fill = best_assignment_scores[[reference_column]])) + geom_bar(position='stack', stat='identity') + xlab(lane_column) + ylab(best_overlap_column)
+  # use distinct colours if requested
+  if (use_distinct_colours) {
+    # get the unique possible assigments
+    possible_assignments <- unique(best_assignment_scores[[reference_column]])
+    # get an equal amount of colours
+    possible_colours <- NULL
+    if(length(possible_assignments) > 74) {
+      possible_colours <- sample_tons_of_colors(length(possible_assignments), use_sampling = use_sampling, color_indices = color_indices)
+    }
+    else {
+      possible_colours <- sample_many_colours(length(possible_assignments), use_sampling = use_sampling, color_indices = color_indices)
+    }
+    # put into a list
+    colour_mapping <- as.list(possible_colours)
+    names(colour_mapping) <- possible_assignments
+    # add to plot
+    p <- p + scale_fill_manual(values = colour_mapping)
+  }
+  # add legend based on rank or assignment
+  p <- p + guides(fill=guide_legend(title=reference_column))
+  # with some options
+  if(!is.null(ylim)){
+    p <- p + ylim(ylim)
+  }
+  if(pointless){
+    p <- p + theme(axis.text.x=element_blank(), 
+                   axis.ticks = element_blank())
+  }
+  if(legendless){
+    p <- p + theme(legend.position = 'none')
+  }
+  if (paper_style) {
+    p <- p + theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+  }
+  if (angle_labels) {
+    p <- p + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+  }
+  return(p)
+}
+
+
 ```
 
 ```{r setup, include=TRUE, fig.width=10, fig.height=10}
@@ -427,10 +653,15 @@ knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # location of output
 demuxlet_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/demultiplexing/demuxlet/demuxlet_output/gex/'
+atac_demux_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/demultiplexing/demuxlet/demuxlet_output/atac/'
 demux_prepend <- ''
 demux_append <- '.best'
 souporcell_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/demultiplexing/souporcell/souporcell_output/'
 souporcell_append <- 'clusters.tsv'
+freemuxlet_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/demultiplexing/freemuxlet/atac/assignments/'
+freemux_prepend <- ''
+freemux_append <- '_mo_freemux_atac_cluster_correlations.tsv'
+souporcell_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/demultiplexing/souporcell/souporcell_output/'
 
 # let's check the colours available, as we need some later
 get_available_colours_grid(many = T)
@@ -443,8 +674,20 @@ knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 demux_assignments <- get_demux_assignments(demuxlet_output_loc)
 # plot both the absolute numbers and the fractions, supplying the colours I like from the available colours (parameter color_indices can be kept empty)
 plot_grid(
-  plot_demux_assignments(demux_assignments, color_indices = c(1,2,3,4,5,6,7,8,9,17,26)),
-  plot_demux_assignments(demux_assignments, to_fractions = T, color_indices = c(1,2,3,4,5,6,7,8,9,17,26))
+  plot_demux_assignments(demux_assignments, color_indices = c(1,2,3,4,5,6,7,8,9,10,17,26)),
+  plot_demux_assignments(demux_assignments, to_fractions = T, color_indices = c(1,2,3,4,5,6,7,8,9,10,17,26))
+)
+```
+
+```{r demuxlet_atac, include=TRUE, fig.width=20, fig.height=10}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# get the assignments
+atac_demux_assignments <- get_demux_assignments(atac_demux_output_loc, demux_append = '.best.gz')
+# plot both the absolute numbers and the fractions, supplying the colours I like from the available colours (parameter color_indices can be kept empty)
+plot_grid(
+  plot_demux_assignments(atac_demux_assignments, color_indices = c(1,2,3,4,5,6,7,8,9,10,17,26)),
+  plot_demux_assignments(atac_demux_assignments, to_fractions = T, color_indices = c(1,2,3,4,5,6,7,8,9,10,17,26))
 )
 ```
 
@@ -455,7 +698,30 @@ knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 soup_assignments <- get_soup_assignments(souporcell_output_loc)
 # plot
 plot_grid(
-  plot_demux_assignments(soup_assignments),
-  plot_demux_assignments(soup_assignments, to_fractions = T)
+  plot_demux_assignments(soup_assignments, color_indices = c(1,2,3,4,5,6,7,8,10,17)),
+  plot_demux_assignments(soup_assignments, to_fractions = T, color_indices = c(1,2,3,4,5,6,7,8,10,17))
 )
+```
+
+```{r freemux, include=TRUE, fig.width=20, fig.height=10}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# get the assignments
+freemux_assignments <- get_freemux_assignments(freemuxlet_output_loc, freemux_prepend = '', freemux_append = freemux_append)
+# plot
+plot_grid(
+  plot_demux_assignments(freemux_assignments, color_indices = c(1,2,3,4,5,6,7,8,9,17,26)),
+  plot_demux_assignments(freemux_assignments, to_fractions = T, color_indices = c(1,2,3,4,5,6,7,8,9,17,26))
+)
+```
+
+```{r overlap, include=TRUE, fig.width=10, fig.height=10}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# get the assignments
+soup_freemux_overlap <- get_cell_overlaps(soup_assignments, freemux_assignments)
+# get the highest overlap fraction per cluster in each lane
+soup_freemux_overlap_best <- get_best_assignments(soup_freemux_overlap)
+# plot the best overlaps
+plot_best_overlaps(soup_freemux_overlap_best[!(soup_freemux_overlap_best[['reference']] %in% c('ambiguous', 'multiplet')), ], color_indices = c(1,2,3,4,5,6,7,8))
 ```
