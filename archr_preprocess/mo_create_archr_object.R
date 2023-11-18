@@ -11,11 +11,87 @@
 ####################
 
 library(ArchR)
-
+#devtools::install_version("Matrix", version = "1.6-1", repos = "http://cran.us.r-project.org")
+#library(Matrix)
 
 ####################
 # Functions        #
 ####################
+
+#' get the number eGenes per cell type from EMP output
+#' 
+#' @param freemuxlet_output_loc base location of the demuxlet output
+#' @param lanes which lanes to analyse (optional, if omitted, will do a list.files to discover lanes)
+#' @param freemux_prepend what the output file per lane is prepended with (optional, empty string by default)
+#' @param freemux_append what the output file per lane is appended with (optional, '.best')
+#' @returns a dataframe with the demuxlet output of all the lanes, combined with a lane and lane+barcode column added
+#' 
+get_freemux_assignments <- function(freemuxlet_output_loc, lanes=NULL, freemux_prepend='', freemux_append='_mo_freemux_atac_cluster_correlations.tsv') {
+  # first put each result in a list of tables
+  result_per_lane <- list()
+  # get which lanes to check
+  if (is.null(lanes)) {
+    # if not supplied we will try to use regex
+    lane_files <- list.files(path = freemuxlet_output_loc, pattern = paste(freemux_prepend, '*', freemux_append, sep = ''), full.names = F)
+    lanes <- sub(pattern = freemux_prepend, replacement = "", lane_files)
+    lanes <- sub(pattern = freemux_append, replacement = "", lane_files)
+  }
+  # check each lane
+  for (lane in lanes) {
+    # get the full path
+    full_freemux_path <- paste(freemuxlet_output_loc, '/', freemux_prepend, lane, freemux_append, sep = '')
+    # check if the file exists
+    if (file.exists(full_freemux_path)) {
+      # read the file
+      freemux_lane <- read.table(full_freemux_path, header = T, sep = '\t', row.names = 1)
+      # get the bare barcode and the barcode+lane
+      barcodes_short <- gsub('(-\\d+)', '', freemux_lane$BARCODE)
+      barcodes_lane <- paste(barcodes_short, rep(lane, times = length(barcodes_short)), sep = '_')
+      # get the final assignment as well
+      final_assignments <- as.character(freemux_lane$cluster)
+      # but overwrite where it should be a doublet
+      final_assignments[!is.na(freemux_lane$DROPLET.TYPE) & freemux_lane$DROPLET.TYPE == 'DBL'] <- 'multiplet'
+      final_assignments[!is.na(freemux_lane$DROPLET.TYPE) & freemux_lane$DROPLET.TYPE == 'AMB'] <- 'ambiguous'
+      # put the new variables in a dataframe
+      freemux_additional <- data.frame(
+        lane = rep(lane, times = length(barcodes_short)),
+        barcode_1 = freemux_lane$BARCODE,
+        barcode_bare = barcodes_short,
+        barcode_lane = barcodes_lane,
+        assignment = final_assignments
+      )
+      # now add this to the existing freemuxlet output
+      freemux_lane <- cbind(freemux_additional, freemux_lane)
+      result_per_lane[[lane]] <- freemux_lane
+    }
+    else{
+      message(paste('lane ', lane, ' does not exist at location ', full_freemux_path, ', skipped', sep = ''))
+    }
+  }
+  # combine the outputs
+  all_freemux <- do.call('rbind', result_per_lane)
+  return(all_freemux)
+}
+
+
+add_conditions_demuxed <- function(demuxing_output, condition_mapping, lane_column_mapping='lane', sample_column_mapping='sample', condition_column_mapping='condition', lane_column_metadata='lane', sample_column_metadata='best_match_sample', condition_column_metadata='condition') {
+  # add the metadata column
+  demuxing_output[[condition_column_metadata]] <- NA
+  # check each row
+  for (row_i in 1 : nrow(condition_mapping)) {
+    # get the lane
+    lane <- condition_mapping[row_i, lane_column_mapping]
+    sample <- condition_mapping[row_i, sample_column_mapping]
+    condition <- condition_mapping[row_i, condition_column_mapping]
+    if (!is.na(lane) & !is.na(sample)) {
+      # set the condition
+      demuxing_output[!is.na(demuxing_output[[lane_column_metadata]]) & demuxing_output[[lane_column_metadata]] == lane &
+                                !is.na(demuxing_output[[sample_column_metadata]]) & demuxing_output[[sample_column_metadata]] == sample
+                              , condition_column_metadata] <- condition
+    }
+  }
+  return(demuxing_output)
+}
 
 
 ####################
@@ -26,7 +102,10 @@ library(ArchR)
 addArchRGenome('hg38')
 # the number of threads to use
 addArchRThreads(threads = 4) 
-
+# we need some more memory
+options(future.globals.maxSize = 190 * 1000 * 1024^2)
+# set seed
+set.seed(7777)
 
 ####################
 # Main Code        #
@@ -72,6 +151,10 @@ ArrowFiles <- createArrowFiles(
   addGeneScoreMat = TRUE
 )
 
+write.table(ArrowFiles, '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/archr_preprocess_samples/objects/merged/mo_arrowfiles.txt', row.names = F, col.names = F)
+ArrowFiles <- read.table('/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/archr_preprocess_samples/objects/merged/mo_arrowfiles.txt', header = F)$V1
+#ArrowFiles <- list.files('/local/projects/multiome/ongoing/archr_preprocess_samples/objects/raw/*.arrow', full.names = T)
+
 # add doublet scores
 doubScores <- addDoubletScores(
   input = ArrowFiles,
@@ -84,23 +167,54 @@ doubScores <- addDoubletScores(
 mo_peaks <- ArchRProject(
   ArrowFiles = ArrowFiles, 
   outputDirectory = '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/archr_preprocess_samples/objects/merged/',
+  #outputDirectory = '/local/projects/multiome/ongoing/archr_preprocess_samples/objects/merged/',
   copyArrows = TRUE # so that if you modify the Arrow files, you have an original copy for later usage
 )
 
+saveRDS(mo_peaks, '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/archr_preprocess_samples/objects/merged/mo_archr_unfiltered.rds')
+#saveRDS(mo_peaks, '/local/projects/multiome/ongoing/archr_preprocess_samples/objects/merged/mo_archr_unfiltered.rds')
+
+
+#mo_peaks <- readRDS('/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/archr_preprocess_samples/objects/merged/mo_archr_unfiltered.rds')
 # read the metadata we have based on the RNA-seq
 rna_metadata_loc <- '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/metadata/mo_celllevel_metadata.tsv'
 rna_metadata <- read.table(rna_metadata_loc, header = T, sep = '\t')
 # add column as it is in the ArchR data
 rna_metadata[['archr_barcode']] <- paste(rna_metadata[['lane']], rna_metadata[['barcode_1']], sep = '#')
-
 # add some metadata we got from the rna metadata
-for (metadata_col in c('lane', 'soup_best_match_sample', 'soup_best_match_correlation', 'cell_type', 'cell_type_score', 'cell_type_lowerres', 'cell_type_lowerres_imputed', 'condition', 'condition_imputed')) {
+for (metadata_col in c('lane', 'soup_best_match_sample', 'soup_best_match_correlation', 'cell_type', 'cell_type_score', 'cell_type_lowerres', 'cell_type_lowerres_imputed', 'condition', 'condition_imputed', 'seurat_clusters')) {
   mo_peaks <- addCellColData(ArchRProj = mo_peaks, data = rna_metadata[[metadata_col]],
                              cells = rna_metadata[['archr_barcode']], name = metadata_col)
 }
 
+# add the ATAC metadata
+freemuxlet_output_loc <- '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/demultiplexing/freemuxlet/atac/assignments/'
+freemux_prepend <- ''
+freemux_append <- '_mo_freemux_atac_cluster_correlations.tsv'
+freemux_assignments <- get_freemux_assignments(freemuxlet_output_loc, freemux_prepend = '', freemux_append = freemux_append)
+# get the condition mapping
+condition_mapping_loc <- '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/metadata/mo_sample_sheet_final.tsv'
+condition_mapping <- read.table(condition_mapping_loc, header = T, sep = '\t')
+freemux_assignments <- add_conditions_demuxed(freemux_assignments, condition_mapping)
+# add column as it is in the ArchR data
+freemux_assignments[['archr_barcode']] <- paste(freemux_assignments[['lane']], freemux_assignments[['barcode_1']], sep = '#')
+for (metadata_col in c('lane', 'DROPLET.TYPE', 'best_match_sample', 'best_match_correlation')) {
+  mo_peaks <- addCellColData(ArchRProj = mo_peaks, data = freemux_assignments[[metadata_col]],
+                             cells = freemux_assignments[['archr_barcode']], name = paste('freemux', metadata_col, sep = '_'))
+}
+
+# ncell 1307396
 # filter the doublets
 mo_peaks <- filterDoublets(mo_peaks)
+# ncell 1262102
+
+# get the cells that are not doublets
+non_doublets <- rna_metadata[!is.na(rna_metadata[['soup_best_match_sample']]), 'archr_barcode']
+# filter ones that we have in the peaks
+non_doublets <- non_doublets[non_doublets %in% mo_peaks$cellNames]
+#mo_peaks <- subsetArchRProject(mo_peaks, cells = non_doublets, outputDirectory = '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/archr_preprocess_samples/objects/filtered/', force = T)
+# ncell 727751
+
 
 # do the LSI in lieu of PCA
 mo_peaks <- addIterativeLSI(
@@ -114,8 +228,36 @@ mo_peaks <- addIterativeLSI(
     n.start = 10
   ), 
   varFeatures = 25000, 
-  dimsToUse = 1:30
+  dimsToUse = 1:30,
+  sampleCellsFinal = 50000,
+  projectCellsPre = T
 )
+saveRDS(mo_peaks, '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/archr_preprocess_samples/objects/merged/mo_archr_unfiltered_lsi.rds')
+#saveRDS(mo_peaks, '/local/projects/multiome/ongoing/archr_preprocess_samples/objects/mo_archr_unfiltered_lsi.rds')
+
+#mo_peaks <- readRDS('/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/archr_preprocess_samples/objects/merged/mo_archr_unfiltered_lsi.rds')
+# and do dimensional reduction using UMAP
+mo_peaks <- addUMAP(
+  ArchRProj = mo_peaks, 
+  reducedDims = "IterativeLSI", 
+  name = "UMAP", 
+  nNeighbors = 30, 
+  minDist = 0.5, 
+  metric = "cosine"
+)
+saveRDS(mo_peaks, '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/archr_preprocess_samples/objects/merged/mo_archr_unfiltered_umap.rds')
+#saveRDS(mo_peaks, '/local/projects/multiome/ongoing/archr_preprocess_samples/objects/mo_archr_unfiltered_umap.rds')
+
+# do scran clustering
+mo_peaks <- addClusters(
+  input = mo_peaks,
+  reducedDims = "IterativeLSI",
+  method = "scran",
+  name = "ScranClusters",
+  k = 15
+)
+saveRDS(mo_peaks, '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/archr_preprocess_samples/objects/merged/mo_archr_unfiltered_clus.rds')
+#saveRDS(mo_peaks, '/local/projects/multiome/ongoing/archr_preprocess_samples/objects/mo_archr_unfiltered_clus.rds')
 
 # then do clustering
 mo_peaks <- addClusters(
@@ -123,5 +265,45 @@ mo_peaks <- addClusters(
   reducedDims = "IterativeLSI",
   method = "Seurat",
   name = "archr_clusters",
+  resolution = 0.8,
+  sampleCells = 25000
+)
+saveRDS(mo_peaks, '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/archr_preprocess_samples/objects/merged/mo_archr_unfiltered_clus.rds')
+
+
+# get UT
+ut_cells <- rna_metadata[!is.na(rna_metadata[['condition_imputed']]) & rna_metadata[['condition_imputed']] == 'UT', 'archr_barcode']
+ut_cells <- ut_cells[ut_cells %in% mo_peaks$cellNames]
+ut_peaks <- subsetArchRProject(mo_peaks, cells = ut_cells, outputDirectory = '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/archr_preprocess_samples/objects/UT/', force = T)
+# do the LSI in lieu of PCA
+ut_peaks <- addIterativeLSI(
+  ArchRProj = ut_peaks,
+  useMatrix = "TileMatrix", 
+  name = "IterativeLSI", 
+  iterations = 2, 
+  clusterParams = list(
+    resolution = c(1.2), 
+    sampleCells = 10000, 
+    n.start = 10
+  ), 
+  varFeatures = 25000, 
+  dimsToUse = 1:30
+)
+# then do clustering
+ut_peaks <- addClusters(
+  input = ut_peaks,
+  reducedDims = "IterativeLSI",
+  method = "Seurat",
+  name = "archr_clusters",
   resolution = 1.2
 )
+# and do dimensional reduction using UMAP
+ut_peaks <- addUMAP(
+  ArchRProj = ut_peaks, 
+  reducedDims = "IterativeLSI", 
+  name = "UMAP", 
+  nNeighbors = 30, 
+  minDist = 0.5, 
+  metric = "cosine"
+)
+
