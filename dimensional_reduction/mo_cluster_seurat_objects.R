@@ -11,6 +11,9 @@
 
 # required to create object
 library(Seurat)
+# for plots
+library(ggplot2)
+library(cowplot)
 
 
 ####################
@@ -104,6 +107,23 @@ add_conditions <- function(seurat_object, condition_mapping, lane_column_mapping
 }
 
 
+get_scrublet_output <- function(scrublet_output_loc) {
+  # get all files
+  files_scrublet <- list.files(scrublet_output_loc)
+  # we'll add them in a list first
+  scrublet_per_lane <- list()
+  # check each file
+  for (scrublet_file in files_scrublet) {
+    # read the file
+    scrublet_output_lane <- read.table(paste(scrublet_output_loc, '/', scrublet_file, sep = ''), header = T, sep = '\t')
+    scrublet_per_lane[[scrublet_file]] <- scrublet_output_lane
+  }
+  # merge all the lanes
+  scrublet_all <- do.call('rbind', scrublet_per_lane)
+  return(scrublet_all)
+}
+
+
 get_color_coding_dict <- function(){
   # set the condition colors
   color_coding <- list()
@@ -188,6 +208,12 @@ object_all <- object_all[, !is.na(object_all@meta.data[['nFeature_RNA_mad']]) & 
 nrow(object_all@meta.data)
 # 790233
 
+# and with minimal expression
+object_all <- object_all[, object_all@meta.data[['nCount_RNA']] >= 200 & object_all@meta.data[['nFeature_RNA']] >= 3]
+nrow(object_all@meta.data)
+# 781748
+
+
 # backup the old clusters and reductions
 object_all@meta.data[['RNA_snn_res.1.2_unfiltered']] <- object_all@meta.data[['RNA_snn_res.1.2']]
 object_all[['umap_unfiltered']] <- object_all[['umap']]
@@ -198,11 +224,7 @@ object_all <- FindVariableFeatures(object_all, layer = 'data')
 object_all <- RunPCA(object_all)
 object_all <- RunUMAP(object_all, dims = 1:30, return.model = T)
 object_all <- FindNeighbors(object_all, dims = 1:30)
-object_all <- FindClusters(object_all, resolution = 1.2)
-
-# save result
-object_all_cluster_filtered_loc <- paste(seurat_objects_loc, 'mo_all_souped_clus_filtered_20231109.rds', sep = '')
-saveRDS(object_all, object_all_cluster_filtered_loc)
+object_all <- FindClusters(object_all, resolution = 1.5)
 
 # get location of cell type annotation
 cell_type_predictions_loc <- '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/cell_type_assignment/azimuth/NC2022_v3/mo_azimuth_ct_nc2022_v2.tsv'
@@ -224,17 +246,68 @@ object_all <- add_imputed_meta_data(object_all, column_to_transform = 'seurat_cl
 object_all@meta.data[is.na(object_all@meta.data[['cell_type']]), 'cell_type'] <- 'unmapped'
 
 # save result
-object_all_cluster_filtered_ctd_loc <- paste(seurat_objects_loc, 'mo_all_souped_clus_filtered_ctd_20231114.rds', sep = '')
+object_all_cluster_filtered_ctd_loc <- paste(seurat_objects_loc, 'mo_all_souped_clus_filtered_ctd_20231121.rds', sep = '')
 saveRDS(object_all, object_all_cluster_filtered_ctd_loc)
+
+# the output of scrublet
+scrublet_output_loc <- '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/demultiplexing/scrublet/scrublet_output/corrected/'
+scrublet_output <- get_scrublet_output(scrublet_output_loc)
+# set the lane barcode as the column name
+rownames(scrublet_output) <- scrublet_output[['lane_barcode']]
+# rename columns
+colnames(scrublet_output) <- paste('scrublet_', colnames(scrublet_output), sep = '')
+# add the ones we care about
+object_all <- AddMetaData(object_all, metadata = scrublet_output[, c('scrublet_doublet', 'scrublet_doublet_score')])
 
 # get the condition mapping
 condition_mapping_loc <- '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/metadata/mo_sample_sheet_final.tsv'
 condition_mapping <- read.table(condition_mapping_loc, header = T, sep = '\t')
 # add this information
 object_all <- add_conditions(object_all, condition_mapping)
+# but only where we are sure of the sample assignment and thus the condition
+object_all@meta.data[!is.na(object_all@meta.data$soup_best_match_correlation) & object_all@meta.data$soup_best_match_correlation > 0.7, 'filtered_condition'] <- object_all@meta.data[!is.na(object_all@meta.data$soup_best_match_correlation) & object_all@meta.data$soup_best_match_correlation > 0.7, 'condition']
 # we will add an imputed version as well
 object_all <- add_imputed_meta_data(object_all, column_to_transform = 'seurat_clusters', column_to_reference = 'condition', column_to_create = 'condition_imputed')
+object_all <- add_imputed_meta_data(object_all, column_to_transform = 'seurat_clusters', column_to_reference = 'filtered_condition', column_to_create = 'filtered_condition_imputed')
+
 
 # save the result
-object_all_cluster_filtered_ctd_cond_loc <- paste(seurat_objects_loc, 'mo_all_souped_clus_filtered_ctd_cond_20231114.rds', sep = '')
+object_all_cluster_filtered_ctd_cond_loc <- paste(seurat_objects_loc, 'mo_all_souped_clus_filtered_ctd_cond_20231121.rds', sep = '')
 saveRDS(object_all, object_all_cluster_filtered_ctd_cond_loc)
+
+# now repeat for just UT
+object_ut <- object_all[, object_all@meta.data$soup_best_match_correlation > 0.7 & !is.na(object_all@meta.data[['condition']]) & object_all@meta.data[['condition']] == 'UT']
+object_ut <- ScaleData(object_ut)
+object_ut <- FindVariableFeatures(object_ut, layer = 'data')
+object_ut <- RunPCA(object_ut)
+object_ut <- RunUMAP(object_ut, dims = 1:30, return.model = T)
+object_ut <- FindNeighbors(object_ut, dims = 1:30)
+object_ut <- FindClusters(object_ut, resolution = 1.5)
+# save result
+object_ut_cluster_filtered_ctd_loc <- paste(seurat_objects_loc, 'mo_all_souped_clus_filtered_20231121.rds', sep = '')
+saveRDS(object_ut, object_ut_cluster_filtered_ctd_loc)
+# make plots
+p_dim_ut <- DimPlot(object_ut)
+p_markers_ut <- plot_grid(FeaturePlot(object_ut, features=c('CD14', 'CD19', 'CD3G', 'CD3D')), FeaturePlot(object_ut, features=c('CD4', 'CD74', 'CD8A', 'CST7')), FeaturePlot(object_ut, features=c('CTSS', 'NCAM1', 'FCGR3A', 'NKG7')), nrow = 1, ncol=3)
+ggsave('~/mo_ut_souped_clus_filtered_ctd_cond_20231117_clusters.pdf', plot = p_dim_ut, width = 10, height = 10)
+ggsave('~/mo_ut_marker_genes.pdf', plot = p_markers_ut, width = 20, height = 10)
+
+
+# now repeat for just ca
+object_ca <- object_all[, object_all@meta.data$soup_best_match_correlation > 0.7 & object_all@meta.data[['condition']] == '24hCa']
+object_ca <- ScaleData(object_ca)
+object_ca <- FindVariableFeatures(object_ca, layer = 'data')
+object_ca <- RunPCA(object_ca)
+object_ca <- RunUMAP(object_ca, dims = 1:30, return.model = T)
+object_ca <- FindNeighbors(object_ca, dims = 1:30)
+object_ca <- FindClusters(object_ca, resolcaion = 1.5)
+plot_grid(FeaturePlot(object_ca, features=c('CD14', 'CD19', 'CD3G', 'CD3D')), FeaturePlot(object_ca, features=c('CD4', 'CD74', 'CD8A', 'CST7')), FeaturePlot(object_ca, features=c('CTSS', 'NCAM1', 'FCGR3A', 'NKG7')), nrow = 1, ncol=3)
+# save result
+object_ca_cluster_filtered_ctd_loc <- paste(seurat_objects_loc, 'mo_all_souped_clus_filtered_20231121.rds', sep = '')
+saveRDS(object_ca, object_ca_cluster_filtered_ctd_loc)
+# make plots
+p_dim_ca <- DimPlot(object_ca)
+p_markers_ca <- plot_grid(FeaturePlot(object_ca, features=c('CD14', 'CD19', 'CD3G', 'CD3D')), FeaturePlot(object_ca, features=c('CD4', 'CD74', 'CD8A', 'CST7')), FeaturePlot(object_ca, features=c('CTSS', 'NCAM1', 'FCGR3A', 'NKG7')), nrow = 1, ncol=3)
+ggsave('~/mo_24hca_souped_clus_filtered_ctd_cond_20231117_clusters.pdf', plot = p_dim_ca, width = 10, height = 10)
+ggsave('~/mo_24hca_marker_genes.pdf', plot = p_markers_ca, width = 20, height = 10)
+
