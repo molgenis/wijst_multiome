@@ -112,6 +112,9 @@ soup_out_all_rna <- soup_out_all_rna[, setdiff(colnames(soup_out_all_rna), c('la
 colnames(soup_out_all_rna) <- paste('soup', colnames(soup_out_all_rna), sep = '_')
 # add to object
 object_all <- AddMetaData(object_all, soup_out_all_rna)
-# save the object somewhere
-object_loc_souped <- paste(seurat_objects_loc, 'mo_all_souped_20231109.rds', sep = '')
-saveRDS(object_all, object_loc_souped)
+# merge layers
+object_all <- JoinLayers(object_all)
+# update to Seurat v5
+object_loc_v5 <- paste(seurat_objects_loc, 'mo_all_souped_20231129_seuratv5.rds', sep = '')
+saveRDS(object_all, object_loc_v5)
+
