@@ -284,7 +284,7 @@ object_ut <- RunUMAP(object_ut, dims = 1:30, return.model = T)
 object_ut <- FindNeighbors(object_ut, dims = 1:30)
 object_ut <- FindClusters(object_ut, resolution = 1.5)
 # save result
-object_ut_cluster_filtered_ctd_loc <- paste(seurat_objects_loc, 'mo_all_souped_clus_filtered_20231121.rds', sep = '')
+object_ut_cluster_filtered_ctd_loc <- paste(seurat_objects_loc, 'mo_all_souped_clus_filtered_20231130.rds', sep = '')
 saveRDS(object_ut, object_ut_cluster_filtered_ctd_loc)
 # make plots
 p_dim_ut <- DimPlot(object_ut)
@@ -300,7 +300,7 @@ object_ca <- FindVariableFeatures(object_ca, layer = 'data')
 object_ca <- RunPCA(object_ca)
 object_ca <- RunUMAP(object_ca, dims = 1:30, return.model = T)
 object_ca <- FindNeighbors(object_ca, dims = 1:30)
-object_ca <- FindClusters(object_ca, resolcaion = 1.5)
+object_ca <- FindClusters(object_ca, resolution = 1.5)
 plot_grid(FeaturePlot(object_ca, features=c('CD14', 'CD19', 'CD3G', 'CD3D')), FeaturePlot(object_ca, features=c('CD4', 'CD74', 'CD8A', 'CST7')), FeaturePlot(object_ca, features=c('CTSS', 'NCAM1', 'FCGR3A', 'NKG7')), nrow = 1, ncol=3)
 # save result
 object_ca_cluster_filtered_ctd_loc <- paste(seurat_objects_loc, 'mo_all_souped_clus_filtered_20231129.rds', sep = '')
