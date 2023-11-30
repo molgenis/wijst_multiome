@@ -165,31 +165,31 @@ options(Seurat.object.assay.version = 'v5')
 seurat_objects_loc <- '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/seurat_preprocess_samples//objects/'
 
 # get the object
-object_loc_souped <- paste(seurat_objects_loc, 'mo_all_souped_20231109.rds', sep = '')
+object_loc_souped <- paste(seurat_objects_loc, 'mo_all_souped_20231129_seuratv5.rds', sep = '')
 object_all <- readRDS(object_loc_souped)
 
 # merge layers
-object_all <- JoinLayers(object_all)
+#object_all <- JoinLayers(object_all)
 
 # do normalization
 object_all <- NormalizeData(object_all)
-object_all <- ScaleData(object_all)
+#object_all <- ScaleData(object_all)
 
 # do PCA
-object_all <- FindVariableFeatures(object_all, layer = 'data')
-object_all <- RunPCA(object_all)
+# object_all <- FindVariableFeatures(object_all, layer = 'data')
+# object_all <- RunPCA(object_all)
 # set seed
 set.seed(1337)
 # umap
-object_all <- RunUMAP(object_all, dims = 1:30, return.model = T)
+# object_all <- RunUMAP(object_all, dims = 1:30, return.model = T)
 # knn
-object_all <- FindNeighbors(object_all, dims = 1:30)
+# object_all <- FindNeighbors(object_all, dims = 1:30)
 # find clusters
-object_all <- FindClusters(object_all, resolution = 1.2)
+# object_all <- FindClusters(object_all, resolution = 1.2)
 
 # save result
-object_all_cluster_unfiltered_loc <- paste(seurat_objects_loc, 'mo_all_souped_clus_unfiltered_20231109.rds', sep = '')
-saveRDS(object_all, object_all_cluster_unfiltered_loc)
+# object_all_cluster_unfiltered_loc <- paste(seurat_objects_loc, 'mo_all_souped_clus_unfiltered_20231129.rds', sep = '')
+# saveRDS(object_all, object_all_cluster_unfiltered_loc)
 
 # subset to only singlets
 nrow(object_all@meta.data)
@@ -226,6 +226,10 @@ object_all <- RunUMAP(object_all, dims = 1:30, return.model = T)
 object_all <- FindNeighbors(object_all, dims = 1:30)
 object_all <- FindClusters(object_all, resolution = 1.5)
 
+# save the result
+object_all_cluster_filtered_loc <- paste(seurat_objects_loc, 'mo_all_souped_clus_filtered_20231129.rds', sep = '')
+saveRDS(object_all, object_all_cluster_filtered_loc)
+
 # get location of cell type annotation
 cell_type_predictions_loc <- '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/cell_type_assignment/azimuth/NC2022_v3/mo_azimuth_ct_nc2022_v2.tsv'
 # read annotation
@@ -244,10 +248,6 @@ object_all <- add_imputed_meta_data(object_all, column_to_transform = 'seurat_cl
 
 # set the NA values
 object_all@meta.data[is.na(object_all@meta.data[['cell_type']]), 'cell_type'] <- 'unmapped'
-
-# save result
-object_all_cluster_filtered_ctd_loc <- paste(seurat_objects_loc, 'mo_all_souped_clus_filtered_ctd_20231121.rds', sep = '')
-saveRDS(object_all, object_all_cluster_filtered_ctd_loc)
 
 # the output of scrublet
 scrublet_output_loc <- '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/demultiplexing/scrublet/scrublet_output/corrected/'
@@ -272,7 +272,7 @@ object_all <- add_imputed_meta_data(object_all, column_to_transform = 'seurat_cl
 
 
 # save the result
-object_all_cluster_filtered_ctd_cond_loc <- paste(seurat_objects_loc, 'mo_all_souped_clus_filtered_ctd_cond_20231121.rds', sep = '')
+object_all_cluster_filtered_ctd_cond_loc <- paste(seurat_objects_loc, 'mo_all_souped_clus_filtered_ctd_cond_20231129.rds', sep = '')
 saveRDS(object_all, object_all_cluster_filtered_ctd_cond_loc)
 
 # now repeat for just UT
@@ -303,7 +303,7 @@ object_ca <- FindNeighbors(object_ca, dims = 1:30)
 object_ca <- FindClusters(object_ca, resolcaion = 1.5)
 plot_grid(FeaturePlot(object_ca, features=c('CD14', 'CD19', 'CD3G', 'CD3D')), FeaturePlot(object_ca, features=c('CD4', 'CD74', 'CD8A', 'CST7')), FeaturePlot(object_ca, features=c('CTSS', 'NCAM1', 'FCGR3A', 'NKG7')), nrow = 1, ncol=3)
 # save result
-object_ca_cluster_filtered_ctd_loc <- paste(seurat_objects_loc, 'mo_all_souped_clus_filtered_20231121.rds', sep = '')
+object_ca_cluster_filtered_ctd_loc <- paste(seurat_objects_loc, 'mo_all_souped_clus_filtered_20231129.rds', sep = '')
 saveRDS(object_ca, object_ca_cluster_filtered_ctd_loc)
 # make plots
 p_dim_ca <- DimPlot(object_ca)
