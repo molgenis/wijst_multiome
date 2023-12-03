@@ -66,7 +66,6 @@ get_color_coding_dict <- function(){
   color_coding[["platelet"]] <- "#9E1C00"
   color_coding[["plasmablast"]] <- "#DB8E00"
   color_coding[["other T"]] <- "#FF63B6"
-  color_coding[["T_other"]] <- "#FF63B6"
   color_coding[["hemapoietic_stem"]] <- "#8B8000"
   color_coding[["hemapoietic stem"]] <- "#8B8000"
   return(color_coding)
@@ -214,8 +213,8 @@ plot_celltype_abundance <- function(celltype_numbers, sample_column='sample', ce
 ####################
 
 # we will use Seurat version 5
-#options(Seurat.object.assay.version = 'v5')
-
+options(Seurat.object.assay.version = 'v5')
+set.seed(7777)
 
 ####################
 # Main Code        #
@@ -238,9 +237,9 @@ Annotation(pbmc.atac) <- annotations
 pbmc.rna <- subset(pbmc.rna, seurat_annotations != "filtered")
 #pbmc.atac <- subset(pbmc.atac, seurat_annotations != "filtered")
 
-pbmc.rna@meta.data[['cell_type_lowerres']] <- as.vector(unlist(ref10xmo_predictions_to_lower_res_mapping()[pbmc.rna@meta.data[['seurat_annotations']]]))
-celllevel_ct_numbers_10x <- get_celltype_numbers(pbmc.rna@meta.data, sample_column = 'orig.ident', cell_type_column = 'cell_type_lowerres')
-plot_celltype_abundance(celllevel_ct_numbers_10x, sample_column = 'orig.ident', cell_type_column = 'cell_type_lowerres', angle_x_labels = T) + guides(fill = guide_legend(title = 'cell type'))
+#pbmc.rna@meta.data[['cell_type_lowerres']] <- as.vector(unlist(ref10xmo_predictions_to_lower_res_mapping()[pbmc.rna@meta.data[['seurat_annotations']]]))
+#celllevel_ct_numbers_10x <- get_celltype_numbers(pbmc.rna@meta.data, sample_column = 'orig.ident', cell_type_column = 'cell_type_lowerres')
+#plot_celltype_abundance(celllevel_ct_numbers_10x, sample_column = 'orig.ident', cell_type_column = 'cell_type_lowerres', angle_x_labels = T) + guides(fill = guide_legend(title = 'cell type'))
 
 # We exclude the first dimension as this is typically correlated with sequencing depth
 pbmc.atac <- RunTFIDF(pbmc.atac)
@@ -266,8 +265,8 @@ DefaultAssay(cbmc) <- "peaks"
 cbmc <- RunTFIDF(cbmc)
 cbmc <- FindVariableFeatures(cbmc, assay = 'peaks')
 cbmc <- RunSVD(cbmc)
-cbmc <- RunUMAP(cbmc, reduction = "lsi", dims = 2:30, reduction.name = "umap.atac", reduction.key = "atacUMAP_")
-cbmc <- FindNeighbors(cbmc, dims = 2:30, graph.name = 'peaks_snn')
+cbmc <- RunUMAP(cbmc, reduction = "lsi", dims = 2:30, reduction.name = "umap.atac", reduction.key = "atacUMAP_", return.model = T)
+cbmc <- FindNeighbors(cbmc, dims = 2:30, graph.name = 'peaks_snn', reduction = 'lsi')
 cbmc <- FindClusters(cbmc, resolution = 1.2, verbose = FALSE, graph.name = 'peaks_snn')
 
 
@@ -280,34 +279,48 @@ cbmc <- ScaleData(cbmc)
 cbmc <- RunPCA(cbmc, verbose = FALSE)
 cbmc <- FindNeighbors(cbmc, dims = 1:30)
 cbmc <- FindClusters(cbmc, resolution = 1.2, verbose = FALSE)
-cbmc <- RunUMAP(cbmc, dims = 1:30, reduction.name = "umap.rna", reduction.key = "rnaUMAP_")
+cbmc <- RunUMAP(cbmc, dims = 1:30, reduction.name = "umap.rna", reduction.key = "rnaUMAP_", return.model = T)
 
 # do WNN
 cbmc <- FindMultiModalNeighbors(
   cbmc, reduction.list = list("pca", "lsi"), 
   dims.list = list(1:30, 2:30), modality.weight.name = c("RNA.weight", "ATAC.weigth")
 )
-cbmc <- RunUMAP(cbmc, nn.name = "weighted.nn", reduction.name = "wnn.umap", reduction.key = "wnnUMAP_")
+cbmc <- RunUMAP(cbmc, nn.name = "weighted.nn", reduction.name = "wnn.umap", reduction.key = "wnnUMAP_", return.model = T)
 cbmc <- FindClusters(cbmc, graph.name = "wsnn", algorithm = 3, resolution = 2, verbose = FALSE)
+
+# calculate spca 
+cbmc <- RunSPCA(cbmc, assay = 'RNA', graph = 'wsnn')
+# and cache neighbourhood index
+cbmc <- FindNeighbors(
+  object = cbmc,
+  reduction = "spca",
+  dims = 1:50,
+  graph.name = "spca.annoy.neighbors", 
+  k.param = 50,
+  cache.index = TRUE,
+  return.neighbor = TRUE,
+  l2.norm = TRUE
+)
+DefaultAssay(cbmc) <- 'RNA'
 
 # add lower resolution
 cbmc@meta.data[['cell_type_lowerres']] <- as.vector(unlist(ref10xmo_predictions_to_lower_res_mapping()[cbmc@meta.data[['seurat_annotations']]]))
 
-
 # save result
 saveRDS(cbmc, '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/cell_type_assignment/azimuth/10x_mo_reference.rds')
 
-# plot
 plot_grid(
   DimPlot(cbmc, reduction = 'umap.atac', group.by = 'peaks_snn_res.1.2'),
   DimPlot(cbmc, reduction = 'umap.atac', group.by = 'seurat_annotations'),
-  DimPlot(cbmc, reduction = 'umap.atac', group.by = 'cell_type_lowerres') + scale_color_manual(values = get_color_coding_dict()),
+  DimPlot(cbmc, reduction = 'umap.atac', group.by = 'cell_type_lowerres'),
   DimPlot(cbmc, reduction = 'umap.rna', group.by = 'RNA_snn_res.1.2'),
   DimPlot(cbmc, reduction = 'umap.rna', group.by = 'seurat_annotations'),
-  DimPlot(cbmc, reduction = 'umap.rna', group.by = 'cell_type_lowerres') + scale_color_manual(values = get_color_coding_dict()),
+  DimPlot(cbmc, reduction = 'umap.rna', group.by = 'cell_type_lowerres'),
   DimPlot(cbmc, reduction = 'wnn.umap', group.by = 'wsnn_res.2'),
   DimPlot(cbmc, reduction = 'wnn.umap', group.by = 'seurat_annotations'),
-  DimPlot(cbmc, reduction = 'wnn.umap', group.by = 'cell_type_lowerres') + scale_color_manual(values = get_color_coding_dict()),
+  DimPlot(cbmc, reduction = 'wnn.umap', group.by = 'cell_type_lowerres'),
   nrow = 3
 )
-ggsave('~/mo_10x_reference_clusters_celltype.pdf', width = 20, height = 20)
+
+ggsave('~/mo_10x_reference_clusters_celltype.pdf', width = 12, height = 12)
