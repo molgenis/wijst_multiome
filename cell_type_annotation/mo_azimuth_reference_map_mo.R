@@ -209,3 +209,23 @@ for (lane in lanes) {
     saveRDS(processed_object, result_loc)
   }
 }
+
+# now summarize all
+all_ct_predictions_per_lane <- list()
+for (lane in lanes) {
+  # load the object
+  result_loc <- paste(seurat_objects_dir, 'mo_', lane, 'multimodal_azi_mapped.rds', sep = '')
+  try({
+    processed_object <- readRDS(result_loc)
+    # extract the data we want
+    annotation_lane <- data.frame(barcode = processed_object@meta.data[['barcode_lane']],
+                                  predicted.mo_10x_cell_type = processed_object@meta.data[['predicted.mo_10x_cell_type']],
+                                  predicted.mo_10x_cell_type.score = processed_object@meta.data[['predicted.mo_10x_cell_type.score']])
+    # add to the list
+    all_ct_predictions_per_lane[[lane]] <- annotation_lane
+  })
+}
+# merge all
+all_ct_predictions <- do.call('rbind', all_ct_predictions_per_lane)
+# write the results
+write.table(all_ct_predictions, '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cell_type_assignment/azimuth/10x_multiome_PBMCs/mo_azimuth_ct_10xmultiome.tsv', sep = '\t', row.names = F, col.names = T)
