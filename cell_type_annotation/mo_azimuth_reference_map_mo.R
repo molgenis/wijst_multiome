@@ -155,6 +155,66 @@ process_lane <- function(fragments_dir, seurat_objects_dir, lane, seurat_prepend
 }
 
 
+ref10xmo_predictions_to_lower_res_mapping <- function() {
+  high_to_low <- list()
+  high_to_low[['CD4 Naive']] <- 'CD4T'
+  high_to_low[['CD4 TCM']] <- 'CD4T'
+  high_to_low[['CD8 Naive']] <- 'CD8T'
+  high_to_low[['CD16 Mono']] <- 'monocyte'
+  high_to_low[['NK']] <- 'NK'
+  high_to_low[['Treg']] <- 'T_other'
+  high_to_low[['CD14 Mono']] <- 'monocyte'
+  high_to_low[['cDC']] <- 'DC'
+  high_to_low[['CD8 TEM_1']] <- 'CD8T'
+  high_to_low[['Intermediate B']] <- 'B'
+  high_to_low[['Naive B']] <- 'B'
+  high_to_low[['Plasma']] <- 'plasmablast'
+  high_to_low[['CD4 TEM']] <- 'CD4T'
+  high_to_low[['MAIT']] <- 'T_other'
+  high_to_low[['Memory B']] <- 'B'
+  high_to_low[['gdT']] <- 'T_other'
+  high_to_low[['pDC']] <- 'DC'
+  high_to_low[['CD8 TEM_2']] <- 'CD8T'
+  high_to_low[['HSPC']] <- 'hemapoietic_stem'
+  return(high_to_low)
+}
+
+
+# add metadata that is based on existing incomplete metadata in the seurat object
+add_imputed_meta_data <- function(seurat_object, column_to_transform, column_to_reference, column_to_create){
+  # add the column
+  seurat_object@meta.data[[column_to_create]] <- NA
+  # go through the grouping we have for the entire object
+  for(group in unique(seurat_object@meta.data[!is.na(seurat_object@meta.data[[column_to_transform]]), column_to_transform])){
+    # subset to get only this group
+    seurat_group <- seurat_object[, !is.na(seurat_object@meta.data[[column_to_transform]]) & seurat_object@meta.data[[column_to_transform]] == group]
+    best_group <- 'unknown'
+    best_number <- 0
+    # check against the reference column
+    for(reference in unique(seurat_group@meta.data[[column_to_reference]])){
+      # we don't care for the NA reference, if we had all data, we wouldn't need to do this anyway
+      if(is.na(reference) == F){
+        # grab the number of cells in this group, with this reference
+        number_of_reference_in_group <- nrow(seurat_group@meta.data[!(is.na(seurat_group@meta.data[[column_to_reference]])) & seurat_group@meta.data[[column_to_reference]] == reference,])
+        correctpercent <- number_of_reference_in_group/ncol(seurat_group)
+        print(paste(group,"matches", reference, correctpercent,sep=" "))
+        # update numbers if better match
+        if(number_of_reference_in_group > best_number){
+          best_number <- number_of_reference_in_group
+          best_group <- reference
+        }
+      }
+    }
+    print(paste("setting ident:",best_group,"for group", group, sep=" "))
+    # set this best identity
+    seurat_object@meta.data[!is.na(seurat_object@meta.data[[column_to_transform]]) & seurat_object@meta.data[[column_to_transform]] == group, column_to_create] <- best_group
+    # force cleanup
+    rm(seurat_group)
+  }
+  return(seurat_object)
+}
+
+
 ####################
 # Settings         #
 ####################
@@ -229,3 +289,18 @@ for (lane in lanes) {
 all_ct_predictions <- do.call('rbind', all_ct_predictions_per_lane)
 # write the results
 write.table(all_ct_predictions, '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cell_type_assignment/azimuth/10x_multiome_PBMCs/mo_azimuth_ct_10xmultiome.tsv', sep = '\t', row.names = F, col.names = T)
+
+# read the mo object
+mo <- readRDS('/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/seurat_preprocess_samples/objects/mo_all_souped_clus_filtered_ctd_cond_20231129.rds')
+# set the rownames for the all ct preditions
+rownames(all_ct_predictions) <- all_ct_predictions[['barcode']]
+# add the data
+mo <- AddMetaData(mo, all_ct_predictions[, c('predicted.mo_10x_cell_type', 'predicted.mo_10x_cell_type.score')])
+# and lowerres
+mo@meta.data[['cell_type_lowerres_10xmo']] <- NA
+mo@meta.data[!is.na(mo@meta.data[['predicted.mo_10x_cell_type']]), 'cell_type_lowerres_10xmo'] <- as.vector(unlist(ref10xmo_predictions_to_lower_res_mapping()[mo@meta.data[!is.na(mo@meta.data[['predicted.mo_10x_cell_type']]), 'predicted.mo_10x_cell_type']]))
+mo@meta.data[is.na(mo@meta.data[['predicted.mo_10x_cell_type']]), 'predicted.mo_10x_cell_type'] <- 'unmapped'
+mo@meta.data[is.na(mo@meta.data[['cell_type_lowerres_10xmo']]), 'cell_type_lowerres_10xmo'] <- 'unmapped'
+mo <- add_imputed_meta_data(mo, column_to_transform = 'seurat_clusters', column_to_reference = 'cell_type_lowerres_10xmo', column_to_create = 'cell_type_lowerres_10xmo_imputed')
+# save the result
+saveRDS(mo, '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/seurat_preprocess_samples/objects/mo_all_souped_clus_filtered_moctd_cond_20231204.rds')
