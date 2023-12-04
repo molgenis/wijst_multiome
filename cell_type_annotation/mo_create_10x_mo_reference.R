@@ -66,6 +66,7 @@ get_color_coding_dict <- function(){
   color_coding[["platelet"]] <- "#9E1C00"
   color_coding[["plasmablast"]] <- "#DB8E00"
   color_coding[["other T"]] <- "#FF63B6"
+  color_coding[["T_other"]] <- "#FF63B6"
   color_coding[["hemapoietic_stem"]] <- "#8B8000"
   color_coding[["hemapoietic stem"]] <- "#8B8000"
   return(color_coding)
