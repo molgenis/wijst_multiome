@@ -89,7 +89,7 @@ fi
 echo -e "        
         export SINGULARITY_BINDPATH=\"/groups/umcg-franke-scrna/tmp02/projects/multiome/,/groups/umcg-franke-scrna/tmp02/external_datasets/,/groups/umcg-franke-scrna/tmp02/software/\"
         export APPTAINER_BINDPATH=\"/groups/umcg-franke-scrna/tmp02/projects/multiome/,/groups/umcg-franke-scrna/tmp02/external_datasets/,/groups/umcg-franke-scrna/tmp02/software/\"
-        singularity exec ${SOUPOR_IMAGE} souporcell_pipeline.py 
+        singularity exec ${SOUPOR_IMAGE} souporcell_pipeline.py \\
             -i ${LANES_DIR}/${lane_id}/${LANE_READGROUP_APPEND} \\
             -b ${output_folder}/barcodes.tsv \\
             -f ${GENOME_LOC} \\
