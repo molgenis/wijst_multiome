@@ -13,7 +13,7 @@ LANES_DIR="/groups/umcg-franke-scrna/tmp02/projects/multiome/processed/joint/ali
 LANE_READGROUP_APPEND="outs/gex_possorted_bam.bam"
 LANE_BARCODE_APPEND="outs/filtered_feature_bc_matrix/barcodes.tsv.gz"
 OUTPUT_DIR="/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/demultiplexing/souporcell/souporcell_output/gex/barcode_filtered/"
-JOB_DIR="/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/demultiplexing/souporcell/jobs/barcode_filtered/"
+JOB_DIR="/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/demultiplexing/souporcell/jobs/gex/barcode_filtered/"
 SOUPOR_IMAGE="/groups/umcg-franke-scrna/tmp02/software/sc-eqtlgen-consortium-pipeline/wg1/WG1-pipeline-QC_wgpipeline.simg"
 GENOME_LOC="/groups/umcg-franke-scrna/tmp02/external_datasets/refdata-cellranger-arc-GRCh38-2020-A-2.0.0/fasta/genome.fa"
 COMMON_VARIANTS_LOC='/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/genotype/imputed_hg38_all_anc_mmaf005_chrprepend.vcf'
@@ -90,13 +90,13 @@ echo -e "
         export SINGULARITY_BINDPATH=\"/groups/umcg-franke-scrna/tmp02/projects/multiome/,/groups/umcg-franke-scrna/tmp02/external_datasets/,/groups/umcg-franke-scrna/tmp02/software/\"
         export APPTAINER_BINDPATH=\"/groups/umcg-franke-scrna/tmp02/projects/multiome/,/groups/umcg-franke-scrna/tmp02/external_datasets/,/groups/umcg-franke-scrna/tmp02/software/\"
         singularity exec ${SOUPOR_IMAGE} souporcell_pipeline.py 
-            -i ${LANES_DIR}/${lane_id}/${LANE_READGROUP_APPEND} 
-            -b ${output_folder}/barcodes.tsv 
-            -f ${GENOME_LOC} 
-            -t 8 
-            -o ${output_folder}/ 
-            -k ${nr_of_samples} 
-            --skip_remap True 
-            --common_variants ${COMMON_VARIANTS_LOC}
+            -i ${LANES_DIR}/${lane_id}/${LANE_READGROUP_APPEND} \\
+            -b ${output_folder}/barcodes.tsv \\
+            -f ${GENOME_LOC} \\
+            -t 8 \\
+            -o ${output_folder}/ \\
+            -k ${nr_of_samples} \\
+            --skip_remap True \\
+            --common_variants ${COMMON_VARIANTS_LOC} \\
 " >> ${output_job}
 done
