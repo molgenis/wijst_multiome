@@ -1,24 +1,32 @@
 # reinstall to make sure we have correct versions
 install.packages('Seurat')
 remotes::install_github("stuart-lab/signac", ref = 'develop')
-# load libraries
-library(Seurat)
-library(Signac)
-# load the lane I rsynced
-lane <- readRDS('/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/seurat_preprocess_samples/objects/mo_230302_lane6multimodal_azi_mapped.rds')
-# set to the ATAC assay
-DefaultAssay(lane) <- 'peaks'
 # I need these for the annotations apparently
 BiocManager::install("biovizBase")
 BiocManager::install("EnsDb.Hsapiens.v86")
+# I need these for the annotations apparently
+BiocManager::install("biovizBase")
+BiocManager::install("EnsDb.Hsapiens.v86")
+install.packages('irlba')
+
+# load libraries
+library(Seurat)
+library(Signac)
 # and need to load this
 library(EnsDb.Hsapiens.v86)
+
 # get annotations from ensemble database
 annotations <- GetGRangesFromEnsDb(ensdb = EnsDb.Hsapiens.v86)
 # we use UCSC gencode
 seqlevelsStyle(annotations) <- "UCSC"
 # and this was aligned on build 38
 genome(annotations) <- "hg38"
+
+# load the lane I rsynced
+lane <- readRDS('/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/seurat_preprocess_samples/objects/mo_230302_lane6multimodal_azi_mapped.rds')
+# set to the ATAC assay
+DefaultAssay(lane) <- 'peaks'
+
 # set the annotations to the object now
 Annotation(lane) <- annotations
 # hack the path to be vaxtron compatible
@@ -50,7 +58,6 @@ da_peaks <- FindAllMarkers(
 da_peaks_open <- da_peaks[da_peaks[['p_val_adj']] < 0.05 & da_peaks[['avg_log2FC']] > 0, ]
 # now get the closest genes
 da_closest_open_features <- ClosestFeature(lane, regions = "NEED TO KNOW WHAT THE COLUMN IS CALLED")
-# join the peaks and closest features to see what is more open in each cell type
 
 # better stack trace
 options(error = function() {
