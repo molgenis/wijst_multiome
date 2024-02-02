@@ -58,7 +58,7 @@ Below we will outline the steps taken to process and analyse the data
 '*seurat_preprocess/mo_lane_to_seurat.R*' read the barcodes/features/matrix files into Seurat objects for the RNA counts
 
 ### cell type assignment
-'*cell_type_annotation/mo_create_10x_mo_reference.R*' create a reference Azimuth file from the 10x PBMC multi-ome reference dataset
+'*cell_type_annotation/mo_create_10x_mo_reference.R*' create a reference Azimuth file from the 10x PBMC multi-ome reference dataset, which will also add the ATAC data using signac
 '*cell_type_annotation/mo_azimuth_reference_map_mo.R*' do an Azimuth reference mapping of each 10x lane onto the 10x PMBC reference
 
 ### merge seurat objects

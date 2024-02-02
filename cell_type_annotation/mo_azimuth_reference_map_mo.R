@@ -246,7 +246,7 @@ lanes <- c('230105_lane1', '230105_lane2', '230105_lane3', '230105_lane4',
            '230302_lane1', '230302_lane2', '230302_lane3', '230302_lane4',
            '230302_lane5', '230302_lane6', '230302_lane7', '230302_lane8',
            '230316_lane1', '230316_lane2', '230316_lane3', '230316_lane4',
-           '230316_lane5', '230316_lane6', '230316_lane7'
+           '230316_lane5', '230316_lane6', '230316_lane7', '230316_lane8'
 )
 
 # location of the reference
@@ -265,7 +265,7 @@ for (lane in lanes) {
   if (!is.null(processed_object)) {
     processed_object <- do_reference_mapping(reference = reference, query = processed_object)
     # save result
-    result_loc <- paste(seurat_objects_dir, 'mo_', lane, 'multimodal_azi_mapped.rds', sep = '')
+    result_loc <- paste(seurat_objects_dir, 'mo_', lane, '_multimodal_azi_mapped.rds', sep = '')
     saveRDS(processed_object, result_loc)
   }
 }
@@ -289,18 +289,3 @@ for (lane in lanes) {
 all_ct_predictions <- do.call('rbind', all_ct_predictions_per_lane)
 # write the results
 write.table(all_ct_predictions, '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cell_type_assignment/azimuth/10x_multiome_PBMCs/mo_azimuth_ct_10xmultiome.tsv', sep = '\t', row.names = F, col.names = T)
-
-# read the mo object
-mo <- readRDS('/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/seurat_preprocess_samples/objects/mo_all_souped_clus_filtered_ctd_cond_20231129.rds')
-# set the rownames for the all ct preditions
-rownames(all_ct_predictions) <- all_ct_predictions[['barcode']]
-# add the data
-mo <- AddMetaData(mo, all_ct_predictions[, c('predicted.mo_10x_cell_type', 'predicted.mo_10x_cell_type.score')])
-# and lowerres
-mo@meta.data[['cell_type_lowerres_10xmo']] <- NA
-mo@meta.data[!is.na(mo@meta.data[['predicted.mo_10x_cell_type']]), 'cell_type_lowerres_10xmo'] <- as.vector(unlist(ref10xmo_predictions_to_lower_res_mapping()[mo@meta.data[!is.na(mo@meta.data[['predicted.mo_10x_cell_type']]), 'predicted.mo_10x_cell_type']]))
-mo@meta.data[is.na(mo@meta.data[['predicted.mo_10x_cell_type']]), 'predicted.mo_10x_cell_type'] <- 'unmapped'
-mo@meta.data[is.na(mo@meta.data[['cell_type_lowerres_10xmo']]), 'cell_type_lowerres_10xmo'] <- 'unmapped'
-mo <- add_imputed_meta_data(mo, column_to_transform = 'seurat_clusters', column_to_reference = 'cell_type_lowerres_10xmo', column_to_create = 'cell_type_lowerres_10xmo_imputed')
-# save the result
-saveRDS(mo, '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/seurat_preprocess_samples/objects/mo_all_souped_clus_filtered_moctd_cond_20231204.rds')
