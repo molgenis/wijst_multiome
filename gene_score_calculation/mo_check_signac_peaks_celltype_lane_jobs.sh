@@ -64,7 +64,7 @@ for lane in ${LANES[*]} ; do
     for cell_type in ${CELL_TYPES[*]} ; do
         # paste together the paths that we want
         seurat=${SEURAT_OBJECTS_LOC}'/'${SEURAT_PREPEND}${lane}${SEURAT_APPEND}
-        out=${BASE_OUT_LOC}'/'${cell_type}
+        out=${BASE_OUT_LOC}'/'${lane}'_'${cell_type}
         # as well as the actual job location
         job_name='calc_peak_'${lane}'_'${cell_type}
         job_loc_full=${JOBS_LOC}'/calc_peak_'${lane}'_'${cell_type}'_SBATCH.sh'
