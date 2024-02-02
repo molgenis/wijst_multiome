@@ -107,13 +107,13 @@ do_processing <- function(options, annotations) {
   # now get the closest genes
   da_closest_open_features <- ClosestFeature(lane, regions = rownames(da_peaks))
   # join the peaks and closest features to see what is more open in each cell type
-  da_peaks <- cbind(da_peaks, da_closest_open_features[, c('tx_id','gene_name','gene_id','gene_biotype','type', 'closest_region','distance')])
+  #da_peaks <- cbind(da_peaks, da_closest_open_features[, c('tx_id','gene_name','gene_id','gene_biotype','type', 'closest_region','distance')])
   # add the gene and the celltype as explicit columns
   da_peaks <- cbind(data.frame('cell_type' = rep(opt[['cell_type']], times = nrow(da_peaks)), 'region' = rownames(da_peaks)),
                     da_peaks)
   # write all results
   peaks_output_loc <- paste(opt[['out']], '.peaks.tsv', sep = '')
-  write.table(aks_output_loc, peaks_output_loc, sep = '\t', row.names = F, col.names = T, quote = T)
+  write.table(da_peaks, peaks_output_loc, sep = '\t', row.names = F, col.names = T, quote = T)
 }
 
 

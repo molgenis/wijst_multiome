@@ -66,10 +66,10 @@ for lane in ${LANES[*]} ; do
         seurat=${SEURAT_OBJECTS_LOC}'/'${SEURAT_PREPEND}${lane}${SEURAT_APPEND}
         out=${BASE_OUT_LOC}'/'${cell_type}
         # as well as the actual job location
-        job_name=${JOBS_LOC}/calc_peak_${lane}'_'${cell_type}
-        job_loc_full=${JOBS_LOC}/calc_peak_${lane}'_'${cell_type}'_SBATCH.sh'
-        log_out_full=${JOBS_LOC}/calc_peak_${lane}'_'${cell_type}'.out'
-        log_err_full=${JOBS_LOC}/calc_peak_${lane}'_'${cell_type}'.err'
+        job_name='calc_peak_'${lane}'_'${cell_type}
+        job_loc_full=${JOBS_LOC}'/calc_peak_'${lane}'_'${cell_type}'_SBATCH.sh'
+        log_out_full=${JOBS_LOC}'/calc_peak_'${lane}'_'${cell_type}'.out'
+        log_err_full=${JOBS_LOC}'/calc_peak_'${lane}'_'${cell_type}'.err'
         # create the job
         echo -e "#!/usr/bin/env bash
 #SBATCH --job-name=${job_name}
