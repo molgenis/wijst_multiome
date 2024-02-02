@@ -27,6 +27,7 @@ library(RColorBrewer)
 # Functions        #
 ####################
 
+
 #' calculate pearson correlations between genotypes in reference and cluster genotypes
 #' 
 #' @param df dataframe to add the correlations to
@@ -149,7 +150,7 @@ correlate_cluster_genotypes <- function(cluster_geno_loc1, cluster_geno_loc2){
 #' @param genotype_append what the prior genotypes end with in the filename
 #' @returns dataframe with the correlations between genotypes of the a priori genotypes and souporcell genotypes, in a list with the lanes as keys
 #' 
-get_correlation_matrix_per_lane <- function(souporcell_output_loc, genotypes_loc, lanes, genotype_prepend='mo_', genotype_append='_maf005.vcf'){
+get_correlation_matrix_per_lane <- function(souporcell_output_loc, genotypes_loc, lanes, genotype_prepend='mo_', genotype_append='_maf005.vcf.gz'){
   # we will save the correlations per lane
   correlations_per_lane <- list()
   # check each lane
@@ -605,8 +606,8 @@ create_assignment_per_barcode <- function(souporcell_output_loc, best_assignment
 ####################
 
 # locations of the annotation files
-souporcell_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/demultiplexing/souporcell/souporcell_output/gex/barcode_filtered/'
-genotypes_loc <- '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/genotype/genotype_per_lane/'
+souporcell_output_loc <- '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/demultiplexing/souporcell/souporcell_output/gex/barcode_filtered/'
+genotypes_loc <- '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/genotype/genotype_per_lane/'
 
 lanes <- c('230105_lane1', '230105_lane2', '230105_lane3', '230105_lane4',
            '230105_lane5', '230105_lane6', '230105_lane7', '230105_lane8',
@@ -640,28 +641,22 @@ correlations_per_lane <- get_correlation_matrix_per_lane(souporcell_output_loc, 
 # get the best correlations
 best_correlations <- get_best_correlations(correlations_per_lane)
 # save the results
-saveRDS(correlations_per_lane, '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/demultiplexing/souporcell/assignments/mo_souporcell_gex_joint_corrected.rds')
-write.table(best_correlations, '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/demultiplexing/souporcell/assignments/mo_souporcell_gex_joint_corrected_best_assignments.tsv', sep = '\t', row.names = F, col.names = T, quote = F)
+saveRDS(correlations_per_lane, '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/demultiplexing/souporcell/assignments/mo_souporcell_gex_uncorrected.rds')
+write.table(best_correlations, '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/demultiplexing/souporcell/assignments/mo_souporcell_gex_uncorrected_best_assignments.tsv', sep = '\t', row.names = F, col.names = T, quote = F)
 
 # plot what the best correlations look like
 plot_correlations_per_lane(best_correlations)
-
-
-### CHECK MISSING ASSIGNMENTS ###
 
 # check how many samples per lane are assigned (should be 8 unique ones every time)
 samples_per_lane <- unique(best_correlations[, c('lane', 'best_match_sample')])
 nsample_per_lane <- data.frame(table(samples_per_lane[['lane']]))
 
 # get which samples are missing
-samples_missing_per_lane <- get_missing_participants_per_lane(best_correlations, '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/metadata/participant_per_lane/')
-write.table(samples_missing_per_lane[samples_missing_per_lane$missing != '', ], '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/demultiplexing/souporcell/assignments/mo_souporcell_gex_joint_corrected_missings.tsv', row.names = F,col.names = T, quote = F, sep = '\t')
-
-
-### CHECK AGAINST ALL OF THE GENOTYPES INSTEAD OF JUST THE LANE GENOTYPES ###
+samples_missing_per_lane <- get_missing_participants_per_lane(best_correlations, '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/metadata/participant_per_lane/')
+write.table(samples_missing_per_lane[samples_missing_per_lane$missing != '', ], '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/demultiplexing/souporcell/assignments/mo_souporcell_gex_uncorrected_missings.tsv', row.names = F,col.names = T, quote = F, sep = '\t')
 
 # check some correlations
-ref_geno_all_loc <- '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/genotype/imputed_hg38_all_anc_mmaf005_chrprepend.vcf.gz'
+ref_geno_all_loc <- '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/genotype/imputed_hg38_all_anc_mmaf005_chrprepend.vcf.gz'
 ref_geno_all <- read.vcfR(ref_geno_all_loc)
 # we'll save for each lane
 vs_all_per_lane <- list()
@@ -671,7 +666,7 @@ for (lane in lanes) {
   # calculate correlations
   correlations_vs_all <- correlate_genotypes(
     ref_geno_vcfr = ref_geno_all, 
-    cluster_geno_loc = paste(souporcell_output_loc, lane, '/cluster_genotypes.vcf', sep = ''),
+    cluster_geno_loc = paste('/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/demultiplexing/souporcell/souporcell_output/', lane, '/cluster_genotypes.vcf', sep = ''),
     ref_geno_loc = NULL,
     cluster_geno_vcfr = NULL
   )
@@ -680,15 +675,26 @@ for (lane in lanes) {
 }
 
 # save the result
-saveRDS(vs_all_per_lane, '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/demultiplexing/souporcell/assignments/mo_souporcell_gex_joint_corrected_vsall.rds')
+saveRDS(vs_all_per_lane, '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/demultiplexing/souporcell/assignments/mo_souporcell_gex_uncorrected_vsall.rds')
 best_correlations_vs_all <- get_best_correlations(vs_all_per_lane)
-write.table(best_correlations_vs_all, '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/demultiplexing/souporcell/assignments/mo_souporcell_gex_joint_corrected_vsall_best_assignments.tsv', sep = '\t', row.names = F, col.names = T, quote = F)
+write.table(best_correlations_vs_all, '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/demultiplexing/souporcell/assignments/mo_souporcell_gex_uncorrected_vsall_best_assignments.tsv', sep = '\t', row.names = F, col.names = T, quote = F)
 
 
-### CHECK VS NON-IMPUTED GENOTYPES ###
+# add correlation data
+correlation_mapping_per_barcode <- create_assignment_per_barcode(souporcell_output_loc, best_correlations, lanes = lanes)
+write.table(correlation_mapping_per_barcode, '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/demultiplexing/souporcell/assignments/mo_souporcell_gex_uncorrected_sample_matched.tsv', row.names = F,col.names = T, quote = F, sep = '\t')
+
+# try again with the gex data
+correlations_per_lane <- get_correlation_matrix_per_lane('/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/demultiplexing/souporcell/souporcell_output/gex/cellbent/', genotypes_loc, lanes, genotype_prepend = '', genotype_append = '')
+
+# try with filtered input
+correlations_per_lane_barcodefilter <- get_correlation_matrix_per_lane('/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/demultiplexing/souporcell/souporcell_output/barcode_filtered/', genotypes_loc, lanes[1:8])
+best_correlations_barcodefilter <- get_best_correlations(correlations_per_lane_barcodefilter)
+# check comparison
+best_correlations_compared <- merge(best_correlations, best_correlations_barcodefilter, by = c('lane', 'cluster'))
 
 # check imputed vs unimputed
-nonimputed_b38_loc <- '/groups/umcg-franke-scrna/tmp01/projects/multiome/processed/genotype/GSA2023_1044_025_V3/unimputed/GSA2022_1044_025_V3_rsid_noindels_nodots_onlychr_b38.vcf.gz'
+nonimputed_b38_loc <- '/groups/umcg-franke-scrna/tmp03/projects/multiome/processed/genotype/GSA2023_1044_025_V3/unimputed/GSA2022_1044_025_V3_rsid_noindels_nodots_onlychr_b38.vcf.gz'
 # read the files
 nonimputed_b38 <- read.vcfR(nonimputed_b38_loc)
 # calculate correlations
@@ -698,11 +704,11 @@ correlations_imp_nonimp <- correlate_genotypes(
   ref_geno_loc = NULL,
   cluster_geno_vcfr = nonimputed_b38
 )
-saveRDS(correlations_imp_nonimp, '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/demultiplexing/souporcell/assignments/mo_imputed_vs_unimputed_GSA2022_1044_025_V3.rds')
+saveRDS(correlations_imp_nonimp, '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/demultiplexing/souporcell/assignments/mo_imputed_vs_unimputed_GSA2022_1044_025_V3.rds')
 best_correlations_imp_vs_nonimp <- get_best_correlations(list('GSA2022_1044_025_V3' = correlations_imp_nonimp))
 
 # check batch1 as well
-nonimputed_b38_batch1_loc <- '/groups/umcg-franke-scrna/tmp01/projects/venema-2022/processed/genotype/GSA2023_1009/unimputed/GSA2023_1009_rsid_noindels_nodots_onlychr_b38.vcf.gz'# calculate correlations
+nonimputed_b38_batch1_loc <- '/groups/umcg-franke-scrna/tmp03/projects/venema-2022/processed/genotype/GSA2023_1009/unimputed/GSA2023_1009_rsid_noindels_nodots_onlychr_b38.vcf.gz'# calculate correlations
 nonimputed_b38_batch1 <- read.vcfR(nonimputed_b38_batch1_loc)
 correlations_imp_nonimp_batch1 <- correlate_genotypes(
   ref_geno_vcfr = ref_geno_all, 
@@ -710,6 +716,6 @@ correlations_imp_nonimp_batch1 <- correlate_genotypes(
   ref_geno_loc = NULL,
   cluster_geno_vcfr = nonimputed_b38_batch1
 )
-saveRDS(correlations_imp_nonimp_batch1, '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/demultiplexing/souporcell/assignments/mo_imputed_vs_unimputed_GSA2021_1009.rds')
+saveRDS(correlations_imp_nonimp_batch1, '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/demultiplexing/souporcell/assignments/mo_imputed_vs_unimputed_GSA2021_1009.rds')
 best_correlations_imp_vs_nonimp_batch1 <- get_best_correlations(list('GSA2021_1009' = correlations_imp_nonimp_batch1))
 best_correlations_imp_vs_nonimp_batch1[grep('MO', best_correlations_imp_vs_nonimp_batch1$cluster), ]
