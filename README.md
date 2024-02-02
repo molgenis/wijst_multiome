@@ -45,13 +45,22 @@ Below we will outline the steps taken to process and analyse the data
 '*demultiplexing/mo_test_scrublet.ipynb*' jupyter notebook to test Scrublet on individual 10x lanes\
 '*demultiplexing/mo_subset_for_genotype_correlations.sh*' script to subset genotypes for each 10x experiment, using the individuals in present in that experiment\
 '*demultiplexing/mo_subset_gex_bams_snp_regions.sh*' script to create jobs to subset the gene expression alignment files, to only have reads overlapping variants we genotyped\
-'*demultiplexing/mo_create_popscle_sort_vcfs_jobs.sh*' script to create jobs to sort the per-lane VCF files by the order of chromosomes in the alignment files
-'*demultiplexing/mo_create_demuxlet_jobs.sh*' script to create jobs to run Demuxlet on the gene expression alignments
-'*demultiplexing/mo_create_souping_samples_jobs.sh*' script to create jobs that perform Souporcell on each 10x lane\
-'*demultiplexing/mo_correlate_genotypes.R*' correlate the Souporcell cluster genotypes to the genotypes generated for the individuals, to do sample assignment
+'*demultiplexing/mo_create_popscle_sort_vcfs_jobs.sh*' script to create jobs to sort the per-lane VCF files by the order of chromosomes in the alignment files\
+'*demultiplexing/mo_create_demuxlet_jobs.sh*' script to create jobs to run Demuxlet on the gene expression alignments\
+'*demultiplexing/mo_create_souping_samples_jobs_externalbarcodes.sh*' script to create jobs that perform Souporcell on each 10x lane while allowing external barcode files\
+'*demultiplexing/mo_correlate_genotypes.R*' correlate the Souporcell cluster genotypes to the genotypes generated for the individuals, to do sample assignment\
 
 ### scanpy preprocess
 '*scanpy_preprocess/mo_h5_to_scanpy_objects.ipynb*' read the Seurat-incompatible h5 CellBender outputs into Scanpy H5AD objects
+'*scanpy_preprocess/mo_deconstruct_scanpy_objects.ipynb*' deconstruct the H5AD Scanpy objects into Seurat compatible barcodes/features/matrix files
 
 ### seurat preprocess
-'*seurat_preprocess/mo_scanpy_to_h5seurat.R*' covert the scanpy H5AD objects into Seurat compatible h5seurat objects
+'*seurat_preprocess/mo_lane_to_seurat.R*' read the barcodes/features/matrix files into Seurat objects for the RNA counts
+
+### cell type assignment
+'*cell_type_annotation/mo_create_10x_mo_reference.R*' create a reference Azimuth file from the 10x PBMC multi-ome reference dataset
+'*cell_type_annotation/mo_azimuth_reference_map_mo.R*' do an Azimuth reference mapping of each 10x lane onto the 10x PMBC reference
+
+### merge seurat objects
+'*seurat_preprocess/mo_merge_seurat_objects.R*' merge the celltyped Seurat files
+
