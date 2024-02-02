@@ -93,7 +93,7 @@ lanes <- c('230105_lane1', '230105_lane2', '230105_lane3', '230105_lane4',
            '230302_lane1', '230302_lane2', '230302_lane3', '230302_lane4',
            '230302_lane5', '230302_lane6', '230302_lane7', '230302_lane8',
            '230316_lane1', '230316_lane2', '230316_lane3', '230316_lane4',
-           '230316_lane5', '230316_lane6', '230316_lane7'
+           '230316_lane5', '230316_lane6', '230316_lane7', '230316_lane8'
 )
 
 # location of the deconstructed matrices
