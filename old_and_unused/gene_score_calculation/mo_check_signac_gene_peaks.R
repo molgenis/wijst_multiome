@@ -54,10 +54,15 @@ da_peaks <- FindAllMarkers(
   test.use = 'LR',
   latent.vars = 'nCount_peaks'
 )
-# we only want the ones that are more open for a specific cell type
-da_peaks_open <- da_peaks[da_peaks[['p_val_adj']] < 0.05 & da_peaks[['avg_log2FC']] > 0, ]
+# set gene to be region
+colnames(da_peaks) <- c('p_val', 'avg_log2FC', 'pct.1', 'pct.2', 'p_val_adj', 'cluster', 'region')
 # now get the closest genes
-da_closest_open_features <- ClosestFeature(lane, regions = "NEED TO KNOW WHAT THE COLUMN IS CALLED")
+da_closest_open_features <- ClosestFeature(lane, regions = da_peaks[['region']])
+# add the open features
+da_peaks <- cbind(da_peaks, 
+                  da_closest_open_features[match(da_peaks[['region']], da_closest_open_features[['query_region']]), c('tx_id','gene_name','gene_id','gene_biotype','type','closest_region', 'distance')])
+# save the result
+write.table(da_peaks, '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/signac_peaks/output/230302_lane6_10x.peaks.tsv', sep = '\t', row.names = F, col.names = T)
 
 # better stack trace
 options(error = function() {
