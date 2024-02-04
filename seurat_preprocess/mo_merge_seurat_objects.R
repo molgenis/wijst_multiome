@@ -100,21 +100,41 @@ for (lane in lanes) {
 # add the percentage of MT
 object_all[["percent.mt"]] <- PercentageFeatureSet(object_all, pattern = "^MT-")
 # add MADs
-object_all <- mad_function(seurat = object_all, column = "percent.mt", number_mad = 3)
+object_all_ <- mad_function(seurat = object_all, column = "percent.mt", number_mad = 3)
 object_all <- mad_function(seurat = object_all, column = "nCount_RNA", number_mad = 3)
 object_all <- mad_function(seurat = object_all, column = "nFeature_RNA", number_mad = 3)
-# get the souporcell output
-soup_out_all_rna_loc <- '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/demultiplexing/souporcell/assignments/mo_souporcell_gex_uncorrected_sample_matched.tsv'
-soup_out_all_rna <- read.table(soup_out_all_rna_loc, header = T, sep = '\t', row.names = 3)
-# remove columns we don't need
-soup_out_all_rna <- soup_out_all_rna[, setdiff(colnames(soup_out_all_rna), c('lane', 'barcode', 'barcode_original'))]
-# modify column names
-colnames(soup_out_all_rna) <- paste('soup', colnames(soup_out_all_rna), sep = '_')
-# add to object
-object_all <- AddMetaData(object_all, soup_out_all_rna)
-# merge layers
-object_all <- JoinLayers(object_all)
 # update to Seurat v5
-object_loc_v5 <- paste(seurat_objects_loc, 'mo_all_souped_20231129_seuratv5.rds', sep = '')
+object_loc_v5 <- paste(seurat_objects_loc, 'mo_all_20240204_seuratv5.rds', sep = '')
 saveRDS(object_all, object_loc_v5)
+
+
+# check each lane
+for (lane in lanes) {
+  # print progress
+  print(paste('processing lane: ', lane, sep = ''))
+  # read the object
+  try({
+    object_loc <- paste(seurat_objects_loc, '/', 'mo_', lane, '_multimodal_azi_mapped.rds', sep = '')
+    # read object
+    object_lane <- readRDS(object_loc)
+    # merge
+    if (!is.null(object_all_azi)) {
+      object_all_azi <- merge(object_all_azi, object_lane)
+    }
+    else{
+      object_all_azi <- object_lane
+    }
+  })
+}
+
+DefaultAssay(object_all_azi) <- 'RNA'
+# add the percentage of MT
+object_all_azi[["percent.mt"]] <- PercentageFeatureSet(object_all_azi, pattern = "^MT-")
+# add MADs
+object_all_azi <- mad_function(seurat = object_all_azi, column = "percent.mt", number_mad = 3)
+object_all_azi <- mad_function(seurat = object_all_azi, column = "nCount_RNA", number_mad = 3)
+object_all_azi <- mad_function(seurat = object_all_azi, column = "nFeature_RNA", number_mad = 3)
+# update to Seurat v5
+object_loc_v5 <- paste(seurat_objects_loc, 'mo_all_azi_20240204_seuratv5.rds', sep = '')
+saveRDS(object_all_azi, object_loc_v5)
 
