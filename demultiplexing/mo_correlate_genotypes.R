@@ -647,6 +647,10 @@ write.table(best_correlations, '/groups/umcg-franke-scrna/tmp03/projects/multiom
 # plot what the best correlations look like
 plot_correlations_per_lane(best_correlations)
 
+# add correlation data
+correlation_mapping_per_barcode <- create_assignment_per_barcode(souporcell_output_loc, best_correlations, lanes = lanes)
+write.table(correlation_mapping_per_barcode, '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/demultiplexing/souporcell/assignments/mo_souporcell_gex_corrected_sample_matched.tsv', row.names = F,col.names = T, quote = F, sep = '\t')
+
 # check how many samples per lane are assigned (should be 8 unique ones every time)
 samples_per_lane <- unique(best_correlations[, c('lane', 'best_match_sample')])
 nsample_per_lane <- data.frame(table(samples_per_lane[['lane']]))
@@ -679,30 +683,9 @@ saveRDS(vs_all_per_lane, '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongo
 best_correlations_vs_all <- get_best_correlations(vs_all_per_lane)
 write.table(best_correlations_vs_all, '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/demultiplexing/souporcell/assignments/mo_souporcell_gex_corrected_vsall_best_assignments.tsv', sep = '\t', row.names = F, col.names = T, quote = F)
 
+# plot what the best correlations look like
+plot_correlations_per_lane(best_correlations_vs_all)
+
 # add correlation data
-correlation_mapping_per_barcode <- create_assignment_per_barcode(souporcell_output_loc, best_correlations, lanes = lanes)
-write.table(correlation_mapping_per_barcode, '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/demultiplexing/souporcell/assignments/mo_souporcell_gex_corrected_sample_matched.tsv', row.names = F,col.names = T, quote = F, sep = '\t')
-
-
-# get the combined non-imputed data
-ref_geno_all_nonimputed_loc <- '/groups/umcg-franke-scrna/tmp03/projects/multiome/processed/genotype/all/mo_genotypes_all_unimputed_b38.vcf.gz'
-ref_geno_all_nonimputed <- read.vcfR(ref_geno_all_nonimputed_loc)
-# we'll save for each lane
-vs_all_per_lane_nonimputed <- list()
-# check lanes with missing participants
-for (lane in lanes) {
-  print(lane)
-  # calculate correlations
-  correlations_vs_all_nonimputed <- correlate_genotypes(
-    ref_geno_vcfr = ref_geno_all_nonimputed, 
-    cluster_geno_loc = paste('/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/demultiplexing/souporcell/souporcell_output/gex/barcode_filtered/', lane, '/cluster_genotypes.vcf', sep = ''),
-    ref_geno_loc = NULL,
-    cluster_geno_vcfr = NULL
-  )
-  # add to list
-  vs_all_per_lane_nonimputed[[lane]] <- correlations_vs_all_nonimputed
-}
-# save the result
-saveRDS(vs_all_per_lane_nonimputed, '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/demultiplexing/souporcell/assignments/mo_souporcell_gex_corrected_vsall.rds')
-best_correlations_vs_all_nonimputed <- get_best_correlations(vs_all_per_lane_nonimputed)
-write.table(best_correlations_vs_all_nonimputed, '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/demultiplexing/souporcell/assignments/mo_souporcell_gex_corrected_vsall_best_assignments_nonimputed.tsv', sep = '\t', row.names = F, col.names = T, quote = F)
+correlation_mapping_per_barcode_all <- create_assignment_per_barcode(souporcell_output_loc, best_correlations_vs_all, lanes = lanes)
+write.table(correlation_mapping_per_barcode_all, '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/demultiplexing/souporcell/assignments/mo_souporcell_gex_corrected_sample_matched_vs_all.tsv', row.names = F,col.names = T, quote = F, sep = '\t')
