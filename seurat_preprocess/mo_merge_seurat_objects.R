@@ -69,7 +69,7 @@ lanes <- c('230105_lane1', '230105_lane2', '230105_lane3', '230105_lane4',
            '230302_lane1', '230302_lane2', '230302_lane3', '230302_lane4',
            '230302_lane5', '230302_lane6', '230302_lane7', '230302_lane8',
            '230316_lane1', '230316_lane2', '230316_lane3', '230316_lane4',
-           '230316_lane5', '230316_lane6', '230316_lane7'
+           '230316_lane5', '230316_lane6', '230316_lane7', '230316_lane8'
 )
 
 # location of where to place the objects
@@ -105,9 +105,14 @@ object_all <- mad_function(seurat = object_all, column = "nCount_RNA", number_ma
 object_all <- mad_function(seurat = object_all, column = "nFeature_RNA", number_mad = 3)
 # update to Seurat v5
 object_loc_v5 <- paste(seurat_objects_loc, 'mo_all_20240204_seuratv5.rds', sep = '')
+# update
+object_all <- JoinLayers(object_all)
+DefaultAssay(object_all) <- 'RNA'
 saveRDS(object_all, object_loc_v5)
 
 
+# initialize the object
+object_all_azi <- NULL
 # check each lane
 for (lane in lanes) {
   # print progress
@@ -126,7 +131,6 @@ for (lane in lanes) {
     }
   })
 }
-
 DefaultAssay(object_all_azi) <- 'RNA'
 # add the percentage of MT
 object_all_azi[["percent.mt"]] <- PercentageFeatureSet(object_all_azi, pattern = "^MT-")
@@ -136,5 +140,7 @@ object_all_azi <- mad_function(seurat = object_all_azi, column = "nCount_RNA", n
 object_all_azi <- mad_function(seurat = object_all_azi, column = "nFeature_RNA", number_mad = 3)
 # update to Seurat v5
 object_loc_v5 <- paste(seurat_objects_loc, 'mo_all_azi_20240204_seuratv5.rds', sep = '')
+# update
+object_all_azi <- JoinLayers(object_all_azi)
+DefaultAssay(object_all_azi) <- 'RNA'
 saveRDS(object_all_azi, object_loc_v5)
-

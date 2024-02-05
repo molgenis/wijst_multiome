@@ -689,3 +689,6 @@ plot_correlations_per_lane(best_correlations_vs_all)
 # add correlation data
 correlation_mapping_per_barcode_all <- create_assignment_per_barcode(souporcell_output_loc, best_correlations_vs_all, lanes = lanes)
 write.table(correlation_mapping_per_barcode_all, '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/demultiplexing/souporcell/assignments/mo_souporcell_gex_corrected_sample_matched_vs_all.tsv', row.names = F,col.names = T, quote = F, sep = '\t')
+
+# get which samples are missing
+samples_missing_per_lane_all <- get_missing_participants_per_lane(best_correlations_vs_all, '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/metadata/participant_per_lane/')
