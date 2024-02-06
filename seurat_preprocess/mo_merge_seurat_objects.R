@@ -36,6 +36,63 @@ mad_function <- function(seurat, column, number_mad=3){
 }
 
 
+get_souporcell_output <- function(souporcell_output_loc, lanes, souporcell_file_name='clusters.tsv'){
+  # init table
+  soupor_table <- NULL
+  # check each lane
+  for(lane in lanes){
+    # paste the full path
+    full_output_loc <- paste(souporcell_output_loc, lane, '/', souporcell_file_name, sep = '')
+    # read the file
+    try({
+      soupor_output <- read.table(full_output_loc, sep = '\t', header = T, stringsAsFactors = F)
+      # we'll add the lane
+      soupor_output[['lane']] <- lane
+      # order the way we like it, with the barcode and lane first
+      soupor_output <- soupor_output[, c('barcode', 'lane', setdiff(colnames(soupor_output), c('barcode', 'lane')))]
+      # add to the rest
+      if(is.null(soupor_table)){
+        soupor_table <- soupor_output
+      }
+      else{
+        # check if there are columns missing in the new table we just read
+        only_existing_columns <- setdiff(colnames(soupor_table), colnames(soupor_output))
+        # add those to the table we just read
+        if(length(only_existing_columns) > 0){
+          soupor_output[, only_existing_columns] <- NA
+        }
+        # check if there are columns missing in the existing table
+        only_new_columns <- setdiff(colnames(soupor_output), colnames(soupor_table))
+        # add those to the table we already have
+        if(length(only_new_columns) > 0){
+          soupor_table[, only_new_columns] <- NA
+        }
+        # now we can safely combine these
+        soupor_table <- rbind(soupor_table, soupor_output)
+      }
+    })
+  }
+  return(soupor_table)
+}
+
+add_soup_assignments <- function(seurat_object, soupor_output){
+  # create a regex to get the last index of -
+  last_dash_pos <- "\\-[^\\-]*$"
+  # remove the '-1' from the barcode
+  soupor_output[['barcode']] <- substr(soupor_output[['barcode']], 1, regexpr(last_dash_pos, soupor_output[['barcode']])-1)
+  # add a combination of the barcode and the lane
+  rownames(soupor_output) <- paste(soupor_output[['barcode']], soupor_output[['lane']], sep = '_')
+  # now remove the barcode and lane columns
+  soupor_output[['barcode']] <- NULL
+  soupor_output[['lane']] <- NULL
+  # add the 'soup' prepend everywhere
+  colnames(soupor_output) <- paste('soup', colnames(soupor_output), sep = '_')
+  # now add each column to the object
+  for(column in colnames(soupor_output)){
+    seurat_object <- AddMetaData(seurat_object, soupor_output[column])
+  }
+  return(seurat_object)
+}
 
 ####################
 # Settings         #
@@ -111,6 +168,8 @@ DefaultAssay(object_all) <- 'RNA'
 saveRDS(object_all, object_loc_v5)
 
 
+# get the soup per lane
+soup_per_lane_loc <- '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/demultiplexing/souporcell/souporcell_output/gex/barcode_filtered/'
 # initialize the object
 object_all_azi <- NULL
 # check each lane
@@ -122,6 +181,14 @@ for (lane in lanes) {
     object_loc <- paste(seurat_objects_loc, '/', 'mo_', lane, '_multimodal_azi_mapped.rds', sep = '')
     # read object
     object_lane <- readRDS(object_loc)
+    # update the path
+    object_lane$peaks@fragments[[1]]@path <- gsub('tmp02', 'tmp03', object_lane$peaks@fragments[[1]]@path)
+    # get the full souporcell output
+    full_soupor_output <- get_souporcell_output(soup_per_lane_loc, c(lane))
+    # add the souporcell assignments
+    object_lane <- add_soup_assignments(object_lane, full_soupor_output)
+    # remove doublets
+    object_lane <- object_lane[, !is.na(object_lane@meta.data[['soup_status']]) & object_lane@meta.data[['soup_status']] == 'singlet']
     # merge
     if (!is.null(object_all_azi)) {
       object_all_azi <- merge(object_all_azi, object_lane)
