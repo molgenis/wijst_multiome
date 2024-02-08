@@ -19,6 +19,7 @@ library(vcfR)
 library(Seurat)
 # libraries to do plots
 library(ggplot2)
+library(cowplot)
 # and get colors
 library(RColorBrewer)
 
@@ -45,7 +46,7 @@ pearson_correlation <- function(df, ref_df, clust_df){
 }
 
 # method taken from https://github.com/sc-eQTLgen-consortium/WG1-pipeline-QC/blob/master/Demultiplexing/includes/Snakefile_souporcell.smk
-correlate_genotypes <- function(ref_geno_loc=NULL, cluster_geno_loc=NULL, ref_geno_vcfr=NULL, cluster_geno_vcfr=NULL){
+correlate_genotypes <- function(ref_geno_loc=NULL, cluster_geno_loc=NULL, ref_geno_vcfr=NULL, cluster_geno_vcfr=NULL, prepend_chr_ref=NULL, prepend_chr_cluster=NULL){
   ref_geno <- NULL
   if (!is.null(ref_geno_vcfr)) {
     ref_geno <- ref_geno_vcfr
@@ -68,6 +69,13 @@ correlate_genotypes <- function(ref_geno_loc=NULL, cluster_geno_loc=NULL, ref_ge
   }
   ########## Convert to tidy data frame ##########
   ref_geno_tidy <- as_tibble(extract.gt(element = "DS",ref_geno, IDtoRowNames =F))
+  ref_geno_tidy$ID <- NULL
+  if (is.null(prepend_chr_ref)) {
+    ref_geno_tidy$ID <- paste0(ref_geno@fix[,'CHROM'],":", ref_geno@fix[,'POS'],"_", ref_geno@fix[,'REF'], "_",ref_geno@fix[,'ALT'])
+  }
+  else{
+    ref_geno_tidy$ID <- paste0(prepend_chr_ref, ref_geno@fix[,'CHROM'],":", ref_geno@fix[,'POS'],"_", ref_geno@fix[,'REF'], "_",ref_geno@fix[,'ALT'])
+  }
   ref_geno_tidy$ID <- paste0(ref_geno@fix[,'CHROM'],":", ref_geno@fix[,'POS'],"_", ref_geno@fix[,'REF'], "_",ref_geno@fix[,'ALT'])
   ref_geno_tidy <- ref_geno_tidy[!(ref_geno_tidy$ID %in% ref_geno_tidy$ID[duplicated(ref_geno_tidy$ID)]),]
   
@@ -76,7 +84,13 @@ correlate_genotypes <- function(ref_geno_loc=NULL, cluster_geno_loc=NULL, ref_ge
                                    lapply(., function(x) {gsub("0/1",1, x)}) %>%
                                    lapply(., function(x) {gsub("1/0",1, x)}) %>%
                                    lapply(., function(x) {gsub("1/1",2, x)}))
-  cluster_geno_tidy$ID <- paste0(cluster_geno@fix[,'CHROM'],":", cluster_geno@fix[,'POS'],"_", cluster_geno@fix[,'REF'], "_",cluster_geno@fix[,'ALT'])
+  cluster_geno_tidy$ID <- NULL
+  if (is.null(prepend_chr_cluster)) {
+    cluster_geno_tidy$ID <- paste0(cluster_geno@fix[,'CHROM'],":", cluster_geno@fix[,'POS'],"_", cluster_geno@fix[,'REF'], "_",cluster_geno@fix[,'ALT'])
+  }
+  else {
+    cluster_geno_tidy$ID <- paste0(prepend_chr_cluster, cluster_geno@fix[,'CHROM'],":", cluster_geno@fix[,'POS'],"_", cluster_geno@fix[,'REF'], "_",cluster_geno@fix[,'ALT'])
+  }
   cluster_geno_tidy <- cluster_geno_tidy[colSums(!is.na(cluster_geno_tidy)) > 0]
   # cluster_geno_tidy <- cluster_geno_tidy[complete.cases(cluster_geno_tidy),]
   cluster_geno_tidy <- cluster_geno_tidy[!(cluster_geno_tidy$ID %in% cluster_geno_tidy$ID[duplicated(cluster_geno_tidy$ID)]),]
@@ -601,13 +615,88 @@ create_assignment_per_barcode <- function(souporcell_output_loc, best_assignment
   return(full_assignments)
 }
 
+
+wide_to_high_ggplot <- function(wide_table, variable_col_name='correlation', new_col_name='sample', new_row_name='cluster'){
+  # init new table
+  table_high <- NULL
+  for(col in colnames(wide_table)){
+    # get the variables in the column
+    variables <- wide_table[[col]]
+    # turn into dataframe
+    table_high_rows <- data.frame(x=rep(col, times=length(variables)), y=rownames(wide_table), z=variables)
+    # set column names
+    colnames(table_high_rows) <- c(new_col_name, new_row_name, variable_col_name)
+    # add to the rest of the table
+    if(is.null(table_high)){
+      table_high <- table_high_rows
+    }
+    else{
+      table_high <- rbind(table_high, table_high_rows)
+    }
+  }
+  return(table_high)
+}
+
+
+
+correlations_to_tile <- function(correlation_lane, plot_text=F, pointless=F, legendless=F, ylim=NULL, paper_style=T, angle_labels=T) {
+  # first convert to a long table
+  correlations_long <- wide_to_high_ggplot(correlation_lane)
+  # round the value
+  correlations_long[['value_rounded']] <- as.character(round(correlations_long[['correlation']], digits = 2))
+  # create the ploc
+  p <- ggplot(NULL, aes(x = correlations_long[['sample']], y = correlations_long[['cluster']], fill = correlations_long[['correlation']])) +
+    geom_tile() +
+    coord_fixed() + 
+    scale_fill_gradient2(low = 'darkblue', mid = 'white', high = 'darkred', midpoint = .5, limits = c(0,1)) +
+    labs(fill = 'correlation') +
+    xlab('sample') +
+    ylab('cluster')
+  # plot the text if requested
+  if (plot_text) {
+    p <- p + geom_text(aes(label = correlations_long[['value_rounded']]), color = "black", size = text_size)
+  }
+  if(pointless){
+    p <- p + theme(axis.text.x=element_blank(),
+                   axis.ticks = element_blank())
+  }
+  if(legendless){
+    p <- p + theme(legend.position = 'none')
+  }
+  if (paper_style) {
+    p <- p + theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+  }
+  if (angle_labels) {
+    p <- p + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+  }
+  return(p)
+}
+
+
+plot_correlation_densities <- function(correlations, correlation_correlation_column='best_match_correlation', correlation_group_column='vs') {
+  # get the fill categories
+  fill_categories <- unique(correlations[[correlation_group_column]])
+  # get the colors
+  cols <- as.list(sample_many_colours(length(fill_categories)))
+  # set the original categories as names
+  names(cols) <- fill_categories
+  # make the plot
+  p <- ggplot(NULL, aes(correlations[[correlation_correlation_column]], fill = correlations[[correlation_group_column]])) + 
+    geom_density(alpha = 0.2) + 
+    scale_fill_manual(name = correlation_group_column, values = cols) + 
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+    xlab(correlation_correlation_column) + 
+    ylab('Density')
+  return(p)
+}
+
 ####################
 # Main Code        #
 ####################
 
 # locations of the annotation files
-souporcell_output_loc <- '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/demultiplexing/souporcell/souporcell_output/gex/barcode_filtered/'
-genotypes_loc <- '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/genotype/genotype_per_lane/'
+souporcell_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/demultiplexing/souporcell/souporcell_output/gex/barcode_filtered/'
+genotypes_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/genotype/genotype_per_lane/'
 
 lanes <- c('230105_lane1', '230105_lane2', '230105_lane3', '230105_lane4',
            '230105_lane5', '230105_lane6', '230105_lane7', '230105_lane8',
@@ -641,26 +730,26 @@ correlations_per_lane <- get_correlation_matrix_per_lane(souporcell_output_loc, 
 # get the best correlations
 best_correlations <- get_best_correlations(correlations_per_lane)
 # save the results
-saveRDS(correlations_per_lane, '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/demultiplexing/souporcell/assignments/mo_souporcell_gex_corrected.rds')
-write.table(best_correlations, '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/demultiplexing/souporcell/assignments/mo_souporcell_gex_corrected_best_assignments.tsv', sep = '\t', row.names = F, col.names = T, quote = F)
+saveRDS(correlations_per_lane, '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/demultiplexing/souporcell/assignments/mo_souporcell_gex_corrected.rds')
+write.table(best_correlations, '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/demultiplexing/souporcell/assignments/mo_souporcell_gex_corrected_best_assignments.tsv', sep = '\t', row.names = F, col.names = T, quote = F)
 
 # plot what the best correlations look like
 plot_correlations_per_lane(best_correlations)
 
 # add correlation data
 correlation_mapping_per_barcode <- create_assignment_per_barcode(souporcell_output_loc, best_correlations, lanes = lanes)
-write.table(correlation_mapping_per_barcode, '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/demultiplexing/souporcell/assignments/mo_souporcell_gex_corrected_sample_matched.tsv', row.names = F,col.names = T, quote = F, sep = '\t')
+write.table(correlation_mapping_per_barcode, '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/demultiplexing/souporcell/assignments/mo_souporcell_gex_corrected_sample_matched.tsv', row.names = F,col.names = T, quote = F, sep = '\t')
 
 # check how many samples per lane are assigned (should be 8 unique ones every time)
 samples_per_lane <- unique(best_correlations[, c('lane', 'best_match_sample')])
 nsample_per_lane <- data.frame(table(samples_per_lane[['lane']]))
 
 # get which samples are missing
-samples_missing_per_lane <- get_missing_participants_per_lane(best_correlations, '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/metadata/participant_per_lane/')
-write.table(samples_missing_per_lane[samples_missing_per_lane$missing != '', ], '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/demultiplexing/souporcell/assignments/mo_souporcell_gex_corrected_missings.tsv', row.names = F,col.names = T, quote = F, sep = '\t')
+samples_missing_per_lane <- get_missing_participants_per_lane(best_correlations, '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/metadata/participant_per_lane/')
+write.table(samples_missing_per_lane[samples_missing_per_lane$missing != '', ], '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/demultiplexing/souporcell/assignments/mo_souporcell_gex_corrected_missings.tsv', row.names = F,col.names = T, quote = F, sep = '\t')
 
 # check some correlations
-ref_geno_all_loc <- '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/genotype/imputed_hg38_all_anc_mmaf005_chrprepend.vcf.gz'
+ref_geno_all_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/genotype/imputed_hg38_all_anc_mmaf005_chrprepend.vcf.gz'
 ref_geno_all <- read.vcfR(ref_geno_all_loc)
 # we'll save for each lane
 vs_all_per_lane <- list()
@@ -670,7 +759,7 @@ for (lane in lanes) {
   # calculate correlations
   correlations_vs_all <- correlate_genotypes(
     ref_geno_vcfr = ref_geno_all, 
-    cluster_geno_loc = paste('/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/demultiplexing/souporcell/souporcell_output/gex/barcode_filtered/', lane, '/cluster_genotypes.vcf', sep = ''),
+    cluster_geno_loc = paste('/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/demultiplexing/souporcell/souporcell_output/gex/barcode_filtered/', lane, '/cluster_genotypes.vcf', sep = ''),
     ref_geno_loc = NULL,
     cluster_geno_vcfr = NULL
   )
@@ -679,16 +768,83 @@ for (lane in lanes) {
 }
 
 # save the result
-saveRDS(vs_all_per_lane, '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/demultiplexing/souporcell/assignments/mo_souporcell_gex_corrected_vsall.rds')
+saveRDS(vs_all_per_lane, '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/demultiplexing/souporcell/assignments/mo_souporcell_gex_corrected_vsall.rds')
 best_correlations_vs_all <- get_best_correlations(vs_all_per_lane)
-write.table(best_correlations_vs_all, '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/demultiplexing/souporcell/assignments/mo_souporcell_gex_corrected_vsall_best_assignments.tsv', sep = '\t', row.names = F, col.names = T, quote = F)
+write.table(best_correlations_vs_all, '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/demultiplexing/souporcell/assignments/mo_souporcell_gex_corrected_vsall_best_assignments.tsv', sep = '\t', row.names = F, col.names = T, quote = F)
 
 # plot what the best correlations look like
 plot_correlations_per_lane(best_correlations_vs_all)
 
 # add correlation data
 correlation_mapping_per_barcode_all <- create_assignment_per_barcode(souporcell_output_loc, best_correlations_vs_all, lanes = lanes)
-write.table(correlation_mapping_per_barcode_all, '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/demultiplexing/souporcell/assignments/mo_souporcell_gex_corrected_sample_matched_vs_all.tsv', row.names = F,col.names = T, quote = F, sep = '\t')
+write.table(correlation_mapping_per_barcode_all, '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/demultiplexing/souporcell/assignments/mo_souporcell_gex_corrected_sample_matched_vs_all.tsv', row.names = F,col.names = T, quote = F, sep = '\t')
 
 # get which samples are missing
-samples_missing_per_lane_all <- get_missing_participants_per_lane(best_correlations_vs_all, '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/metadata/participant_per_lane/')
+samples_missing_per_lane_all <- get_missing_participants_per_lane(best_correlations_vs_all, '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/metadata/participant_per_lane/')
+
+
+# plot the per-lane and all-lane correlations per lane
+plot_grid(
+  plot_correlations_per_lane(best_correlations, legendless = T) + ggtitle('only sheet samples'),
+  plot_correlations_per_lane(best_correlations_vs_all, legendless = T) + ggtitle('all samples'),
+  get_legend(plot_correlations_per_lane(best_correlations, legendless = F)),
+  rel_widths = c(3,3,1),
+  nrow = 1
+)
+
+# combine the correlations
+best_correlations[['vs']] <- 'lane samples'
+best_correlations_vs_all[['vs']] <- 'all samples'
+best_correlations_both <- rbind(best_correlations, best_correlations_vs_all)
+# plot
+plot_correlation_densities(best_correlations_both)
+
+# plot the number of lanes with issues
+nlanes_problem <- length(unique(best_correlations[best_correlations$best_match_correlation < 0.7, 'lane']))
+nlanes_problem_vs_all <- length(unique(best_correlations_vs_all[best_correlations_vs_all$best_match_correlation < 0.7, 'lane']))
+p_nlanes_problems <- ggplot(data = data.frame(lanes = c('total', 'lane_samples', 'all_samples'),  number = c(length(unique(best_correlations$lane)), nlanes_problem, nlanes_problem_vs_all)), mapping = aes(x = lanes, y = number, fill = lanes)) +
+  geom_bar(stat = 'identity') +
+  scale_fill_manual(values = c('darkred', 'darkblue', '#FFEA00')) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+
+# plot the number of samples with issues
+ndonors_problem <- nrow(best_correlations[best_correlations$best_match_correlation < 0.7, ])
+ndonors_problem_vs_all <- nrow(best_correlations_vs_all[best_correlations_vs_all$best_match_correlation < 0.7, ])
+p_ndonors_problems <- ggplot(data = data.frame(samples = c('total', 'lane_samples', 'all_samples', 'all_samples_minus_missing'),  number = c(length(unique(best_correlations$best_match_sample)), ndonors_problem, ndonors_problem_vs_all, ndonors_problem_vs_all - 4)), mapping = aes(x = samples, y = number, fill = samples)) +
+  geom_bar(stat = 'identity') +
+  scale_fill_manual(values = c('darkred', 'purple', 'darkblue', '#FFEA00')) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+
+# plot the missing correlations
+plot_correlation_densities(best_correlations_both[best_correlations_both[['best_match_correlation']] < 0.7, ])
+
+# plot the number of lanes with issues
+nlanes_problem_06 <- length(unique(best_correlations[best_correlations$best_match_correlation < 0.6, 'lane']))
+nlanes_problem_vs_all_06 <- length(unique(best_correlations_vs_all[best_correlations_vs_all$best_match_correlation < 0.65, 'lane']))
+p_nlanes_problems_06 <- ggplot(data = data.frame(lanes = c('total', 'lane_samples', 'all_samples'),  number = c(length(unique(best_correlations$lane)), nlanes_problem_06, nlanes_problem_vs_all_06)), mapping = aes(x = lanes, y = number, fill = lanes)) +
+  geom_bar(stat = 'identity') +
+  scale_fill_manual(values = c('darkred', 'darkblue', '#FFEA00')) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+  
+# plot the number of samples with issues
+ndonors_problem_06 <- nrow(best_correlations[best_correlations$best_match_correlation < 0.6, ])
+ndonors_problem_vs_all_06 <- nrow(best_correlations_vs_all[best_correlations_vs_all$best_match_correlation < 0.6, ])
+p_ndonors_problems_06 <- ggplot(data = data.frame(samples = c('total', 'lane_samples', 'all_samples', 'all_samples_minus_missing'),  number = c(length(unique(best_correlations$best_match_sample)), ndonors_problem_06, ndonors_problem_vs_all_06, ndonors_problem_vs_all_06 - 4)), mapping = aes(x = samples, y = number, fill = samples)) +
+  geom_bar(stat = 'identity') +
+  scale_fill_manual(values = c('darkred', 'purple', 'darkblue', '#FFEA00')) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+
+# plot 0.6 vs 0.7
+plot_grid(
+  p_ndonors_problems + ggtitle('0.7 cutoff') + theme(legend.position = 'none') + theme(axis.text.x=element_blank(), axis.ticks = element_blank()),
+  p_ndonors_problems_06 + ggtitle('0.6 cutoff') + theme(legend.position = 'none') + theme(axis.text.x=element_blank(), axis.ticks = element_blank()),
+  get_legend(p_ndonors_problems_06),
+  nrow = 1
+)
+plot_grid(
+  p_nlanes_problems + ggtitle('0.7 cutoff') + theme(legend.position = 'none') + theme(axis.text.x=element_blank(), axis.ticks = element_blank()),
+  p_nlanes_problems_06 + ggtitle('0.6 cutoff') + theme(legend.position = 'none') + theme(axis.text.x=element_blank(), axis.ticks = element_blank()),
+  get_legend(p_nlanes_problems),
+  nrow = 1
+)
+
