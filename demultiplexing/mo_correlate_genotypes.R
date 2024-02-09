@@ -46,7 +46,7 @@ pearson_correlation <- function(df, ref_df, clust_df){
 }
 
 # method taken from https://github.com/sc-eQTLgen-consortium/WG1-pipeline-QC/blob/master/Demultiplexing/includes/Snakefile_souporcell.smk
-correlate_genotypes <- function(ref_geno_loc=NULL, cluster_geno_loc=NULL, ref_geno_vcfr=NULL, cluster_geno_vcfr=NULL, prepend_chr_ref=NULL, prepend_chr_cluster=NULL){
+correlate_genotypes <- function(ref_geno_loc=NULL, cluster_geno_loc=NULL, ref_geno_vcfr=NULL, cluster_geno_vcfr=NULL){
   ref_geno <- NULL
   if (!is.null(ref_geno_vcfr)) {
     ref_geno <- ref_geno_vcfr
@@ -69,13 +69,6 @@ correlate_genotypes <- function(ref_geno_loc=NULL, cluster_geno_loc=NULL, ref_ge
   }
   ########## Convert to tidy data frame ##########
   ref_geno_tidy <- as_tibble(extract.gt(element = "DS",ref_geno, IDtoRowNames =F))
-  ref_geno_tidy$ID <- NULL
-  if (is.null(prepend_chr_ref)) {
-    ref_geno_tidy$ID <- paste0(ref_geno@fix[,'CHROM'],":", ref_geno@fix[,'POS'],"_", ref_geno@fix[,'REF'], "_",ref_geno@fix[,'ALT'])
-  }
-  else{
-    ref_geno_tidy$ID <- paste0(prepend_chr_ref, ref_geno@fix[,'CHROM'],":", ref_geno@fix[,'POS'],"_", ref_geno@fix[,'REF'], "_",ref_geno@fix[,'ALT'])
-  }
   ref_geno_tidy$ID <- paste0(ref_geno@fix[,'CHROM'],":", ref_geno@fix[,'POS'],"_", ref_geno@fix[,'REF'], "_",ref_geno@fix[,'ALT'])
   ref_geno_tidy <- ref_geno_tidy[!(ref_geno_tidy$ID %in% ref_geno_tidy$ID[duplicated(ref_geno_tidy$ID)]),]
   
@@ -84,13 +77,7 @@ correlate_genotypes <- function(ref_geno_loc=NULL, cluster_geno_loc=NULL, ref_ge
                                    lapply(., function(x) {gsub("0/1",1, x)}) %>%
                                    lapply(., function(x) {gsub("1/0",1, x)}) %>%
                                    lapply(., function(x) {gsub("1/1",2, x)}))
-  cluster_geno_tidy$ID <- NULL
-  if (is.null(prepend_chr_cluster)) {
-    cluster_geno_tidy$ID <- paste0(cluster_geno@fix[,'CHROM'],":", cluster_geno@fix[,'POS'],"_", cluster_geno@fix[,'REF'], "_",cluster_geno@fix[,'ALT'])
-  }
-  else {
-    cluster_geno_tidy$ID <- paste0(prepend_chr_cluster, cluster_geno@fix[,'CHROM'],":", cluster_geno@fix[,'POS'],"_", cluster_geno@fix[,'REF'], "_",cluster_geno@fix[,'ALT'])
-  }
+  cluster_geno_tidy$ID <- paste0(cluster_geno@fix[,'CHROM'],":", cluster_geno@fix[,'POS'],"_", cluster_geno@fix[,'REF'], "_",cluster_geno@fix[,'ALT'])
   cluster_geno_tidy <- cluster_geno_tidy[colSums(!is.na(cluster_geno_tidy)) > 0]
   # cluster_geno_tidy <- cluster_geno_tidy[complete.cases(cluster_geno_tidy),]
   cluster_geno_tidy <- cluster_geno_tidy[!(cluster_geno_tidy$ID %in% cluster_geno_tidy$ID[duplicated(cluster_geno_tidy$ID)]),]
@@ -525,13 +512,13 @@ plot_correlations_per_lane <- function(correlations_table, sample_column='best_m
 #' @param participant_per_lane_loc_apppend what the prior participants per lane start with in the filename
 #' @returns Seurat object with the assignment and correlation
 #' 
-get_missing_participants_per_lane <- function(best_correlations, participant_per_lane_loc, participant_per_lane_loc_prepend='', participant_per_lane_loc_apppend='.txt', lane_column='lane', donor_column='best_match_sample') {
+get_missing_participants_per_lane <- function(best_correlations, participant_per_lane_loc, participant_per_lane_loc_prepend='', participant_per_lane_loc_apppend='.txt', lane_column='lane', donor_column='best_match_sample', correlation_column='best_match_correlation') {
   # get the lanes from the correlation table
   lanes <- unique(best_correlations[[lane_column]])
   # and we need to know how many lanes we have
   nlanes <- length(lanes)
   # create a dataframe to store the participants that are
-  participants_missing_per_lane = data.frame(lane = rep(NA, times = nlanes), missing = rep(NA, times = nlanes))
+  participants_missing_per_lane = data.frame(lane = rep(NA, times = nlanes), missing = rep(NA, times = nlanes), present_instead = rep(NA, times = nlanes), present_correlations = rep(NA, times = nlanes))
   # now check each lane, by index
   for (i in 1 : nlanes) {
     # extract lane
@@ -544,9 +531,20 @@ get_missing_participants_per_lane <- function(best_correlations, participant_per
     parts_should_be_in_lane <- read.table(parts_per_lane_loc_lane, header = F)$V1
     # get what is missing
     parts_missing <- setdiff(parts_should_be_in_lane, participants_matched)
+    # order to make more readable
+    parts_missing <- parts_missing[order(parts_missing)]
+    # get which were added instead
+    present_instead <- setdiff(participants_matched, parts_should_be_in_lane)
+    # order to make more readable
+    present_instead <- present_instead[order(present_instead)]
+    # and their correlations
+    present_correlations <- best_correlations[best_correlations[[lane_column]] == lane, ][match(present_instead, best_correlations[best_correlations[[lane_column]] == lane, donor_column]), correlation_column]
+    present_correlations <- round(present_correlations, digits = 2)
     # add to the dataframe
     participants_missing_per_lane[i, 'lane'] <- lane
     participants_missing_per_lane[i, 'missing'] <- paste(parts_missing, collapse = ',')
+    participants_missing_per_lane[i, 'present_instead'] <- paste(present_instead, collapse = ',')
+    participants_missing_per_lane[i, 'present_correlations'] <- paste(present_correlations, collapse = ',')
   }
   return(participants_missing_per_lane)
 }
@@ -556,7 +554,7 @@ get_missing_participants_per_lane <- function(best_correlations, participant_per
 #' @param best_correlations_table the table that has the best matching sample per souporcell clusters
 #' @param participant_per_lane_loc location of the folder that has the lists of participants per lane
 #' @param participant_per_lane_loc_prepend what the prior participants per lane start with in the filename
-#' @param participant_per_lane_loc_apppend what the prior participants per lane start with in the filename
+#' @param participant_per_lane_loc_apppend what the prior participants per lane ends with in the filename
 #' @returns Seurat object with the assignment and correlation
 #' 
 create_assignment_per_barcode <- function(souporcell_output_loc, best_assignments, lanes) {
@@ -690,6 +688,61 @@ plot_correlation_densities <- function(correlations, correlation_correlation_col
   return(p)
 }
 
+
+create_confusion_matrix <- function(assignment_table, truth_column, prediction_column, truth_column_label=NULL, prediction_column_label=NULL, legendless=F){
+  # init the table
+  confusion_table <- NULL
+  # check each truth
+  for(truth in unique(assignment_table[[truth_column]])){
+    # get these truths
+    truth_rows <- assignment_table[assignment_table[[truth_column]] == truth, ]
+    # check now many have this truth
+    this_truth_number <- nrow(truth_rows)
+    # check what was predicted for these truths
+    #for(prediction in unique(truth_rows[[prediction_column]])){
+    for(prediction in unique(assignment_table[[prediction_column]])){
+      # check the number of this prediction
+      this_prediction_number <- nrow(truth_rows[truth_rows[[prediction_column]] == prediction, ])
+      # init variable
+      fraction <- NULL
+      # we can only calculate a fraction if the result is not zero
+      if(this_prediction_number > 0){
+        # calculate the fraction
+        fraction <- this_prediction_number / this_truth_number
+      }
+      # otherwise we just set it to zero
+      else{
+        fraction <- 0
+      }
+      # turn into row
+      this_row <- data.frame(truth=c(truth), prediction=c(prediction), freq=c(fraction), stringsAsFactors = F)
+      # add this entry to the dataframe
+      if(is.null(confusion_table)){
+        confusion_table <- this_row
+      }
+      else{
+        confusion_table <- rbind(confusion_table, this_row)
+      }
+    }
+  }
+  # round the frequency off to a sensible cutoff
+  confusion_table$freq <- round(confusion_table$freq, digits=2)
+  # turn into plot
+  p <- ggplot(data=confusion_table, aes(x=truth, y=prediction, fill=freq)) + geom_tile() + scale_fill_gradient(low='red', high='blue') + geom_text(aes(label=freq))
+  # some options
+  if(!is.null(truth_column_label)){
+    p <- p + xlab(truth_column_label)
+  }
+  if(!is.null(prediction_column_label)){
+    p <- p + ylab(prediction_column_label)
+  }
+  if(legendless){
+    p <- p + theme(legend.position = 'none')
+  }
+  return(p)
+}
+
+
 ####################
 # Main Code        #
 ####################
@@ -781,7 +834,7 @@ write.table(correlation_mapping_per_barcode_all, '/groups/umcg-franke-scrna/tmp0
 
 # get which samples are missing
 samples_missing_per_lane_all <- get_missing_participants_per_lane(best_correlations_vs_all, '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/metadata/participant_per_lane/')
-
+write.table(samples_missing_per_lane_all, '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/demultiplexing/souporcell/assignments/mo_souporcell_gex_corrected_sample_matched_vs_all_missings.tsv', sep = '\t', row.names = F, col.names = T)
 
 # plot the per-lane and all-lane correlations per lane
 plot_grid(
@@ -848,3 +901,35 @@ plot_grid(
   nrow = 1
 )
 
+# load the previous barcodes mapping
+correlation_mapping_per_barcode_all_old <- read.table('/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/demultiplexing/souporcell/assignments/mo_souporcell_gex_uncorrected_sample_matched.tsv', sep = '\t', header = T)
+# merge them based on what we care about
+correlation_mappings_old_vs_new <- merge(
+  x = correlation_mapping_per_barcode_all_old[, c('lane', 'cluster', 'barcode_lane')], 
+  y = correlation_mapping_per_barcode_all[, c('lane', 'cluster', 'barcode_lane')], 
+  by.x = 'barcode_lane', by.y = 'barcode_lane'
+)
+# replace all the / with 'multiplet'
+correlation_mappings_old_vs_new[['cluster.x']] <- gsub('\\d+/\\d+', 'multiplet', correlation_mappings_old_vs_new[['cluster.x']])
+correlation_mappings_old_vs_new[['cluster.y']] <- gsub('\\d+/\\d+', 'multiplet', correlation_mappings_old_vs_new[['cluster.y']])
+
+plot_grid(
+  create_confusion_matrix(correlation_mappings_old_vs_new[correlation_mappings_old_vs_new$lane.x == lanes[1], ], truth_column = 'cluster.x', prediction_column = 'cluster.y', truth_column_label = 'uncorrected', prediction_column_label = 'corrected', legendless = T) + ggtitle(lanes[1]),
+  create_confusion_matrix(correlation_mappings_old_vs_new[correlation_mappings_old_vs_new$lane.x == lanes[2], ], truth_column = 'cluster.x', prediction_column = 'cluster.y', truth_column_label = 'uncorrected', prediction_column_label = 'corrected', legendless = T) + ggtitle(lanes[2]),
+  create_confusion_matrix(correlation_mappings_old_vs_new[correlation_mappings_old_vs_new$lane.x == lanes[3], ], truth_column = 'cluster.x', prediction_column = 'cluster.y', truth_column_label = 'uncorrected', prediction_column_label = 'corrected', legendless = T) + ggtitle(lanes[3]),
+  create_confusion_matrix(correlation_mappings_old_vs_new[correlation_mappings_old_vs_new$lane.x == lanes[4], ], truth_column = 'cluster.x', prediction_column = 'cluster.y', truth_column_label = 'uncorrected', prediction_column_label = 'corrected', legendless = T) + ggtitle(lanes[4]),
+  create_confusion_matrix(correlation_mappings_old_vs_new[correlation_mappings_old_vs_new$lane.x == lanes[5], ], truth_column = 'cluster.x', prediction_column = 'cluster.y', truth_column_label = 'uncorrected', prediction_column_label = 'corrected', legendless = T) + ggtitle(lanes[5]),
+  create_confusion_matrix(correlation_mappings_old_vs_new[correlation_mappings_old_vs_new$lane.x == lanes[6], ], truth_column = 'cluster.x', prediction_column = 'cluster.y', truth_column_label = 'uncorrected', prediction_column_label = 'corrected', legendless = T) + ggtitle(lanes[6]),
+  create_confusion_matrix(correlation_mappings_old_vs_new[correlation_mappings_old_vs_new$lane.x == lanes[7], ], truth_column = 'cluster.x', prediction_column = 'cluster.y', truth_column_label = 'uncorrected', prediction_column_label = 'corrected', legendless = T) + ggtitle(lanes[7]),
+  create_confusion_matrix(correlation_mappings_old_vs_new[correlation_mappings_old_vs_new$lane.x == lanes[8], ], truth_column = 'cluster.x', prediction_column = 'cluster.y', truth_column_label = 'uncorrected', prediction_column_label = 'corrected', legendless = T) + ggtitle(lanes[8]),
+  create_confusion_matrix(correlation_mappings_old_vs_new[correlation_mappings_old_vs_new$lane.x == lanes[9], ], truth_column = 'cluster.x', prediction_column = 'cluster.y', truth_column_label = 'uncorrected', prediction_column_label = 'corrected', legendless = T) + ggtitle(lanes[9]),
+  create_confusion_matrix(correlation_mappings_old_vs_new[correlation_mappings_old_vs_new$lane.x == lanes[10], ], truth_column = 'cluster.x', prediction_column = 'cluster.y', truth_column_label = 'uncorrected', prediction_column_label = 'corrected', legendless = T) + ggtitle(lanes[10]),
+  create_confusion_matrix(correlation_mappings_old_vs_new[correlation_mappings_old_vs_new$lane.x == lanes[11], ], truth_column = 'cluster.x', prediction_column = 'cluster.y', truth_column_label = 'uncorrected', prediction_column_label = 'corrected', legendless = T) + ggtitle(lanes[11]),
+  create_confusion_matrix(correlation_mappings_old_vs_new[correlation_mappings_old_vs_new$lane.x == lanes[12], ], truth_column = 'cluster.x', prediction_column = 'cluster.y', truth_column_label = 'uncorrected', prediction_column_label = 'corrected', legendless = T) + ggtitle(lanes[12]),
+  create_confusion_matrix(correlation_mappings_old_vs_new[correlation_mappings_old_vs_new$lane.x == lanes[13], ], truth_column = 'cluster.x', prediction_column = 'cluster.y', truth_column_label = 'uncorrected', prediction_column_label = 'corrected', legendless = T) + ggtitle(lanes[13]),
+  create_confusion_matrix(correlation_mappings_old_vs_new[correlation_mappings_old_vs_new$lane.x == lanes[14], ], truth_column = 'cluster.x', prediction_column = 'cluster.y', truth_column_label = 'uncorrected', prediction_column_label = 'corrected', legendless = T) + ggtitle(lanes[14]),
+  create_confusion_matrix(correlation_mappings_old_vs_new[correlation_mappings_old_vs_new$lane.x == lanes[15], ], truth_column = 'cluster.x', prediction_column = 'cluster.y', truth_column_label = 'uncorrected', prediction_column_label = 'corrected', legendless = T) + ggtitle(lanes[15]),
+  create_confusion_matrix(correlation_mappings_old_vs_new[correlation_mappings_old_vs_new$lane.x == lanes[16], ], truth_column = 'cluster.x', prediction_column = 'cluster.y', truth_column_label = 'uncorrected', prediction_column_label = 'corrected', legendless = T) + ggtitle(lanes[16]),
+  nrow = 4,
+  ncol = 4
+)
