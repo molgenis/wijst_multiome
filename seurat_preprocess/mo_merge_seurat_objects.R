@@ -130,7 +130,7 @@ lanes <- c('230105_lane1', '230105_lane2', '230105_lane3', '230105_lane4',
 )
 
 # location of where to place the objects
-seurat_objects_loc <- '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/seurat_preprocess_samples/objects/'
+seurat_objects_loc <- '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/seurat_preprocess_samples/objects/'
 
 # initialize the object
 object_all <- NULL
