@@ -125,6 +125,23 @@ mo <- add_inflammation_status(mo, sample_sheet = inflammation_assignments,
 # finally just the soup data
 mo <- AddMetaData(mo, soup_only)
 
+# set the final assignments
+mo@meta.data[['sample_final']] <- NA
+# set those with high enough correlations
+mo@meta.data[!is.na(mo@meta.data[['unconfined_best_match_correlation']]) & mo@meta.data[['unconfined_best_match_correlation']] > 0.5, 'sample_final'] <- mo@meta.data[!is.na(mo@meta.data[['unconfined_best_match_correlation']]) & mo@meta.data[['unconfined_best_match_correlation']] > 0.5, 'unconfined_best_match_sample']
+# this one has the best correlation for MO408 and MO1001. MO1001 should be present, so that one we will assign it to
+mo@meta.data[mo@meta.data[['lane']] == '230112_lane1' & !is.na(mo@meta.data[['unconfined_best_match_correlation']]) & mo@meta.data[['unconfined_best_match_correlation']] == 'MO408', 'sample_final'] <- 'MO1001'
+# this one has the best correlation for MO97 and MO203. MO203 should be present, so that one we will assign it to
+mo@meta.data[mo@meta.data[['lane']] == '230202_lane8' & !is.na(mo@meta.data[['unconfined_best_match_correlation']]) & mo@meta.data[['unconfined_best_match_correlation']] == 'MO203', 'sample_final'] <- 'MO97'
+mo <- add_inflammation_status(mo, sample_sheet = inflammation_assignments, 
+                              seurat_lane_column = 'lane', 
+                              sheet_lane_column = 'lane', 
+                              seurat_participant_column = 'sample_final',
+                              sheet_participants_column='sample', 
+                              seurat_inflammation_column='final_condition', 
+                              sheet_inflammation_column='condition')
+
+
 # save the result
-mo_assigned_loc <- paste(seurat_objects_loc, 'mo_all_20240214_seuratv5_assigned.rds', sep = '')
+mo_assigned_loc <- paste(seurat_objects_loc, 'mo_all_20240223_seuratv5_assigned.rds', sep = '')
 saveRDS(mo, mo_assigned_loc)

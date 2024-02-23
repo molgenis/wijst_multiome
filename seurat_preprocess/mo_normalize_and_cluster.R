@@ -54,8 +54,11 @@ set.seed(7777)
 seurat_objects_loc <- '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/seurat_preprocess_samples/objects/'
 
 # load object
-mo_loc <- paste(seurat_objects_loc, 'mo_all_20240214_seuratv5_filtered.rds', sep = '')
+mo_loc <- paste(seurat_objects_loc, 'mo_all_20240223_seuratv5_filtered.rds', sep = '')
 mo <- readRDS(mo_loc)
+
+# do MJ normalization
+mo <- normalize_mj(mo)
 
 # do normalization
 mo <- SCTransform(mo, vst.flavor = 'v2')
@@ -69,4 +72,5 @@ mo <- FindNeighbors(mo, dims = 1:30)
 mo <- FindClusters(mo, resolution = 1.5)
 
 # save the result
-mo_normalized_loc <- paste(seurat_objects_loc, 'mo_all_20240214_seuratv5_normalized.rds', sep = '')
+mo_normalized_loc <- paste(seurat_objects_loc, 'mo_all_20240223_seuratv5_normalized.rds', sep = '')
+saveRDS(mo, mo_normalized_loc)
