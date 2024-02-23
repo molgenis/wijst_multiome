@@ -17,6 +17,7 @@ library(Seurat)
 # Functions        #
 ####################
 
+
 normalize_mj <- function(seurat_object) {
   # get the count matrix where we have the correct cell type
   count_matrix <- GetAssayData(seurat_object, slot = "counts")
@@ -35,6 +36,39 @@ normalize_mj <- function(seurat_object) {
 }
 
 
+# add metadata that is based on existing incomplete metadata in the seurat object
+add_imputed_meta_data <- function(seurat_object, column_to_transform, column_to_reference, column_to_create){
+  # add the column
+  seurat_object@meta.data[column_to_create] <- NA
+  # go through the grouping we have for the entire object
+  for(group in unique(seurat_object@meta.data[[column_to_transform]])){
+    # subset to get only this group
+    seurat_group <- seurat_object[,seurat_object@meta.data[[column_to_transform]] == group]
+    best_group <- 'unknown'
+    best_number <- 0
+    # check against the reference column
+    for(reference in unique(seurat_group@meta.data[[column_to_reference]])){
+      # we don't care for the NA reference, if we had all data, we wouldn't need to do this anyway
+      if(is.na(reference) == F){
+        # grab the number of cells in this group, with this reference
+        number_of_reference_in_group <- nrow(seurat_group@meta.data[seurat_group@meta.data[[column_to_reference]] == reference & is.na(seurat_group@meta.data[[column_to_reference]]) == F,])
+        correctpercent <- number_of_reference_in_group/ncol(seurat_group)
+        print(paste(group,"matches",reference,correctpercent,sep=" "))
+        # update numbers if better match
+        if(number_of_reference_in_group > best_number){
+          best_number <- number_of_reference_in_group
+          best_group <- reference
+        }
+      }
+    }
+    print(paste("setting ident:",best_group,"for group", group, sep=" "))
+    # set this best identity
+    seurat_object@meta.data[seurat_object@meta.data[[column_to_transform]] == group,][column_to_create] <- best_group
+    # force cleanup
+    rm(seurat_group)
+  }
+  return(seurat_object)
+}
 
 
 ####################
@@ -70,6 +104,12 @@ mo <- RunPCA(mo)
 mo <- RunUMAP(mo, dims = 1:30, return.model = T)
 mo <- FindNeighbors(mo, dims = 1:30)
 mo <- FindClusters(mo, resolution = 1.5)
+
+# try to impute the stimulation condition
+mo <- add_imputed_meta_data(seurat_object = mo, column_to_transform = 'seurat_clusters', column_to_reference = 'condition_final', column_to_create = 'condition_imputed')
+# and celltypes where missing
+mo <- add_imputed_meta_data(seurat_object = mo, column_to_transform = 'seurat_clusters', column_to_reference = 'predicted.mo_10x_cell_type', column_to_create = 'celltype_imputed')
+mo <- add_imputed_meta_data(seurat_object = mo, column_to_transform = 'seurat_clusters', column_to_reference = 'predicted.mo_10x_cell_type.lowerres', column_to_create = 'celltype_imputed_lowerres')
 
 # save the result
 mo_normalized_loc <- paste(seurat_objects_loc, 'mo_all_20240223_seuratv5_normalized.rds', sep = '')
