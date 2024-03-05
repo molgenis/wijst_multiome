@@ -2,7 +2,7 @@
 
 ###################################################################
 #Script Name	  : mo_create_cpeaks_jobs.sh
-#Description	  : create SBATCH jobs scripts to do ambient RNA correction
+#Description	  : create SBATCH jobs scripts to do peak calling with the cpeaks reference
 #Author       	: Roy Oelen
 ###################################################################
 
@@ -40,10 +40,10 @@ LANES=('230105_lane1' '230105_lane2' '230105_lane3' '230105_lane4' \
 
 
 CORES='8'
-MEMORY_GB='32'
+MEMORY_GB='86'
 TMP_SIZE='512mb'
 RUNTIME='23:59:59'
-NR_OF_GPUS='1'
+NR_OF_GPUS='3'
 
 # check each run
 for lane in ${LANES[*]}
@@ -83,10 +83,18 @@ echo '~/miniconda3/bin/activate cpeaks_env' >> ${JOB_LOC}
 # go to the directory that has the cpeaks script
 echo 'cd '${CPEAKS_DIR} >> ${JOB_LOC}
 
+# execute script
 echo '~/miniconda3/envs/cpeaks_env/bin/python '${CPEAKS_DIR}'main.py \
     --fragment_path '${fragment_loc}' \
     --barcode_path '${barcodes_loc}' \
-    --output '${output_loc}'
+    --output '${output_loc}' \
+    --num_cores '${CORES}'
 ' >> ${JOB_LOC}
 
 done
+
+
+# conda environment was created with
+# conda create -n cpeaks_env python==3.9
+# conda activate cpeaks_env
+# pip install anndata scanpy numpy tqdm joblib
