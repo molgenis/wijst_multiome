@@ -7,10 +7,12 @@
 ###################################################################
 
 LANE_DIR='/groups/umcg-franke-scrna/tmp02/projects/multiome/processed/joint/alignment/b38/'
+LANE_DIR='/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/rounded_fragments/'
 OUTPUT_DIR='/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cpeaks_peak_calling/output/default/'
 JOB_DIR='/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cpeaks_peak_calling/jobs/default/'
 FRAGMENTS_APPEND='outs/atac_fragments.tsv.gz'
-CPEAKS_DIR='/groups/umcg-franke-scrna/tmp02/software/cPeaks/'
+FRAGMENTS_APPEND='_rounded_fragments.tsv.gz'
+CPEAKS_DIR='/groups/umcg-franke-scrna/tmp02/software/cPeaks/rounded/'
 BARCODES_DIR='/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cpeaks_peak_calling/credible_barcodes/'
 BARCODES_PREPEND=''
 BARCODES_APPEND='.txt'
@@ -58,6 +60,7 @@ for lane in ${LANES[*]}
 
     # location of fragments
     fragment_loc=${LANE_DIR}'/'${lane}'/'${FRAGMENTS_APPEND}
+    fragment_loc=${LANE_DIR}'/'${lane}''${FRAGMENTS_APPEND}
 
     # location of barcodes
     barcodes_loc=${BARCODES_DIR}'/'${BARCODES_PREPEND}${lane}${BARCODES_APPEND}
