@@ -6,14 +6,14 @@
 #Author       	: Roy Oelen
 ###################################################################
 
-LANE_DIR='/groups/umcg-franke-scrna/tmp02/projects/multiome/processed/joint/alignment/b38/'
-LANE_DIR='/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/rounded_fragments/'
-OUTPUT_DIR='/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cpeaks_peak_calling/output/default/'
-JOB_DIR='/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cpeaks_peak_calling/jobs/default/'
-FRAGMENTS_APPEND='outs/atac_fragments.tsv.gz'
+#LANE_DIR='/groups/umcg-franke-scrna/tmp02/projects/multiome/processed/joint/alignment/b38/'
+LANE_DIR='/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/rounded_fragments/'
+OUTPUT_DIR='/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/cpeaks_peak_calling/output/rounded/'
+JOB_DIR='/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/cpeaks_peak_calling/jobs/rounded/'
+#FRAGMENTS_APPEND='outs/atac_fragments.tsv.gz'
 FRAGMENTS_APPEND='_rounded_fragments.tsv.gz'
-CPEAKS_DIR='/groups/umcg-franke-scrna/tmp02/software/cPeaks/rounded/'
-BARCODES_DIR='/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cpeaks_peak_calling/credible_barcodes/'
+CPEAKS_DIR='/groups/umcg-franke-scrna/tmp03/software/cPeaks/'
+BARCODES_DIR='/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/cpeaks_peak_calling/credible_barcodes/'
 BARCODES_PREPEND=''
 BARCODES_APPEND='.txt'
 
@@ -45,7 +45,7 @@ CORES='8'
 MEMORY_GB='86'
 TMP_SIZE='512mb'
 RUNTIME='23:59:59'
-NR_OF_GPUS='3'
+NR_OF_GPUS='1'
 
 # check each run
 for lane in ${LANES[*]}
@@ -59,7 +59,7 @@ for lane in ${LANES[*]}
     output_loc=${OUTPUT_DIR}'/'${lane}'/'
 
     # location of fragments
-    fragment_loc=${LANE_DIR}'/'${lane}'/'${FRAGMENTS_APPEND}
+    #fragment_loc=${LANE_DIR}'/'${lane}'/'${FRAGMENTS_APPEND}
     fragment_loc=${LANE_DIR}'/'${lane}''${FRAGMENTS_APPEND}
 
     # location of barcodes
@@ -73,7 +73,6 @@ for lane in ${LANES[*]}
 #SBATCH --time='${RUNTIME}'
 #SBATCH --cpus-per-task='${CORES}'
 #SBATCH --mem='${MEMORY_GB}'GB
-#SBATCH --gres=gpu:a40:'${NR_OF_GPUS}'
 #SBATCH --nodes=1
 #SBATCH --export=NONE
 #SBATCH --get-user-env=L
