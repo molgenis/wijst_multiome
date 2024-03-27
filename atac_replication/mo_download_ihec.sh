@@ -1,11 +1,11 @@
-#!/bin/bash ${SAVE_DIR}
+#!/bin/bash
 
-################################################################### ${SAVE_DIR}
-#Script Name	  : mo_download_ihec.sh ${SAVE_DIR}
-#Description	  : download ihec ATAC-seq data bed files ${SAVE_DIR}
-#Args           : ${SAVE_DIR}
-#Author       	: Roy Oelen ${SAVE_DIR}
-################################################################### ${SAVE_DIR}
+###################################################################
+#Script Name	  : mo_download_ihec.sh
+#Description	  : download ihec ATAC-seq data bed files
+#Args           : 
+#Author       	: Roy Oelen
+###################################################################
 
 SAVE_DIR='/groups/umcg-franke-scrna/tmp02/external_datasets/ihec/chromatin'
 
