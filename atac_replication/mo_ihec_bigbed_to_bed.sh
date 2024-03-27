@@ -40,7 +40,7 @@ for e in "${dirlist[@]}"
             # actually do the conversion
             ${BIGBED_TO_BED_BIN_LOC} \
                 ${e} \
-                ${IHEC_OUT_DIR}'/'${e_replaced}${BED_APPEND}
+                ${IHEC_OUT_DIR}'/'${e_replaced}
         fi
     fi
 done
