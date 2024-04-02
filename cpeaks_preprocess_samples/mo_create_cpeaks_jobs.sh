@@ -7,13 +7,13 @@
 ###################################################################
 
 #LANE_DIR='/groups/umcg-franke-scrna/tmp02/projects/multiome/processed/joint/alignment/b38/'
-LANE_DIR='/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/rounded_fragments/'
-OUTPUT_DIR='/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/cpeaks_peak_calling/output/rounded/'
-JOB_DIR='/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/cpeaks_peak_calling/jobs/rounded/'
+LANE_DIR='/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/rounded_fragments/'
+OUTPUT_DIR='/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cpeaks_peak_calling/output/rounded/'
+JOB_DIR='/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cpeaks_peak_calling/jobs/rounded/'
 #FRAGMENTS_APPEND='outs/atac_fragments.tsv.gz'
 FRAGMENTS_APPEND='_rounded_fragments.tsv.gz'
-CPEAKS_DIR='/groups/umcg-franke-scrna/tmp03/software/cPeaks/'
-BARCODES_DIR='/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/cpeaks_peak_calling/credible_barcodes/'
+CPEAKS_DIR='/groups/umcg-franke-scrna/tmp02/software/cPeaks/'
+BARCODES_DIR='/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cpeaks_peak_calling/credible_barcodes/'
 BARCODES_PREPEND=''
 BARCODES_APPEND='.txt'
 
