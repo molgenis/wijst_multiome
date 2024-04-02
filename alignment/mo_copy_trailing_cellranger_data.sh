@@ -5,7 +5,7 @@
 #Description	  : copy any specific data from the cellranger output
 #Args           : file or directory in the cellranger per-lane output that you want to copy
 #Author       	: Roy Oelen
-#example        : ./lpmcv2_create_tensorqtl_jobs_all.sh \
+#example        : ./mo_copy_trailing_cellranger_data.sh \
 #                 outs/per_barcode_metrics.csv \
 ###################################################################
 
@@ -40,7 +40,6 @@ LANES=('230105_lane1' '230105_lane2' '230105_lane3' '230105_lane4' \
 DATA_TO_CP=$1
 
 # check each lane
-# check each run
 for lane in ${LANES[*]}
     do
     # paste together the full destination
