@@ -495,14 +495,22 @@ for (lane in lanes) {
   rm(object_lane)
 }
 
-# add all together
-mo_all <- merge_cpeaks_objects(cpeaks_loc, cellranger_loc = frag_loc, lanes = lanes, annotations = annotations, cpeak_prepend='mo_rounded_cpeaks_', cpeak_append='.rds', frag_append='_rounded_fragments.tsv.gz')
-# reremoved cells not having enough counts
-mo_all <- mo_all[, mo_all$nFeature_peaks > 200]
-# compute nucleosome signal score per cell
-mo_all <- NucleosomeSignal(object = mo_all)
-# compute TSS enrichment score per cell
-mo_all <- TSSEnrichment(object = mo_all, fast = FALSE)
+i_starts <- seq(1, 80, 16)
+i_stops <- seq(16, 80, 16)
+
+for (i in 1:length(i_starts)) {
+  # add all together
+  mo_all <- merge_cpeaks_objects(cpeaks_loc, cellranger_loc = frag_loc, lanes = lanes[i_starts[i] : i_stops[i]], annotations = annotations, cpeak_prepend='mo_rounded_cpeaks_', cpeak_append='.rds', frag_append='_rounded_fragments.tsv.gz')
+  # reremoved cells not having enough counts
+  mo_all <- mo_all[, mo_all$nFeature_peaks > 200]
+  # compute nucleosome signal score per cell
+  #mo_all <- NucleosomeSignal(object = mo_all)
+  # compute TSS enrichment score per cell
+  #mo_all <- TSSEnrichment(object = mo_all, fast = FALSE)
+  # save result
+  saveRDS(mo_all, paste('/scratch/hb-functionalgenomics/projects/ongoing/cpeaks_peak_calling/output/default/mo_cpeaks_unfiltered', i_starts[i], '_', i_stops[i], '.rds', sep = ''))
+  mo_all <- NULL
+}
 
 # get the metdatadata
 arc_metadata <- get_arc_metadata(cellranger_loc, lanes)
