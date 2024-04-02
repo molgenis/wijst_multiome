@@ -475,15 +475,20 @@ lanes <- c('230105_lane1', '230105_lane2', '230105_lane3', '230105_lane4',
 
 # location of the cpeaks objects
 cpeaks_loc <- '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/cpeaks_peak_calling/output/rounded/'
+cpeaks_loc <- '/scratch/hb-functionalgenomics/projects/multiome/ongoing/cpeaks_peak_calling/output/rounded/'
 # get cellranger loc
 cellranger_loc <- '/groups/umcg-franke-scrna/tmp03/projects/multiome/processed/joint/alignment/b38/'
 # location of the gene annotations
 gtf_loc <- '/groups/umcg-franke-scrna/tmp03/external_datasets/refdata-cellranger-arc-GRCh38-2020-A-2.0.0/genes/genes.gtf.gz'
+# fragment loc
+frag_loc <- '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/rounded_fragments/'
+frag_loc <- '/scratch/hb-functionalgenomics/projects/multiome/ongoing/rounded_fragments/'
 
 # check each lane
 for (lane in lanes) {
+  print(lane)
   # read the object
-  object_lane <- read_cpeaks(cpeaks_loc, cellranger_loc = '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/rounded_fragments/', lane = lane, annotations = annotations, atac_fragments_append = '_rounded_fragments.tsv.gz')
+  object_lane <- read_cpeaks(cpeaks_loc, cellranger_loc = frag_loc, lane = lane, annotations = annotations, atac_fragments_append = '_rounded_fragments.tsv.gz')
   # save the result
   cpeaks_object_loc <- paste(cpeaks_loc, '/', lane, '/', 'mo_rounded_cpeaks_', lane, '.rds', sep = '')
   saveRDS(object_lane, cpeaks_object_loc)
@@ -491,7 +496,7 @@ for (lane in lanes) {
 }
 
 # add all together
-mo_all <- merge_cpeaks_objects(cpeaks_loc, cellranger_loc = '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/rounded_fragments/', lanes = lanes, annotations = annotations, cpeak_prepend='mo_rounded_cpeaks_', cpeak_append='.rds', frag_append='_rounded_fragments.tsv.gz')
+mo_all <- merge_cpeaks_objects(cpeaks_loc, cellranger_loc = frag_loc, lanes = lanes, annotations = annotations, cpeak_prepend='mo_rounded_cpeaks_', cpeak_append='.rds', frag_append='_rounded_fragments.tsv.gz')
 # reremoved cells not having enough counts
 mo_all <- mo_all[, mo_all$nFeature_peaks > 200]
 # compute nucleosome signal score per cell
@@ -579,7 +584,7 @@ mo_all <- NormalizeData(
   normalization.method = 'LogNormalize',
   scale.factor = median(mo_all$nCount_activity)
 )
-saveRDS(mo_all, '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/cpeaks_peak_calling/output/default/mo_cpeaks_230105_lane1-8.rds')
+saveRDS(mo_all, '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/cpeaks_peak_calling/output/default/mo_cpeaks_all.rds')
 
 # use multi-ome martijn FRIP
 mo_all <- mo_all[, mo_all@meta.data$pct_reads_in_peaks >= 50]
