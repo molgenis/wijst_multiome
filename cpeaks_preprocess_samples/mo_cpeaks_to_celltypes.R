@@ -58,20 +58,19 @@ process_signac_object <- function(signac_object, arc_metadata, npeaks_cutoff=200
 
 qc_signac_object <- function(signac_object, min_nCount_peaks=3000, max_nCount_peaks=30000, min_pct_reads_in_peaks=50, max_blacklist_ratio=0.05, max_nucleosome_signal=4, min_TSS.enrichment=3) {
   # remove outliers
-  ncol(signac_object)
-  print('ncells pre QC:', str(ncol(signac_object)))
+  print(paste('ncells pre QC:', as.character(ncol(signac_object))))
   signac_object <- subset(x = signac_object, subset = nCount_peaks > min_nCount_peaks)
-  print('ncells post-min_nCount_peaks QC:', str(ncol(signac_object)))
+  print(paste('ncells post-min_nCount_peaks QC:', as.character(ncol(signac_object))))
   signac_object <- subset(x = signac_object, subset = nCount_peaks < max_nCount_peaks)
-  print('ncells post-max_nCount_peaks:', str(ncol(signac_object)))
+  print(paste('ncells post-max_nCount_peaks:', as.character(ncol(signac_object))))
   signac_object <- subset(x = signac_object, subset = pct_reads_in_peaks >= min_pct_reads_in_peaks)
-  print('ncells post-min_pct_reads_in_peaks:', str(ncol(signac_object)))
+  print(paste('ncells post-min_pct_reads_in_peaks:', as.character(ncol(signac_object))))
   signac_object <- subset(x = signac_object, subset = blacklist_ratio < max_blacklist_ratio)
-  print('ncells post-max_blacklist_ratio:', str(ncol(signac_object)))
+  print(paste('ncells post-max_blacklist_ratio:', as.character(ncol(signac_object))))
   signac_object <- subset(x = signac_object, subset = nucleosome_signal < max_nucleosome_signal)
-  print('ncells post-max_nucleosome_signal:', str(ncol(signac_object)))
+  print(paste('ncells post-max_nucleosome_signal:', as.character(ncol(signac_object))))
   signac_object <- subset(x = signac_object, subset = TSS.enrichment > min_TSS.enrichment)
-  print('ncells post-min_TSS.enrichment:', str(ncol(signac_object)))
+  print(paste('ncells post-min_TSS.enrichment:', as.character(ncol(signac_object))))
   return(signac_object)
 }
 
@@ -354,6 +353,98 @@ plot_peak_sharing_per_celltype <- function(peaks_per_ct, use_label_dict=T, use_c
 }
 
 
+merge_signac_objects <- function(signac_object_vector) {
+  signac_metadata_list <- list()
+  signac_fragments_lists <- list()
+  merged_atac_matrix <- NULL
+  # check each object
+  for (i in 1:length(signac_object_vector)) {
+    # extract the metadata
+    signac_metadata_list[[i]] <- signac_object_vector[[i]]@meta.data
+    signac_metadata_list[[i]] <- Fragments(signac_object_vector[[i]])
+    # extract the count data
+    counts <- signac_object_vector[[i]]@assays$peaks@counts
+    # check if we already have count data
+    if (is.null(merged_atac_matrix)) {
+      merged_atac_matrix <- counts
+    }
+    else {
+      # get what is only present in the new count matrix
+      only_mo_2_locs <- setdiff(rownames(counts), rownames(merged_atac_matrix))
+      # get what is only present in the exisiting matrix
+      only_mo_1_locs <- setdiff(rownames(merged_atac_matrix), rownames(counts))
+      # add zero counts for the locations only present in each of the modalities
+      merged_atac_matrix <- rbind(merged_atac_matrix, SparseEmptyMatrix(nrow = length(only_mo_2_locs), ncol = ncol(merged_atac_matrix), rownames = only_mo_2_locs, colnames = colnames(merged_atac_matrix)))
+      counts <- rbind(counts, SparseEmptyMatrix(nrow = length(only_mo_1_locs), ncol = ncol(counts), rownames = only_mo_1_locs, colnames = colnames(counts)))
+      # sort both of them
+      merged_atac_matrix <- merged_atac_matrix[order(rownames(merged_atac_matrix)), ]
+      counts <- counts[order(rownames(counts)), ]
+      # now merge them
+      merged_atac_matrix <- cbind(merged_atac_matrix, counts)
+    }
+  }
+  # now merge all the metadata
+  signac_metadata <- do.call('rbind', signac_metadata_list)
+  # now merge all the fragments
+  signac_fragments <- do.call('c', signac_fragments_lists)
+  # create the chromatin assay
+  chrom_assay <- CreateChromatinAssay(
+    counts = merged_atac_matrix,
+    sep = c(":", "-"),
+    fragments = signac_fragments,
+    min.cells = 10,
+    min.features = 200
+  )
+  # create object
+  seurat_object <- CreateSeuratObject(
+    counts = chrom_assay,
+    assay = "peaks",
+    meta.data = signac_metadata,
+    project = 'wijst_multiome'
+  )
+  # set the annotations to the object now
+  Annotation(seurat_object) <- annotations
+  return(seurat_object)
+}
+
+
+merge_signac_per_celltypes <- function(signac_object_vector, cell_type_column='cell_type_final') {
+  # save an object per cell type
+  merged_objects_celltypes <- list()
+  # extract the cell types
+  cell_types_to_do <- unique(signac_object_vector[[1]]@meta.data[[cell_type_column]])
+  # remove NA
+  cell_types_to_do <- cell_types_to_do[!is.na(cell_types_to_do)]
+  # check each cell type
+  for (cell_type in cell_types_to_do) {
+    # check each object first
+    objects_cell_type <- list()
+    # do each object
+    for (i in 1:length(signac_object_vector)) {
+      # subset to cell type
+      signac_object_celltype <- signac_object_vector[[i]][, signac_object_vector[[i]]@meta.data[[cell_type_column]] == cell_type]
+      # add to the vector
+      objects_cell_type[[i]] <- signac_object_celltype
+    }
+    # now merge for all of the celltype
+    merged_object_celltype <- merge_signac_objects(objects_cell_type)
+    # add result to list
+    merged_objects_celltypes[[cell_type]] <- merged_object_celltype
+  }
+  return(merged_objects_celltypes)
+}
+
+make_celltypes_safe <- function(cell_types){
+  # get a safe file name
+  cell_type_safes <- gsub(' |/', '_', cell_types)
+  cell_type_safes <- gsub('-', '_negative', cell_type_safes)
+  cell_type_safes <- gsub('\\+', '_positive', cell_type_safes)
+  cell_type_safes <- gsub('\\)', '', cell_type_safes)
+  cell_type_safes <- gsub('\\(', '', cell_type_safes)
+  return(cell_type_safes)
+}
+
+
 ####################
 # Settings         #
 ####################
@@ -381,13 +472,105 @@ arc_metadata_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/m
 fragments_loc <- '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/rounded_fragments/'
 
 # these are the objects
-mo_object_2 <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_unfiltered17_32.rds'
+mo_object_1_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_unfiltered1_16.rds'
+mo_object_1_filtered_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered1_16.rds'
+mo_object_2_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_unfiltered17_32.rds'
+mo_object_2_filtered_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered17_32.rds'
+mo_object_3_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_unfiltered33_48.rds'
+mo_object_3_filtered_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered33_48.rds'
+mo_object_4_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_unfiltered49_64.rds'
+mo_object_4_filtered_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered49_64.rds'
+
 
 # load metadata
 arc_metadata <- read.table(arc_metadata_loc, header = T, sep = '\t')
 rownames(arc_metadata) <- arc_metadata[['barcode_lane']]
 
+# read the RNA level metadata
+rna_metadata <- read.table('/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/metadata/mo_celllevel_metadata.tsv.gz', header = T, sep = '\t')
+# add a final cell type, by taking the prediction and adding the imputed where it was empty
+rna_metadata[['cell_type_final']] <- rna_metadata[['predicted.mo_10x_cell_type']]
+rna_metadata[is.na(rna_metadata[['cell_type_final']]), 'cell_type_final'] <- rna_metadata[is.na(rna_metadata[['cell_type_final']]), 'celltype_imputed']
+# set rownames to be barcode and lane
+rownames(rna_metadata) <- rna_metadata[['barcode_lane']]
+
 # read the first object
-mo_object_2 <- readRDS(mo_object_2)
+mo_object_2 <- readRDS(mo_object_2_loc)
 # process
 mo_object_2 <- process_signac_object(mo_object_2, arc_metadata, fragments_loc = fragments_loc)
+mo_object_2 <- qc_signac_object(mo_object_2)
+#[1] "ncells pre QC: 151251"
+#[1] "ncells post-min_nCount_peaks QC: 132108"
+#[1] "ncells post-max_nCount_peaks: 130057"
+#[1] "ncells post-min_pct_reads_in_peaks: 124448"
+#[1] "ncells post-max_blacklist_ratio: 124448"
+#[1] "ncells post-max_nucleosome_signal: 124448"
+#[1] "ncells post-min_TSS.enrichment: 124448"
+saveRDS(mo_object_2, mo_object_2_filtered_loc)
+
+# read the first object
+mo_object_1 <- readRDS(mo_object_1_loc)
+# process
+mo_object_1 <- process_signac_object(mo_object_1, arc_metadata, fragments_loc = fragments_loc)
+mo_object_1 <- qc_signac_object(mo_object_1)
+#[1] "ncells pre QC: 184692"
+#[1] "ncells post-min_nCount_peaks QC: 168673"
+#[1] "ncells post-max_nCount_peaks: 159033"
+#[1] "ncells post-min_pct_reads_in_peaks: 142113"
+#[1] "ncells post-max_blacklist_ratio: 142113"
+#[1] "ncells post-max_nucleosome_signal: 142113"
+#[1] "ncells post-min_TSS.enrichment: 142113"
+saveRDS(mo_object_1, mo_object_1_filtered_loc)
+
+# read the first object
+mo_object_3 <- readRDS(mo_object_3_loc)
+# process
+mo_object_3 <- process_signac_object(mo_object_3, arc_metadata, fragments_loc = fragments_loc)
+mo_object_3 <- qc_signac_object(mo_object_3)h
+#[1] "ncells pre QC: 143544"
+#[1] "ncells post-min_nCount_peaks QC: 116650"
+#[1] "ncells post-max_nCount_peaks: 115266"
+#[1] "ncells post-min_pct_reads_in_peaks: 98627"
+#[1] "ncells post-max_blacklist_ratio: 98627"
+#[1] "ncells post-max_nucleosome_signal: 98627"
+#[1] "ncells post-min_TSS.enrichment: 98627"
+saveRDS(mo_object_3, mo_object_3_filtered_loc)
+
+# read the first object
+mo_object_4 <- readRDS(mo_object_4_loc)
+# process
+mo_object_4 <- process_signac_object(mo_object_4, arc_metadata, fragments_loc = fragments_loc)
+mo_object_4 <- qc_signac_object(mo_object_4)
+#[1] "ncells pre QC: 158193"
+#[1] "ncells post-min_nCount_peaks QC: 136293"
+#[1] "ncells post-max_nCount_peaks: 135285"
+#[1] "ncells post-min_pct_reads_in_peaks: 121580"
+#[1] "ncells post-max_blacklist_ratio: 121580"
+#[1] "ncells post-max_nucleosome_signal: 121580"
+#[1] "ncells post-min_TSS.enrichment: 121580"
+saveRDS(mo_object_4, mo_object_4_filtered_loc)
+
+# add more metadata
+mo_object_1 <- AddMetaData(mo_object_1, rna_metadata['cell_type_final'], 'cell_type_final')
+mo_object_1 <- AddMetaData(mo_object_1, rna_metadata['sample_final'], 'sample_final')
+mo_object_1 <- AddMetaData(mo_object_1, rna_metadata['final_condition'], 'final_condition')
+mo_object_1 <- AddMetaData(mo_object_1, rna_metadata['soup_status'], 'soup_status')
+mo_object_2 <- AddMetaData(mo_object_2, rna_metadata['cell_type_final'], 'cell_type_final')
+mo_object_2 <- AddMetaData(mo_object_2, rna_metadata['sample_final'], 'sample_final')
+mo_object_2 <- AddMetaData(mo_object_2, rna_metadata['final_condition'], 'final_condition')
+mo_object_2 <- AddMetaData(mo_object_2, rna_metadata['soup_status'], 'soup_status')
+mo_object_3 <- AddMetaData(mo_object_3, rna_metadata['cell_type_final'], 'cell_type_final')
+mo_object_3 <- AddMetaData(mo_object_3, rna_metadata['sample_final'], 'sample_final')
+mo_object_3 <- AddMetaData(mo_object_3, rna_metadata['final_condition'], 'final_condition')
+mo_object_3 <- AddMetaData(mo_object_3, rna_metadata['soup_status'], 'soup_status')
+mo_object_4 <- AddMetaData(mo_object_4, rna_metadata['cell_type_final'], 'cell_type_final')
+mo_object_4 <- AddMetaData(mo_object_4, rna_metadata['sample_final'], 'sample_final')
+mo_object_4 <- AddMetaData(mo_object_4, rna_metadata['final_condition'], 'final_condition')
+mo_object_4 <- AddMetaData(mo_object_4, rna_metadata['soup_status'], 'soup_status')
+
+# merge per celltype
+mo_all_per_celltype <- merge_signac_per_celltypes(c(mo_object_1, mo_object_2, mo_object_3, mo_object_4))
+# make the names posix safe
+names(mo_all_per_celltype) <- make_celltypes_safe(names(mo_all_per_celltype))
+# save result
+saveRDS(mo_all_per_celltype, '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_percelltype_1_64.rds')
