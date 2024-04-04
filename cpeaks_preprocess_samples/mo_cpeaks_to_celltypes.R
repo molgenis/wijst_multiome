@@ -16,6 +16,7 @@ library(Signac)
 library(EnsDb.Hsapiens.v86)
 # for plots
 library(ggplot2)
+library(cowplot)
 # for upset plot of peak sharing
 library(UpSetR)
 
@@ -445,6 +446,29 @@ make_celltypes_safe <- function(cell_types){
 }
 
 
+signac_dimreduc_and_cluster <- function(signac_object) {
+  # do normalization
+  signac_object <- RunTFIDF(signac_object)
+  signac_object <- FindTopFeatures(signac_object, min.cutoff = 'q0')
+  signac_object <- RunSVD(signac_object)
+  # clustering and UMAP
+  signac_object <- RunUMAP(object = signac_object, reduction = 'lsi', dims = 1:30)
+  signac_object <- FindNeighbors(object = signac_object, reduction = 'lsi', dims = 1:30)
+  signac_object <- FindClusters(object = signac_object, verbose = FALSE, algorithm = 3)
+  DimPlot(object = signac_object, label = TRUE) + NoLegend()
+  # add the gene activity matrix to the Seurat object as a new assay and normalize it
+  gene_activities <- GeneActivity(signac_object)
+  signac_object[['activity']] <- CreateAssayObject(counts = gene_activities)
+  signac_object <- NormalizeData(
+    object = signac_object,
+    assay = 'activity',
+    normalization.method = 'LogNormalize',
+    scale.factor = median(signac_object$nCount_activity)
+  )
+  return(signac_object)
+}
+
+
 ####################
 # Settings         #
 ####################
@@ -474,12 +498,16 @@ fragments_loc <- '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/roun
 # these are the objects
 mo_object_1_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_unfiltered1_16.rds'
 mo_object_1_filtered_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered1_16.rds'
+mo_object_1_clustered_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_clustered1_16.rds'
 mo_object_2_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_unfiltered17_32.rds'
 mo_object_2_filtered_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered17_32.rds'
+mo_object_2_clustered_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_clustered17_32.rds'
 mo_object_3_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_unfiltered33_48.rds'
 mo_object_3_filtered_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered33_48.rds'
+mo_object_3_clustered_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_clustered33_48.rds'
 mo_object_4_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_unfiltered49_64.rds'
 mo_object_4_filtered_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered49_64.rds'
+mo_object_4_clustered_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_clustered49_64.rds'
 
 
 # load metadata
@@ -574,3 +602,32 @@ mo_all_per_celltype <- merge_signac_per_celltypes(c(mo_object_1, mo_object_2, mo
 names(mo_all_per_celltype) <- make_celltypes_safe(names(mo_all_per_celltype))
 # save result
 saveRDS(mo_all_per_celltype, '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_percelltype_1_64.rds')
+
+# we should also check the cell type annotation. We can not do this for the full data, so let's do it for each separately
+# remove doublets
+mo_object_1 <- mo_object_1[, !is.na(mo_object_1@meta.data[['soup_status']]) & mo_object_1@meta.data[['soup_status']] == 'singlet']
+ncol(mo_object_1)
+# [1] 129983
+# now do the dimreduc and clustering
+mo_object_1 <- signac_dimreduc_and_cluster(mo_object_1)
+# add lower classification celltypes
+mo_object_1@meta.data[['cell_type_final_lowerres']] <- as.vector(unlist(ref10xmo_predictions_to_lower_res_mapping()[mo_object_1@meta.data[['cell_type_final']]]))
+# plot
+plot_grid(
+  DimPlot(mo_object_1, group.by = 'seurat_clusters') + theme(legend.position = "none"),
+  DimPlot(mo_object_1, group.by = 'cell_type_final_lowerres') + scale_color_manual(values = get_color_coding_dict()),
+  nrow = 2
+)
+saveRDS(mo_object_1, mo_object_1_clustered_loc)
+# remove doublets
+mo_object_2 <- mo_object_2[, !is.na(mo_object_2@meta.data[['soup_status']]) & mo_object_2@meta.data[['soup_status']] == 'singlet']
+ncol(mo_object_2)
+# [1] 116330
+mo_object_2 <- signac_dimreduc_and_cluster(mo_object_2)
+mo_object_2@meta.data[['cell_type_final_lowerres']] <- as.vector(unlist(ref10xmo_predictions_to_lower_res_mapping()[mo_object_2@meta.data[['cell_type_final']]]))
+plot_grid(
+  DimPlot(mo_object_2, group.by = 'seurat_clusters') + theme(legend.position = "none"),
+  DimPlot(mo_object_2, group.by = 'cell_type_final_lowerres') + scale_color_manual(values = get_color_coding_dict()),
+  nrow = 2
+)
+saveRDS(mo_object_2, mo_object_2_clustered_loc)
