@@ -469,6 +469,61 @@ signac_dimreduc_and_cluster <- function(signac_object) {
 }
 
 
+get_peaks_to_bed <- function(exp_per_group) {
+  bed_per_group <- list()
+  # check each of the columns
+  for (identity in colnames(exp_per_group)) {
+    print(identity)
+    # subset to that identity
+    peaks_ident <- exp_per_group[, c(identity), drop = F]
+    # get the locations
+    positions <- data.frame(do.call('rbind', strsplit(rownames(peaks_ident), '-')))
+    # set the colnames properly to bed format
+    colnames(positions) <- c('#chrom', 'start', 'end')
+    # add the rownames themselves as the name
+    positions[['name']] <- rownames(peaks_ident)
+    # and the counts as score
+    positions[['exp']] <- log10(peaks_ident[, c(identity)])
+    # make the start and stop numeric
+    positions[['start']] <- as.numeric(positions[['start']])
+    positions[['end']] <- as.numeric(positions[['end']])
+    # add bed to list
+    bed_per_group[[identity]] <- positions
+  }
+  return(bed_per_group)
+}
+
+
+summarize_peak_info <- function(peaks_per_celltype, cell_type_column='cell_type_lowerres', output_prepend='mo_peaks_', output_append='.bed') {
+  # check each cell type
+  for (cell_type in names(peaks_per_celltype)) {
+    print(cell_type)
+    # get this celltype object
+    peaks_object <- peaks_per_celltype[[cell_type]]
+    # calculate average expression
+    avg_peaks <- AverageExpression(peaks_object)[[1]]
+    # calculate average expression
+    sum_peaks <- AggregateExpression(peaks_object)[[1]]
+    # calculate pct exp
+    counts_as_row_sparse <- as(peaks_object@assays$peaks@counts, "RsparseMatrix") # turn into row-wise sparse matrix
+    non_zero_cell_nr <- as.vector(unlist(rowSums(counts_as_row_sparse != 0))) # do a rowsum on the T/F value you get from the zero-or-not comparison
+    pct_peaks <- non_zero_cell_nr / ncol(peaks_object@assays$peaks@counts) # the percentage expressed is that number of cells divided by the total number
+    # turn the exp per group into a bed
+    peaks_bed <- get_peaks_to_bed(sum_peaks)[[1]]
+    # add the other info
+    peaks_bed[['avg']] <-  unlist(as.vector(avg_peaks[, 1]))
+    peaks_bed[['ncell']] <-  ncol(peaks_object)
+    peaks_bed[['pct_exp']] <- pct_peaks
+    # and sort
+    peaks_bed <- peaks_bed[order(peaks_bed[['#chrom']], peaks_bed[['start']], peaks_bed[['end']]), ]
+    # create the output location
+    output_loc <- paste(output_prepend, gsub(' ', '_', cell_type), output_append, sep = '')
+    # write the result
+    write.table(peaks_bed, output_loc, row.names = F, col.names = T, quote = F, sep = '\t')
+  }
+  return(0)
+}
+
 ####################
 # Settings         #
 ####################
@@ -596,12 +651,17 @@ mo_object_4 <- AddMetaData(mo_object_4, rna_metadata['sample_final'], 'sample_fi
 mo_object_4 <- AddMetaData(mo_object_4, rna_metadata['final_condition'], 'final_condition')
 mo_object_4 <- AddMetaData(mo_object_4, rna_metadata['soup_status'], 'soup_status')
 
+# reload if necessary
+mo_object_1 <- readRDS(mo_object_1_clustered_loc)
+mo_object_2 <- readRDS(mo_object_2_clustered_loc)
+mo_object_3 <- readRDS(mo_object_3_clustered_loc)
+mo_object_4 <- readRDS(mo_object_4_clustered_loc)
 # merge per celltype
-mo_all_per_celltype <- merge_signac_per_celltypes(c(mo_object_1, mo_object_2, mo_object_3, mo_object_4))
+mo_all_per_celltype <- merge_signac_per_celltypes(c(mo_object_1, mo_object_2, mo_object_3, mo_object_4), cell_type_column = 'cell_type_final_lowerres')
 # make the names posix safe
 names(mo_all_per_celltype) <- make_celltypes_safe(names(mo_all_per_celltype))
 # save result
-saveRDS(mo_all_per_celltype, '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_percelltype_1_64.rds')
+saveRDS(mo_all_per_celltype, '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_percelltypemajor_1_64.rds')
 
 # we should also check the cell type annotation. We can not do this for the full data, so let's do it for each separately
 # remove doublets
@@ -631,3 +691,27 @@ plot_grid(
   nrow = 2
 )
 saveRDS(mo_object_2, mo_object_2_clustered_loc)
+# remove doublets
+mo_object_3 <- mo_object_3[, !is.na(mo_object_3@meta.data[['soup_status']]) & mo_object_3@meta.data[['soup_status']] == 'singlet']
+ncol(mo_object_3)
+# 
+mo_object_3 <- signac_dimreduc_and_cluster(mo_object_3)
+mo_object_3@meta.data[['cell_type_final_lowerres']] <- as.vector(unlist(ref10xmo_predictions_to_lower_res_mapping()[mo_object_3@meta.data[['cell_type_final']]]))
+plot_grid(
+  DimPlot(mo_object_3, group.by = 'seurat_clusters') + theme(legend.position = "none"),
+  DimPlot(mo_object_3, group.by = 'cell_type_final_lowerres') + scale_color_manual(values = get_color_coding_dict()),
+  nrow = 2
+)
+saveRDS(mo_object_3, mo_object_3_clustered_loc)
+# remove doublets
+mo_object_4 <- mo_object_4[, !is.na(mo_object_4@meta.data[['soup_status']]) & mo_object_4@meta.data[['soup_status']] == 'singlet']
+ncol(mo_object_4)
+# 
+mo_object_4 <- signac_dimreduc_and_cluster(mo_object_4)
+mo_object_4@meta.data[['cell_type_final_lowerres']] <- as.vector(unlist(ref10xmo_predictions_to_lower_res_mapping()[mo_object_4@meta.data[['cell_type_final']]]))
+plot_grid(
+  DimPlot(mo_object_4, group.by = 'seurat_clusters') + theme(legend.position = "none"),
+  DimPlot(mo_object_4, group.by = 'cell_type_final_lowerres') + scale_color_manual(values = get_color_coding_dict()),
+  nrow = 2
+)
+saveRDS(mo_object_4, mo_object_4_clustered_loc)
