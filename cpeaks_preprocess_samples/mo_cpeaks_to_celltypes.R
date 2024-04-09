@@ -524,6 +524,84 @@ summarize_peak_info <- function(peaks_per_celltype, cell_type_column='cell_type_
   return(0)
 }
 
+
+get_peaks_sharing_from_beds <- function(output_prepend='mo_peaks_', output_append='.bed', cell_types=c('B', 'CD4T', 'CD8T', 'DC', 'monocyte', 'NK'), filter_column=NULL, filter_value=NULL, id_column='name') {
+  # we'll do each identity, and store the result in per ident in a list
+  peaks_per_identity <- list()
+  # check each of the columns
+  for (cell_type in cell_types) {
+    # create the output location
+    output_loc <- paste(output_prepend, cell_type, output_append, sep = '')
+    # read the result
+    peaks_bed <- read.table(output_loc, header = T, sep = '\t', comment.char='', check.names = F)
+    # filter by filter if present
+    if (!is.null(filter_column) & !is.null(filter_value)) {
+      peaks_bed <- peaks_bed[peaks_bed[[filter_column]] > filter_value, ]
+    }
+    # extract the peaks
+    peaks_per_identity[[cell_type]] <- peaks_bed[[id_column]]
+  }
+  return(peaks_per_identity)
+}
+
+plot_peak_sharing_from_beds <- function(output_prepend='mo_peaks_', output_append='.bed', cell_types=c('B', 'CD4T', 'CD8T', 'DC', 'monocyte', 'NK'), filter_column=NULL, filter_value=NULL, id_column='name', use_color_dict=T, use_label_dict=T) {
+  # get the peak sharing from the beds
+  peaks_per_ct <- get_peaks_sharing_from_beds(output_prepend=output_prepend, output_append=output_append, cell_types=cell_types, filter_column=filter_column, filter_value=filter_value, id_column=id_column)
+  # rename cell types if requested
+  if(use_label_dict){
+    names(peaks_per_ct) <- label_dict()[names(peaks_per_ct)]
+  }
+  # we'll need this list for colouring
+  queries <- list()
+  sets.bar.color <- 'black'
+  # do colouring
+  if(use_color_dict){
+    # create df to store the number of each set, so we know how to order
+    nrs_df <- NULL
+    # add the colors for the cell types
+    i <- 1
+    for(cell_type in (names(peaks_per_ct))){
+      # get all peaks except this cell type
+      peaks_except_c <- do.call('c', peaks_per_ct[setdiff(names(peaks_per_ct), cell_type)])
+      # then this cell type
+      peaks_celltype<- peaks_per_ct[[cell_type]]
+      # check if this singlet exists
+      if (length(setdiff(peaks_celltype, peaks_except_c)) > 0) {
+        # add for the singles in the intersection sizes
+        ct_list <- list(
+          query = intersects,
+          params = list(cell_type),
+          color = get_color_coding_dict()[[cell_type]],
+          active = T)
+        queries[[i]] <- ct_list
+        i <- i + 1
+      }
+      else {
+        print('blegh')
+      }
+      
+      # add for the DF to order the set sizes
+      numbers_row <- data.frame(ct=c(cell_type), nr=c(length(peaks_per_ct[[cell_type]])), stringsAsFactors = F)
+      if(is.null(nrs_df)){
+        nrs_df <- numbers_row
+      }
+      else{
+        nrs_df <- rbind(nrs_df, numbers_row)
+      }
+    }
+    # get the order of the sets
+    ordered_cts <- nrs_df[order(nrs_df$nr, decreasing = T), 'ct']
+    # add the colors for the sets
+    sets.bar.color <- unlist(get_color_coding_dict()[ordered_cts])
+  }
+  else {
+    queries = NULL
+  }
+  upset(fromList(peaks_per_ct), order.by = 'freq', nsets = length(peaks_per_ct), queries = queries, sets.bar.color=sets.bar.color, nintersects = length(peaks_per_ct)*length(peaks_per_ct))
+  #upset(fromList(peaks_per_ct), order.by = 'freq', nsets = length(peaks_per_ct), sets.bar.color=sets.bar.color, nintersects = length(peaks_per_ct)*length(peaks_per_ct))
+  #return(peaks_per_ct)
+}
+
 ####################
 # Settings         #
 ####################
@@ -715,3 +793,11 @@ plot_grid(
   nrow = 2
 )
 saveRDS(mo_object_4, mo_object_4_clustered_loc)
+
+# get the peaks per celltype
+mo_all_per_celltype <- readRDS('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_percelltypemajor_1_64.rds')
+summarize_peak_info(mo_all_per_celltype, output_prepend = '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/signac_peaks/output/mo_peaks_lane1to64_')
+# now plot them
+plot_peak_sharing_from_beds('/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/signac_peaks/output/mo_peaks_lane1to64_', filter_column = 'exp', filter_value = 1) # minimal ten counts per cell type
+plot_peak_sharing_from_beds('/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/signac_peaks/output/mo_peaks_lane1to64_', filter_column = 'avg', filter_value = .1) # on average expressed in one out of ten cells
+plot_peak_sharing_from_beds('/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/signac_peaks/output/mo_peaks_lane1to64_', filter_column = 'pct_exp', filter_value = .1) # expressed in at least 10% of cells
