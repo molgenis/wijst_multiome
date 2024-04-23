@@ -50,6 +50,65 @@ get_color_coding_dict <- function(){
   color_coding[["hemapoietic_stem"]] <- "#8B8000"
   color_coding[["hemapoietic stem"]] <- "#8B8000"
   color_coding[["hemapoietic-stem"]] <- "#8B8000"
+  
+  # now for condition specific
+  color_coding[["24hCA_Bulk"]] <- "black"
+  color_coding[["24hCA Bulk"]] <- "black"
+  color_coding[["24hCA_CD4T"]] <- "#153057"
+  color_coding[["24hCA_CD8T"]] <- "#009DDB"
+  color_coding[["24hCA monocyte"]] <- "#EDBA1B"
+  color_coding[["24hCA_monocyte"]] <- "#EDBA1B"
+  color_coding[["24hCA NK"]] <- "#E64B50"
+  color_coding[["24hCA_NK"]] <- "#E64B50"
+  color_coding[["24hCA B"]] <- "#71BC4B"
+  color_coding[["24hCA_B"]] <- "#71BC4B"
+  color_coding[["24hCA DC"]] <- "#965EC8"
+  color_coding[["24hCA_DC"]] <- "#965EC8"
+  color_coding[["24hCA CD4+ T"]] <- "#153057"
+  color_coding[["24hCA CD8+ T"]] <- "#009DDB"
+  color_coding[["24hCA HSPC"]] <- "#009E94"
+  color_coding[["24hCA_HSPC"]] <- "#009E94"
+  color_coding[["24hCA platelet"]] <- "#9E1C00"
+  color_coding[["24hCA_platelet"]] <- "#9E1C00"
+  color_coding[["24hCA plasmablast"]] <- "#DB8E00"
+  color_coding[["24hCA_plasmablast"]] <- "#DB8E00"
+  color_coding[["24hCA other T"]] <- "#FF63B6"
+  color_coding[["24hCA_T_other"]] <- "#FF63B6"
+  color_coding[["24hCA T-other"]] <- "#FF63B6"
+  color_coding[["24hCA_T-other"]] <- "#FF63B6"
+  color_coding[["24hCA_hemapoietic_stem"]] <- "#8B8000"
+  color_coding[["24hCA hemapoietic stem"]] <- "#8B8000"
+  color_coding[["24hCA hemapoietic-stem"]] <- "#8B8000"
+  color_coding[["24hCA_hemapoietic-stem"]] <- "#8B8000"
+  pct_whitening=40
+  color_coding[["UT_Bulk"]] <- colorRampPalette(c(color_coding[["24hCA_Bulk"]], "white"))(100)[pct_whitening]
+  color_coding[["UT Bulk"]] <- colorRampPalette(c(color_coding[["24hCA Bulk"]], "white"))(100)[pct_whitening]
+  color_coding[["UT_CD4T"]] <- colorRampPalette(c(color_coding[["24hCA_CD4T"]], "white"))(100)[pct_whitening]
+  color_coding[["UT_CD4T"]] <- colorRampPalette(c(color_coding[["24hCA_CD4T"]], "white"))(100)[pct_whitening]
+  color_coding[["UT monocyte"]] <- colorRampPalette(c(color_coding[["24hCA monocyte"]], "white"))(100)[pct_whitening]
+  color_coding[["UT_monocyte"]] <- colorRampPalette(c(color_coding[["24hCA_monocyte"]], "white"))(100)[pct_whitening]
+  color_coding[["UT NK"]] <- colorRampPalette(c(color_coding[["24hCA NK"]], "white"))(100)[pct_whitening]
+  color_coding[["UT_NK"]] <- colorRampPalette(c(color_coding[["24hCA_NK"]], "white"))(100)[pct_whitening]
+  color_coding[["UT B"]] <- colorRampPalette(c(color_coding[["24hCA B"]], "white"))(100)[pct_whitening]
+  color_coding[["UT_B"]] <- colorRampPalette(c(color_coding[["24hCA_B"]], "white"))(100)[pct_whitening]
+  color_coding[["UT DC"]] <- colorRampPalette(c(color_coding[["24hCA DC"]], "white"))(100)[pct_whitening]
+  color_coding[["UT_DC"]] <- colorRampPalette(c(color_coding[["24hCA_DC"]], "white"))(100)[pct_whitening]
+  color_coding[["UT CD4+ T"]] <- colorRampPalette(c(color_coding[["24hCA CD4+ T"]], "white"))(100)[pct_whitening]
+  color_coding[["UT CD8+ T"]] <- colorRampPalette(c(color_coding[["24hCA CD8+ T"]], "white"))(100)[pct_whitening]
+  color_coding[["UT HSPC"]] <- colorRampPalette(c(color_coding[["24hCA HSPC"]], "white"))(100)[pct_whitening]
+  color_coding[["UT_HSPC"]] <- colorRampPalette(c(color_coding[["24hCA_HSPC"]], "white"))(100)[pct_whitening]
+  color_coding[["UT platelet"]] <- colorRampPalette(c(color_coding[["24hCA platelet"]], "white"))(100)[pct_whitening]
+  color_coding[["UT_platelet"]] <- colorRampPalette(c(color_coding[["24hCA_platelet"]], "white"))(100)[pct_whitening]
+  color_coding[["UT plasmablast"]] <- colorRampPalette(c(color_coding[["24hCA plasmablast"]], "white"))(100)[pct_whitening]
+  color_coding[["UT_plasmablast"]] <- colorRampPalette(c(color_coding[["24hCA_plasmablast"]], "white"))(100)[pct_whitening]
+  color_coding[["UT other T"]] <- colorRampPalette(c(color_coding[["24hCA other T"]], "white"))(100)[pct_whitening]
+  color_coding[["UT_T_other"]] <- colorRampPalette(c(color_coding[["24hCA_T_other"]], "white"))(100)[pct_whitening]
+  color_coding[["UT T-other"]] <- colorRampPalette(c(color_coding[["24hCA T-other"]], "white"))(100)[pct_whitening]
+  color_coding[["UT_T-other"]] <- colorRampPalette(c(color_coding[["24hCA_T-other"]], "white"))(100)[pct_whitening]
+  color_coding[["UT_hemapoietic_stem"]] <- colorRampPalette(c(color_coding[["24hCA_hemapoietic_stem"]], "white"))(100)[pct_whitening]
+  color_coding[["UT hemapoietic stem"]] <- colorRampPalette(c(color_coding[["24hCA hemapoietic stem"]], "white"))(100)[pct_whitening]
+  color_coding[["UT hemapoietic-stem"]] <- colorRampPalette(c(color_coding[["24hCA hemapoietic-stem"]], "white"))(100)[pct_whitening]
+  color_coding[["UT_hemapoietic-stem"]] <- colorRampPalette(c(color_coding[["24hCA_hemapoietic-stem"]], "white"))(100)[pct_whitening]
   return(color_coding)
 }
 
@@ -102,6 +161,35 @@ label_dict <- function(){
   label_dict[["cDC1"]] <- "cDC1"
   label_dict[["ILC"]] <- "ILC"
   label_dict[["dnT"]] <- "double negative T"
+  # with the conditions
+  label_dict[["UT_Bulk"]] <- "UT bulk-like"
+  label_dict[["24hCA_Bulk"]] <- "24hCA bulk-like"
+  label_dict[["UT_CD4T"]] <- "UT CD4+ T"
+  label_dict[["24hCA_CD4T"]] <- "24hCA CD4+ T"
+  label_dict[["UT_CD8T"]] <- "UT CD8+ T"
+  label_dict[["24hCA_CD8T"]] <- "24hCA CD8+ T"
+  label_dict[["UT_monocyte"]] <- "UT monocyte"
+  label_dict[["24hCA_monocyte"]] <- "24hCA monocyte"
+  label_dict[["UT_NK"]] <- "UT NK"
+  label_dict[["24hCA_NK"]] <- "24hCA NK"
+  label_dict[["UT_B"]] <- "UT B"
+  label_dict[["24hCA_B"]] <- "24hCA B"
+  label_dict[["UT_DC"]] <- "UT DC"
+  label_dict[["24hCA_DC"]] <- "24hCA DC"
+  label_dict[["UT_HSPC"]] <- "UT HSPC"
+  label_dict[["24hCA HSPC"]] <- "24hCA HSPC"
+  label_dict[["UT_plasmablast"]] <- "UT plasmablast"
+  label_dict[["24hCA_plasmablast"]] <- "24hCA plasmablast"
+  label_dict[["UT_platelet"]] <- "UT platelet"
+  label_dict[["24hCA_platelet"]] <- "24hCA platelet"
+  label_dict[["UT_T_other"]] <- "UT other T"
+  label_dict[["24hCA_T_other"]] <- "24hCA other T"
+  label_dict[["UT_T-other"]] <- "UT other T"
+  label_dict[["24hCA_T-other"]] <- "24hCA other T"
+  label_dict[["UT_hemapoietic_stem"]] <- "UT hemapoietic stem"
+  label_dict[["24hCA_hemapoietic_stem"]] <- "24hCA hemapoietic stem"
+  label_dict[["UT_hemapoietic-stem"]] <- "UT hemapoietic stem"
+  label_dict[["24hCA_hemapoietic-stem"]] <- "24hCA hemapoietic stem"
   return(label_dict)
 }
 
@@ -293,9 +381,17 @@ get_peaks_sharing_from_beds <- function(output_prepend='mo_peaks_', output_appen
   return(peaks_per_identity)
 }
 
-plot_peak_sharing_from_beds <- function(output_prepend='mo_peaks_', output_append='.bed', cell_types=c('B', 'CD4T', 'CD8T', 'DC', 'monocyte', 'NK'), filter_column=NULL, filter_value=NULL, id_column='name', use_color_dict=T, use_label_dict=T) {
-  # get the peak sharing from the beds
-  peaks_per_ct <- get_peaks_sharing_from_beds(output_prepend=output_prepend, output_append=output_append, cell_types=cell_types, filter_column=filter_column, filter_value=filter_value, id_column=id_column)
+plot_peak_sharing_from_beds <- function(output_prepend='mo_peaks_', output_append='.bed', cell_types=c('B', 'CD4T', 'CD8T', 'DC', 'monocyte', 'NK'), filter_column=NULL, filter_value=NULL, id_column='name', use_color_dict=T, use_label_dict=T, precalculated_peaks=NULL) {
+  # we will use peaks per ct
+  peaks_per_ct <- NULL
+  # if we have them already calculated, we will use the filtered peaks
+  if (!is.null(precalculated_peaks)) {
+    peaks_per_ct <- precalculated_peaks
+  }
+  # else get the peak sharing from the beds
+  else {
+    peaks_per_ct <- get_peaks_sharing_from_beds(output_prepend=output_prepend, output_append=output_append, cell_types=cell_types, filter_column=filter_column, filter_value=filter_value, id_column=id_column)
+  }
   # rename cell types if requested
   if(use_label_dict){
     names(peaks_per_ct) <- label_dict()[names(peaks_per_ct)]
@@ -352,6 +448,39 @@ plot_peak_sharing_from_beds <- function(output_prepend='mo_peaks_', output_appen
 }
 
 
+write_peak_mtx <- function(signac_object, output_folder) {
+  # features
+  features_gz <- gzfile(paste(output_folder, 'features.tsv.gz', sep = ''))
+  write.table(data.frame(x = rownames(signac_object@assays$peaks@counts)), features_gz, row.names = F, col.names = F, quote = F)
+  # barcodes
+  barcodes_gz <- gzfile(paste(output_folder, 'barcodes.tsv.gz', sep = ''))
+  write.table(data.frame(x = colnames(signac_object@assays$peaks@counts)), barcodes_gz, row.names = F, col.names = F, quote = F)
+  # metadata
+  metadata_gz <- gzfile(paste(output_folder, 'metadata.tsv.gz', sep = ''))
+  write.table(cbind(data.frame(bc = rownames(signac_object@meta.data)), signac_object@meta.data), metadata_gz, row.names = F, col.names = T, quote = F, sep = '\t')
+  # and finally the count matrix
+  counts_gz <- (paste(output_folder, 'matrix.mtx', sep = ''))
+  writeMM(signac_object@assays$peaks@counts, counts_gz)
+  # needs to be bgzipped manually
+  return(0)
+}
+
+
+write_peak_matrices <- function(signac_object_list, output_folder) {
+  # check each object
+  for (entry in names(signac_object_list)) {
+    # get the object
+    signac_object <- signac_object_list[[entry]]
+    # get the full output directory
+    full_output_folder <- paste(output_folder, '/', entry, '/', sep = '')
+    # create the directory if not present already
+    dir.create(full_output_folder, showWarnings = F, recursive = T)
+    # write the actual stuff
+    write_peak_mtx(signac_object, full_output_folder)
+  }
+  return(0)
+}
+
 ####################
 # Main Code        #
 ####################
@@ -361,6 +490,7 @@ condition_assignment_loc <- '/groups/umcg-franke-scrna/tmp03/projects/multiome/o
 
 # location of the cell type objects
 cell_type_objects_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_percelltypemajor_1_64.rds'
+cell_type_objects_wstatus_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_percelltypemajor_wstatus_1_64.rds'
 
 # read the object
 cell_type_objects <- readRDS(cell_type_objects_loc)
@@ -413,4 +543,27 @@ plot_peak_sharing_from_beds('/groups/umcg-franke-scrna/tmp03/projects/multiome/o
 plot_peak_sharing_from_beds('/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/signac_peaks/output/mo_peaks_lane1to64_24hCA_', filter_column = 'exp', filter_value = 1) # minimal ten counts per cell type
 plot_peak_sharing_from_beds('/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/signac_peaks/output/mo_peaks_lane1to64_24hCA_', filter_column = 'avg', filter_value = .1) # on average expressed in one out of ten cells
 plot_peak_sharing_from_beds('/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/signac_peaks/output/mo_peaks_lane1to64_24hCA_', filter_column = 'pct_exp', filter_value = .1) # expressed in at least 10% of cells
+
+# now combine the UT and 24hCA
+mo_peaks_lane1to64_UT_avgfilter <- get_peaks_sharing_from_beds(output_prepend = '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/signac_peaks/output/mo_peaks_lane1to64_UT_', filter_column = 'avg', filter_value = .1)
+mo_peaks_lane1to64_24hCA_avgfilter <- get_peaks_sharing_from_beds(output_prepend = '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/signac_peaks/output/mo_peaks_lane1to64_24hCA_', filter_column = 'avg', filter_value = .1)
+# but first rename the names in the named list
+names(mo_peaks_lane1to64_UT_avgfilter) <- paste('UT', names(mo_peaks_lane1to64_UT_avgfilter), sep = '_')
+names(mo_peaks_lane1to64_24hCA_avgfilter) <- paste('24hCA', names(mo_peaks_lane1to64_24hCA_avgfilter), sep = '_')
+mo_peaks_lane1to64_both_avgfilter <- c(mo_peaks_lane1to64_UT_avgfilter, mo_peaks_lane1to64_24hCA_avgfilter)
+plot_peak_sharing_from_beds(precalculated_peaks = mo_peaks_lane1to64_both_avgfilter, use_color_dict = T, use_label_dict = T)
+
+# also do with the minimally expressed in 0.01 cells
+mo_peaks_lane1to64_UT_minfilter <- get_peaks_sharing_from_beds(output_prepend = '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/signac_peaks/output/mo_peaks_lane1to64_UT_', filter_column = 'pct_exp', filter_value = .01)
+mo_peaks_lane1to64_24hCA_minfilter <- get_peaks_sharing_from_beds(output_prepend = '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/signac_peaks/output/mo_peaks_lane1to64_24hCA_', filter_column = 'pct_exp', filter_value = .01)
+names(mo_peaks_lane1to64_UT_minfilter) <- paste('UT', names(mo_peaks_lane1to64_UT_minfilter), sep = '_')
+names(mo_peaks_lane1to64_24hCA_minfilter) <- paste('24hCA', names(mo_peaks_lane1to64_24hCA_minfilter), sep = '_')
+mo_peaks_lane1to64_both_minfilter <- c(mo_peaks_lane1to64_UT_minfilter, mo_peaks_lane1to64_24hCA_minfilter)
+plot_peak_sharing_from_beds(precalculated_peaks = mo_peaks_lane1to64_both_minfilter, use_color_dict = T, use_label_dict = T)
+
+# save the object
+saveRDS(cell_type_objects, cell_type_objects_wstatus_loc)
+
+# create the peak matrices
+write_peak_matrices(cell_type_objects, '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/scenic_plus/pycistopic/matrices/')
 
