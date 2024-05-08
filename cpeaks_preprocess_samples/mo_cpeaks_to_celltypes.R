@@ -544,7 +544,7 @@ get_peaks_sharing_from_beds <- function(output_prepend='mo_peaks_', output_appen
   return(peaks_per_identity)
 }
 
-plot_peak_sharing_from_beds <- function(output_prepend='mo_peaks_', output_append='.bed', cell_types=c('B', 'CD4T', 'CD8T', 'DC', 'monocyte', 'NK'), filter_column=NULL, filter_value=NULL, id_column='name', use_color_dict=T, use_label_dict=T) {
+plot_peak_sharing_from_beds <- function(output_prepend='mo_peaks_', output_append='.bed', cell_types=c('B', 'CD4T', 'CD8T', 'DC', 'monocyte', 'NK'), filter_column=NULL, filter_value=NULL, id_column='name', use_color_dict=T, use_label_dict=T, nintersects=NULL) {
   # get the peak sharing from the beds
   peaks_per_ct <- get_peaks_sharing_from_beds(output_prepend=output_prepend, output_append=output_append, cell_types=cell_types, filter_column=filter_column, filter_value=filter_value, id_column=id_column)
   # rename cell types if requested
@@ -597,7 +597,12 @@ plot_peak_sharing_from_beds <- function(output_prepend='mo_peaks_', output_appen
   else {
     queries = NULL
   }
-  upset(fromList(peaks_per_ct), order.by = 'freq', nsets = length(peaks_per_ct), queries = queries, sets.bar.color=sets.bar.color, nintersects = length(peaks_per_ct)*length(peaks_per_ct))
+  if (!is.null(nintersects)) {
+    upset(fromList(peaks_per_ct), order.by = 'freq', nsets = length(peaks_per_ct), queries = queries, sets.bar.color=sets.bar.color, nintersects = nintersects)
+  }
+  else{
+    upset(fromList(peaks_per_ct), order.by = 'freq', nsets = length(peaks_per_ct), queries = queries, sets.bar.color=sets.bar.color, nintersects = length(peaks_per_ct)*length(peaks_per_ct))
+  }
   #upset(fromList(peaks_per_ct), order.by = 'freq', nsets = length(peaks_per_ct), sets.bar.color=sets.bar.color, nintersects = length(peaks_per_ct)*length(peaks_per_ct))
   #return(peaks_per_ct)
 }
@@ -641,6 +646,9 @@ mo_object_3_clustered_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/
 mo_object_4_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_unfiltered49_64.rds'
 mo_object_4_filtered_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered49_64.rds'
 mo_object_4_clustered_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_clustered49_64.rds'
+mo_object_5_loc <- '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_unfiltered65_80.rds'
+mo_object_5_filtered_loc <- '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered65_80.rds'
+mo_object_5_clustered_loc <- '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_clustered65_80.rds'
 
 
 # load metadata
@@ -711,6 +719,20 @@ mo_object_4 <- qc_signac_object(mo_object_4)
 #[1] "ncells post-min_TSS.enrichment: 121580"
 saveRDS(mo_object_4, mo_object_4_filtered_loc)
 
+# read the first object
+mo_object_5 <- readRDS(mo_object_5_loc)
+# process
+mo_object_5 <- process_signac_object(mo_object_5, arc_metadata, fragments_loc = fragments_loc)
+mo_object_5 <- qc_signac_object(mo_object_5)
+#[1] "ncells pre QC: 166065"
+#[1] "ncells post-min_nCount_peaks QC: 149030"
+#[1] "ncells post-max_nCount_peaks: 138228"
+#[1] "ncells post-min_pct_reads_in_peaks: 114365"
+#[1] "ncells post-max_blacklist_ratio: 114365"
+#[1] "ncells post-max_nucleosome_signal: 114365"
+#[1] "ncells post-min_TSS.enrichment: 114365"
+saveRDS(mo_object_5, mo_object_5_filtered_loc)
+
 # add more metadata
 mo_object_1 <- AddMetaData(mo_object_1, rna_metadata['cell_type_final'], 'cell_type_final')
 mo_object_1 <- AddMetaData(mo_object_1, rna_metadata['sample_final'], 'sample_final')
@@ -728,18 +750,10 @@ mo_object_4 <- AddMetaData(mo_object_4, rna_metadata['cell_type_final'], 'cell_t
 mo_object_4 <- AddMetaData(mo_object_4, rna_metadata['sample_final'], 'sample_final')
 mo_object_4 <- AddMetaData(mo_object_4, rna_metadata['final_condition'], 'final_condition')
 mo_object_4 <- AddMetaData(mo_object_4, rna_metadata['soup_status'], 'soup_status')
-
-# reload if necessary
-mo_object_1 <- readRDS(mo_object_1_clustered_loc)
-mo_object_2 <- readRDS(mo_object_2_clustered_loc)
-mo_object_3 <- readRDS(mo_object_3_clustered_loc)
-mo_object_4 <- readRDS(mo_object_4_clustered_loc)
-# merge per celltype
-mo_all_per_celltype <- merge_signac_per_celltypes(c(mo_object_1, mo_object_2, mo_object_3, mo_object_4), cell_type_column = 'cell_type_final_lowerres')
-# make the names posix safe
-names(mo_all_per_celltype) <- make_celltypes_safe(names(mo_all_per_celltype))
-# save result
-saveRDS(mo_all_per_celltype, '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_percelltypemajor_1_64.rds')
+mo_object_5 <- AddMetaData(mo_object_5, rna_metadata['cell_type_final'], 'cell_type_final')
+mo_object_5 <- AddMetaData(mo_object_5, rna_metadata['sample_final'], 'sample_final')
+mo_object_5 <- AddMetaData(mo_object_5, rna_metadata['final_condition'], 'final_condition')
+mo_object_5 <- AddMetaData(mo_object_5, rna_metadata['soup_status'], 'soup_status')
 
 # we should also check the cell type annotation. We can not do this for the full data, so let's do it for each separately
 # remove doublets
@@ -793,6 +807,31 @@ plot_grid(
   nrow = 2
 )
 saveRDS(mo_object_4, mo_object_4_clustered_loc)
+#
+mo_object_5 <- signac_dimreduc_and_cluster(mo_object_5)
+mo_object_5@meta.data[['cell_type_final_lowerres']] <- as.vector(unlist(ref10xmo_predictions_to_lower_res_mapping()[mo_object_5@meta.data[['cell_type_final']]]))
+plot_grid(
+  DimPlot(mo_object_5, group.by = 'seurat_clusters') + theme(legend.position = "none"),
+  DimPlot(mo_object_5, group.by = 'cell_type_final_lowerres') + scale_color_manual(values = get_color_coding_dict()),
+  nrow = 2
+)
+saveRDS(mo_object_5, mo_object_5_clustered_loc)
+
+
+# reload if necessary
+mo_object_1 <- readRDS(mo_object_1_clustered_loc)
+mo_object_2 <- readRDS(mo_object_2_clustered_loc)
+mo_object_3 <- readRDS(mo_object_3_clustered_loc)
+mo_object_4 <- readRDS(mo_object_4_clustered_loc)
+mo_object_5 <- readRDS(mo_object_5_clustered_loc)
+
+# merge per celltype
+mo_all_per_celltype <- merge_signac_per_celltypes(c(mo_object_1, mo_object_2, mo_object_3, mo_object_4, mo_object_5), cell_type_column = 'cell_type_final_lowerres')
+# make the names posix safe
+names(mo_all_per_celltype) <- make_celltypes_safe(names(mo_all_per_celltype))
+# save result
+saveRDS(mo_all_per_celltype, '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_percelltypemajor_1_64.rds')
+
 
 # get the peaks per celltype
 mo_all_per_celltype <- readRDS('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_percelltypemajor_1_64.rds')
@@ -800,4 +839,4 @@ summarize_peak_info(mo_all_per_celltype, output_prepend = '/groups/umcg-franke-s
 # now plot them
 plot_peak_sharing_from_beds('/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/signac_peaks/output/mo_peaks_lane1to64_', filter_column = 'exp', filter_value = 1) # minimal ten counts per cell type
 plot_peak_sharing_from_beds('/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/signac_peaks/output/mo_peaks_lane1to64_', filter_column = 'avg', filter_value = .1) # on average expressed in one out of ten cells
-plot_peak_sharing_from_beds('/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/signac_peaks/output/mo_peaks_lane1to64_', filter_column = 'pct_exp', filter_value = .1) # expressed in at least 10% of cells
+plot_peak_sharing_from_beds('/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/signac_peaks/output/mo_peaks_lane1to64_', filter_column = 'pct_exp', filter_value = 0) # expressed in at least 10% of cells
