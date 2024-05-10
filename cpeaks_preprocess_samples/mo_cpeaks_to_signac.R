@@ -46,7 +46,8 @@ read_cpeaks <- function(cpeaks_loc, cellranger_loc, lane, annotations, atac_frag
   # save the lane the samples are from
   metadata$lane <- lane
   metadata$batch <- lane
-  #rownames(metadata) <- metadata$barcode_lane
+  # match barcodes in metadata with count colnames
+  rownames(metadata) <- metadata$barcode_1
   # change to a barcode unique across lanes
   #colnames(peaks) <- metadata$barcode_lane
   # get the fragments
@@ -470,19 +471,19 @@ lanes <- c('230105_lane1', '230105_lane2', '230105_lane3', '230105_lane4',
            '230302_lane1', '230302_lane2', '230302_lane3', '230302_lane4',
            '230302_lane5', '230302_lane6', '230302_lane7', '230302_lane8',
            '230316_lane1', '230316_lane2', '230316_lane3', '230316_lane4',
-           '230316_lane5', '230316_lane6', '230316_lane7'
+           '230316_lane5', '230316_lane6', '230316_lane7', '230316_lane8'
 )
 
 # location of the cpeaks objects
 cpeaks_loc <- '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/cpeaks_peak_calling/output/rounded/'
-cpeaks_loc <- '/scratch/hb-functionalgenomics/projects/multiome/ongoing/cpeaks_peak_calling/output/rounded/'
+#cpeaks_loc <- '/scratch/hb-functionalgenomics/projects/multiome/ongoing/cpeaks_peak_calling/output/rounded/'
 # get cellranger loc
 cellranger_loc <- '/groups/umcg-franke-scrna/tmp03/projects/multiome/processed/joint/alignment/b38/'
 # location of the gene annotations
 gtf_loc <- '/groups/umcg-franke-scrna/tmp03/external_datasets/refdata-cellranger-arc-GRCh38-2020-A-2.0.0/genes/genes.gtf.gz'
 # fragment loc
 frag_loc <- '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/rounded_fragments/'
-frag_loc <- '/scratch/hb-functionalgenomics/projects/multiome/ongoing/rounded_fragments/'
+#frag_loc <- '/scratch/hb-functionalgenomics/projects/multiome/ongoing/rounded_fragments/'
 
 # check each lane
 for (lane in lanes) {
@@ -508,7 +509,7 @@ for (i in 1:length(i_starts)) {
   # compute TSS enrichment score per cell
   #mo_all <- TSSEnrichment(object = mo_all, fast = FALSE)
   # save result
-  saveRDS(mo_all, paste('/scratch/hb-functionalgenomics/projects/ongoing/cpeaks_peak_calling/output/default/mo_cpeaks_unfiltered', i_starts[i], '_', i_stops[i], '.rds', sep = ''))
+  saveRDS(mo_all, paste(cpeaks_loc, '/mo_cpeaks_unfiltered', i_starts[i], '_', i_stops[i], '.rds', sep = ''))
   mo_all <- NULL
 }
 

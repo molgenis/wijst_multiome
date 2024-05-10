@@ -123,6 +123,7 @@ ref10xmo_predictions_to_lower_res_mapping <- function() {
   high_to_low[['pDC']] <- 'DC'
   high_to_low[['CD8 TEM_2']] <- 'CD8T'
   high_to_low[['HSPC']] <- 'hemapoietic_stem'
+  high_to_low[['unknown']] <- 'unknown'
   return(high_to_low)
 }
 
@@ -808,7 +809,9 @@ plot_grid(
 )
 saveRDS(mo_object_4, mo_object_4_clustered_loc)
 #
+mo_object_5 <- readRDS(mo_object_5_filtered_loc)
 mo_object_5 <- signac_dimreduc_and_cluster(mo_object_5)
+mo_object_5@meta.data[is.na(mo_object_5@meta.data[['cell_type_final']]), 'cell_type_final'] <- 'unknown'
 mo_object_5@meta.data[['cell_type_final_lowerres']] <- as.vector(unlist(ref10xmo_predictions_to_lower_res_mapping()[mo_object_5@meta.data[['cell_type_final']]]))
 plot_grid(
   DimPlot(mo_object_5, group.by = 'seurat_clusters') + theme(legend.position = "none"),
@@ -830,13 +833,13 @@ mo_all_per_celltype <- merge_signac_per_celltypes(c(mo_object_1, mo_object_2, mo
 # make the names posix safe
 names(mo_all_per_celltype) <- make_celltypes_safe(names(mo_all_per_celltype))
 # save result
-saveRDS(mo_all_per_celltype, '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_percelltypemajor_1_64.rds')
+saveRDS(mo_all_per_celltype, '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_percelltypemajor_1_80.rds')
 
 
 # get the peaks per celltype
-mo_all_per_celltype <- readRDS('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_percelltypemajor_1_64.rds')
-summarize_peak_info(mo_all_per_celltype, output_prepend = '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/signac_peaks/output/mo_peaks_lane1to64_')
+mo_all_per_celltype <- readRDS('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_percelltypemajor_1_80.rds')
+summarize_peak_info(mo_all_per_celltype, output_prepend = '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/signac_peaks/output/mo_peaks_lane1to80_')
 # now plot them
-plot_peak_sharing_from_beds('/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/signac_peaks/output/mo_peaks_lane1to64_', filter_column = 'exp', filter_value = 1) # minimal ten counts per cell type
-plot_peak_sharing_from_beds('/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/signac_peaks/output/mo_peaks_lane1to64_', filter_column = 'avg', filter_value = .1) # on average expressed in one out of ten cells
-plot_peak_sharing_from_beds('/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/signac_peaks/output/mo_peaks_lane1to64_', filter_column = 'pct_exp', filter_value = 0) # expressed in at least 10% of cells
+plot_peak_sharing_from_beds('/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/signac_peaks/output/mo_peaks_lane1to80_', filter_column = 'exp', filter_value = 1) # minimal ten counts per cell type
+plot_peak_sharing_from_beds('/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/signac_peaks/output/mo_peaks_lane1to80_', filter_column = 'avg', filter_value = .1) # on average expressed in one out of ten cells
+plot_peak_sharing_from_beds('/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/signac_peaks/output/mo_peaks_lane1to80_', filter_column = 'pct_exp', filter_value = 0) # expressed in at least 10% of cells
