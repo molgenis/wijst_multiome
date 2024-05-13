@@ -330,13 +330,17 @@ write_limix_input <- function(expression_per_celltype, metadata_per_celltype, ou
       qtl_expression <- qtl_expression[, colnames(qtl_expression) %in% metadata[['Donor_Pool']]]
     }
     # paste together the output names
-    qtl_output_loc <- paste(output_loc, '/', cell_type, '.qtlInput.txt', sep = '')
-    pcs_output_loc <- paste(output_loc, '/', cell_type, '.qtlInput.Pcs.txt', sep = '')
-    exp_output_loc <- paste(output_loc, '/', cell_type, '.Exp.txt', sep = '')
-    metadata_output_loc <- paste(output_loc, '/', cell_type, '.covariates.txt', sep = '')
+    qtl_output_loc <- gzfile(paste(output_loc, '/', cell_type, '.qtlInput.txt.gz', sep = ''))
+    pcs_output_loc <- gzfile(paste(output_loc, '/', cell_type, '.qtlInput.Pcs.txt.gz', sep = ''))
+    exp_output_loc <- gzfile(paste(output_loc, '/', cell_type, '.Exp.txt.gz', sep = ''))
+    metadata_output_loc <- gzfile(paste(output_loc, '/', cell_type, '.covariates.txt.gz', sep = ''))
+    #qtl_output_loc <- gzfile(paste(output_loc, '/', cell_type, '.qtlInput.txt', sep = ''))
+    #pcs_output_loc <- paste(output_loc, '/', cell_type, '.qtlInput.Pcs.txt', sep = '')
+    #exp_output_loc <- paste(output_loc, '/', cell_type, '.Exp.txt', sep = '')
+    #metadata_output_loc <- paste(output_loc, '/', cell_type, '.covariates.txt', sep = '')
     # write the files
-    write.table(qtl_expression, qtl_output_loc, quote = F, sep = '\t', col.names = NA)
-    write.table(mean_expression, exp_output_loc, quote = F, sep = '\t', col.names = NA)
+    write.table(qtl_expression, qtl_output_loc, quote = F, sep = '\t', col.names = T)
+    write.table(mean_expression, exp_output_loc, quote = F, sep = '\t', col.names = T)
     # change X.FFID back to #FID
     colnames(metadata) <- gsub('X\\.FID', '#FID', colnames(metadata))
     # either write the PCs together or separate from the covariates
@@ -369,8 +373,8 @@ write_limix_input <- function(expression_per_celltype, metadata_per_celltype, ou
       write.table(metadata, metadata_output_loc, quote = F, sep = '\t', col.names = T, row.names = F)
     }
     else {
-      write.table(pcs, pcs_output_loc, quote = F, sep = '\t', col.names = NA, row.names = F)
-      write.table(metadata, metadata_output_loc, quote = F, sep = '\t', col.names = NA, row.names = F)
+      write.table(pcs, pcs_output_loc, quote = F, sep = '\t', col.names = T, row.names = F)
+      write.table(metadata, metadata_output_loc, quote = F, sep = '\t', col.names = T, row.names = F)
     }
   }
   # extract the first metadata
