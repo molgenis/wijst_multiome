@@ -369,8 +369,8 @@ write_limix_input <- function(expression_per_celltype, metadata_per_celltype, ou
       write.table(metadata, metadata_output_loc, quote = F, sep = '\t', col.names = T, row.names = F)
     }
     else {
-      write.table(pcs, pcs_output_loc, quote = F, sep = '\t', col.names = NA)
-      write.table(metadata, metadata_output_loc, quote = F, sep = '\t', col.names = NA)
+      write.table(pcs, pcs_output_loc, quote = F, sep = '\t', col.names = NA, row.names = F)
+      write.table(metadata, metadata_output_loc, quote = F, sep = '\t', col.names = NA, row.names = F)
     }
   }
   # extract the first metadata
@@ -620,6 +620,36 @@ donor_annotation_psam_batch3 <- read.delim(donor_annotation_psam_batch3_loc, as.
 donor_annotation_psam <- rbind(donor_annotation_psam_batch1, donor_annotation_psam_batch2)
 donor_annotation_psam <- rbind(donor_annotation_psam, donor_annotation_psam_batch3)
 
+# subset to the unstimulated samples
+do_limix_input_pipeline(
+  seurat_object = seurat_object[, !is.na(seurat_object@meta.data[['inflammation_final']]) & seurat_object@meta.data[['inflammation_final']] == 'UT'], 
+  psam = donor_annotation_psam, 
+  output_loc='/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/qtl/eqtl/sc-eqtlgen/input/L1/UT/',
+  participant_column='sample_final',
+  celltype_column='celltype_imputed_lowerres',
+  merge_pcs_into_covariates=F,
+  join_pools=F,
+  min_numi=200,
+  min_sample_cor=0.7,
+  condition_column='inflammation_final',
+  pool_column = 'lane',
+  sample_cor_column='unconfined_best_match_correlation'
+)
+# and stimulated
+do_limix_input_pipeline(
+  seurat_object = seurat_object[, !is.na(seurat_object@meta.data[['inflammation_final']]) & seurat_object@meta.data[['inflammation_final']] == '24hCA'], 
+  psam = donor_annotation_psam, 
+  output_loc='/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/qtl/eqtl/sc-eqtlgen/input/L1/24hCA/',
+  participant_column='sample_final',
+  celltype_column='celltype_imputed_lowerres',
+  merge_pcs_into_covariates=F,
+  join_pools=F,
+  min_numi=200,
+  min_sample_cor=0.7,
+  condition_column='inflammation_final',
+  pool_column = 'lane',
+  sample_cor_column='unconfined_best_match_correlation'
+)
 # write the matrices
 do_limix_input_pipeline(
   seurat_object = seurat_object, 
@@ -627,12 +657,12 @@ do_limix_input_pipeline(
   output_loc='/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/qtl/eqtl/sc-eqtlgen/input/cell_type_lowerres/',
   participant_column='sample_final',
   celltype_column='celltype_imputed_lowerres',
-  merge_pcs_into_covariates=T,
+  merge_pcs_into_covariates=F,
   join_pools=F,
   min_numi=200,
   min_sample_cor=0.7,
   condition_column='inflammation_final',
-  pool_column = 'lane_both',
+  pool_column = 'lane',
   sample_cor_column='unconfined_best_match_correlation'
 )
 packageVersion('Seurat')
