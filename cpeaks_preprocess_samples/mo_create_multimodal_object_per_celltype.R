@@ -384,6 +384,9 @@ seurat_object@meta.data[!is.na(seurat_object@meta.data[['inflammation_sheet']]) 
 # now also set the final inflammation assignment
 seurat_object@meta.data[['inflammation_final']] <- seurat_object@meta.data[['inflammation_sheet']]
 seurat_object@meta.data[is.na(seurat_object@meta.data[['inflammation_final']]), 'inflammation_final'] <- seurat_object@meta.data[is.na(seurat_object@meta.data[['inflammation_final']]), 'inflammation_prev']
+# save result
+mo_annotated_loc <- paste(objects_loc, 'mo_all_20240513_seuratv5_annotated.rds', sep = '')
+saveRDS(seurat_object, mo_annotated_loc)
 
 # get multimodal monocytes
 mono_rna <- seurat_object[, !is.na(seurat_object@meta.data$celltype_imputed_lowerres) & seurat_object@meta.data$celltype_imputed_lowerres == 'monocyte']
@@ -394,7 +397,7 @@ monocyte_multimodal <- merge_atac_and_rna(
   rna_object = mono_rna,
   atac_object = mono_atac
 )
-saveRDS(monocyte_multimodal, '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/seurat_preprocess_samples/objects/mo_multimodal_monocyte_1_80.rds')
+saveRDS(monocyte_multimodal, '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/seurat_preprocess_samples/objects/mo_multimodal_monocyte_1_80_20240513.rds')
 rm(monocyte_multimodal)
 
 # multimodal CD4T
@@ -406,7 +409,7 @@ cd4t_multimodal <- merge_atac_and_rna(
   rna_object = cd4t_rna,
   atac_object = cd4t_atac
 )
-saveRDS(cd4t_multimodal, '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/seurat_preprocess_samples/objects/mo_multimodal_cd4t_1_80.rds')
+saveRDS(cd4t_multimodal, '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/seurat_preprocess_samples/objects/mo_multimodal_cd4t_1_80_20240513.rds')
 rm(cd4t_multimodal)
 
 # multimodal CD8T
@@ -418,7 +421,7 @@ cd8t_multimodal <- merge_atac_and_rna(
   rna_object = cd8t_rna,
   atac_object = cd8t_atac
 )
-saveRDS(cd8t_multimodal, '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/seurat_preprocess_samples/objects/mo_multimodal_cd8t_1_80.rds')
+saveRDS(cd8t_multimodal, '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/seurat_preprocess_samples/objects/mo_multimodal_cd8t_1_80_20240513.rds')
 rm(cd8t_multimodal)
 
 # multimodal DC
@@ -430,5 +433,28 @@ dc_multimodal <- merge_atac_and_rna(
   rna_object = dc_rna,
   atac_object = dc_atac
 )
-saveRDS(dc_multimodal, '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/seurat_preprocess_samples/objects/mo_multimodal_dc_1_80.rds')
+saveRDS(dc_multimodal, '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/seurat_preprocess_samples/objects/mo_multimodal_dc_1_80_20240513.rds')
 rm(dc_multimodal)
+
+# multimodal NK
+nk_rna <- seurat_object[, !is.na(seurat_object@meta.data$celltype_imputed_lowerres) & seurat_object@meta.data$celltype_imputed_lowerres == 'NK']
+nk_atac <- cell_type_objects[['NK']]
+#rm(seurat_object)
+#rm(cell_type_objects)
+nk_multimodal <- merge_atac_and_rna(
+  rna_object = nk_rna,
+  atac_object = nk_atac
+)
+saveRDS(nk_multimodal, '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/seurat_preprocess_samples/objects/mo_multimodal_nk_1_80_20240513.rds')
+
+# multimodal B
+b_rna <- seurat_object[, !is.na(seurat_object@meta.data$celltype_imputed_lowerres) & seurat_object@meta.data$celltype_imputed_lowerres == 'B']
+b_atac <- cell_type_objects[['B']]
+#rm(seurat_object)
+#rm(cell_type_objects)
+b_multimodal <- merge_atac_and_rna(
+  rna_object = b_rna,
+  atac_object = b_atac
+)
+saveRDS(b_multimodal, '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/seurat_preprocess_samples/objects/mo_multimodal_b_1_80_20240513.rds')
+rm(b_multimodal)
