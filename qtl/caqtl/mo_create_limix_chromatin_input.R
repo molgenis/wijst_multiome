@@ -148,17 +148,17 @@ create_metadata_tables <- function(seurat_object_metadata, psam, participant_col
 #' @param celltype_column the seurat metadata column that denotes the celltype of the cell
 #' @param batch_column the batch the sample was processed in (optional)
 #' @param min_cell_number the minimal number of cells to need to build a pseudobulk, pseudobulks with less cells are removed
-#' @param min_numi the minimal number of UMIs to include a cell for pseudobulk
+#' @param min_peaks the minimal number of peaks to include a cell for pseudobulk
 #' @param npcs the number of PCs to return
 #' @param sample_cor_column the column with the sample correlations
 #' @param min_sample_cor the minimal sample correlation to keep a cell (leave at zero to do no filtering)
 #' @param verbose print progress or not
 #' @returns a list per cell type, each cell type has a list with the raw pseudobulk expression, the filtered pseudobulk expression, and the pcs
 #' expression_per_celltype <- create_aggregated_expression_matrices(seurat_object, participant_column = 'soup_final_sample_assignment')
-create_aggregated_expression_matrices <- function(seurat_object, participant_column='donor_final', celltype_column='cell_type_safe', condition_column='inflammation_final', batch_column=NULL, min_cell_number=5, min_numi=200, npcs=10, sample_cor_column='best_match_correlation', min_sample_cor=0, verbose=T) {
-  # subset object if min_numi parameter is given
-  if (!is.null(min_numi) & !is.na(min_numi) & min_numi > 0) {
-    seurat_object <- seurat_object[, seurat_object@meta.data[['nCount_peaks']] >= min_numi]
+create_aggregated_expression_matrices_quantilemethod <- function(seurat_object, participant_column='donor_final', celltype_column='cell_type_safe', condition_column='inflammation_final', batch_column=NULL, min_cell_number=5, min_peaks=200, npcs=10, sample_cor_column='best_match_correlation', min_sample_cor=0, verbose=T) {
+  # subset object if min_peaks parameter is given
+  if (!is.null(min_peaks) & !is.na(min_peaks) & min_peaks > 0) {
+    seurat_object <- seurat_object[, seurat_object@meta.data[['nCount_peaks']] >= min_peaks]
   }
   # if we have a minimal sample correlation metric, we will use that as well
   if (min_sample_cor > 0) {
@@ -280,6 +280,201 @@ create_aggregated_expression_matrices <- function(seurat_object, participant_col
 
 #' get table with the cell numbers for each combination of supplied columns
 #' 
+#' @param seurat_object the metadata (from Seurat) to use to create a metadata annotation file
+#' @param participant_column the seurat metadata column that denotes the participant
+#' @param celltype_column the seurat metadata column that denotes the celltype of the cell
+#' @param batch_column the batch the sample was processed in (optional)
+#' @param min_cell_number the minimal number of cells to need to build a pseudobulk, pseudobulks with less cells are removed
+#' @param min_peaks the minimal number of peaks to include a cell for pseudobulk
+#' @param npcs the number of PCs to return
+#' @param sample_cor_column the column with the sample correlations
+#' @param min_sample_cor the minimal sample correlation to keep a cell (leave at zero to do no filtering)
+#' @param verbose print progress or not
+#' @returns a list per cell type, each cell type has a list with the raw pseudobulk expression, the filtered pseudobulk expression, and the pcs
+create_aggregated_expression_matrices_rnamethod <- function(seurat_object, participant_column='donor_final', celltype_column='cell_type_safe', batch_column=NULL, min_cell_number=5, min_peaks=200, npcs=10, sample_cor_column='best_match_correlation', min_sample_cor=0, verbose=T) {
+  # subset object if min_peaks parameter is given
+  if (!is.null(min_peaks) & !is.na(min_peaks) & min_peaks > 0) {
+    seurat_object <- seurat_object[, seurat_object@meta.data[['nCount_peaks']] >= min_peaks]
+  }
+  # if we have a minimal sample correlation metric, we will use that as well
+  if (min_sample_cor > 0) {
+    seurat_object <- seurat_object[, !is.na(seurat_object@meta.data[[sample_cor_column]]) & seurat_object@meta.data[[sample_cor_column]] >= min_sample_cor]
+  }
+  # if the batch column is non-empty, we need to make a new column that is the join of the batch column and the participant ID
+  if (!is.null(batch_column)) {
+    seurat_object@meta.data[['participant_pool']] <- paste(seurat_object@meta.data[[participant_column]], seurat_object@meta.data[[batch_column]], sep = ';;')
+    participant_column <- 'participant_pool'
+  }
+  # we'll store the aggregated count matrices per cell type
+  aggregation_per_celltype <- list()
+  # get the unique cell types
+  cell_types <- unique(seurat_object@meta.data[[celltype_column]])
+  # excluding NA of course
+  cell_types <- cell_types[!is.na(cell_types)]
+  # check each cell type
+  for (cell_type in cell_types) {
+    if (verbose) {
+      message(paste('calculating for', cell_type))
+    }
+    # get indices of cells that are of this cell type
+    indices_cell_type <- which(seurat_object@meta.data[[celltype_column]] == cell_type)
+    # get the count matrix where we have the correct cell type
+    count_matrix_full <- GetAssayData(seurat_object[, indices_cell_type], slot = "counts")
+    # ignore genes that are never expressed
+    count_matrix <-  count_matrix_full[which(rowSums(count_matrix_full) != 0), ]
+    
+    # also get the metadata for this cell type
+    metadata <- seurat_object@meta.data[indices_cell_type, ]
+    
+    # extract IDs
+    ids <- metadata[[participant_column]]
+    unique_id_list <- unique(ids)
+    
+    # create new object to store the counts in
+    norm_count_matrix <- count_matrix
+    rm(count_matrix)
+    gc()
+    
+    if (verbose) {
+      message('doing single-cell normalization')
+    }
+    # do mean sample-sum normalization
+    sample_sum_info = colSums(norm_count_matrix)
+    mean_sample_sum = mean(sample_sum_info)
+    sample_scale = sample_sum_info / mean_sample_sum
+    
+    # divide each column by sample_scale
+    norm_count_matrix@x <- norm_count_matrix@x / rep.int(sample_scale, diff(norm_count_matrix@p))
+    
+    if (verbose) {
+      message('calculating mean expression')
+    }
+    # now create the mean expression matrix
+    aggregate_norm_count_matrix <- as.data.frame(
+      pblapply(
+        # go through each ID
+        unique_id_list, FUN = function(x){
+          # get the sparse means over the cells of a participant
+          sparse_Means(norm_count_matrix[, ids == x, drop = FALSE], rowMeans = TRUE)
+        }
+      )
+    )
+    # set the colnames to be the participants
+    colnames(aggregate_norm_count_matrix) <- unique_id_list
+    # and the genes as the rows
+    rownames(aggregate_norm_count_matrix) <- rownames(norm_count_matrix)
+    
+    # save the unfiltered mean expression
+    aggregate_norm_count_matrix_unfiltered <- aggregate_norm_count_matrix
+    
+    # calculate the number of cells per donor
+    cell_numbers_per_donor <- data.frame(table(metadata[[participant_column]]))
+    # set more descriptive column names
+    colnames(cell_numbers_per_donor) <- c('participant', 'number')
+    
+    # filter on aggregates that are based on a certain number of cells
+    samples_with_min_cells <- cell_numbers_per_donor[cell_numbers_per_donor[['number']] >= min_cell_number, 'participant']
+    aggregate_norm_count_matrix = aggregate_norm_count_matrix[, which(colnames(aggregate_norm_count_matrix) %in% samples_with_min_cells), drop = F]
+    # check if we have any cells left
+    if (length(aggregate_norm_count_matrix) != 0 & ncol(aggregate_norm_count_matrix) > 0) {
+      # remove genes without any variation
+      row_var_info = rowVars(as.matrix(aggregate_norm_count_matrix))
+      aggregate_norm_count_matrix = aggregate_norm_count_matrix[which(row_var_info != 0), , drop = F]
+      # check if we have any genes left
+      if (length(aggregate_norm_count_matrix) != 0 & nrow(aggregate_norm_count_matrix) > 0) {
+        if (verbose) {
+          message('doing mean expression normalization')
+        }
+        # do inverse normal transform per gene.
+        for (r_i in 1:nrow(aggregate_norm_count_matrix)) {
+          aggregate_norm_count_matrix[r_i, ] = qnorm((rank(aggregate_norm_count_matrix[r_i, ], na.last = 'keep')-0.5) / sum(!is.na(aggregate_norm_count_matrix[r_i, ])))
+        }
+        
+        if (verbose) {
+          message('performing PCA')
+        }
+        # Do PCA, and select first x components.
+        pc_out = prcomp(t(aggregate_norm_count_matrix))
+        # check how many pcs we have
+        npcs_present <- ncol(pc_out$x)
+        # now subset to that number of pcs if we can
+        cov_out <- NULL
+        if (npcs <= npcs_present) {
+          cov_out = pc_out$x[, 1:npcs]
+        }
+        else{
+          # if we have less pcs we should warn
+          warning(paste('requested', as.character(npcs), 'pcs, but only', as.character(npcs_present), 'are present for', cell_type))
+          cov_out <- pc_out$x
+        }
+        if (verbose) {
+          message(paste('finished', cell_type))
+        }
+        # put the results in a list
+        aggregate_summary <- list('cell_type' = cell_type, 'expression' = aggregate_norm_count_matrix, 'expression_unfiltered' = aggregate_norm_count_matrix_unfiltered, 'pc' = cov_out)
+        # which in turn is put into another list
+        aggregation_per_celltype[[cell_type]] <- aggregate_summary
+      }
+      else {
+        message(paste('no genes left after checking for variation between genes for', cell_type, 'skipping cell type'))
+      }
+    }
+    else {
+      message(paste('no cells left after min_cells filter for', cell_type, ', skipping cell type'))
+    }
+  }
+  return(aggregation_per_celltype)
+}
+
+#' get table with the cell numbers for each combination of supplied columns
+#' 
+#' @param seurat_object the metadata (from Seurat) to use to create a metadata annotation file
+#' @param participant_column the seurat metadata column that denotes the participant
+#' @param celltype_column the seurat metadata column that denotes the celltype of the cell
+#' @param batch_column the batch the sample was processed in (optional)
+#' @param min_cell_number the minimal number of cells to need to build a pseudobulk, pseudobulks with less cells are removed
+#' @param min_peaks the minimal number of peaks to include a cell for pseudobulk
+#' @param npcs the number of PCs to return
+#' @param sample_cor_column the column with the sample correlations
+#' @param min_sample_cor the minimal sample correlation to keep a cell (leave at zero to do no filtering)
+#' @param verbose print progress or not
+#' @param quantile use the smooth quantile normalization methd
+#' @returns a list per cell type, each cell type has a list with the raw pseudobulk expression, the filtered pseudobulk expression, and the pcs
+#' expression_per_celltype <- create_aggregated_expression_matrices(seurat_object, participant_column = 'soup_final_sample_assignment')
+create_aggregated_expression_matrices <- function(seurat_object, participant_column='donor_final', celltype_column='cell_type_safe', condition_column='inflammation_final', batch_column=NULL, min_cell_number=5, min_peaks=200, npcs=10, sample_cor_column='best_match_correlation', min_sample_cor=0, verbose=T, quantile=T) {
+  if (quantile) {
+    expression_per_celltype <- create_aggregated_expression_matrices_quantilemethod(
+      seurat_object = seurat_object, 
+      participant_column = participant_column, 
+      celltype_column = celltype_column, 
+      batch_column = batch_column,
+      min_cell_number = min_cell_number, 
+      npcs = npcs, 
+      sample_cor_column = sample_cor_column,
+      min_sample_cor = min_sample_cor,
+      min_peaks = min_peaks,
+      verbose = verbose
+    )
+  }
+  else {
+    expression_per_celltype <- create_aggregated_expression_matrices_rnamethod(
+      seurat_object = seurat_object, 
+      participant_column = participant_column, 
+      celltype_column = celltype_column, 
+      batch_column = batch_column,
+      min_cell_number = min_cell_number, 
+      npcs = npcs, 
+      sample_cor_column = sample_cor_column,
+      min_sample_cor = min_sample_cor,
+      min_peaks = min_peaks,
+      verbose = verbose
+    )
+  }
+}
+
+
+#' get table with the cell numbers for each combination of supplied columns
+#' 
 #' @param expression_per_celltype list with celltypes as key, with the filtered expression under the expression key, unfiltered expression under the expression_unfiltered key, and pcs under the pc key
 #' @param metadata_per_celltype metadata annation per cell type in a list, where the keys are the cell types
 #' @param output_loc where to place the output files
@@ -392,12 +587,13 @@ write_limix_input <- function(expression_per_celltype, metadata_per_celltype, ou
 #' @param celltype_column the seurat metadata column that denotes the celltype of the cell
 #' @param join_pools whether to join the pools
 #' @param min_cell_number the minimal number of cells to need to build a pseudobulk, pseudobulks with less cells are removed
-#' @param min_numi the minimal number of UMIs to include a cell for pseudobulk
+#' @param min_peaks the minimal number of UMIs to include a cell for pseudobulk
 #' @param npcs the number of PCs to return
 #' @param sample_cor_column the column with the sample correlations
 #' @param min_sample_cor the minimal sample correlation to keep a cell (leave at zero to do no filtering)
 #' @param merge_pcs_into_covariates whether to merge the PCs into the covariates file
 #' @param verbose print progress or not
+#' @param quantile use the smooth quantile normalization methd
 #' @returns 0 if succesfull
 #' do_limix_input_pipeline(seurat_object, psam, output_loc='./', partipant_column='soup_final_sample_assignment')
 do_limix_input_pipeline <- function(seurat_object, 
@@ -409,12 +605,13 @@ do_limix_input_pipeline <- function(seurat_object,
                                     celltype_column='cell_type_safe', 
                                     join_pools=T,
                                     min_cell_number=5, 
-                                    min_numi=200,
+                                    min_peaks=200,
                                     npcs=10,
                                     sample_cor_column='soup_final_sample_correlation',
                                     min_sample_cor=0,
                                     merge_pcs_into_covariates=F, 
-                                    verbose=T) {
+                                    verbose=T,
+                                    quantile=T) {
   if (verbose) {
     message('creating metadata files')
   }
@@ -449,8 +646,9 @@ do_limix_input_pipeline <- function(seurat_object,
     npcs = npcs, 
     sample_cor_column = sample_cor_column,
     min_sample_cor = min_sample_cor,
-    min_numi = min_numi,
-    verbose = verbose
+    min_peaks = min_peaks,
+    verbose = verbose,
+    quantile = quantile
   )
   if (verbose) {
     message('writing results')
@@ -707,18 +905,56 @@ lane_remapping <- combine_lanes(unique(cell_type_objects[['monocyte']]@meta.data
 cell_type_objects[['monocyte']]@meta.data[['lane_both']] <- as.vector(unlist(lane_remapping[cell_type_objects[['monocyte']]@meta.data[['lane']]]))
 cell_type_objects[['monocyte']]@meta.data[['cell_type']] <- 'monocyte'
 # create input matrices
-do_limix_input_pipeline(seurat_object = cell_type_objects[['monocyte']], 
+do_limix_input_pipeline(seurat_object = cell_type_objects[['monocyte']][, cell_type_objects[['monocyte']][['inflammation_final']] == 'UT'], 
                                     psam = donor_annotation_psam, 
-                                    output_loc='/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/L1/',
+                                    output_loc='/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/L1/UT/',
                                     participant_column='best_match_sample', 
-                                    pool_column='lane_both', 
+                                    pool_column='lane', 
                                     condition_column='inflammation_final', 
                                     celltype_column='cell_type',
                                     join_pools=F,
                                     min_cell_number=5, 
-                                    min_numi=200,
+                                    min_peaks=200,
                                     npcs=10,
                                     sample_cor_column='best_match_correlation', 
                                     min_sample_cor=0,
                                     merge_pcs_into_covariates=T, 
-                                    verbose=T)
+                                    verbose=T,
+                                    quantile=F)
+do_limix_input_pipeline(seurat_object = cell_type_objects[['monocyte']][, cell_type_objects[['monocyte']][['inflammation_final']] == '24hCA'], 
+                        psam = donor_annotation_psam, 
+                        output_loc='/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/L1/24hCA/',
+                        participant_column='best_match_sample', 
+                        pool_column='lane', 
+                        condition_column='inflammation_final', 
+                        celltype_column='cell_type',
+                        join_pools=F,
+                        min_cell_number=5, 
+                        min_peaks=200,
+                        npcs=10,
+                        sample_cor_column='best_match_correlation', 
+                        min_sample_cor=0,
+                        merge_pcs_into_covariates=T, 
+                        verbose=T,
+                        quantile=F)
+
+# add to the object
+cell_type_objects[['NK']]@meta.data[['lane_both']] <- as.vector(unlist(lane_remapping[cell_type_objects[['NK']]@meta.data[['lane']]]))
+cell_type_objects[['NK']]@meta.data[['cell_type']] <- 'NK'
+# create input matrices
+do_limix_input_pipeline(seurat_object = cell_type_objects[['NK']], 
+                        psam = donor_annotation_psam, 
+                        output_loc='/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/L1/',
+                        participant_column='best_match_sample', 
+                        pool_column='lane_both', 
+                        condition_column='inflammation_final', 
+                        celltype_column='cell_type',
+                        join_pools=F,
+                        min_cell_number=5, 
+                        min_peaks=200,
+                        npcs=10,
+                        sample_cor_column='best_match_correlation', 
+                        min_sample_cor=0,
+                        merge_pcs_into_covariates=T, 
+                        verbose=T)
+
