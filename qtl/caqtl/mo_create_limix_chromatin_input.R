@@ -546,6 +546,92 @@ add_inflammation_status <- function(seurat_object, sample_sheet, seurat_lane_col
 }
 
 
+read_barcode_and_lane <- function(seurat_object) {
+  # do the split first
+  seurat_object_rowsnames_split <- strsplit(colnames(seurat_object), split = '_')
+  # now do a list apply
+  df_per_barcode <- lapply(seurat_object_rowsnames_split, FUN = function(x) {
+    data.frame(lane = paste(x[2], x[3], sep = '_'), barcode = x[1])
+  })
+  # merge all of them together
+  extra_metadata <- do.call('rbind', df_per_barcode)
+  # set the rownames to be the original ones
+  rownames(extra_metadata) <- colnames(seurat_object)
+  # now add the extra data we have
+  seurat_object <- AddMetaData(seurat_object, extra_metadata)
+  return(seurat_object)
+}
+
+#' add the inflammation assignments  to the Seurat object
+#' 
+#' @param seurat_object The Seurat object to add the inflammation status to
+#' @param sample_sheet The sample sheet containing lanes, participants and inflammation statuses
+#' @param seurat_lane_column The column in the Seurat metadata denoting the 10x lane
+#' @param sheet_lane_column The column in the sample sheet denoting the 10x lane
+#' @param seurat_participant_column The column in the Seurat metadata denoting the participant assignment
+#' @param sheet_participants_column The column in the sample sheet containing the participants per lane
+#' @param seurat_inflammation_column The column in the Seurat metadata to add the inflammation status in
+#' @param sheet_inflammation_column The column in the sample sheet containing the inflammation statuses per lane
+#' @returns the Seurat object with the inflammation status added
+#' lpmcv2 <- add_inflammation_status(lpmcv2, sample_sheet)
+add_inflammation_status <- function(seurat_object, sample_sheet, seurat_lane_column='lane', sheet_lane_column='lane', seurat_participant_column='soup_final_sample_assignment', sheet_participants_column='genoid', seurat_inflammation_column='inflammation_status', sheet_inflammation_column='inflammation_status') {
+  # create a mapping of lane+sample to inflammation status
+  mapping_per_lane_list <- list()
+  for (i in 1:nrow(sample_sheet)) {
+    # extract lane
+    lane <- sample_sheet[i, sheet_lane_column]
+    # extract the participants
+    participant <- sample_sheet[i, sheet_participants_column]
+    # and the inflammation condition
+    condition <- sample_sheet[i, sheet_inflammation_column]
+    # if not set, set to unknown
+    if (is.null(condition)) {
+      condition <- 'unknown'
+    }
+    # subset to the barcodes which have are this lane and participant
+    barcodes_match <- rownames(seurat_object@meta.data[!is.na(seurat_object@meta.data[[seurat_lane_column]]) &
+                                                         seurat_object@meta.data[[seurat_lane_column]] == lane &
+                                                         !is.na(seurat_object@meta.data[[seurat_participant_column]]) &
+                                                         seurat_object@meta.data[[seurat_participant_column]] == participant, ])
+    # only add if there are matching barcodes
+    if (length(barcodes_match) > 0) {
+      # create dataframe
+      df_lane_part <- data.frame(barcode = barcodes_match, condition = rep(condition, times = length(barcodes_match)))
+      # set the colname to be the one we chose
+      colnames(df_lane_part) <- c('barcode', seurat_inflammation_column)
+      # then add to the list
+      mapping_per_lane_list[[paste(lane, participant, sep = ':')]] <- df_lane_part
+    }
+  }
+  # now merge all together
+  mapping_all <- do.call('rbind', mapping_per_lane_list)
+  # set the barcode as rownames
+  rownames(mapping_all) <- mapping_all[['barcode']]
+  # finally add to the object
+  seurat_object <- AddMetaData(seurat_object, mapping_all[seurat_inflammation_column])
+  return(seurat_object)
+}
+
+
+add_inflammation_status_each_object <- function(seurat_object_list, sample_sheet, seurat_lane_column='lane', sheet_lane_column='lane', seurat_participant_column='soup_final_sample_assignment', sheet_participants_column='genoid', seurat_inflammation_column='inflammation_status', sheet_inflammation_column='inflammation_status') {
+  # let's go over each object
+  for (object_name in names(seurat_object_list)) {
+    # do the condition assignment
+    seurat_object_list[[object_name]] <- add_inflammation_status(
+      seurat_object_list[[object_name]],
+      sample_sheet=sample_sheet, 
+      seurat_lane_column=seurat_lane_column,
+      sheet_lane_column=sheet_lane_column, 
+      seurat_participant_column=seurat_participant_column, 
+      sheet_participants_column=sheet_participants_column, 
+      seurat_inflammation_column=seurat_inflammation_column, 
+      sheet_inflammation_column=sheet_inflammation_column
+    )
+  }
+  return(seurat_object_list)
+}
+
+
 ####################
 # Main Code        #
 ####################
@@ -565,10 +651,43 @@ condition_assignment_loc <- '/groups/umcg-franke-scrna/tmp03/projects/multiome/o
 condition_assignments <- read.table(condition_assignment_loc, header = T, sep = '\t')
 
 # location of the cell type objects
-cell_type_objects_wstatus_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_percelltypemajor_wstatus_1_64.rds'
+cell_type_objects_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_percelltypemajor_1_80.rds'
 
 # read the object
-cell_type_objects <- readRDS(cell_type_objects_wstatus_loc)
+cell_type_objects <- readRDS(cell_type_objects_loc)
+
+# add barcodes back
+for(cell_type in names(cell_type_objects)) {
+  cell_type_objects[[cell_type]] <- read_barcode_and_lane(cell_type_objects[[cell_type]])
+}
+# get the assignment matrices
+correlation_mapping_per_barcode_all <- read.table('/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/demultiplexing/souporcell/assignments/mo_souporcell_gex_corrected_sample_matched_vs_all.tsv', header = T, sep = '\t')
+# set barcodes and remove data we already have
+rownames(correlation_mapping_per_barcode_all) <- correlation_mapping_per_barcode_all[['barcode_lane']]
+correlation_mapping_per_barcode_all[, c('lane', 'barcode_lane', 'barcode', 'barcode_original')] <- NULL
+# now let's get the souporcell data specifically, which would be the same for all and per-lane
+soup_only <- correlation_mapping_per_barcode_all[, setdiff(colnames(correlation_mapping_per_barcode_all), c('best_match_sample', 'second_match_sample', 'best_match_correlation', 'second_match_correlation'))]
+# and the correlation data
+correlations_unconfined <- correlation_mapping_per_barcode_all[, c('best_match_sample', 'second_match_sample', 'best_match_correlation', 'second_match_correlation')]
+# add the confined sample
+for(cell_type in names(cell_type_objects)) {
+  cell_type_objects[[cell_type]] <- AddMetaData(cell_type_objects[[cell_type]], correlations_unconfined[, colnames(correlations_unconfined)])
+}
+
+# add the conditions of the original sheet
+cell_type_objects <- add_inflammation_status_each_object(cell_type_objects, condition_assignments, seurat_participant_column='best_match_sample', sheet_participants_column = 'sample_final', seurat_inflammation_column = 'inflammation_sheet', sheet_inflammation_column = 'condition')
+cell_type_objects <- add_inflammation_status_each_object(cell_type_objects, condition_assignments, seurat_participant_column='best_match_sample', sheet_participants_column = 'sample', seurat_inflammation_column = 'inflammation_prev', sheet_inflammation_column = 'cond_prev')
+# rename CA in the original assignment, and set a consensus one
+for (cell_type in names(cell_type_objects)) {
+  cell_type_object <- cell_type_objects[[cell_type]]
+  cell_type_object@meta.data[!is.na(cell_type_object@meta.data[['inflammation_sheet']]) &
+                               cell_type_object@meta.data[['inflammation_sheet']] == '24hCa', 'inflammation_sheet'] <- '24hCA'
+  # now also set the final inflammation assignment
+  cell_type_object@meta.data[['inflammation_final']] <- cell_type_object@meta.data[['inflammation_sheet']]
+  cell_type_object@meta.data[is.na(cell_type_object@meta.data[['inflammation_final']]), 'inflammation_final'] <- cell_type_object@meta.data[is.na(cell_type_object@meta.data[['inflammation_final']]), 'inflammation_prev']
+  # add back to list
+  cell_type_objects[[cell_type]] <- cell_type_object
+}
 
 # donor annotation psam
 donor_annotation_psam_batch1_loc <- '/groups/umcg-franke-scrna/tmp03/projects/multiome/processed/genotype/GSA2023_1044_025_V3/unimputed/GSA2022_1044_025_V3.psam'
@@ -587,20 +706,7 @@ lane_remapping <- combine_lanes(unique(cell_type_objects[['monocyte']]@meta.data
 # add to the object
 cell_type_objects[['monocyte']]@meta.data[['lane_both']] <- as.vector(unlist(lane_remapping[cell_type_objects[['monocyte']]@meta.data[['lane']]]))
 cell_type_objects[['monocyte']]@meta.data[['cell_type']] <- 'monocyte'
-
-create_aggregated_expression_matrices(seurat_object = cell_type_objects[['monocyte']], 
-                                                  participant_column='best_match_sample', 
-                                                  celltype_column='cell_type', 
-                                                  condition_column='inflammation_final', 
-                                                  batch_column='lane_both', 
-                                                  min_cell_number=5, 
-                                                  min_numi=200, 
-                                                  npcs=10, 
-                                                  sample_cor_column='best_match_correlation', 
-                                                  min_sample_cor=0, 
-                                                  verbose=T)
-  
-
+# create input matrices
 do_limix_input_pipeline(seurat_object = cell_type_objects[['monocyte']], 
                                     psam = donor_annotation_psam, 
                                     output_loc='/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/L1/',

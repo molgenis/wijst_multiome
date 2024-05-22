@@ -373,7 +373,7 @@ write_limix_input <- function(expression_per_celltype, metadata_per_celltype, ou
       write.table(metadata, metadata_output_loc, quote = F, sep = '\t', col.names = T, row.names = F)
     }
     else {
-      write.table(pcs, pcs_output_loc, quote = F, sep = '\t', col.names = T, row.names = F)
+      write.table(pcs, pcs_output_loc, quote = F, sep = '\t', col.names = T, row.names = T)
       write.table(metadata, metadata_output_loc, quote = F, sep = '\t', col.names = T, row.names = F)
     }
   }
@@ -658,7 +658,7 @@ do_limix_input_pipeline(
 do_limix_input_pipeline(
   seurat_object = seurat_object, 
   psam = donor_annotation_psam, 
-  output_loc='/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/qtl/eqtl/sc-eqtlgen/input/cell_type_lowerres/',
+  output_loc='/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/qtl/eqtl/sc-eqtlgen/input/L1/combined/',
   participant_column='sample_final',
   celltype_column='celltype_imputed_lowerres',
   merge_pcs_into_covariates=F,
