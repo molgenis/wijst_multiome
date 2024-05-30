@@ -383,11 +383,14 @@ create_aggregated_expression_matrices_rnamethod <- function(seurat_object, parti
       # check if we have any genes left
       if (length(aggregate_norm_count_matrix) != 0 & nrow(aggregate_norm_count_matrix) > 0) {
         if (verbose) {
-          message('doing mean expression normalization')
+          message(paste('doing mean expression normalization across', as.character(nrow(aggregate_norm_count_matrix)), 'rows'))
         }
         # do inverse normal transform per gene.
         for (r_i in 1:nrow(aggregate_norm_count_matrix)) {
           aggregate_norm_count_matrix[r_i, ] = qnorm((rank(aggregate_norm_count_matrix[r_i, ], na.last = 'keep')-0.5) / sum(!is.na(aggregate_norm_count_matrix[r_i, ])))
+          if (verbose & r_i %% 10000 == 0) {
+            message(paste('processed', as.character(r_i), 'rows'))
+          }
         }
         
         if (verbose) {
@@ -918,7 +921,7 @@ do_limix_input_pipeline(seurat_object = cell_type_objects[['monocyte']][, cell_t
                                     npcs=10,
                                     sample_cor_column='best_match_correlation', 
                                     min_sample_cor=0,
-                                    merge_pcs_into_covariates=T, 
+                                    merge_pcs_into_covariates=F, 
                                     verbose=T,
                                     quantile=F)
 do_limix_input_pipeline(seurat_object = cell_type_objects[['monocyte']][, cell_type_objects[['monocyte']][['inflammation_final']] == '24hCA'], 
@@ -934,7 +937,7 @@ do_limix_input_pipeline(seurat_object = cell_type_objects[['monocyte']][, cell_t
                         npcs=10,
                         sample_cor_column='best_match_correlation', 
                         min_sample_cor=0,
-                        merge_pcs_into_covariates=T, 
+                        merge_pcs_into_covariates=F, 
                         verbose=T,
                         quantile=F)
 
