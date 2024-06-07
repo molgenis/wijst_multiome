@@ -16,6 +16,7 @@ library(matrixStats)
 library(textTinyR) # NOT IN CONTAINER
 library(pbapply)
 library(qsmooth) # NOT IN CONTAINER
+library(doParallel)
 
 
 ####################
@@ -278,6 +279,43 @@ create_aggregated_expression_matrices_quantilemethod <- function(seurat_object, 
   return(aggregation_per_celltype)
 }
 
+inverse_normalize <- function(norm_count_matrix, verbose = T) {
+  # get the number of rows
+  nrow_matrix <- nrow(norm_count_matrix)
+  # calculate how many chunks we need
+  n_chunks <- nrow_matrix / chunk_size
+  # round up because we need that last chunk
+  n_chunks <- ceiling(n_chunks)
+  if (verbose) {
+    message(paste('work has been split into', as.character(n_chunks), 'chunks'))
+  }
+  # now do this per chunk
+  res_per_chunk <- foreach(i = 1:n_chunks) %dopar% {
+    # calculate the chunk start and stop
+    chunk_start <- (i - 1) * chunk_size + 1
+    chunk_stop <- i * chunk_size
+    # check if we are exceeding the number of rows
+    if (chunk_stop > nrow_matrix) {
+      # because then we will stop there
+      chunk_stop <- nrow_matrix
+    }
+    # extract these rows
+    norm_count_matrix_chunk <- norm_count_matrix[chunk_start : chunk_stop, ]
+    # do inverse normal transform per gene.
+    for (r_i in 1:nrow(norm_count_matrix_chunk)) {
+      norm_count_matrix_chunk[r_i, ] = qnorm((rank(norm_count_matrix_chunk[r_i, ], na.last = 'keep')-0.5) / sum(!is.na(norm_count_matrix_chunk[r_i, ])))
+      if (verbose & r_i %% 10000 == 0) {
+        message(paste('chunk', as.character(i), 'processed', as.character(r_i), 'rows'))
+      }
+    }
+    return(norm_count_matrix_chunk)
+  }
+  # merge chuncks
+  norm_count_matrix <- do.call('rbind', res_per_chunk) # dopar should keep order of input (not order of execution), and as such I should not have to manually set the order to be the same
+  return(norm_count_matrix)
+}
+
+
 #' get table with the cell numbers for each combination of supplied columns
 #' 
 #' @param seurat_object the metadata (from Seurat) to use to create a metadata annotation file
@@ -291,7 +329,7 @@ create_aggregated_expression_matrices_quantilemethod <- function(seurat_object, 
 #' @param min_sample_cor the minimal sample correlation to keep a cell (leave at zero to do no filtering)
 #' @param verbose print progress or not
 #' @returns a list per cell type, each cell type has a list with the raw pseudobulk expression, the filtered pseudobulk expression, and the pcs
-create_aggregated_expression_matrices_rnamethod <- function(seurat_object, participant_column='donor_final', celltype_column='cell_type_safe', batch_column=NULL, min_cell_number=5, min_peaks=200, npcs=10, sample_cor_column='best_match_correlation', min_sample_cor=0, verbose=T) {
+create_aggregated_expression_matrices_rnamethod <- function(seurat_object, participant_column='donor_final', celltype_column='cell_type_safe', batch_column=NULL, min_cell_number=5, min_peaks=200, npcs=10, sample_cor_column='best_match_correlation', min_sample_cor=0, verbose=T, single_thread=F) {
   # subset object if min_peaks parameter is given
   if (!is.null(min_peaks) & !is.na(min_peaks) & min_peaks > 0) {
     seurat_object <- seurat_object[, seurat_object@meta.data[['nCount_peaks']] >= min_peaks]
@@ -349,6 +387,7 @@ create_aggregated_expression_matrices_rnamethod <- function(seurat_object, parti
     if (verbose) {
       message('calculating mean expression')
     }
+    
     # now create the mean expression matrix
     aggregate_norm_count_matrix <- as.data.frame(
       pblapply(
@@ -363,7 +402,7 @@ create_aggregated_expression_matrices_rnamethod <- function(seurat_object, parti
     colnames(aggregate_norm_count_matrix) <- unique_id_list
     # and the genes as the rows
     rownames(aggregate_norm_count_matrix) <- rownames(norm_count_matrix)
-    
+
     # save the unfiltered mean expression
     aggregate_norm_count_matrix_unfiltered <- aggregate_norm_count_matrix
     
@@ -385,14 +424,18 @@ create_aggregated_expression_matrices_rnamethod <- function(seurat_object, parti
         if (verbose) {
           message(paste('doing mean expression normalization across', as.character(nrow(aggregate_norm_count_matrix)), 'rows'))
         }
-        # do inverse normal transform per gene.
-        for (r_i in 1:nrow(aggregate_norm_count_matrix)) {
-          aggregate_norm_count_matrix[r_i, ] = qnorm((rank(aggregate_norm_count_matrix[r_i, ], na.last = 'keep')-0.5) / sum(!is.na(aggregate_norm_count_matrix[r_i, ])))
-          if (verbose & r_i %% 10000 == 0) {
-            message(paste('processed', as.character(r_i), 'rows'))
+        if (single_thread) {
+          # do inverse normal transform per gene.
+          for (r_i in 1:nrow(aggregate_norm_count_matrix)) {
+            aggregate_norm_count_matrix[r_i, ] = qnorm((rank(aggregate_norm_count_matrix[r_i, ], na.last = 'keep')-0.5) / sum(!is.na(aggregate_norm_count_matrix[r_i, ])))
+            if (verbose & r_i %% 10000 == 0) {
+              message(paste('processed', as.character(r_i), 'rows'))
+            }
           }
         }
-        
+        else {
+          aggregate_norm_count_matrix <- inverse_normalize(aggregate_norm_count_matrix)
+        }
         if (verbose) {
           message('performing PCA')
         }
@@ -564,8 +607,8 @@ write_limix_input <- function(expression_per_celltype, metadata_per_celltype, ou
       write.table(metadata, metadata_output_loc, quote = F, sep = '\t', col.names = T, row.names = F)
     }
     else {
-      write.table(pcs, pcs_output_loc, quote = F, sep = '\t', col.names = NA, row.names = F)
-      write.table(metadata, metadata_output_loc, quote = F, sep = '\t', col.names = NA, row.names = F)
+      write.table(pcs, pcs_output_loc, quote = F, sep = '\t', col.names = T, row.names = F)
+      write.table(metadata, metadata_output_loc, quote = F, sep = '\t', col.names = T, row.names = F)
     }
   }
   # extract the first metadata
@@ -658,10 +701,10 @@ do_limix_input_pipeline <- function(seurat_object,
   }
   # write the results
   write_limix_input(
-    expression_per_celltype = expression_per_celltype, 
-    metadata_per_celltype = metadata_per_celltype, 
+    expression_per_celltype = expression_per_celltype,
+    metadata_per_celltype = metadata_per_celltype,
     output_loc = output_loc,
-    merge_pcs_into_covariates = merge_pcs_into_covariates, 
+    merge_pcs_into_covariates = merge_pcs_into_covariates,
     rename_samples_to_samplepools = rename_samples_to_samplepools
   )
   return(0)
@@ -846,13 +889,17 @@ options(future.globals.maxSize = 500 * 1000 * 1024^2)
 # set seed
 set.seed(7777)
 
+# size of chunks to normalize
+chunk_size <- 50000
+registerDoParallel(cores = 8)
+
 # location of the condition assignment
 condition_assignment_loc <- '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/metadata/mo_monocyte_based_condition_numbers.tsv'
 # read the conditions
 condition_assignments <- read.table(condition_assignment_loc, header = T, sep = '\t')
 
 # location of the cell type objects
-cell_type_objects_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_percelltypemajor_1_80.rds'
+cell_type_objects_loc <- '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_percelltypemajor_1_80.rds'
 
 # read the object
 cell_type_objects <- readRDS(cell_type_objects_loc)
@@ -945,11 +992,11 @@ do_limix_input_pipeline(seurat_object = cell_type_objects[['monocyte']][, cell_t
 cell_type_objects[['NK']]@meta.data[['lane_both']] <- as.vector(unlist(lane_remapping[cell_type_objects[['NK']]@meta.data[['lane']]]))
 cell_type_objects[['NK']]@meta.data[['cell_type']] <- 'NK'
 # create input matrices
-do_limix_input_pipeline(seurat_object = cell_type_objects[['NK']], 
+do_limix_input_pipeline(seurat_object = cell_type_objects[['NK']][, cell_type_objects[['NK']][['inflammation_final']] == 'UT'], 
                         psam = donor_annotation_psam, 
-                        output_loc='/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/L1/',
+                        output_loc='/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/L1/UT/',
                         participant_column='best_match_sample', 
-                        pool_column='lane_both', 
+                        pool_column='lane', 
                         condition_column='inflammation_final', 
                         celltype_column='cell_type',
                         join_pools=F,
@@ -958,6 +1005,22 @@ do_limix_input_pipeline(seurat_object = cell_type_objects[['NK']],
                         npcs=10,
                         sample_cor_column='best_match_correlation', 
                         min_sample_cor=0,
-                        merge_pcs_into_covariates=T, 
-                        verbose=T)
-
+                        merge_pcs_into_covariates=F, 
+                        verbose=T,
+                        quantile=F)
+do_limix_input_pipeline(seurat_object = cell_type_objects[['NK']][, cell_type_objects[['NK']][['inflammation_final']] == '24hCA'], 
+                        psam = donor_annotation_psam, 
+                        output_loc='/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/L1/24hCA/',
+                        participant_column='best_match_sample', 
+                        pool_column='lane', 
+                        condition_column='inflammation_final', 
+                        celltype_column='cell_type',
+                        join_pools=F,
+                        min_cell_number=5, 
+                        min_peaks=200,
+                        npcs=10,
+                        sample_cor_column='best_match_correlation', 
+                        min_sample_cor=0,
+                        merge_pcs_into_covariates=F, 
+                        verbose=T,
+                        quantile=F)
