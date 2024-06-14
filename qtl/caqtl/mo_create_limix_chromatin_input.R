@@ -282,18 +282,22 @@ create_aggregated_expression_matrices_quantilemethod <- function(seurat_object, 
 inverse_normalize <- function(norm_count_matrix, verbose = T) {
   # get the number of rows
   nrow_matrix <- nrow(norm_count_matrix)
+  # get the number of columns
+  ncol_matrix <- ncol(norm_count_matrix)
+  # calculate how many rows a chunk would be
+  nrow_chunk <- chunk_size / ncol_matrix
   # calculate how many chunks we need
-  n_chunks <- nrow_matrix / chunk_size
+  n_chunks <- nrow_matrix / nrow_chunk
   # round up because we need that last chunk
   n_chunks <- ceiling(n_chunks)
   if (verbose) {
-    message(paste('work has been split into', as.character(n_chunks), 'chunks'))
+    message(paste('work has been split into', as.character(n_chunks), 'chunks, of', as.character(nrow_chunk), 'rows each'))
   }
   # now do this per chunk
   res_per_chunk <- foreach(i = 1:n_chunks) %dopar% {
     # calculate the chunk start and stop
-    chunk_start <- (i - 1) * chunk_size + 1
-    chunk_stop <- i * chunk_size
+    chunk_start <- (i - 1) * nrow_chunk + 1
+    chunk_stop <- i * nrow_chunk
     # check if we are exceeding the number of rows
     if (chunk_stop > nrow_matrix) {
       # because then we will stop there
@@ -604,11 +608,11 @@ write_limix_input <- function(expression_per_celltype, metadata_per_celltype, ou
       # change X.FFID back to #FID
       colnames(metadata) <- gsub('X\\.FID', '#FID', colnames(metadata))
       # and write the result
-      write.table(metadata, metadata_output_loc, quote = F, sep = '\t', col.names = T, row.names = F)
+      write.table(metadata, metadata_output_loc, quote = F, sep = '\t', col.names = NA)
     }
     else {
-      write.table(pcs, pcs_output_loc, quote = F, sep = '\t', col.names = T, row.names = F)
-      write.table(metadata, metadata_output_loc, quote = F, sep = '\t', col.names = T, row.names = F)
+      write.table(pcs, pcs_output_loc, quote = F, sep = '\t', col.names = NA)
+      write.table(metadata, metadata_output_loc, quote = F, sep = '\t', col.names = NA)
     }
   }
   # extract the first metadata
@@ -890,7 +894,7 @@ options(future.globals.maxSize = 500 * 1000 * 1024^2)
 set.seed(7777)
 
 # size of chunks to normalize
-chunk_size <- 50000
+chunk_size <- 5000000
 registerDoParallel(cores = 8)
 
 # location of the condition assignment
