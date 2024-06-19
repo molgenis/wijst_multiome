@@ -166,4 +166,21 @@ mo@meta.data[is.na(mo@meta.data[['LONG_COVID']]), 'LONG_COVID_method'] <- 'infer
 mo@meta.data[!is.na(mo@meta.data[['LONG_COVID']]), 'LONG_COVID_method'] <- 'assigned'
 # save the result
 saveRDS(mo, '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/seurat_preprocess_samples/objects/mo_all_20240517_seuratv5_annotated_agesexcovid.rds')
-
+# create a new sample mapping file
+full_sample_mapping <- unique(mo@meta.data[, c('lane', 'sample_final', 'realid', 'condition_final', 'age', 'sex', 'LONG_COVID_final', 'LONG_COVID_method')])
+write.table(full_sample_mapping, '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/metadata/mo_full_sample_mapping.tsv', row.names = F, col.names = T, quote = F, sep = '\t')
+# now go through each cell type
+for (cell_type in unique(mo@meta.data$celltype_imputed_lowerres)) {
+  # check for NA
+  if (!is.na(cell_type)) {
+    # subset to this celltype and condition
+    mo_covid_ct <- mo[, !is.na(mo@meta.data$celltype_imputed_lowerres) &
+                        !is.na(mo@meta.data$condition_final) &
+                        mo@meta.data$celltype_imputed_lowerres == cell_type &
+                        mo@meta.data$condition_final == 'UT']
+    # write this file
+    saveRDS(mo_covid_ct,
+            paste('/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/seurat_preprocess_samples/objects/mo_all_20240619_seuratv5_annotated_agesexcovid_', cell_type, '_UT.rds', sep = ''))
+    
+  }
+}
