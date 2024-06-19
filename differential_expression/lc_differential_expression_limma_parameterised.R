@@ -204,7 +204,7 @@ dream_pairwise <- function(seurat_object, output_loc, condition_combinations, ag
             limma_formula_loc <- paste(output_loc, combination_name, '.formula', sep = '')
             
             if(verbose){
-              print(paste('writing result', limma_output_loc))
+              print(paste('writing result', paste(output_loc, combination_name, '.tsv.gz', sep = '')))
             }
             
             # write the result
