@@ -177,7 +177,7 @@ dream_pairwise <- function(seurat_object, output_loc, condition_combinations, ag
             for (condition in combination) {
               # get the cell numbers for the condition
               cell_numbers_condition <- cell_numbers[cell_numbers[[combination_name]] == condition, ]
-              result_stats_list[[paste('ndonor', condition, sep = '_')]] <- data.frame(ndonor=rep(nrow(cell_numbers_condition), times = nrow(limma_result)))
+              result_stats_list[[paste('nsample', condition, sep = '_')]] <- data.frame(nsample=rep(nrow(cell_numbers_condition), times = nrow(limma_result)))
               result_stats_list[[paste('ncell', condition, sep = '_')]] <- data.frame(ncells=rep(
                 paste(as.character(min(cell_numbers_condition[['nr']])),
                       as.character(quantile(cell_numbers_condition[['nr']])[['25%']]),
@@ -198,7 +198,7 @@ dream_pairwise <- function(seurat_object, output_loc, condition_combinations, ag
             limma_result <- cbind(data.frame(feature = rownames(limma_result)), limma_result)
             
             # set an output location
-            limma_output_loc <- paste(output_loc, combination_name, '.tsv', sep = '')
+            limma_output_loc <- gzfile(paste(output_loc, combination_name, '.tsv.gz', sep = ''))
             
             # also write the model we used
             limma_formula_loc <- paste(output_loc, combination_name, '.formula', sep = '')
