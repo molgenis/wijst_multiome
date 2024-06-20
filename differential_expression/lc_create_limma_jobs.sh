@@ -55,7 +55,7 @@ for object in ${REGEX_SEURAT_OBJECTS}
 ~/start_Rscript.sh '${script_loc}' \
 -f '${object}' \
 -o '${output_loc}' \
--c '${cell_type_column}' \ 
+-c '${cell_type_column}' \
 -m 10 \
 -u 200 \
 -l 2000
