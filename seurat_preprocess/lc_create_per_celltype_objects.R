@@ -184,3 +184,17 @@ for (cell_type in unique(mo@meta.data$celltype_imputed_lowerres)) {
     
   }
 }
+# now go through each cell type without taking UT only
+for (cell_type in unique(mo@meta.data$celltype_imputed_lowerres)) {
+  # check for NA
+  if (!is.na(cell_type)) {
+    # subset to this celltype and condition
+    mo_covid_ct <- mo[, !is.na(mo@meta.data$celltype_imputed_lowerres) &
+                        !is.na(mo@meta.data$condition_final) &
+                        mo@meta.data$celltype_imputed_lowerres == cell_type]
+    # write this file
+    saveRDS(mo_covid_ct,
+            paste('/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/seurat_preprocess_samples/objects/mo_all_20240619_seuratv5_annotated_agesexcovid_', cell_type, '.rds', sep = ''))
+    
+  }
+}
