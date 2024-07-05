@@ -88,26 +88,26 @@ set.seed(7777)
 ####################
 
 # location of the objects
-seurat_object_loc <- '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/seurat_preprocess_samples/objects/mo_all_20240517_seuratv5_annotated.rds'
+seurat_object_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/seurat_preprocess_samples/objects/mo_all_20240517_seuratv5_annotated.rds'
 
 # load object
 mo <- readRDS(seurat_object_loc)
 
 # location of the condition assignment
-condition_assignment_loc <- '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/metadata/mo_monocyte_based_condition_numbers.tsv'
+condition_assignment_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/metadata/mo_monocyte_based_condition_numbers.tsv'
 # read the conditions
 condition_assignments <- read.table(condition_assignment_loc, header = T, sep = '\t')
 # location of the age/sex assignments
-age_sex_assignments_loc <- '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/metadata/mo_age_sex_batch12.tsv'
+age_sex_assignments_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/metadata/mo_age_sex_batch12.tsv'
 # read the assignments
 age_sex_assigments <- read.table(age_sex_assignments_loc, header = T, sep = '\t')
 # the ugli ones as well
-age_sex_assigments_ugli_loc <- '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/metadata/mo_age_sex_ugli.tsv'
+age_sex_assigments_ugli_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/metadata/mo_age_sex_ugli.tsv'
 age_sex_assigments_ugli <- read.table(age_sex_assigments_ugli_loc, header = T, sep = '\t')
 # merge
 age_sex_assigments <- rbind(age_sex_assigments, age_sex_assigments_ugli)
 # and the 'realids'
-realid_assignments_loc <- '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/metadata/mo_sample_sheet_final.tsv'
+realid_assignments_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/metadata/mo_sample_sheet_final.tsv'
 # read the realids
 realid_assignments <- read.table(realid_assignments_loc, header = T, sep = '\t')
 
@@ -165,10 +165,10 @@ mo@meta.data[['LONG_COVID_method']] <- NA
 mo@meta.data[is.na(mo@meta.data[['LONG_COVID']]), 'LONG_COVID_method'] <- 'inferred'
 mo@meta.data[!is.na(mo@meta.data[['LONG_COVID']]), 'LONG_COVID_method'] <- 'assigned'
 # save the result
-saveRDS(mo, '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/seurat_preprocess_samples/objects/mo_all_20240517_seuratv5_annotated_agesexcovid.rds')
+saveRDS(mo, '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/seurat_preprocess_samples/objects/mo_all_20240517_seuratv5_annotated_agesexcovid.rds')
 # create a new sample mapping file
 full_sample_mapping <- unique(mo@meta.data[, c('lane', 'sample_final', 'realid', 'condition_final', 'age', 'sex', 'LONG_COVID_final', 'LONG_COVID_method')])
-write.table(full_sample_mapping, '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/metadata/mo_full_sample_mapping.tsv', row.names = F, col.names = T, quote = F, sep = '\t')
+write.table(full_sample_mapping, '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/metadata/mo_full_sample_mapping.tsv', row.names = F, col.names = T, quote = F, sep = '\t')
 # now go through each cell type
 for (cell_type in unique(mo@meta.data$celltype_imputed_lowerres)) {
   # check for NA
@@ -180,8 +180,8 @@ for (cell_type in unique(mo@meta.data$celltype_imputed_lowerres)) {
                         mo@meta.data$condition_final == 'UT']
     # write this file
     saveRDS(mo_covid_ct,
-            paste('/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/seurat_preprocess_samples/objects/mo_all_20240619_seuratv5_annotated_agesexcovid_', cell_type, '_UT.rds', sep = ''))
-    
+            paste('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/seurat_preprocess_samples/objects/mo_all_20240619_seuratv5_annotated_agesexcovid_', cell_type, '_UT.rds', sep = ''))
+    mdfiver::create_md5_for_file(paste('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/seurat_preprocess_samples/objects/mo_all_20240619_seuratv5_annotated_agesexcovid_', cell_type, '_UT.rds', sep = ''));
   }
 }
 # now go through each cell type without taking UT only
@@ -194,7 +194,7 @@ for (cell_type in unique(mo@meta.data$celltype_imputed_lowerres)) {
                         mo@meta.data$celltype_imputed_lowerres == cell_type]
     # write this file
     saveRDS(mo_covid_ct,
-            paste('/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/seurat_preprocess_samples/objects/mo_all_20240619_seuratv5_annotated_agesexcovid_', cell_type, '.rds', sep = ''))
-    
+            paste('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/seurat_preprocess_samples/objects/mo_all_20240619_seuratv5_annotated_agesexcovid_', cell_type, '.rds', sep = ''))
+    mdfiver::create_md5_for_file(paste('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/seurat_preprocess_samples/objects/mo_all_20240619_seuratv5_annotated_agesexcovid_', cell_type, '.rds', sep = ''))
   }
 }

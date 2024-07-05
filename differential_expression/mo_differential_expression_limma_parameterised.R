@@ -213,6 +213,8 @@ dream_pairwise <- function(seurat_object, output_loc, condition_combinations, ag
             write.table(limma_result, limma_output_loc, sep = '\t', row.names = F)
             # and the formula
             write.table(model_formula, limma_formula_loc, row.names = F, col.names = F)
+            # and add an md5
+            mdfiver::create_md5_for_file(limma_output_loc)
           }, error=function(cond) {
             print(paste('analysis failed in', combination))
             message(cond)
@@ -379,8 +381,8 @@ get_nr_cells_aggregate_combination <- function(aggregate_df, seurat_metadata) {
 do_debug <- function() {
   # fill the opt
   opt <- list()
-  opt[['out']] <- '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/differential_expression/limma_dream/output/stimulation/'
-  opt[['file']] <- '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/seurat_preprocess_samples/objects/mo_all_20240619_seuratv5_annotated_agesexcovid_CD8T.rds'
+  opt[['out']] <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/differential_expression/limma_dream/output/stimulation/'
+  opt[['file']] <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/seurat_preprocess_samples/objects/mo_all_20240619_seuratv5_annotated_agesexcovid_CD8T.rds'
   opt[['cell_type_column']] <- 'celltype_imputed_lowerres'
   opt[['min_cells']] <- 10
   opt[['min_umi']] <- 200
