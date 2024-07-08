@@ -118,7 +118,6 @@ process_and_write_subset <- function(signac_object, correlations_confined, corre
   
   # add the realid
   signac_object@meta.data['realid'] <- realid_assignments[match(signac_object@meta.data$sample_final, realid_assignments$sample_final), 'realid_final']
-  print(head(signac_object@meta.data))
   # add the age and sex
   signac_object@meta.data[['age']] <- age_sex_assigments[match(signac_object@meta.data$realid, age_sex_assigments$sample), 'age']
   signac_object@meta.data[['sex']] <- age_sex_assigments[match(signac_object@meta.data$realid, age_sex_assigments$sample), 'sex']
@@ -157,8 +156,8 @@ set.seed(7777)
 ####################
 
 # correlation files
-correlation_mapping_per_barcode_loc <- '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/demultiplexing/souporcell/assignments/mo_souporcell_gex_corrected_sample_matched.tsv'
-correlation_mapping_per_barcode_all_loc <- '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/demultiplexing/souporcell/assignments/mo_souporcell_gex_corrected_sample_matched_vs_all.tsv'
+correlation_mapping_per_barcode_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/demultiplexing/souporcell/assignments/mo_souporcell_gex_corrected_sample_matched.tsv'
+correlation_mapping_per_barcode_all_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/demultiplexing/souporcell/assignments/mo_souporcell_gex_corrected_sample_matched_vs_all.tsv'
 # get the assignment matrices
 correlation_mapping_per_barcode <- read.table(correlation_mapping_per_barcode_loc, header = T, sep = '\t')
 correlation_mapping_per_barcode_all <- read.table(correlation_mapping_per_barcode_all_loc, header = T, sep = '\t')
@@ -179,20 +178,20 @@ colnames(correlations_confined) <- paste('confined', colnames(correlations_confi
 colnames(correlations_unconfined) <- paste('unconfined', colnames(correlations_unconfined), sep = '_')
 
 # location of the condition assignment
-condition_assignment_loc <- '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/metadata/mo_monocyte_based_condition_numbers.tsv'
+condition_assignment_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/metadata/mo_monocyte_based_condition_numbers.tsv'
 # read the conditions
 condition_assignments <- read.table(condition_assignment_loc, header = T, sep = '\t')
 # location of the age/sex assignments
-age_sex_assignments_loc <- '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/metadata/mo_age_sex_batch12.tsv'
+age_sex_assignments_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/metadata/mo_age_sex_batch12.tsv'
 # read the assignments
 age_sex_assigments <- read.table(age_sex_assignments_loc, header = T, sep = '\t')
 # the ugli ones as well
-age_sex_assigments_ugli_loc <- '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/metadata/mo_age_sex_ugli.tsv'
+age_sex_assigments_ugli_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/metadata/mo_age_sex_ugli.tsv'
 age_sex_assigments_ugli <- read.table(age_sex_assigments_ugli_loc, header = T, sep = '\t')
 # merge
 age_sex_assigments <- rbind(age_sex_assigments, age_sex_assigments_ugli)
 # and the 'realids'
-realid_assignments_loc <- '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/metadata/mo_sample_sheet_final.tsv'
+realid_assignments_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/metadata/mo_sample_sheet_final.tsv'
 # read the realids
 realid_assignments <- read.table(realid_assignments_loc, header = T, sep = '\t')
 # fix the sample IDs in the realid table
@@ -203,7 +202,7 @@ realid_assignments[is.na(realid_assignments$RealID) | realid_assignments$RealID 
 
 
 # location of the full object
-mo_all_loc <- '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_percelltypemajor_wstatus_1_80.rds'
+mo_all_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_percelltypemajor_wstatus_1_80.rds'
 # read object
 mo_all <- readRDS(mo_all_loc)
 # subset to monocytes, because we can't handle all of it at once
@@ -220,7 +219,7 @@ process_and_write_subset(
   condition_assignments=condition_assignments, 
   age_sex_assigments=age_sex_assigments, 
   realid_assignments=realid_assignments, 
-  output_loc='/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_monocyte_wstatus_1_80_20240701.rds'
+  output_loc='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_monocyte_wstatus_1_80_20240701.rds'
 )
 # clear memory
 rm(mo_mono)
@@ -237,7 +236,7 @@ process_and_write_subset(
   condition_assignments=condition_assignments, 
   age_sex_assigments=age_sex_assigments, 
   realid_assignments=realid_assignments, 
-  output_loc='/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_cd4t_wstatus_1_80_20240701.rds'
+  output_loc='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_cd4t_wstatus_1_80_20240701.rds'
 )
 rm(mo_cd4t)
 # and CD8T
@@ -252,7 +251,7 @@ process_and_write_subset(
   condition_assignments=condition_assignments, 
   age_sex_assigments=age_sex_assigments, 
   realid_assignments=realid_assignments, 
-  output_loc='/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_cd8t_wstatus_1_80_20240701.rds'
+  output_loc='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_cd8t_wstatus_1_80_20240701.rds'
 )
 rm(mo_cd8t)
 # and NK
@@ -267,7 +266,7 @@ process_and_write_subset(
   condition_assignments=condition_assignments, 
   age_sex_assigments=age_sex_assigments, 
   realid_assignments=realid_assignments, 
-  output_loc='/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_nk_wstatus_1_80_20240701.rds'
+  output_loc='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_nk_wstatus_1_80_20240701.rds'
 )
 rm(mo_nk)
 # and B
@@ -282,7 +281,7 @@ process_and_write_subset(
   condition_assignments=condition_assignments, 
   age_sex_assigments=age_sex_assigments, 
   realid_assignments=realid_assignments, 
-  output_loc='/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_b_wstatus_1_80_20240701.rds'
+  output_loc='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_b_wstatus_1_80_20240701.rds'
 )
 rm(mo_b)
 # and finally DC
@@ -297,6 +296,6 @@ process_and_write_subset(
   condition_assignments=condition_assignments, 
   age_sex_assigments=age_sex_assigments, 
   realid_assignments=realid_assignments, 
-  output_loc='/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_dc_wstatus_1_80_20240701.rds'
+  output_loc='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_dc_wstatus_1_80_20240701.rds'
 )
 rm(mo_dc)
