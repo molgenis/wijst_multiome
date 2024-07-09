@@ -13,11 +13,29 @@
 library(Seurat)
 library(Signac)
 library(tools)
+library(doParallel)
 
 
 ####################
 # Functions        #
 ####################
+
+
+create_anonymized_mapping <- function(metadata, source_column, target_column, target_prepend='') {
+  # get the unique values
+  source_values <- unique(as.character(metadata[[source_column]]))
+  # turn NA into 'unknown'
+  source_values[is.na(source_values)] <- 'unknown'
+  # randomly sort your values, by sampling all values
+  source_values <- source_values[sample(1:length(source_values), length(source_values))]
+  # create a mapping
+  target_values <- paste(target_prepend, 1:length(source_values), sep = '')
+  # now put that into a dataframe
+  mapping_table <- data.frame(x = source_values, y = target_values)
+  # now make the column names as expected
+  colnames(mapping_table) <- c(source_column, target_column)
+  return(mapping_table)
+}
 
 #' add the inflammation assignments  to the Seurat object
 #' 
@@ -71,7 +89,7 @@ add_inflammation_status <- function(seurat_object, sample_sheet, seurat_lane_col
 
 
 
-process_and_write_subset <- function(signac_object, correlations_confined, correlations_unconfined, condition_assignments, age_sex_assigments, realid_assignments, output_loc) {
+process_and_write_subset <- function(signac_object, correlations_confined, correlations_unconfined, condition_assignments, age_sex_assigments, realid_assignments, longcovid_assignments, output_loc, only_covid=F, recode_id=F) {
   # add the confined sample
   signac_object <- AddMetaData(signac_object, correlations_confined[, colnames(correlations_confined)])
   # and for unconfined
@@ -121,12 +139,45 @@ process_and_write_subset <- function(signac_object, correlations_confined, corre
   # add the age and sex
   signac_object@meta.data[['age']] <- age_sex_assigments[match(signac_object@meta.data$realid, age_sex_assigments$sample), 'age']
   signac_object@meta.data[['sex']] <- age_sex_assigments[match(signac_object@meta.data$realid, age_sex_assigments$sample), 'sex']
+  
+  # add annotated LONG_COVID assignment
+  # add the first part to the name of the long covid ID
+  longcovid_assignments[['mo']] <- paste('MO', longcovid_assignments$Project_ID, sep = '')
+  # add the longcovid assignment first
+  signac_object@meta.data[['LONG_COVID']] <- NA
+  # now add the ones we have
+  signac_object@meta.data[signac_object@meta.data[['sample_final']] %in% longcovid_assignments[['mo']], 'LONG_COVID'] <- longcovid_assignments[match(signac_object@meta.data[signac_object@meta.data[['sample_final']] %in% longcovid_assignments[['mo']], 'sample_final'], longcovid_assignments[['mo']]), 'Case.Control']
+  # set empty to NA
+  signac_object@meta.data[!is.na(signac_object@meta.data[['LONG_COVID']]) & signac_object@meta.data[['LONG_COVID']] == '', 'LONG_COVID'] <- NA
   # add the final LONG_COVID assignment
   signac_object@meta.data[['LONG_COVID_final']] <- signac_object@meta.data$LONG_COVID
   signac_object@meta.data[is.na(signac_object@meta.data[['LONG_COVID']]), 'LONG_COVID_final'] <- 'control'
   signac_object@meta.data[['LONG_COVID_method']] <- NA
   signac_object@meta.data[is.na(signac_object@meta.data[['LONG_COVID']]), 'LONG_COVID_method'] <- 'inferred'
   signac_object@meta.data[!is.na(signac_object@meta.data[['LONG_COVID']]), 'LONG_COVID_method'] <- 'assigned'
+  # check if only covid
+  if (only_covid) {
+    signac_object <- signac_object[, 
+                                   !is.na(signac_object@meta.data[['condition_final']]) &
+                                     signac_object@meta.data[['condition_final']] == 'UT' &
+                                     !is.na(signac_object@meta.data[['LONG_COVID_final']])]
+  }
+  if (recode_id) {
+    # create anonimized mapping
+    p_mapping <- create_anonymized_mapping(signac_object@meta.data, 'sample_final', 'sample_number', 's')
+    # add these new columns
+    signac_object@meta.data[['sample_final']] <- p_mapping[match(signac_object@meta.data[['sample_final']], p_mapping[['sample_final']]), 'sample_number']
+    signac_object@meta.data[['best_match_sample']] <- p_mapping[match(signac_object@meta.data[['best_match_sample']], p_mapping[['sample_final']]), 'sample_number']
+    signac_object@meta.data[['second_match_sample']] <- p_mapping[match(signac_object@meta.data[['second_match_sample']], p_mapping[['sample_final']]), 'sample_number']
+    signac_object@meta.data[['confined_best_match_sample']] <- p_mapping[match(signac_object@meta.data[['confined_second_match_sample']], p_mapping[['sample_final']]), 'sample_number']
+    signac_object@meta.data[['confined_second_match_sample']] <- p_mapping[match(signac_object@meta.data[['confined_second_match_sample']], p_mapping[['sample_final']]), 'sample_number']
+    signac_object@meta.data[['unconfined_best_match_sample']] <- p_mapping[match(signac_object@meta.data[['unconfined_best_match_sample']], p_mapping[['sample_final']]), 'sample_number']
+    signac_object@meta.data[['unconfined_second_match_sample']] <- p_mapping[match(signac_object@meta.data[['unconfined_second_match_sample']], p_mapping[['sample_final']]), 'sample_number']
+    # write the sample mapping
+    write.table(p_mapping, gzfile(paste(output_loc, '.sample_mapping.tsv.gz', sep = ''), sep = '\t', row.names = F, col.names = T))
+    # remove all other IDs
+    signac_object@meta.data[, c('realid')] <- NULL
+  }
   # save the result
   saveRDS(signac_object, output_loc)
   # make md5
@@ -200,6 +251,10 @@ realid_assignments[is.na(realid_assignments$SampleID_CORRECT) | realid_assignmen
 realid_assignments[['realid_final']] <- realid_assignments$RealID
 realid_assignments[is.na(realid_assignments$RealID) | realid_assignments$RealID == '', 'realid_final']  <- realid_assignments[is.na(realid_assignments$RealID) | realid_assignments$RealID == '', 'sample_final']
 
+# location of the LONG-CoVID assignments
+longcovid_assignments_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/metadata/mo_longcovid_assignments.tsv'
+# read the assignments
+longcovid_assignments <- read.table(longcovid_assignments_loc, header = T, sep = '\t')
 
 # location of the full object
 mo_all_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_percelltypemajor_wstatus_1_80.rds'
@@ -219,7 +274,20 @@ process_and_write_subset(
   condition_assignments=condition_assignments, 
   age_sex_assigments=age_sex_assigments, 
   realid_assignments=realid_assignments, 
-  output_loc='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_monocyte_wstatus_1_80_20240701.rds'
+  longcovid_assignments=longcovid_assignments,
+  output_loc='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_monocyte_wstatus_1_80_20240709.rds'
+)
+process_and_write_subset(
+  mo_mono,
+  correlations_confined = correlations_confined,
+  correlations_unconfined = correlations_unconfined,
+  condition_assignments=condition_assignments, 
+  age_sex_assigments=age_sex_assigments, 
+  realid_assignments=realid_assignments,  
+  longcovid_assignments=longcovid_assignments,
+  output_loc='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_monocyte_UT_wstatus_1_80_20240709.rds',
+  only_covid = T,
+  recode_id = T
 )
 # clear memory
 rm(mo_mono)
@@ -235,8 +303,21 @@ process_and_write_subset(
   correlations_unconfined = correlations_unconfined,
   condition_assignments=condition_assignments, 
   age_sex_assigments=age_sex_assigments, 
-  realid_assignments=realid_assignments, 
-  output_loc='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_cd4t_wstatus_1_80_20240701.rds'
+  realid_assignments=realid_assignments,  
+  longcovid_assignments=longcovid_assignments,
+  output_loc='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_cd4t_wstatus_1_80_20240709.rds'
+)
+process_and_write_subset(
+  mo_cd4t,
+  correlations_confined = correlations_confined,
+  correlations_unconfined = correlations_unconfined,
+  condition_assignments=condition_assignments, 
+  age_sex_assigments=age_sex_assigments, 
+  realid_assignments=realid_assignments,  
+  longcovid_assignments=longcovid_assignments,
+  output_loc='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_cd4t_UT_wstatus_1_80_20240709.rds',
+  only_covid = T, 
+  recode_id = T
 )
 rm(mo_cd4t)
 # and CD8T
@@ -250,8 +331,21 @@ process_and_write_subset(
   correlations_unconfined = correlations_unconfined,
   condition_assignments=condition_assignments, 
   age_sex_assigments=age_sex_assigments, 
-  realid_assignments=realid_assignments, 
-  output_loc='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_cd8t_wstatus_1_80_20240701.rds'
+  realid_assignments=realid_assignments,  
+  longcovid_assignments=longcovid_assignments,
+  output_loc='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_cd8t_wstatus_1_80_20240709.rds'
+)
+process_and_write_subset(
+  mo_cd8t,
+  correlations_confined = correlations_confined,
+  correlations_unconfined = correlations_unconfined,
+  condition_assignments=condition_assignments, 
+  age_sex_assigments=age_sex_assigments, 
+  realid_assignments=realid_assignments,  
+  longcovid_assignments=longcovid_assignments,
+  output_loc='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_cd8t_UT_wstatus_1_80_20240709.rds',
+  only_covid = T, 
+  recode_id = T
 )
 rm(mo_cd8t)
 # and NK
@@ -265,8 +359,21 @@ process_and_write_subset(
   correlations_unconfined = correlations_unconfined,
   condition_assignments=condition_assignments, 
   age_sex_assigments=age_sex_assigments, 
-  realid_assignments=realid_assignments, 
-  output_loc='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_nk_wstatus_1_80_20240701.rds'
+  realid_assignments=realid_assignments,  
+  longcovid_assignments=longcovid_assignments,
+  output_loc='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_nk_wstatus_1_80_20240709.rds'
+)
+process_and_write_subset(
+  mo_nk,
+  correlations_confined = correlations_confined,
+  correlations_unconfined = correlations_unconfined,
+  condition_assignments=condition_assignments, 
+  age_sex_assigments=age_sex_assigments, 
+  realid_assignments=realid_assignments,  
+  longcovid_assignments=longcovid_assignments,
+  output_loc='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_nk_UT_wstatus_1_80_20240709.rds',
+  only_covid = T, 
+  recode_id = T
 )
 rm(mo_nk)
 # and B
@@ -280,8 +387,21 @@ process_and_write_subset(
   correlations_unconfined = correlations_unconfined,
   condition_assignments=condition_assignments, 
   age_sex_assigments=age_sex_assigments, 
-  realid_assignments=realid_assignments, 
-  output_loc='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_b_wstatus_1_80_20240701.rds'
+  realid_assignments=realid_assignments,  
+  longcovid_assignments=longcovid_assignments,
+  output_loc='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_b_wstatus_1_80_20240709.rds'
+)
+process_and_write_subset(
+  mo_b,
+  correlations_confined = correlations_confined,
+  correlations_unconfined = correlations_unconfined,
+  condition_assignments=condition_assignments, 
+  age_sex_assigments=age_sex_assigments, 
+  realid_assignments=realid_assignments,  
+  longcovid_assignments=longcovid_assignments,
+  output_loc='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_b_UT_wstatus_1_80_20240709.rds',
+  only_covid = T, 
+  recode_id = T
 )
 rm(mo_b)
 # and finally DC
@@ -295,7 +415,20 @@ process_and_write_subset(
   correlations_unconfined = correlations_unconfined,
   condition_assignments=condition_assignments, 
   age_sex_assigments=age_sex_assigments, 
-  realid_assignments=realid_assignments, 
-  output_loc='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_dc_wstatus_1_80_20240701.rds'
+  realid_assignments=realid_assignments,  
+  longcovid_assignments=longcovid_assignments,
+  output_loc='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_dc_wstatus_1_80_20240709.rds'
+)
+process_and_write_subset(
+  mo_dc,
+  correlations_confined = correlations_confined,
+  correlations_unconfined = correlations_unconfined,
+  condition_assignments=condition_assignments, 
+  age_sex_assigments=age_sex_assigments, 
+  realid_assignments=realid_assignments,  
+  longcovid_assignments=longcovid_assignments,
+  output_loc='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_dc_UT_wstatus_1_80_20240709.rds',
+  only_covid = T, 
+  recode_id = T
 )
 rm(mo_dc)
