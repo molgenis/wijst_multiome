@@ -1,7 +1,7 @@
 #!/usr/bin/env Rscript
 ############################################################################################################################
 # Authors: Roy Oelen
-# Name: mo_differential_accessibility_limma_parameterised.R
+# Name: lc_differential_accessibility_limma_parameterised.R
 # Function: perform differential gene expression analysis using Limma Dream
 ############################################################################################################################
 
@@ -57,21 +57,21 @@ get_peaks_to_bed <- function(exp_per_group) {
 
 
 get_peak_info <- function(peaks_object) {
-    # calculate average expression
-    avg_peaks <- AverageExpression(peaks_object)[['peaks']]
-    # calculate average expression
-    sum_peaks <- AggregateExpression(peaks_object)[['peaks']]
-    # calculate pct exp
-    counts_as_row_sparse <- as(peaks_object@assays$peaks@counts, "RsparseMatrix") # turn into row-wise sparse matrix
-    non_zero_cell_nr <- as.vector(unlist(rowSums(counts_as_row_sparse != 0))) # do a rowsum on the T/F value you get from the zero-or-not comparison
-    pct_peaks <- non_zero_cell_nr / ncol(peaks_object@assays$peaks@counts) # the percentage expressed is that number of cells divided by the total number
-    # turn the exp per group into a bed
-    peaks_bed <- get_peaks_to_bed(sum_peaks)[[1]]
-    # add the other info
-    peaks_bed[['avg']] <-  unlist(as.vector(avg_peaks[, 1]))
-    peaks_bed[['ncell']] <-  ncol(peaks_object)
-    peaks_bed[['pct_exp']] <- pct_peaks
-    return(peaks_bed)
+  # calculate average expression
+  avg_peaks <- AverageExpression(peaks_object)[['peaks']]
+  # calculate average expression
+  sum_peaks <- AggregateExpression(peaks_object)[['peaks']]
+  # calculate pct exp
+  counts_as_row_sparse <- as(peaks_object@assays$peaks@counts, "RsparseMatrix") # turn into row-wise sparse matrix
+  non_zero_cell_nr <- as.vector(unlist(rowSums(counts_as_row_sparse != 0))) # do a rowsum on the T/F value you get from the zero-or-not comparison
+  pct_peaks <- non_zero_cell_nr / ncol(peaks_object@assays$peaks@counts) # the percentage expressed is that number of cells divided by the total number
+  # turn the exp per group into a bed
+  peaks_bed <- get_peaks_to_bed(sum_peaks)[[1]]
+  # add the other info
+  peaks_bed[['avg']] <-  unlist(as.vector(avg_peaks[, 1]))
+  peaks_bed[['ncell']] <-  ncol(peaks_object)
+  peaks_bed[['pct_exp']] <- pct_peaks
+  return(peaks_bed)
 }
 
 
@@ -376,6 +376,7 @@ dream_pairwise_mt <- function(seurat_object, output_loc, condition_combinations,
   limma_output_nomsig_loc <- gzfile(paste(output_loc, names(condition_combinations)[[1]], '.nominal_significant.tsv.gz', sep = ''))
   write.table(limma_result, limma_output_nomsig_loc, sep = '\t', row.names = F)
   mdfiver::create_md5_for_file(paste(output_loc, names(condition_combinations)[[1]], '.nominal_significant.tsv.gz', sep = ''))
+  
   return(0)
 }
 
@@ -463,7 +464,7 @@ dream_pairwise <- function(seurat_object, output_loc, condition_combinations, ag
   colnames(cell_numbers) <- c('aggregate', 'nr')
   # order the same as the metadata
   cell_numbers <- cell_numbers[match(aggregate_metadata[['aggregate']], cell_numbers[['aggregate']]), ]
-
+  
   # filter by the number of cells if requested
   if (minimal_cells > 0) {
     # get the indices of where the cell numbers are above this
@@ -798,8 +799,8 @@ get_nr_cells_aggregate_combination <- function(aggregate_df, seurat_metadata) {
 do_debug <- function() {
   # fill the opt
   opt <- list()
-  opt[['out']] <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/differential_accessibility/limma_dream/output/stimulation/pct01/'
-  opt[['file']] <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_cd8t_wstatus_1_80_20240701.rds'
+  opt[['out']] <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/differential_accessibility/limma_dream/output/LONG_COVID/pct01/'
+  opt[['file']] <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_cd4t_UT_wstatus_1_80_20240709.rds'
   opt[['cell_type_column']] <- 'cell_type'
   opt[['min_cells']] <- 10
   opt[['min_peaks']] <- 200
@@ -838,18 +839,15 @@ do_debug <- function() {
   # or the age
   seurat_object <- seurat_object[, !is.na(seurat_object@meta.data[['age']])]
   # or the inflammation status
-  seurat_object <- seurat_object[, !is.na(seurat_object@meta.data[['condition_final']]) & seurat_object@meta.data[['condition_final']] != 'unknown']
-  
-  # add c to conditions so we won't have issues with the aggregation
-  seurat_object@meta.data[['condition_final']] <- paste('c', seurat_object@meta.data[['condition_final']], sep = '')
+  seurat_object <- seurat_object[, !is.na(seurat_object@meta.data[['LONG_COVID_final']]) & seurat_object@meta.data[['LONG_COVID_final']] != 'unknown']
   
   # do the bulk analysis
   do_limma_dream_pairwise_per_celltype(seurat_object, 
                                        output_loc = limma_output_loc, 
-                                       condition_combinations=list('condition_final' =  c('c24hCA', 'cUT')),
+                                       condition_combinations=list('LONG_COVID_final' =  c('case', 'control')),
                                        celltype_column = celltype_column, 
-                                       aggregates = c('condition_final', 'lane', 'sample_final'), 
-                                       fixed_effects = c('condition_final', 'age', 'sex'), 
+                                       aggregates = c('LONG_COVID_final', 'lane', 'sample_final'), 
+                                       fixed_effects = c('LONG_COVID_final', 'age', 'sex'), 
                                        random_effects = c('sample_final', 'lane'),
                                        minimal_cells = min_cells,
                                        min_peaks = min_cell_umis, 
@@ -922,17 +920,15 @@ seurat_object <- seurat_object[, !is.na(seurat_object@meta.data[['sex']])]
 # or the age
 seurat_object <- seurat_object[, !is.na(seurat_object@meta.data[['age']])]
 # or the inflammation status
-seurat_object <- seurat_object[, !is.na(seurat_object@meta.data[['condition_final']]) & seurat_object@meta.data[['condition_final']] != 'unknown']
-# add c to conditions so we won't have issues with the aggregation
-seurat_object@meta.data[['condition_final']] <- paste('c', seurat_object@meta.data[['condition_final']], sep = '')
+seurat_object <- seurat_object[, !is.na(seurat_object@meta.data[['LONG_COVID_final']]) & seurat_object@meta.data[['LONG_COVID_final']] != 'unknown']
 
 # do the bulk analysis
 do_limma_dream_pairwise_per_celltype(seurat_object, 
                                      output_loc = limma_output_loc, 
-                                     condition_combinations=list('condition_final' =  c('c24hCA', 'cUT')),
+                                     condition_combinations=list('LONG_COVID_final' =  c('case', 'control')),
                                      celltype_column = celltype_column, 
-                                     aggregates = c('condition_final', 'lane', 'sample_final'), 
-                                     fixed_effects = c('condition_final', 'age', 'sex'), 
+                                     aggregates = c('LONG_COVID_final', 'lane', 'sample_final'), 
+                                     fixed_effects = c('LONG_COVID_final', 'age', 'sex'), 
                                      random_effects = c('sample_final', 'lane'),
                                      minimal_cells = min_cells,
                                      min_peaks = min_cell_umis, 

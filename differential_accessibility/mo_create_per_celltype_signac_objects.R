@@ -174,7 +174,7 @@ process_and_write_subset <- function(signac_object, correlations_confined, corre
     signac_object@meta.data[['unconfined_best_match_sample']] <- p_mapping[match(signac_object@meta.data[['unconfined_best_match_sample']], p_mapping[['sample_final']]), 'sample_number']
     signac_object@meta.data[['unconfined_second_match_sample']] <- p_mapping[match(signac_object@meta.data[['unconfined_second_match_sample']], p_mapping[['sample_final']]), 'sample_number']
     # write the sample mapping
-    write.table(p_mapping, gzfile(paste(output_loc, '.sample_mapping.tsv.gz', sep = ''), sep = '\t', row.names = F, col.names = T))
+    write.table(p_mapping, gzfile(paste(output_loc, '.sample_mapping.tsv.gz', sep = '')), sep = '\t', row.names = F, col.names = T)
     # remove all other IDs
     signac_object@meta.data[, c('realid')] <- NULL
   }
