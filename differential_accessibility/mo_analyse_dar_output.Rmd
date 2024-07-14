@@ -1,0 +1,434 @@
+---
+title: "mo_analyse_dar_output"
+author: "Roy Oelen"
+date: "2024-07-14"
+output: html_document
+---
+
+```{r header, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+#!/usr/bin/env Rscript
+############################################################################################################################
+# Authors: Roy Oelen
+# Name: mo_analyse_dar_output.Rmd
+# Function: plot DAR output
+############################################################################################################################
+```
+
+```{r libraries, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+####################
+# libraries        #
+####################
+
+# for plotting
+library(ggplot2)
+library(cowplot)
+library(roycols)
+library(RColorBrewer)
+library(UpSetR)
+library(grid)
+
+```
+
+```{r functions, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+####################
+# Functions        #
+####################
+
+#' get a label dict that replaces the posix safe names into printable versions
+#' 
+#' @returns a label dict that replaces the posix safe names into printable versions
+#' label_dict_names <- get_label_dict()
+get_label_dict <- function() {
+  label_dict <- list()
+  # condition combinations
+  label_dict[['cUTc24hCA']] <- 'UT-24hCA'
+  label_dict[['c24hCAcUT']] <- 'UT-24hCA'
+  # conditions
+  label_dict[['UT']] <- 'untreated'
+  label_dict[['cUT']] <- 'untreated'
+  label_dict[['24hCA']] <- '24h Candida'
+  label_dict[['c24hCA']] <- '24h Candida'
+  # major cell types
+  label_dict[["Bulk"]] <- "bulk-like"
+  label_dict[["CD4T"]] <- "CD4+ T"
+  label_dict[["CD8T"]] <- "CD8+ T"
+  label_dict[["monocyte"]] <- "monocyte"
+  label_dict[["NK"]] <- "NK"
+  label_dict[["B"]] <- "B"
+  label_dict[["DC"]] <- "DC"
+  label_dict[["HSPC"]] <- "HSPC"
+  label_dict[["plasmablast"]] <- "plasmablast"
+  label_dict[["platelet"]] <- "platelet"
+  label_dict[["T_other"]] <- "other T"
+  # minor cell types
+  label_dict[["CD4_TCM"]] <- "CD4 TCM"
+  label_dict[["Treg"]] <- "T regulatory"
+  label_dict[["CD4_Naive"]] <- "CD4 naive"
+  label_dict[["CD4_CTL"]] <- "CD4 CTL"
+  label_dict[["CD8_TEM"]] <- "CD8 TEM"
+  label_dict[["cMono"]] <- "cMono"
+  label_dict[["CD8_TCM"]] <- "CD8 TCM"
+  label_dict[["ncMono"]] <- "ncMono"
+  label_dict[["cDC2"]] <- "cDC2"
+  label_dict[["B_intermediate"]] <- "B intermediate"
+  label_dict[["NKdim"]] <- "NK dim"
+  label_dict[["pDC"]] <- "pDC"
+  label_dict[["ASDC"]] <- "ASDC"
+  label_dict[["CD8_Naive"]] <- "CD8 naive"
+  label_dict[["MAIT"]] <- "MAIT"
+  label_dict[["CD8_Proliferating"]] <- "CD8 proliferating"
+  label_dict[["CD4_TEM"]] <- "CD4 TEM"
+  label_dict[["B_memory"]] <- "B memory"
+  label_dict[["NKbright"]] <- "NK bright"
+  label_dict[["B_naive"]] <- "B naive"
+  label_dict[["gdT"]] <- "gamma delta T"
+  label_dict[["CD4_Proliferating"]] <- "CD4 proliferating"
+  label_dict[["NK_Proliferating"]] <- "NK proliferating"
+  label_dict[["cDC1"]] <- "cDC1"
+  label_dict[["ILC"]] <- "ILC"
+  label_dict[["dnT"]] <- "double negative T"
+  return(label_dict)
+}
+
+
+rename_labels <- function(vector_to_rename) {
+  # get the labels that are present
+  label_renaming <- get_label_dict()
+  # now check which labels we are missing
+  missing_renames <- setdiff(unique(vector_to_rename), names(label_renaming))
+  # add those renames as not being renames
+  for (missing_rename in missing_renames) {
+    label_renaming[[missing_rename]] <- missing_rename
+  }
+  # now replace each value with the rename
+  renamed_vector <- as.vector(unlist(label_renaming[vector_to_rename]))
+  # and return that
+  return(renamed_vector)
+}
+
+
+get_color_coding_dict <- function() {
+	# set the condition colors
+  color_coding <- list()
+  color_coding[["UTBaseline"]] <- "khaki2"
+  color_coding[["UTt24h"]] <- "khaki4"
+  color_coding[["UTt8w"]] <- "paleturquoise1"
+  color_coding[["Baselinet24h"]] <- "paleturquoise3"
+  color_coding[["Baselinet8w"]] <- "rosybrown1"
+  color_coding[["t24ht8w"]] <- "rosybrown3"
+  color_coding[["UT\nBaseline"]] <- "khaki2"
+  color_coding[["UT\nt24h"]] <- "khaki4"
+  color_coding[["UT\nt8w"]] <- "paleturquoise1"
+  color_coding[["Baseline\nt24h"]] <- "paleturquoise3"
+  color_coding[["Baseline\nt8w"]] <- "rosybrown1"
+  color_coding[["t24h\nt8w"]] <- "rosybrown3"
+  color_coding[["UT-Baseline"]] <- "khaki2"
+  color_coding[["UT-t24h"]] <- "khaki4"
+  color_coding[["UT-t8w"]] <- "paleturquoise1"
+  color_coding[["Baseline-t24h"]] <- "paleturquoise3"
+  color_coding[["Baseline-t8w"]] <- "rosybrown1"
+  color_coding[["t24h-t8w"]] <- "rosybrown3"
+  color_coding[["UT-t0"]] <- "khaki2"
+  color_coding[["UT-t24h"]] <- "khaki4"
+  color_coding[["UT-t8w"]] <- "paleturquoise1"
+  color_coding[["HC-t0"]] <- "khaki2"
+  color_coding[["HC-t24h"]] <- "khaki4"
+  color_coding[["HC-t8w"]] <- "paleturquoise1"
+  color_coding[["t0-t24h"]] <- "paleturquoise3"
+  color_coding[["t0-t8w"]] <- "rosybrown1"
+  color_coding[["t24h-t8w"]] <- "rosybrown3"
+  # set condition colors
+  color_coding[["HC"]] <- "grey"
+  color_coding[["Control"]] <- "grey"
+  color_coding[["C"]] <- "grey"
+  color_coding[["t0"]] <- "#ff7101"
+  color_coding[["t24h"]] <- "#e12a62"
+  color_coding[["t8w"]] <- "#3B0550"
+  color_coding[["t6-8w"]] <- "#3B0550"
+  # set the cell type colors
+  color_coding[["Bulk"]] <- "black"
+  color_coding[["CD4T"]] <- "#153057"
+  color_coding[["CD8T"]] <- "#009DDB"
+  color_coding[["monocyte"]] <- "#EDBA1B"
+  color_coding[["NK"]] <- "#E64B50"
+  color_coding[["B"]] <- "#71BC4B"
+  color_coding[["DC"]] <- "#965EC8"
+  color_coding[["CD4+ T"]] <- "#153057"
+  color_coding[["CD8+ T"]] <- "#009DDB"
+  # other cell type colors
+  color_coding[["HSPC"]] <- "#009E94"
+  color_coding[["platelet"]] <- "#9E1C00"
+  color_coding[["plasmablast"]] <- "#DB8E00"
+  color_coding[["other T"]] <- "#FF63B6"
+  return(color_coding)
+}
+
+
+#' get the LFC for each gene from an output file processed by limma dream
+#' 
+#' @param mast.output.loc the location of the output file
+#' @param p.val.column the column in the file that has the P value to filtr on
+#' @param p.val.cutoff the p-value cutoff to use for filtering
+#' @returns the filtered table for that output file
+#' 
+get_gene_and_lfc_limma <- function(limma.output.loc, p.val.column='p.bonferroni', p.val.cutoff=0.05){
+  # read the output
+  de.output <- read.table(limma.output.loc, header = T, sep = '\t', stringsAsFactors = F)
+  # subset to what is significant
+  de.output.significant <- de.output[de.output[[p.val.column]] < p.val.cutoff, ]
+  return(de.output.significant)
+}
+
+
+
+#' get the LFC for each gene from an output file created by a DE method
+#' 
+#' @param de.output.loc the location of the output file
+#' @param de_method the DE method used (mast_standalone, mast_seurat or limma)
+#' @param p.val.column the column in the file that has the P value to filter on
+#' @param p.val.cutoff the p-value cutoff to use for filtering
+#' @returns the filtered table for that output file
+#' 
+get_de_output <- function(de.output.loc, de_method, p.val.column='bonferroni', p.val.cutoff=0.05){
+  # use the correct method
+  de.output <- NULL
+  if (de_method == 'limma'){
+    de.output <- get_gene_and_lfc_limma(de.output.loc, p.val.column = p.val.column, p.val.cutoff = p.val.cutoff)
+  }
+  else{
+    print('de_method not valid, valid options are: limma')
+  }
+  return(de.output)
+}
+
+#' get the LFC for each gene from each output file created by a DE method
+#' 
+#' @param de_output_path the folder containing the DE results
+#' @param de_method the DE method used (mast_standalone, mast_seurat or limma)
+#' @param p.val.column the column in the file that has the P value to filter on
+#' @param p.val.cutoff the p-value cutoff to use for filtering
+#' @returns a list of tables per output file, with in each entry a table with the filtered table for that output file
+#' 
+get_de_genes_per_celltype <- function(de_output_path, de_method, pval_column='p.bonferroni', p_val_cutoff=0.05, pattern='*_condition_final.nominal_significant.tsv.gz$') {
+  # list files in directory
+  files_dir <- list.files(de_output_path, full.names = T, pattern = pattern)
+  # keep track of results per celltype
+  results_per_ct <- list()
+  # check each file
+  for (output_file in files_dir) {
+    # get the output
+    output <- get_de_output(output_file, de_method = de_method, p.val.column = pval_column, p.val.cutoff = p_val_cutoff)
+    # get the basename of the file
+    basename_file <- basename(output_file)
+    basename_file <- sub(pattern = "(.*?)\\..*$", replacement = "\\1", basename_file)
+    # add to the list
+    results_per_ct[[basename_file]] <- output
+  }
+  return(results_per_ct)
+}
+
+#' get the number of DE genes per output file
+#' 
+#' @param de_output_path the DE output table per cell type in a list, with the names being the cell types
+#' @param celltype_snip part of the string remove from the cell type annotation to make the name look nicer
+#' @param p.val.column the column in the file that has the P value to filter on
+#' @param p.val.cutoff the p-value cutoff to use for filtering
+#' @returns a table with the 'celltype' as the first column, and the 'number' as the second column
+#' 
+de_outputs_to_table <- function(de_output_per_celltype, celltype_snip='_condition_final', p_val_column='p.bonferroni', p_val_cutoff=0.05) {
+  # create a new dataframe
+  nr_df <- data.frame(celltype = rep(NA, times = length(names(de_output_per_celltype))),
+                      number = rep(0, times = length(names(de_output_per_celltype))))
+  # check each celltype
+  for (i in 1:length(names(de_output_per_celltype))) {
+    # extract the cell type
+    celltype <- names(de_output_per_celltype)[i]
+    # extract the results
+    output <- de_output_per_celltype[[celltype]]
+    # filter by significance
+    output <- output[output[[p_val_column]] < p_val_cutoff, ]
+    # count how many results
+    nr_genes <- nrow(output)
+    # snip something from the name if requested
+    celltype_snipped <- celltype
+    if (!is.null(celltype_snip)) {
+      celltype_snipped <- gsub(celltype_snip, '', celltype)
+    }
+    # add to the dataframe
+    nr_df[i, 'celltype'] <- celltype_snipped
+    nr_df[i, 'number'] <- nr_genes
+  }
+  return(nr_df)
+}
+
+#' plot in a barplot the number of DE genes per cell type
+#' 
+#' @param de_numbers the table containing the number of DE genes per cell type
+#' @param celltype_column which column of the supplied table has the celltype name
+#' @param number_column which column of the supplied table has the number of DE genes
+#' @param pointless draw the ticks on the bottom of the plot?
+#' @param legendless draw the legend?
+#' @param ylim the range for the y-axis
+#' @param paper_style use the paper style with more whitespace
+#' @param angle_labels angle the x labels 90 degrees?
+#' @returns a barplot with the number of DE genes per cell type
+#' 
+de_gene_numbers_to_plot <- function(de_numbers, celltype_column='celltype', number_column='number', pointless=F, legendless=F, ylim=NULL, paper_style=T, angle_labels=T, use_label_dict=F) {
+  # rename labels if requested
+  if (use_label_dict) {
+    de_numbers[[celltype_column]] <- rename_labels(as.character(de_numbers[[celltype_column]]))
+  }
+  p <- ggplot(mapping = aes(x = de_numbers[[celltype_column]], y = de_numbers[[number_column]], fill = de_numbers[[celltype_column]])) +
+    geom_bar(stat='identity') + xlab(celltype_column) + ylab(number_column)
+  # options
+  if(!is.null(ylim)){
+    p <- p + ylim(ylim)
+  }
+  if(pointless){
+    p <- p + theme(axis.text.x=element_blank(), 
+                   axis.ticks = element_blank())
+  }
+  if(legendless){
+    p <- p + theme(legend.position = 'none')
+  }
+  if (paper_style) {
+    p <- p + theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+  }
+  if (angle_labels) {
+    p <- p + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+  }
+  return(p)
+}
+
+
+
+plot_DE_sharing_per_celltype <- function(de_table_per_ct, feature_column='feature', pval_column='p.bonferroni', sig_pval=0.05, only_positive=F, only_negative=F, lfc_column='metafc', use_label_dict=T, use_color_dict=T){
+  DE_genes_per_ct <- list()
+  # get the DE genes for each cell type
+  for(cell_type in names(de_table_per_ct)){
+    # filter to only include the significant results
+    de_table <- de_table_per_ct[[cell_type]][de_table_per_ct[[cell_type]][[pval_column]] <= 0.05, ]
+    # filter for only the positive lfc if required
+    if(only_positive){
+      de_table <- de_table[de_table[[lfc_column]] < 0, ]
+    }
+    # filter for only the positive lfc if required
+    if(only_negative){
+      de_table <- de_table[de_table[[lfc_column]] > 0, ]
+    }
+    # we just care about the gene names
+    sig_genes <- NULL
+    if (is.null(feature_column)) {
+      sig_genes <- rownames(mast)
+    }
+    else {
+      sig_genes <- de_table[[feature_column]]
+    }
+    # store these for the cell type
+    DE_genes_per_ct[[cell_type]] <- sig_genes
+  }
+  if(use_label_dict){
+    names(DE_genes_per_ct) <- rename_labels(names(DE_genes_per_ct))
+  }
+  queries <- list()
+  sets.bar.color <- 'black'
+  if(use_color_dict){
+    # create df to store the number of each set, so we know how to order
+    nrs_df <- NULL
+    # add the colors for the cell types
+    for(i in 1:length(names(DE_genes_per_ct))){
+      cell_type <- names(DE_genes_per_ct)[i]
+      # add for the singles in the intersection sizes
+      ct_list <- list(
+        query = intersects,
+        params = list(cell_type),
+        color = get_color_coding_dict()[[cell_type]],
+        active = T)
+      queries[[i]] <- ct_list
+      # add for the DF to order the set sizes
+      numbers_row <- data.frame(ct=c(cell_type), nr=c(length(DE_genes_per_ct[[cell_type]])), stringsAsFactors = F)
+      if(is.null(nrs_df)){
+        nrs_df <- numbers_row
+      }
+      else{
+        nrs_df <- rbind(nrs_df, numbers_row)
+      }
+    }
+    # get the order of the sets
+    ordered_cts <- nrs_df[order(nrs_df$nr, decreasing = T), 'ct']
+    # add the colors for the sets
+    sets.bar.color <- unlist(get_color_coding_dict()[ordered_cts])
+    upset(fromList(DE_genes_per_ct), order.by = 'freq', nsets = length(DE_genes_per_ct), queries = queries, sets.bar.color=sets.bar.color)
+  }
+  else {
+    upset(fromList(DE_genes_per_ct), order.by = 'freq', nsets = length(DE_genes_per_ct))
+  }
+  
+  #return(DE_genes_per_ct)
+}
+
+
+```
+
+```{r setup_paths, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+####################
+# Main Code        #
+####################
+
+# get the stimulation output
+limma_stim_base_output_path <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/differential_accessibility/limma_dream/output/stimulation/pct01/'
+# get the stimulation output where we didn't correct for the lane
+limma_stim_nolane_base_output_path <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/differential_accessibility/limma_dream/output/stimulation/pct01/nolane/'
+
+```
+
+```{r plot_stim_numbers, include=TRUE, fig.width=10, fig.height=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# get the output per celltype
+de_genes_limma_stim <- get_de_genes_per_celltype(limma_stim_base_output_path, de_method = 'limma')
+# fix up names
+names(de_genes_limma_stim) <- gsub('_condition_final', '', names(de_genes_limma_stim))
+# get the numbers as well
+de_genes_limma_stim_numbers <- de_outputs_to_table(de_genes_limma_stim)
+# plot them
+de_gene_numbers_to_plot(de_genes_limma_stim_numbers, legendless = T, use_label_dict = T) + 
+  ylab('Number of DARs') + 
+  xlab('Cell type') + 
+  ggtitle('Number of DARs using Limma') +
+  scale_fill_manual(values = get_color_coding_dict())
+
+```
+
+```{r plot_stim_sharing, include=TRUE, fig.width=10, fig.height=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# plot the sharing of region
+plot_DE_sharing_per_celltype(de_genes_limma_stim)
+
+```
+
+```{r plot_stim_sharing, include=TRUE, fig.width=10, fig.height=5}
+
+# get the output per celltype when not correcting for lane
+de_genes_limma_stim_nolane <- get_de_genes_per_celltype(limma_stim_nolane_base_output_path, de_method = 'limma')
+# fix up names
+names(de_genes_limma_stim_nolane) <- gsub('_condition_final', '', names(de_genes_limma_stim_nolane))
+# make new list with the different runs for the same celltype
+de_genes_mono_different_runs <- list('without lane' = de_genes_limma_stim_nolane[['monocyte']], 'with lane' = de_genes_limma_stim[['monocyte']])
+de_genes_cd8t_different_runs <- list('without lane' = de_genes_limma_stim_nolane[['CD8T']], 'with lane' = de_genes_limma_stim[['CD8T']])
+# plot overlap
+plot_DE_sharing_per_celltype(de_genes_mono_different_runs, use_label_dict = F, use_color_dict = F)
+grid.text("correcting vs not correcting for lane in DAR identification for monocytes",x = 0.65, y=0.95, gp=gpar(fontsize=10))
+plot_DE_sharing_per_celltype(de_genes_cd8t_different_runs, use_label_dict = F, use_color_dict = F)
+grid.text("correcting vs not correcting for lane in DAR identification for CD8+ T",x = 0.65, y=0.95, gp=gpar(fontsize=10))
+
+```
+
