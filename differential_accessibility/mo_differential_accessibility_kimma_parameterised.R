@@ -25,7 +25,9 @@ library(doParallel)
 library(Matrix)
 #library(Matrix.utils) # NOT IN CONTAINER! als grr or remotes::install_github("cvarrichio/Matrix.utils")
 library(optparse) # NOT IN CONTAINER
-
+# required for kimma
+library(tidyverse)
+library(BIGverse)
 
 ####################
 # Functions        #
@@ -322,12 +324,22 @@ dream_pairwise_mt <- function(seurat_object, kinship, output_loc, condition_comb
   }
   
   # paste together the model
-  model_formula <- '~ 0 '
+  model_formula <- ''
   for(fixed_effect in fixed_effects){
-    model_formula <- paste(model_formula, fixed_effect, sep = ' + ')
+    if (model_formula == '') {
+      model_formula <- paste('~ ', fixed_effect, sep = '')
+    }
+    else{
+      model_formula <- paste(model_formula, fixed_effect, sep = ' + ')
+    }
   }
   for(random_effect in random_effects){
-    model_formula <- paste(model_formula, ' + (1|', random_effect, ')', sep = '')
+    if (model_formula == '') {
+      model_formula <- paste('~ (1|', random_effect, ')', sep = '')
+    }
+    else {
+      model_formula <- paste(model_formula, ' + (1|', random_effect, ')', sep = '')
+    }
   }
   
   if(verbose){
@@ -336,6 +348,9 @@ dream_pairwise_mt <- function(seurat_object, kinship, output_loc, condition_comb
   
   # do not turn into a formula like is required in limma
   form <- model_formula
+  
+  # turn into standard matrix
+  geneExpr <- as.matrix(geneExpr[['counts']])
   
   # get the number of rows
   nrow_matrix <- nrow(geneExpr)
@@ -541,17 +556,30 @@ dream_pairwise <- function(seurat_object, kinship, output_loc, condition_combina
   }
   
   # paste together the model
-  model_formula <- '~ 0 '
+  model_formula <- ''
   for(fixed_effect in fixed_effects){
-    model_formula <- paste(model_formula, fixed_effect, sep = ' + ')
+    if (model_formula == '') {
+      model_formula <- paste('~ ', fixed_effect, sep = '')
+    }
+    else{
+      model_formula <- paste(model_formula, fixed_effect, sep = ' + ')
+    }
   }
   for(random_effect in random_effects){
-    model_formula <- paste(model_formula, ' + (1|', random_effect, ')', sep = '')
+    if (model_formula == '') {
+      model_formula <- paste('~ (1|', random_effect, ')', sep = '')
+    }
+    else {
+      model_formula <- paste(model_formula, ' + (1|', random_effect, ')', sep = '')
+    }
   }
   
   if(verbose){
     print(paste('formula:', model_formula))
   }
+  
+  # turn into standard matrix
+  geneExpr <- as.matrix(geneExpr[['counts']])
   
   # do not turn into a formula like is required in limma
   form <- model_formula
@@ -673,6 +701,17 @@ dream_pairwise <- function(seurat_object, kinship, output_loc, condition_combina
 #' @returns 0 if successful
 #' do_limma_dream_pairwise_per_celltype(pbmc, './ct_test/')
 do_limma_dream_pairwise_per_celltype <- function(seurat_object, kinship, output_loc, condition_combinations=list('condition_final' =  c('24hCA', 'UT')), celltype_column='cell_type_final', cell_types_to_use=NULL, aggregates=c('sample_final', 'condition_final'), fixed_effects=c('condition_final'), random_effects=c('sample_final'), kin_column='sample_final', minimal_cells=0, min_peaks=200, minimal_complexity=5000, verbose=T, nthreads=5){
+  # drop elements we don't have kinship for
+  kins <- rownames(kinship)
+  samples <- unique(as.character(seurat_object@meta.data[[kin_column]]))
+  kins_and_samples <- intersect(samples, kins)
+  no_kin <- setdiff(samples, kins)
+  if (length(no_kin) > 0) {
+    # warn
+    warning(paste('dropping', as.character(length(no_kin)), 'samples due to no kinship info'))
+    # and subset
+    seurat_object <- seurat_object[, !is.na(seurat_object@meta.data[[kin_column]]) & as.character(seurat_object@meta.data[[kin_column]]) %in% kins_and_samples]
+  }
   # use the cell types supplied, or all if none are supplied
   cell_types <- cell_types_to_use
   if(is.null(cell_types_to_use)){
