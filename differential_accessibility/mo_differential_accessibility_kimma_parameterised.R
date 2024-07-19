@@ -97,7 +97,7 @@ plot_qc_metrics <- function(qc_data, plot_groups, plot_prepend, plot_values=c('n
 }
 
 
-do_dream <- function(geneExpr, aggregate_metadata, cell_numbers, form, condition_combinations, kinship, kin_column='sample_final', verbose = T) {
+do_dream <- function(geneExpr, aggregate_metadata, cell_numbers, form, condition_combinations, kinship, kin_column='sample_final', verbose = T, nthreads=NULL) {
   tryCatch(
     {
       # do each combination
@@ -123,13 +123,14 @@ do_dream <- function(geneExpr, aggregate_metadata, cell_numbers, form, condition
                           patientID = kin_column,
                           libraryID = 'aggregate',
                           model = form,
-                          run_lmerel = TRUE
+                          run_lmerel = TRUE,
+                          processors = nthreads
                           #use_weights = TRUE
                           )
             
             
             # grab the exact fit
-            limma_result <- kimfit$lmerel
+            limma_result <- kmfit$lmerel
             
             print(head(limma_result))
             
@@ -296,11 +297,6 @@ dream_pairwise_mt <- function(seurat_object, kinship, output_loc, condition_comb
   geneExpr = DGEList( aggregate_countMatrix[isexpr,] )
   geneExpr = calcNormFactors( geneExpr )
   
-  # Specify parallel processing parameters
-  # this is used implicitly by dream() to run in parallel
-  param = SnowParam(4, "SOCK", progressbar=TRUE)
-  register(param)
-  
   # show head of the tables if we are being verbose
   if(verbose){
     print('aggregated metadata head:')
@@ -360,6 +356,8 @@ dream_pairwise_mt <- function(seurat_object, kinship, output_loc, condition_comb
   n_chunks <- ceiling(n_chunks)
   # get the number of rows per chunk
   nrow_chunk <- nrow(geneExpr) / n_chunks
+  # give some info on how we will work on the data
+  message(paste('work has been devided in', as.character(n_chunks), 'of', as.character(nrow_chunk), 'rows, ascross', as.character(nthreads), 'threads'))
   # now do parallel processing of chunks
   res_per_chunk <- foreach(i = 1:n_chunks) %dopar% {
     # calculate the chunk start and stop
@@ -373,7 +371,7 @@ dream_pairwise_mt <- function(seurat_object, kinship, output_loc, condition_comb
     # extract these rows
     geneExprChunk <- as.matrix(geneExpr[chunk_start : chunk_stop, ])
     # do the limma run for this chunk
-    limma_result_chunk <- do_dream(geneExpr = geneExprChunk, aggregate_metadata = aggregate_metadata, cell_numbers = cell_numbers, form = form, condition_combinations = condition_combinations, kinship = kinship, kin_column = kin_column, verbose = verbose)
+    limma_result_chunk <- do_dream(geneExpr = geneExprChunk, aggregate_metadata = aggregate_metadata, cell_numbers = cell_numbers, form = form, condition_combinations = condition_combinations, kinship = kinship, kin_column = kin_column, verbose = verbose, nthreads = 1)
     return(limma_result_chunk)
   }
   # merge chuncks
@@ -387,6 +385,9 @@ dream_pairwise_mt <- function(seurat_object, kinship, output_loc, condition_comb
   
   # set an output location
   limma_output_loc <- gzfile(paste(output_loc, names(condition_combinations)[[1]], '.tsv.gz', sep = ''))
+  
+  # make the folder
+  dir.create(output_loc, recursive = T, showWarnings = F)
   
   # also write the model we used
   limma_formula_loc <- paste(output_loc, names(condition_combinations)[[1]], '.formula', sep = '')
@@ -428,7 +429,7 @@ dream_pairwise_mt <- function(seurat_object, kinship, output_loc, condition_comb
 #' @param plot_metrics plot the QC metrics that were used for filtering
 #' @returns 0 if successful
 #' dream_pairwise(pbmc, './bulk_test/', list('inflammation'=c('AI','NI')))
-dream_pairwise <- function(seurat_object, kinship, output_loc, condition_combinations, aggregates=c('sample_final', 'condition_final'), fixed_effects=c('condition_final'), random_effects=c('sample_final'), kin_column='sample_final', minimal_cells=0, min_peaks=200, minimal_complexity=5000, min_pct=0.01, verbose=T, plot_metrics=T){
+dream_pairwise <- function(seurat_object, kinship, output_loc, condition_combinations, aggregates=c('sample_final', 'condition_final'), fixed_effects=c('condition_final'), random_effects=c('sample_final'), kin_column='sample_final', minimal_cells=0, min_peaks=200, minimal_complexity=5000, min_pct=0.01, verbose=T, plot_metrics=T, nthread=20){
   # set assay
   DefaultAssay(seurat_object) <- 'peaks'
   # grab the countmatrix
@@ -530,11 +531,6 @@ dream_pairwise <- function(seurat_object, kinship, output_loc, condition_combina
   geneExpr = DGEList( aggregate_countMatrix[isexpr,] )
   geneExpr = calcNormFactors( geneExpr )
   
-  # Specify parallel processing parameters
-  # this is used implicitly by dream() to run in parallel
-  param = SnowParam(20, "SOCK", progressbar=TRUE)
-  register(param)
-  
   # show head of the tables if we are being verbose
   if(verbose){
     print('aggregated metadata head:')
@@ -580,11 +576,13 @@ dream_pairwise <- function(seurat_object, kinship, output_loc, condition_combina
   
   # turn into standard matrix
   geneExpr <- as.matrix(geneExpr[['counts']])
+  # TEST
+  geneExpr <- geneExpr[1:1000, ]
   
   # do not turn into a formula like is required in limma
   form <- model_formula
-  tryCatch(
-    {
+  # tryCatch(
+  #   {
       # do each combination
       for(combination_name in names(condition_combinations)){
         # grab the combination
@@ -594,8 +592,8 @@ dream_pairwise <- function(seurat_object, kinship, output_loc, condition_combina
           print(paste('doing combination:', combination_name, sep = ' ', collapse = ' '))
         }
         
-        tryCatch(
-          {
+        # tryCatch(
+        #   {
             # fit contrast
             kmfit = kmFit(counts = geneExpr,
                           meta = aggregate_metadata,
@@ -605,14 +603,14 @@ dream_pairwise <- function(seurat_object, kinship, output_loc, condition_combina
                           patientID = kin_column,
                           libraryID = 'aggregate',
                           model = form,
-                          run_lmerel = TRUE
+                          run_lmerel = TRUE,
+                          processors = nthreads
                           #use_weights = TRUE
                           )
             
             
             # grab the exact fit
-            limma_result <- kimfit$lmerel
-            
+            limma_result <- kmfit$lmerel
             
             # add bonferroni adjustment
             limma_result[['p.bonferroni']] <- p.adjust(limma_result[['P.Value']], method = 'bonferroni')
@@ -667,17 +665,17 @@ dream_pairwise <- function(seurat_object, kinship, output_loc, condition_combina
             write.table(limma_result, limma_output_nomsig_loc, sep = '\t', row.names = F)
             mdfiver::create_md5_for_file(paste(output_loc, names(condition_combinations)[[1]], '.nominal_significant.tsv.gz', sep = ''))
             
-          }, error=function(cond) {
-            print(paste('analysis failed in', paste(combination, collapse = ' vs ')))
-            message(cond)
-          }
-        )
+        #   }, error=function(cond) {
+        #     print(paste('analysis failed in', paste(combination, collapse = ' vs ')))
+        #     message(cond)
+        #   }
+        # )
       }
-    }, error=function(cond) {
-      print(paste('model build failed'))
-      message(cond)
-    }
-  )
+  #   }, error=function(cond) {
+  #     print(paste('model build failed'))
+  #     message(cond)
+  #   }
+  # )
   return(0)
 }
 
@@ -712,6 +710,14 @@ do_limma_dream_pairwise_per_celltype <- function(seurat_object, kinship, output_
     # and subset
     seurat_object <- seurat_object[, !is.na(seurat_object@meta.data[[kin_column]]) & as.character(seurat_object@meta.data[[kin_column]]) %in% kins_and_samples]
   }
+  # check for negative kinships
+  kin_negative <- sum(kinship < 0)
+  if (kin_negative > 0) {
+    # kimma can't handle negative kinships, as such we transform the negative values into zero: https://www.biostars.org/p/375773/
+    warning(paste('negative kinships present (', as.character(kin_negative), '), kimma cannot handle these and will set them to 0', sep = ''))
+    kinship[kinship < 0] <- 0
+  }
+  
   # use the cell types supplied, or all if none are supplied
   cell_types <- cell_types_to_use
   if(is.null(cell_types_to_use)){
@@ -917,7 +923,7 @@ do_debug <- function() {
                                        minimal_cells = min_cells,
                                        min_peaks = min_cell_umis, 
                                        minimal_complexity = min_pseudo_umis, 
-                                       nthreads = 5)
+                                       nthreads = nthreads)
 }
 
 
