@@ -98,8 +98,8 @@ plot_qc_metrics <- function(qc_data, plot_groups, plot_prepend, plot_values=c('n
 
 
 do_dream <- function(geneExpr, aggregate_metadata, cell_numbers, form, condition_combinations, kinship, kin_column='sample_final', verbose = T, nthreads=NULL) {
-  tryCatch(
-    {
+  # tryCatch(
+  #   {
       # do each combination
       for(combination_name in names(condition_combinations)){
         # grab the combination
@@ -109,8 +109,8 @@ do_dream <- function(geneExpr, aggregate_metadata, cell_numbers, form, condition
           print(paste('doing combination:', combination_name, sep = ' ', collapse = ' '))
         }
         
-        tryCatch(
-          {
+        # tryCatch(
+        #   {
             print(paste(combination_name, combination[1], sep=''))
             print(paste(combination_name, combination[2], sep=''))
             
@@ -127,7 +127,7 @@ do_dream <- function(geneExpr, aggregate_metadata, cell_numbers, form, condition
                           processors = nthreads
                           #use_weights = TRUE
                           )
-            
+            print(kmfit)
             
             # grab the exact fit
             limma_result <- kmfit$lmerel
@@ -166,17 +166,17 @@ do_dream <- function(geneExpr, aggregate_metadata, cell_numbers, form, condition
             
             # return the result
             return(limma_result)
-          }, error=function(cond) {
-            print(paste('analysis failed in', paste(combination, collapse = ' vs ')))
-            message(cond)
-          }
-        )
+        #   }, error=function(cond) {
+        #     print(paste('analysis failed in', paste(combination, collapse = ' vs ')))
+        #     message(cond)
+        #   }
+        # )
       }
-    }, error=function(cond) {
-      print(paste('model build failed'))
-      message(cond)
-    }
-  )
+  #   }, error=function(cond) {
+  #     print(paste('model build failed'))
+  #     message(cond)
+  #   }
+  # )
 }
 
 
@@ -352,12 +352,12 @@ dream_pairwise_mt <- function(seurat_object, kinship, output_loc, condition_comb
   nrow_matrix <- nrow(geneExpr)
   # get the number of chunks
   n_chunks <- nthreads
-  # round up for the number of threads
-  n_chunks <- ceiling(n_chunks)
   # get the number of rows per chunk
   nrow_chunk <- nrow(geneExpr) / n_chunks
+  # round up for the number of chunks
+  nrow_chunk <- ceiling(nrow_chunk)
   # give some info on how we will work on the data
-  message(paste('work has been devided in', as.character(n_chunks), 'of', as.character(nrow_chunk), 'rows, ascross', as.character(nthreads), 'threads'))
+  message(paste('work has been devided in', as.character(n_chunks), 'chunks of', as.character(nrow_chunk), 'rows, ascross', as.character(nthreads), 'threads'))
   # now do parallel processing of chunks
   res_per_chunk <- foreach(i = 1:n_chunks) %dopar% {
     # calculate the chunk start and stop
@@ -378,10 +378,10 @@ dream_pairwise_mt <- function(seurat_object, kinship, output_loc, condition_comb
   limma_result <- do.call('rbind', res_per_chunk)
   
   # redo the B&H, as it was done per chunk, while it needs to be done on all data
-  limma_result[['adj.P.Val']] <- p.adjust(limma_result[['P.Value']], method = 'BH')
+  limma_result[['adj.P.Val']] <- p.adjust(limma_result[['pval']], method = 'BH')
   
   # add bonferroni correction
-  limma_result[['p.bonferroni']] <- p.adjust(limma_result[['P.Value']], method = 'bonferroni')
+  limma_result[['p.bonferroni']] <- p.adjust(limma_result[['pval']], method = 'bonferroni')
   
   # set an output location
   limma_output_loc <- gzfile(paste(output_loc, names(condition_combinations)[[1]], '.tsv.gz', sep = ''))
@@ -404,7 +404,7 @@ dream_pairwise_mt <- function(seurat_object, kinship, output_loc, condition_comb
   mdfiver::create_md5_for_file(paste(output_loc, names(condition_combinations)[[1]], '.tsv.gz', sep = ''))
   
   # now write just the nominally significant values as well
-  limma_result <- limma_result[limma_result[['P.Value']] < 0.05, ]
+  limma_result <- limma_result[limma_result[['pval']] < 0.05, ]
   limma_output_nomsig_loc <- gzfile(paste(output_loc, names(condition_combinations)[[1]], '.nominal_significant.tsv.gz', sep = ''))
   write.table(limma_result, limma_output_nomsig_loc, sep = '\t', row.names = F)
   mdfiver::create_md5_for_file(paste(output_loc, names(condition_combinations)[[1]], '.nominal_significant.tsv.gz', sep = ''))
@@ -429,7 +429,7 @@ dream_pairwise_mt <- function(seurat_object, kinship, output_loc, condition_comb
 #' @param plot_metrics plot the QC metrics that were used for filtering
 #' @returns 0 if successful
 #' dream_pairwise(pbmc, './bulk_test/', list('inflammation'=c('AI','NI')))
-dream_pairwise <- function(seurat_object, kinship, output_loc, condition_combinations, aggregates=c('sample_final', 'condition_final'), fixed_effects=c('condition_final'), random_effects=c('sample_final'), kin_column='sample_final', minimal_cells=0, min_peaks=200, minimal_complexity=5000, min_pct=0.01, verbose=T, plot_metrics=T, nthread=20){
+dream_pairwise <- function(seurat_object, kinship, output_loc, condition_combinations, aggregates=c('sample_final', 'condition_final'), fixed_effects=c('condition_final'), random_effects=c('sample_final'), kin_column='sample_final', minimal_cells=0, min_peaks=200, minimal_complexity=5000, min_pct=0.01, verbose=T, plot_metrics=T, nthreads=20){
   # set assay
   DefaultAssay(seurat_object) <- 'peaks'
   # grab the countmatrix
@@ -576,8 +576,6 @@ dream_pairwise <- function(seurat_object, kinship, output_loc, condition_combina
   
   # turn into standard matrix
   geneExpr <- as.matrix(geneExpr[['counts']])
-  # TEST
-  geneExpr <- geneExpr[1:1000, ]
   
   # do not turn into a formula like is required in limma
   form <- model_formula
@@ -610,10 +608,11 @@ dream_pairwise <- function(seurat_object, kinship, output_loc, condition_combina
             
             
             # grab the exact fit
+            print(kmfit)
             limma_result <- kmfit$lmerel
             
             # add bonferroni adjustment
-            limma_result[['p.bonferroni']] <- p.adjust(limma_result[['P.Value']], method = 'bonferroni')
+            limma_result[['p.bonferroni']] <- p.adjust(limma_result[['pval']], method = 'bonferroni')
             
             # add some statistics
             result_stats_list <- list()
@@ -621,7 +620,7 @@ dream_pairwise <- function(seurat_object, kinship, output_loc, condition_combina
             result_stats_list[['combination']] <- data.frame(combination=rep(paste(combination_name, paste(combination, collapse='-'), sep = '.'), times = nrow(limma_result)))
             for (condition in combination) {
               # get the cell numbers for the condition
-              cell_numbers_condition <- cell_numbers[cell_numbers[[combination_name]] == condition, ]
+              cell_numbers_condition <- cell_numbers[aggregate_metadata[[combination_name]] == condition, ]
               result_stats_list[[paste('nsample', condition, sep = '_')]] <- data.frame(nsample=rep(nrow(cell_numbers_condition), times = nrow(limma_result)))
               result_stats_list[[paste('ncell', condition, sep = '_')]] <- data.frame(ncells=rep(
                 paste(as.character(min(cell_numbers_condition[['nr']])),
@@ -660,7 +659,7 @@ dream_pairwise <- function(seurat_object, kinship, output_loc, condition_combina
             mdfiver::create_md5_for_file(paste(output_loc, combination_name, '.tsv.gz', sep = ''))
             
             # now write just the nominally significant values as well
-            limma_result <- limma_result[limma_result[['P.Value']] < 0.05, ]
+            limma_result <- limma_result[limma_result[['pval']] < 0.05, ]
             limma_output_nomsig_loc <- gzfile(paste(output_loc, names(condition_combinations)[[1]], '.nominal_significant.tsv.gz', sep = ''))
             write.table(limma_result, limma_output_nomsig_loc, sep = '\t', row.names = F)
             mdfiver::create_md5_for_file(paste(output_loc, names(condition_combinations)[[1]], '.nominal_significant.tsv.gz', sep = ''))
@@ -742,7 +741,7 @@ do_limma_dream_pairwise_per_celltype <- function(seurat_object, kinship, output_
     seurat_object_celltype <- seurat_object[, seurat_object@meta.data[[celltype_column]] == cell_type]
     # perform the analysis
     if (nthreads == 1) {
-      dream_pairwise(seurat_object = seurat_object_celltype, kinship = kinship,  output_loc = output_loc_celltype, condition_combinations = condition_combinations, aggregates = aggregates, fixed_effects = fixed_effects, random_effects = random_effects, kin_column = kin_column, minimal_cells = minimal_cells, min_peaks = min_peaks, minimal_complexity = minimal_complexity, verbose = verbose)
+      dream_pairwise(seurat_object = seurat_object_celltype, kinship = kinship,  output_loc = output_loc_celltype, condition_combinations = condition_combinations, aggregates = aggregates, fixed_effects = fixed_effects, random_effects = random_effects, kin_column = kin_column, minimal_cells = minimal_cells, min_peaks = min_peaks, minimal_complexity = minimal_complexity, verbose = verbose, nthreads = nthreads)
     }
     else if (nthreads > 1) {
       dream_pairwise_mt(seurat_object = seurat_object_celltype, kinship = kinship, output_loc = output_loc_celltype, condition_combinations = condition_combinations, aggregates = aggregates, fixed_effects = fixed_effects, random_effects = random_effects, minimal_cells = minimal_cells, min_peaks = min_peaks, minimal_complexity = minimal_complexity, verbose = verbose, nthreads = nthreads)
@@ -923,7 +922,9 @@ do_debug <- function() {
                                        minimal_cells = min_cells,
                                        min_peaks = min_cell_umis, 
                                        minimal_complexity = min_pseudo_umis, 
-                                       nthreads = nthreads)
+                                       #nthreads = nthreads
+                                       nthreads = nthreads
+                                       )
 }
 
 
@@ -939,6 +940,8 @@ option_list <- list(
               help="output file name [default= %default]", metavar="character"),
   make_option(c("-c", "--cell_type_column"), type="character", default='cell_type_safe',
               help="column describing the celltype in the Seurat metadata [default= %default]", metavar="character"),
+  make_option(c("-k", "--kin"), type="character", default=NULL,
+              help="location of kinship file [default= %default]", metavar="character"),
   make_option(c("-m", "--min_cells"), type="numeric", default=0,
               help="minimal number of cells required for a pseudobulk to consider it in the analysis [default= %default]", metavar="numeric"),
   make_option(c("-u", "--min_peaks"), type="numeric", default=200,
@@ -973,6 +976,9 @@ min_cell_umis <- opt[['min_peaks']]
 min_pseudo_umis <- opt[['min_complexity']]
 # number of threads
 nthreads <- opt[['threads']]
+# kinship
+kin_loc <- opt[['kin']]
+kinship <- read.table(kin_loc, header = T, row.names = 1, check.names = F)
 
 # set number of parallel threads
 parallel::mcaffinity(1:nthreads)
@@ -998,11 +1004,15 @@ seurat_object@meta.data[['condition_final']] <- paste('c', seurat_object@meta.da
 # do the bulk analysis
 do_limma_dream_pairwise_per_celltype(seurat_object, 
                                      output_loc = limma_output_loc, 
+                                     kinship = kinship,
                                      condition_combinations=list('condition_final' =  c('c24hCA', 'cUT')),
                                      celltype_column = celltype_column, 
                                      aggregates = c('condition_final', 'lane', 'sample_final'), 
                                      fixed_effects = c('condition_final', 'age', 'sex'), 
-                                     random_effects = c('sample_final', 'lane'),
+                                     random_effects = c('sample_final'),
+                                     kin_column = 'sample_final',
                                      minimal_cells = min_cells,
                                      min_peaks = min_cell_umis, 
-                                     minimal_complexity = min_pseudo_umis)
+                                     minimal_complexity = min_pseudo_umis, 
+                                     nthreads = nthreads
+)
