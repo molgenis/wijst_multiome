@@ -184,9 +184,11 @@ do_dream <- function(geneExpr, aggregate_metadata, cell_numbers, form, condition
 #' @param minimal_complexity the minimal number of cells transcripts a pseudobulk needs to be based on for a sample to not be excluded
 #' @param plot_metrics plot the QC metrics that were used for filtering
 #' @param verbose whether to print progress messages
+#' @param permute do a permutation round instead
+#' @param seed use supplied seed if permuting. If not supplied a random seed is selected (recommended)
 #' @returns 0 if successful
 #' dream_pairwise(pbmc, './bulk_test/', list('inflammation'=c('AI','NI')))
-dream_pairwise_mt <- function(seurat_object, output_loc, condition_combinations, aggregates=c('sample_final', 'condition_final'), fixed_effects=c('condition_final'), random_effects=c('sample_final'), minimal_cells=0, min_peaks=200, minimal_complexity=5000, min_pct=0.01, verbose=T, plot_metrics=T, nthreads=5){
+dream_pairwise_mt <- function(seurat_object, output_loc, condition_combinations, aggregates=c('sample_final', 'condition_final'), fixed_effects=c('condition_final'), random_effects=c('sample_final'), minimal_cells=0, min_peaks=200, minimal_complexity=5000, min_pct=0.01, verbose=T, plot_metrics=T, nthreads=5, permute=F, seed=NULL){
   # set assay
   DefaultAssay(seurat_object) <- 'peaks'
   # grab the countmatrix
@@ -321,6 +323,26 @@ dream_pairwise_mt <- function(seurat_object, output_loc, condition_combinations,
   # and turn into a formula
   form <- as.formula(model_formula)
   
+  # if we are doing a permutation run, we'll have to change some metadata. We'll use a different variable, so we keep the original as a backup
+  aggregate_metadata_to_use <- aggregate_metadata
+  # the permutation seed we'll save, though it will only be used if there is an actual permutation
+  permutation_seed <- NA
+  # let's set up some things for the permutation
+  if (permute) {
+    # if we have a seed, we'll use that, otherwise we need to get one
+    if (!is.null(seed) & !is.na(seed)) {
+      permutation_seed <- seed
+    }
+    else {
+      # get a seed
+      permutation_seed <- .Machine$integer.max * runif(1)
+    }
+    # set this seed
+    set.seed(permutation_seed)
+    # then permute the combination we are looking at
+    aggregate_metadata_to_use[[combination_name]] <- sample(aggregate_metadata_to_use[[combination_name]], size = nrow(aggregate_metadata_to_use), replace = F)
+  }
+  
   # get the number of rows
   nrow_matrix <- nrow(geneExpr)
   # get the number of chunks
@@ -355,7 +377,12 @@ dream_pairwise_mt <- function(seurat_object, output_loc, condition_combinations,
   limma_result[['p.bonferroni']] <- p.adjust(limma_result[['P.Value']], method = 'bonferroni')
   
   # set an output location
-  limma_output_loc <- gzfile(paste(output_loc, names(condition_combinations)[[1]], '.tsv.gz', sep = ''))
+  limma_output_loc <- (paste(output_loc, names(condition_combinations)[[1]], '.tsv.gz', sep = ''))
+  
+  # which will be a bit different when we are permuting
+  if (permute) {
+    limma_output_loc <- (paste(output_loc, combination_name, '.', permutation_seed, '.tsv.gz', sep = ''))
+  }
   
   # also write the model we used
   limma_formula_loc <- paste(output_loc, names(condition_combinations)[[1]], '.formula', sep = '')
@@ -365,17 +392,19 @@ dream_pairwise_mt <- function(seurat_object, output_loc, condition_combinations,
   }
   
   # write the result
-  write.table(limma_result, limma_output_loc, sep = '\t', row.names = F)
+  write.table(limma_result, gzfile(limma_output_loc), sep = '\t', row.names = F)
   # and the formula
   write.table(model_formula, limma_formula_loc, row.names = F, col.names = F)
   # write md5
   mdfiver::create_md5_for_file(paste(output_loc, names(condition_combinations)[[1]], '.tsv.gz', sep = ''))
   
-  # now write just the nominally significant values as well
-  limma_result <- limma_result[limma_result[['P.Value']] < 0.05, ]
-  limma_output_nomsig_loc <- gzfile(paste(output_loc, names(condition_combinations)[[1]], '.nominal_significant.tsv.gz', sep = ''))
-  write.table(limma_result, limma_output_nomsig_loc, sep = '\t', row.names = F)
-  mdfiver::create_md5_for_file(paste(output_loc, names(condition_combinations)[[1]], '.nominal_significant.tsv.gz', sep = ''))
+  # now write just the nominally significant values as well, but only if we don't permute
+  if (!permute) {
+    limma_result <- limma_result[limma_result[['P.Value']] < 0.05, ]
+    limma_output_nomsig_loc <- gzfile(paste(output_loc, names(condition_combinations)[[1]], '.nominal_significant.tsv.gz', sep = ''))
+    write.table(limma_result, limma_output_nomsig_loc, sep = '\t', row.names = F)
+    mdfiver::create_md5_for_file(paste(output_loc, names(condition_combinations)[[1]], '.nominal_significant.tsv.gz', sep = ''))
+  }
   return(0)
 }
 
@@ -393,9 +422,11 @@ dream_pairwise_mt <- function(seurat_object, output_loc, condition_combinations,
 #' @param minimal_complexity the minimal number of cells transcripts a pseudobulk needs to be based on for a sample to not be excluded
 #' @param verbose whether to print progress messages
 #' @param plot_metrics plot the QC metrics that were used for filtering
+#' @param permute do a permutation round instead
+#' @param seed use supplied seed if permuting. If not supplied a random seed is selected (recommended)
 #' @returns 0 if successful
 #' dream_pairwise(pbmc, './bulk_test/', list('inflammation'=c('AI','NI')))
-dream_pairwise <- function(seurat_object, output_loc, condition_combinations, aggregates=c('sample_final', 'condition_final'), fixed_effects=c('condition_final'), random_effects=c('sample_final'), minimal_cells=0, min_peaks=200, minimal_complexity=5000, min_pct=0.01, verbose=T, plot_metrics=T){
+dream_pairwise <- function(seurat_object, output_loc, condition_combinations, aggregates=c('sample_final', 'condition_final'), fixed_effects=c('condition_final'), random_effects=c('sample_final'), minimal_cells=0, min_peaks=200, minimal_complexity=5000, min_pct=0.01, verbose=T, plot_metrics=T, permute=F, seed=NULL, nthreads=20){
   # set assay
   DefaultAssay(seurat_object) <- 'peaks'
   # grab the countmatrix
@@ -507,7 +538,7 @@ dream_pairwise <- function(seurat_object, output_loc, condition_combinations, ag
   
   # Specify parallel processing parameters
   # this is used implicitly by dream() to run in parallel
-  param = SnowParam(20, "SOCK", progressbar=TRUE)
+  param = SnowParam(nthreads, "SOCK", progressbar=TRUE)
   register(param)
   
   # show head of the tables if we are being verbose
@@ -559,13 +590,33 @@ dream_pairwise <- function(seurat_object, output_loc, condition_combinations, ag
           print(paste('doing combination:', combination_name, sep = ' ', collapse = ' '))
         }
         
+        # if we are doing a permutation run, we'll have to change some metadata. We'll use a different variable, so we keep the original as a backup
+        aggregate_metadata_to_use <- aggregate_metadata
+        # the permutation seed we'll save, though it will only be used if there is an actual permutation
+        permutation_seed <- NA
+        # let's set up some things for the permutation
+        if (permute) {
+          # if we have a seed, we'll use that, otherwise we need to get one
+          if (!is.null(seed) & !is.na(seed)) {
+            permutation_seed <- seed
+          }
+          else {
+            # get a seed
+            permutation_seed <- .Machine$integer.max * runif(1)
+          }
+          # set this seed
+          set.seed(permutation_seed)
+          # then permute the combination we are looking at
+          aggregate_metadata_to_use[[combination_name]] <- sample(aggregate_metadata_to_use[[combination_name]], size = nrow(aggregate_metadata_to_use), replace = F)
+        }
+        
         tryCatch(
           {
             # define and then cbind contrasts
-            L = getContrast( vobjDream, form, aggregate_metadata, c(paste(combination_name, combination[1], sep=''), paste(combination_name, combination[2], sep='')))
+            L = getContrast( vobjDream, form, aggregate_metadata_to_use, c(paste(combination_name, combination[1], sep=''), paste(combination_name, combination[2], sep='')))
             
             # fit contrast
-            fit = dream( vobjDream, form, aggregate_metadata, L)
+            fit = dream( vobjDream, form, aggregate_metadata_to_use, L)
             
             # grab the exact fit
             limma_result <- topTable(fit, coef='L1', number=length(fit$F.p.value))
@@ -595,6 +646,10 @@ dream_pairwise <- function(seurat_object, output_loc, condition_combinations, ag
             result_stats <- do.call('cbind', result_stats_list)
             colnames(result_stats) <- names(result_stats_list)
             
+            # now add the permutation status and seed
+            result_stats[['permuted']] <- permute
+            result_stats[['seed']] <- permutation_seed
+            
             # add combination as first column
             limma_result <- cbind(result_stats, limma_result)
             
@@ -602,7 +657,12 @@ dream_pairwise <- function(seurat_object, output_loc, condition_combinations, ag
             limma_result <- cbind(data.frame(feature = rownames(limma_result)), limma_result)
             
             # set an output location
-            limma_output_loc <- gzfile(paste(output_loc, combination_name, '.tsv.gz', sep = ''))
+            limma_output_loc <- (paste(output_loc, combination_name, '.tsv.gz', sep = ''))
+            
+            # which will be a bit different when we are permuting
+            if (permute) {
+              limma_output_loc <- (paste(output_loc, combination_name, '.', permutation_seed, '.tsv.gz', sep = ''))
+            }
             
             # also write the model we used
             limma_formula_loc <- paste(output_loc, combination_name, '.formula', sep = '')
@@ -612,18 +672,19 @@ dream_pairwise <- function(seurat_object, output_loc, condition_combinations, ag
             }
             
             # write the result
-            write.table(limma_result, limma_output_loc, sep = '\t', row.names = F)
+            write.table(limma_result, gzfile(limma_output_loc), sep = '\t', row.names = F)
             # and the formula
             write.table(model_formula, limma_formula_loc, row.names = F, col.names = F)
             # write md5
             mdfiver::create_md5_for_file(paste(output_loc, combination_name, '.tsv.gz', sep = ''))
             
-            # now write just the nominally significant values as well
-            limma_result <- limma_result[limma_result[['P.Value']] < 0.05, ]
-            limma_output_nomsig_loc <- gzfile(paste(output_loc, names(condition_combinations)[[1]], '.nominal_significant.tsv.gz', sep = ''))
-            write.table(limma_result, limma_output_nomsig_loc, sep = '\t', row.names = F)
-            mdfiver::create_md5_for_file(paste(output_loc, names(condition_combinations)[[1]], '.nominal_significant.tsv.gz', sep = ''))
-            
+            # now write just the nominally significant values as well, if we don't permute
+            if (!permute) {
+              limma_result <- limma_result[limma_result[['P.Value']] < 0.05, ]
+              limma_output_nomsig_loc <- (paste(output_loc, names(condition_combinations)[[1]], '.nominal_significant.tsv.gz', sep = ''))
+              write.table(limma_result, gzfile(limma_output_nomsig_loc), sep = '\t', row.names = F)
+              mdfiver::create_md5_for_file(paste(output_loc, names(condition_combinations)[[1]], '.nominal_significant.tsv.gz', sep = ''))
+            }
           }, error=function(cond) {
             print(paste('analysis failed in', combination))
             message(cond)
@@ -653,9 +714,12 @@ dream_pairwise <- function(seurat_object, output_loc, condition_combinations, ag
 #' @param min_peaks the minimal number of UMIs a cell must have to be used for the pseudobulk
 #' @param minimal_complexity the minimal number of cells transcripts a pseudobulk needs to be based on for a sample to not be excluded
 #' @param verbose whether to print progress messages
+#' @param nthreads number of threads
+#' @param permute whether to do a permutation-round instead
+#' @param seed use supplied seed if permuting. If not supplied a random seed is selected (recommended)
 #' @returns 0 if successful
 #' do_limma_dream_pairwise_per_celltype(pbmc, './ct_test/')
-do_limma_dream_pairwise_per_celltype <- function(seurat_object, output_loc, condition_combinations=list('condition_final' =  c('24hCA', 'UT')), celltype_column='cell_type_final', cell_types_to_use=NULL, aggregates=c('sample_final', 'condition_final'), fixed_effects=c('condition_final'), random_effects=c('sample_final'), minimal_cells=0, min_peaks=200, minimal_complexity=5000, verbose=T, nthreads=5){
+do_limma_dream_pairwise_per_celltype <- function(seurat_object, output_loc, condition_combinations=list('condition_final' =  c('24hCA', 'UT')), celltype_column='cell_type_final', cell_types_to_use=NULL, aggregates=c('sample_final', 'condition_final'), fixed_effects=c('condition_final'), random_effects=c('sample_final'), minimal_cells=0, min_peaks=200, minimal_complexity=5000, verbose=T, nthreads=5, permute=F, seed=NULL){
   # use the cell types supplied, or all if none are supplied
   cell_types <- cell_types_to_use
   if(is.null(cell_types_to_use)){
@@ -679,15 +743,15 @@ do_limma_dream_pairwise_per_celltype <- function(seurat_object, output_loc, cond
     # subset to the cell type
     seurat_object_celltype <- seurat_object[, seurat_object@meta.data[[celltype_column]] == cell_type]
     # perform the analysis
-    if (nthreads == 1) {
-      dream_pairwise(seurat_object = seurat_object_celltype, output_loc = output_loc_celltype, condition_combinations = condition_combinations, aggregates = aggregates, fixed_effects = fixed_effects, random_effects = random_effects, minimal_cells = minimal_cells, min_peaks = min_peaks, minimal_complexity = minimal_complexity, verbose = verbose)
-    }
-    else if (nthreads > 1) {
-      dream_pairwise_mt(seurat_object = seurat_object_celltype, output_loc = output_loc_celltype, condition_combinations = condition_combinations, aggregates = aggregates, fixed_effects = fixed_effects, random_effects = random_effects, minimal_cells = minimal_cells, min_peaks = min_peaks, minimal_complexity = minimal_complexity, verbose = verbose, nthreads = nthreads)
-    }
-    else {
-      stop(paste('nthreads should be a positive number, now is', as.character(nthreads)))
-    }
+    # if (nthreads == 1) {
+      dream_pairwise(seurat_object = seurat_object_celltype, output_loc = output_loc_celltype, condition_combinations = condition_combinations, aggregates = aggregates, fixed_effects = fixed_effects, random_effects = random_effects, minimal_cells = minimal_cells, min_peaks = min_peaks, minimal_complexity = minimal_complexity, verbose = verbose, permute = permute, seed = seed, nthreads = nthreads)
+    # }
+    # else if (nthreads > 1) {
+    #   dream_pairwise_mt(seurat_object = seurat_object_celltype, output_loc = output_loc_celltype, condition_combinations = condition_combinations, aggregates = aggregates, fixed_effects = fixed_effects, random_effects = random_effects, minimal_cells = minimal_cells, min_peaks = min_peaks, minimal_complexity = minimal_complexity, verbose = verbose, nthreads = nthreads, permute = permute, seed = seed)
+    # }
+    # else {
+    #   stop(paste('nthreads should be a positive number, now is', as.character(nthreads)))
+    # }
   }
   return(0)
 }
@@ -799,12 +863,13 @@ do_debug <- function() {
   # fill the opt
   opt <- list()
   opt[['out']] <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/differential_accessibility/limma_dream/output/stimulation/pct01/'
-  opt[['file']] <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_cd8t_wstatus_1_80_20240701.rds'
+  opt[['file']] <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_monocyte_wstatus_1_80_20240701.rds'
   opt[['cell_type_column']] <- 'cell_type'
   opt[['min_cells']] <- 10
   opt[['min_peaks']] <- 200
   opt[['min_complexity']] <- 2000
   opt[['threads']] <- 20
+  opt[['permute']] <- F
   
   # location of the DE
   limma_output_loc <- opt[['out']]
@@ -820,6 +885,8 @@ do_debug <- function() {
   min_pseudo_umis <- opt[['min_complexity']]
   # number of threads
   nthreads <- opt[['threads']]
+  # whether or not to run permutation
+  permute <- opt[['permute']]
   
   # set number of parallel threads
   parallel::mcaffinity(1:nthreads)
@@ -854,7 +921,8 @@ do_debug <- function() {
                                        minimal_cells = min_cells,
                                        min_peaks = min_cell_umis, 
                                        minimal_complexity = min_pseudo_umis, 
-                                       nthreads = 5)
+                                       nthreads = 5, 
+                                       permute = F)
 }
 
 
@@ -877,7 +945,11 @@ option_list <- list(
   make_option(c("-l", "--min_complexity"), type="numeric", default=0,
               help="minimal number of UMIs for a pseudobulk to consider it in the analysis [default= %default]", metavar="numeric"),
   make_option(c("-t", "--threads"), type="numeric", default=8,
-              help="number of threads to use [default= %default]", metavar="numeric")
+              help="number of threads to use [default= %default]", metavar="numeric"),
+  make_option(c("-p", "--permute"), type="numeric", default=F,
+              help="do a permutation run instead [default= %default]", metavar="boolean"),
+  make_option(c("-s", "--seed"), type="numeric", default=NULL,
+              help="do a permutation run instead [default= %default]", metavar="numeric")
 )
 
 # initialize optparser
@@ -904,6 +976,10 @@ min_cell_umis <- opt[['min_peaks']]
 min_pseudo_umis <- opt[['min_complexity']]
 # number of threads
 nthreads <- opt[['threads']]
+# whether or not to run permutation
+permute <- opt[['permute']]
+# and the seed
+seed <- opt[['seed']]
 
 # set number of parallel threads
 parallel::mcaffinity(1:nthreads)
@@ -936,4 +1012,8 @@ do_limma_dream_pairwise_per_celltype(seurat_object,
                                      random_effects = c('sample_final', 'lane'),
                                      minimal_cells = min_cells,
                                      min_peaks = min_cell_umis, 
-                                     minimal_complexity = min_pseudo_umis)
+                                     minimal_complexity = min_pseudo_umis,
+                                     nthreads = nthreads,
+                                     permute = permute,
+                                     seed = seed
+                                     )
