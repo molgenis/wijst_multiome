@@ -157,7 +157,7 @@ add_imputed_meta_data <- function(seurat_object, column_to_transform, column_to_
 ####################
 
 # we will use Seurat version 5
-options(Seurat.object.assay.version = 'v4')
+options(Seurat.object.assay.version = 'v5')
 set.seed(7777)
 
 ####################
@@ -224,12 +224,13 @@ for (lane in lanes) {
     processed_object <- readRDS(result_loc)
     # extract the data we want
     annotation_lane <- data.frame(barcode = processed_object@meta.data[['barcode_lane']],
-                                  predicted.azipbmc.l1 = processed_object@meta.data[['predicted.azipbmc.l1']],
-                                  predicted.azipbmc.l1.score = processed_object@meta.data[['predicted.azipbmc.l1.score']],
-                                  predicted.azipbmc.l2 = processed_object@meta.data[['predicted.azipbmc']],
-                                  predicted.azipbmc.l2.score = processed_object@meta.data[['predicted.azipbmc.score']],
-                                  predicted.azipbmc.ADT = processed_object@meta.data[['predicted.azipbmc']],
-                                  predicted.azipbmc.ADT.score = processed_object@meta.data[['predicted.azipbmc.score']])
+                                  predicted.azipbmc.l1 = processed_object@meta.data[['predicted.predicted.azipbmc.l1']],
+                                  predicted.azipbmc.l1.score = processed_object@meta.data[['predicted.predicted.azipbmc.l1.score']],
+                                  predicted.azipbmc.l2 = processed_object@meta.data[['predicted.predicted.azipbmc.l2']],
+                                  predicted.azipbmc.l2.score = processed_object@meta.data[['predicted.predicted.azipbmc.l2.score']]
+                                  #predicted.azipbmc.ADT = processed_object@meta.data[['predicted.azipbmc.ADT']],
+                                  #predicted.azipbmc.ADT.score = processed_object@meta.data[['predicted.azipbmc.ADT.score']]
+                                  )
     # add to the list
     all_ct_predictions_per_lane[[lane]] <- annotation_lane
   })

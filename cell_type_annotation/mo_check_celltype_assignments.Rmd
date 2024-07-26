@@ -1,0 +1,469 @@
+---
+title: "mo_check_celltype_assignments"
+author: "Roy Oelen"
+date: "2024-07-26"
+output: html_document
+---
+
+```{r header, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+#!/usr/bin/env Rscript
+############################################################################################################################
+# Authors: Roy Oelen
+# Name: mo_check_celltype_assignments.Rmd
+# Function: plot the assignments of cell types
+############################################################################################################################
+```
+
+```{r libraries, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+####################
+# libraries        #
+####################
+
+# for the dimplots we need Seurat
+library(Seurat)
+# and we need to do some plotting
+library(ggplot2)
+library(cowplot)
+
+
+```
+
+```{r functions, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+####################
+# Functions        #
+####################
+
+
+create_confusion_matrix <- function(assignment_table, truth_column, prediction_column, truth_column_label=NULL, prediction_column_label=NULL, angle_labels=T){
+  confusion_table <- create_confusion_table(assignment_table, truth_column, prediction_column)
+  # round the frequency off to a sensible cutoff
+  confusion_table$freq <- round(confusion_table$freq, digits=2)
+  # turn into plot
+  p <- ggplot(data=confusion_table, aes(x=truth, y=prediction, fill=freq)) + geom_tile() + scale_fill_gradient(low='red', high='blue') + geom_text(aes(label=freq))
+  # some options
+  if(!is.null(truth_column_label)){
+    p <- p + xlab(truth_column_label)
+  }
+  if(!is.null(prediction_column_label)){
+    p <- p + ylab(prediction_column_label)
+  }
+  if (angle_labels) {
+    p <- p + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+  }
+  return(p)
+}
+
+
+create_confusion_table <- function(assignment_table, truth_column, prediction_column){
+  # init the table
+  confusion_table <- NULL
+  # check each truth
+  for(truth in unique(assignment_table[[truth_column]])){
+    # get these truths
+    truth_rows <- assignment_table[assignment_table[[truth_column]] == truth, ]
+    # check now many have this truth
+    this_truth_number <- nrow(truth_rows)
+    # check what was predicted for these truths
+    for(prediction in unique(assignment_table[[prediction_column]])){
+      # check the number of this prediction
+      this_prediction_number <- nrow(truth_rows[truth_rows[[prediction_column]] == prediction, ])
+      # init variable
+      fraction <- NULL
+      # we can only calculate a fraction if the result is not zero
+      if(this_prediction_number > 0){
+        # calculate the fraction
+        fraction <- this_prediction_number / this_truth_number
+      }
+      # otherwise we just set it to zero
+      else{
+        fraction <- 0
+      }
+      # turn into row
+      this_row <- data.frame(truth=c(truth), prediction=c(prediction), freq=c(fraction), stringsAsFactors = F)
+      # add this entry to the dataframe
+      if(is.null(confusion_table)){
+        confusion_table <- this_row
+      }
+      else{
+        confusion_table <- rbind(confusion_table, this_row)
+      }
+    }
+  }
+  return(confusion_table)
+}
+
+
+ref10xmo_predictions_to_lower_res_mapping <- function() {
+  high_to_low <- list()
+  high_to_low[['CD4 Naive']] <- 'CD4T'
+  high_to_low[['CD4 TCM']] <- 'CD4T'
+  high_to_low[['CD8 Naive']] <- 'CD8T'
+  high_to_low[['CD16 Mono']] <- 'monocyte'
+  high_to_low[['NK']] <- 'NK'
+  high_to_low[['Treg']] <- 'T_other'
+  high_to_low[['CD14 Mono']] <- 'monocyte'
+  high_to_low[['cDC']] <- 'DC'
+  high_to_low[['CD8 TEM_1']] <- 'CD8T'
+  high_to_low[['Intermediate B']] <- 'B'
+  high_to_low[['Naive B']] <- 'B'
+  high_to_low[['Plasma']] <- 'plasmablast'
+  high_to_low[['CD4 TEM']] <- 'CD4T'
+  high_to_low[['MAIT']] <- 'T_other'
+  high_to_low[['Memory B']] <- 'B'
+  high_to_low[['gdT']] <- 'T_other'
+  high_to_low[['pDC']] <- 'DC'
+  high_to_low[['CD8 TEM_2']] <- 'CD8T'
+  high_to_low[['HSPC']] <- 'hemapoietic_stem'
+  return(high_to_low)
+}
+
+get_color_coding_dict <- function() {
+	# set the condition colors
+  color_coding <- list()
+  # set condition colors
+  color_coding[["HC"]] <- "grey"
+  color_coding[["Control"]] <- "grey"
+  color_coding[["C"]] <- "grey"
+  color_coding[["t0"]] <- "#ff7101"
+  color_coding[["t24h"]] <- "#e12a62"
+  color_coding[["t8w"]] <- "#3B0550"
+  color_coding[["t6-8w"]] <- "#3B0550"
+  color_coding[['UT']] <- 'lightgrey'
+  color_coding[["3hCA"]] <- "darkolivegreen2"
+  color_coding[["24hCA"]] <- "forestgreen"
+  color_coding[["3hMTB"]] <- "lightskyblue"
+  color_coding[["24hMTB"]] <- "deepskyblue3"
+  color_coding[["3hPA"]] <- "sandybrown"
+  color_coding[["24hPA"]] <- "darkorange1"
+  color_coding[["X3hCA"]] <- "darkolivegreen2"
+  color_coding[["X24hCA"]] <- "forestgreen"
+  color_coding[["X3hMTB"]] <- "lightskyblue"
+  color_coding[["X24hMTB"]] <- "deepskyblue3"
+  color_coding[["X3hPA"]] <- "sandybrown"
+  color_coding[["X24hPA"]] <- "darkorange1"
+  # set the cell type colors
+  color_coding[["Bulk"]] <- "black"
+  color_coding[["CD4T"]] <- "#153057"
+  color_coding[["CD4+ T"]] <- "#153057"
+  color_coding[["CD4 T"]] <- "#153057"
+  color_coding[["CD8T"]] <- "#009DDB"
+  color_coding[["CD8+ T"]] <- "#009DDB"
+  color_coding[["CD8 T"]] <- "#009DDB"
+  color_coding[["monocyte"]] <- "#EDBA1B"
+  color_coding[["Mono"]] <- "#EDBA1B"
+  color_coding[["NK"]] <- "#E64B50"
+  color_coding[["B"]] <- "#71BC4B"
+  color_coding[["DC"]] <- "#965EC8"
+  # other cell type colors
+  color_coding[["HSPC"]] <- "#009E94"
+  color_coding[["platelet"]] <- "#9E1C00"
+  color_coding[["plasmablast"]] <- "#DB8E00"
+  color_coding[["other T"]] <- "#FF63B6"
+  color_coding[["T_other"]] <- "#FF63B6"
+  color_coding[["hemapoietic_stem"]] <- "#8B8000"
+  color_coding[["hemapoietic stem"]] <- "#8B8000"
+  color_coding[["other"]] <- "gray"
+  color_coding[["unannotated"]] <- "gray"
+  return(color_coding)
+}
+
+
+get_label_dict <- function() {
+  label_dict <- list()
+  # condition combinations
+  label_dict[['cUTc24hCA']] <- 'UT-24hCA'
+  label_dict[['c24hCAcUT']] <- 'UT-24hCA'
+  # conditions
+  label_dict[['UT']] <- 'untreated'
+  label_dict[['cUT']] <- 'untreated'
+  label_dict[['24hCA']] <- '24h Candida'
+  label_dict[['c24hCA']] <- '24h Candida'
+  # major cell types
+  label_dict[["Bulk"]] <- "bulk-like"
+  label_dict[["CD4T"]] <- "CD4+ T"
+  label_dict[["CD8T"]] <- "CD8+ T"
+  label_dict[["CD4 T"]] <- "CD4+ T"
+  label_dict[["CD8 T"]] <- "CD8+ T"
+  label_dict[["monocyte"]] <- "monocyte"
+  label_dict[["Mono"]] <- "monocyte"
+  label_dict[["NK"]] <- "NK"
+  label_dict[["B"]] <- "B"
+  label_dict[["DC"]] <- "DC"
+  label_dict[["HSPC"]] <- "HSPC"
+  label_dict[["plasmablast"]] <- "plasmablast"
+  label_dict[["platelet"]] <- "platelet"
+  label_dict[["T_other"]] <- "other T"
+  label_dict[["hemapoietic_stem"]] <- "hemapoietic stem"
+  # minor cell types
+  label_dict[["CD4_TCM"]] <- "CD4 TCM"
+  label_dict[["Treg"]] <- "T regulatory"
+  label_dict[["CD4_Naive"]] <- "CD4 naive"
+  label_dict[["CD4_CTL"]] <- "CD4 CTL"
+  label_dict[["CD8_TEM"]] <- "CD8 TEM"
+  label_dict[["cMono"]] <- "cMono"
+  label_dict[["CD8_TCM"]] <- "CD8 TCM"
+  label_dict[["ncMono"]] <- "ncMono"
+  label_dict[["cDC2"]] <- "cDC2"
+  label_dict[["B_intermediate"]] <- "B intermediate"
+  label_dict[["NKdim"]] <- "NK dim"
+  label_dict[["pDC"]] <- "pDC"
+  label_dict[["ASDC"]] <- "ASDC"
+  label_dict[["CD8_Naive"]] <- "CD8 naive"
+  label_dict[["MAIT"]] <- "MAIT"
+  label_dict[["CD8_Proliferating"]] <- "CD8 proliferating"
+  label_dict[["CD4_TEM"]] <- "CD4 TEM"
+  label_dict[["B_memory"]] <- "B memory"
+  label_dict[["NKbright"]] <- "NK bright"
+  label_dict[["B_naive"]] <- "B naive"
+  label_dict[["gdT"]] <- "gamma delta T"
+  label_dict[["CD4_Proliferating"]] <- "CD4 proliferating"
+  label_dict[["NK_Proliferating"]] <- "NK proliferating"
+  label_dict[["cDC1"]] <- "cDC1"
+  label_dict[["ILC"]] <- "ILC"
+  label_dict[["dnT"]] <- "double negative T"
+  return(label_dict)
+}
+
+
+rename_labels <- function(vector_to_rename) {
+  # get the labels that are present
+  label_renaming <- get_label_dict()
+  # convert vector
+  vector_to_rename <- as.character(vector_to_rename)
+  # now check which labels we are missing
+  missing_renames <- setdiff(unique(vector_to_rename), names(label_renaming))
+  # add those renames as not being renames
+  for (missing_rename in missing_renames) {
+    label_renaming[[missing_rename]] <- missing_rename
+  }
+  # now replace each value with the rename
+  renamed_vector <- as.vector(unlist(label_renaming[vector_to_rename]))
+  # and return that
+  return(renamed_vector)
+}
+
+
+#' get a dataframe with the proportons and cell numbers per sample
+#' 
+#' @param metadata the metadata to calculate the cell type numbers and proportions from
+#' @param sample_column the sample denoting the sample
+#' @param cell_type_column the column denoting the cell type
+#' @returns a dataframe with the proportion and number of each cell type per sample
+#' 
+get_celltype_numbers <- function(metadata, sample_column='sample', cell_type_column='cell_type') {
+  # get the numbers in total
+  numbers_totals <- data.frame(table(metadata[, c(sample_column, cell_type_column)]))
+  # init proportion
+  numbers_totals[['prop']] <- 0
+  # now add proportions
+  for (sample_name in unique(metadata[[sample_column]])) {
+    # subset to that sample
+    numbers_sample <- numbers_totals[!is.na(numbers_totals[[sample_column]]) & numbers_totals[[sample_column]] == sample_name, ]
+    # get the total for that sample
+    numbers_sample_total <- sum(numbers_sample[['Freq']])
+    # check each cell type
+    for (cell_type in unique(numbers_sample[[cell_type_column]])) {
+      # get the number
+      numbers_celltype_sample <- numbers_sample[!is.na(numbers_sample[[cell_type_column]]) & numbers_sample[[cell_type_column]] == cell_type, 'Freq']
+      # get the proportion
+      prop_celltype_sample <- numbers_celltype_sample / numbers_sample_total
+      # add to the table
+      numbers_totals[!is.na(numbers_totals[[sample_column]]) & 
+                       numbers_totals[[sample_column]] == sample_name &
+                       !is.na(numbers_totals[[cell_type_column]]) & 
+                       numbers_totals[[cell_type_column]] == cell_type, 'prop'] <- prop_celltype_sample
+    }
+  }
+  # set the column names
+  colnames(numbers_totals) <- c(sample_column, cell_type_column, 'number', 'proportion')
+  return(numbers_totals)
+}
+
+#' get a dataframe with the proportons and cell numbers per sample
+#' 
+#' @param celltype_numbers the metadata to calculate the cell type numbers and proportions from
+#' @param sample_column the sample denoting the sample
+#' @param cell_type_column the column denoting the cell type
+#' @param number_column the column denoting number to plot
+#' @param use_label_dict update labels with nicer ones, using the label dict
+#' @param pointless plot the ticks and names on the x axis
+#' @param legendless plot the legend
+#' @param paper_style use paper style plot, with more whitespace
+#' @param angle_x_labels angle the x label 90 degrees
+#' @param use_colour_coding_dict use colors from the color dict
+#' @returns a plot of cell numbers/proportions per sample
+#' 
+plot_celltype_abundance <- function(celltype_numbers, sample_column='sample', cell_type_column='cell_type', number_column='proportion', use_label_dict=T, pointless=F, legendless=F, paper_style=T, angle_x_labels=F, use_colour_coding_dict=T) {
+  # use some better labels if requested
+  if (use_label_dict) {
+    celltype_numbers[[cell_type_column]] <- rename_labels(as.character(celltype_numbers[[cell_type_column]]))
+  }
+  
+  # init plot
+  p <- ggplot(data = NULL, mapping = aes(x = celltype_numbers[[sample_column]], y = celltype_numbers[[number_column]], fill = celltype_numbers[[cell_type_column]])) +
+    geom_bar(stat = 'identity', position = 'stack') +
+    xlab(sample_column) +
+    ylab(number_column)
+  
+  # add colours if requested
+  if (use_colour_coding_dict) {
+    p <- p + scale_fill_manual(name = cell_type_column, values = get_color_coding_dict())
+  }
+  
+  # all our options
+  if(pointless){
+    p <- p + theme(axis.text.x=element_blank(), 
+                   axis.ticks = element_blank(),
+                   axis.title.x = element_blank())
+  }
+  if(legendless){
+    p <- p + theme(legend.position = 'none')
+  }
+  if(paper_style){
+    p <- p + theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+  }
+  if(angle_x_labels){
+    p <- p + theme(axis.text.x = element_text(angle = 90))
+  }
+  return(p)
+}
+
+
+
+
+```
+
+```{r setup_paths, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+####################
+# Main Code        #
+####################
+
+# get the azimuth reference PBMC mapping output
+azi_pbmc_annotation_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cell_type_assignment/azimuth/azimuth_PBMCs/mo_azimuth_ct_azipbmc.tsv'
+# get the 10x multiome reference mapping output
+azi_mo_annotation_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cell_type_assignment/azimuth/10x_multiome_PBMCs/mo_azimuth_ct_10xmultiome.tsv'
+# location of the multiome object
+mo_object_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/seurat_preprocess_samples/objects/mo_all_20240517_seuratv5_annotated_agesexcovid.rds'
+
+```
+
+```{r plot_mo_vs_azi, include=TRUE, fig.width=10, fig.height=10}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# read the two tables
+azi_pbmc_annotation <- read.table(azi_pbmc_annotation_loc, header = T, sep = '\t')
+azi_mo_annotation <- read.table(azi_mo_annotation_loc, header = T, sep = '\t')
+# merge where possible
+azi_overlap_barcodes <- intersect(azi_pbmc_annotation[['barcode']], azi_mo_annotation[['barcode']])
+# get the confusion table
+azi_both <- data.frame(
+  barcode = azi_overlap_barcodes,
+  multiome = azi_mo_annotation[match(azi_overlap_barcodes, azi_mo_annotation[['barcode']]), 'predicted.mo_10x_cell_type'], 
+  azimuth = azi_pbmc_annotation[match(azi_overlap_barcodes, azi_pbmc_annotation[['barcode']]), 'predicted.azipbmc.l2']
+)
+# get the confusion table
+create_confusion_matrix(assignment_table = azi_both, truth_column = 'multiome', prediction_column = 'azimuth', angle_labels = T, truth_column_label = '10x multiome', prediction_column_label = 'azimuth pbmc reference')
+```
+
+```{r plot_mo_vs_azi_l1, include=TRUE, fig.width=10, fig.height=10}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# add a lower resolution celltype for the 10x annotation
+azi_mo_annotation[['predicted.mo_10x_cell_type.l1']] <- as.vector(unlist(ref10xmo_predictions_to_lower_res_mapping()[azi_mo_annotation[['predicted.mo_10x_cell_type']]]))
+# get the confusion table
+azi_both_l1 <- data.frame(
+  barcode = azi_overlap_barcodes,
+  multiome = azi_mo_annotation[match(azi_overlap_barcodes, azi_mo_annotation[['barcode']]), 'predicted.mo_10x_cell_type.l1'], 
+  azimuth = azi_pbmc_annotation[match(azi_overlap_barcodes, azi_pbmc_annotation[['barcode']]), 'predicted.azipbmc.l1']
+)
+# get the confusion table
+create_confusion_matrix(assignment_table = azi_both_l1, truth_column = 'multiome', prediction_column = 'azimuth', angle_labels = T, truth_column_label = '10x multiome', prediction_column_label = 'azimuth pbmc reference')
+```
+
+```{r read_mo_object, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# let's read the multiome data to get the stimulation status
+mo <- readRDS(mo_object_loc)
+
+```
+
+```{r plot_mo_vs_azi_perstim, include=TRUE, fig.width=20, fig.height=20}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# get the barcodes per stim
+barcodes_stim <- mo@meta.data[!is.na(mo@meta.data[['condition_final']]) & mo@meta.data[['condition_final']] == '24hCA', 'barcode_lane']
+barcodes_unstim <- mo@meta.data[!is.na(mo@meta.data[['condition_final']]) & mo@meta.data[['condition_final']] == 'UT', 'barcode_lane']
+# subset the annotations
+azi_both_stim <- azi_both[azi_both[['barcode']] %in% barcodes_stim, ]
+azi_both_unstim <- azi_both[azi_both[['barcode']] %in% barcodes_unstim, ]
+azi_both_l1_stim <- azi_both_l1[azi_both_l1[['barcode']] %in% barcodes_stim, ]
+azi_both_l1_unstim <- azi_both_l1[azi_both_l1[['barcode']] %in% barcodes_unstim, ]
+
+
+plot_grid(
+  create_confusion_matrix(assignment_table = azi_both_unstim, truth_column = 'multiome', prediction_column = 'azimuth', angle_labels = T, truth_column_label = '10x multiome', prediction_column_label = 'azimuth pbmc reference') + ggtitle('unstim L2'),
+  create_confusion_matrix(assignment_table = azi_both_stim, truth_column = 'multiome', prediction_column = 'azimuth', angle_labels = T, truth_column_label = '10x multiome', prediction_column_label = 'azimuth pbmc reference') + ggtitle('stim L2'),
+  create_confusion_matrix(assignment_table = azi_both_l1_unstim, truth_column = 'multiome', prediction_column = 'azimuth', angle_labels = T, truth_column_label = '10x multiome', prediction_column_label = 'azimuth pbmc reference') + ggtitle('unstim L1'),
+  create_confusion_matrix(assignment_table = azi_both_l1_stim, truth_column = 'multiome', prediction_column = 'azimuth', angle_labels = T, truth_column_label = '10x multiome', prediction_column_label = 'azimuth pbmc reference') + ggtitle('stim L1')
+)
+
+```
+
+```{r plot_mo_dimplots, include=TRUE, fig.width=20, fig.height=20}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# add the assignments to the Seurat object
+rownames(azi_pbmc_annotation) <- azi_pbmc_annotation[['barcode']]
+mo <- AddMetaData(mo, azi_pbmc_annotation[, c('predicted.azipbmc.l1', 'predicted.azipbmc.l1.score', 'predicted.azipbmc.l2', 'predicted.azipbmc.l2.score')])
+# show the plots
+plot_grid(
+  DimPlot(mo, reduction = 'umap', group.by = 'condition_final') + scale_colour_manual(values = get_color_coding_dict()),
+  DimPlot(mo, reduction = 'umap', group.by = 'seurat_clusters'),
+  DimPlot(mo, reduction = 'umap', group.by = 'celltype_imputed_lowerres') + scale_colour_manual(values = get_color_coding_dict()),
+  DimPlot(mo, reduction = 'umap', group.by = 'predicted.azipbmc.l1') + scale_colour_manual(values = get_color_coding_dict())
+)
+```
+
+```{r plot_mo_abundances, include=TRUE, fig.width=10, fig.height=10}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# add a dummy column
+azi_both_l1_stim[['abundance']] <- 'abundance'
+azi_both_l1_unstim[['abundance']] <- 'abundance'
+
+# get the numbers
+nr_ct_stim_mo <- get_celltype_numbers(azi_both_l1_stim, sample_column = 'abundance', cell_type_column = 'multiome')
+nr_ct_stim_mo[['celltype']] <- nr_ct_stim_mo[['multiome']]
+nr_ct_stim_mo[['multiome']] <- NULL
+nr_ct_unstim_mo <- get_celltype_numbers(azi_both_l1_unstim, sample_column = 'abundance', cell_type_column = 'multiome')
+nr_ct_unstim_mo[['celltype']] <- nr_ct_unstim_mo[['multiome']]
+nr_ct_unstim_mo[['multiome']] <- NULL
+nr_ct_stim_azi <- get_celltype_numbers(azi_both_l1_stim, sample_column = 'abundance', cell_type_column = 'azimuth')
+nr_ct_stim_azi[['celltype']] <- nr_ct_stim_azi[['azimuth']]
+nr_ct_stim_azi[['azimuth']] <- NULL
+nr_ct_unstim_azi <- get_celltype_numbers(azi_both_l1_unstim, sample_column = 'abundance', cell_type_column = 'azimuth')
+nr_ct_unstim_azi[['celltype']] <- nr_ct_unstim_azi[['azimuth']]
+nr_ct_unstim_azi[['azimuth']] <- NULL
+# add the dataset
+nr_ct_stim_mo[['dataset']] <- 'stim 10x mo'
+nr_ct_unstim_mo[['dataset']] <- 'unstim 10x mo'
+nr_ct_stim_azi[['dataset']] <- 'stim 10x azi'
+nr_ct_unstim_azi[['dataset']] <- 'unstim 10x azi'
+# now add them together
+nr_ct_all <- rbind(nr_ct_stim_mo, nr_ct_unstim_mo, nr_ct_stim_azi, nr_ct_unstim_azi)
+# remove NA
+nr_ct_all[is.na(nr_ct_all$celltype), 'celltype'] <- 'unannotated'
+
+# now make the plot
+plot_celltype_abundance(nr_ct_all, sample_column = 'dataset', cell_type_column = 'celltype')
+
+```
+
