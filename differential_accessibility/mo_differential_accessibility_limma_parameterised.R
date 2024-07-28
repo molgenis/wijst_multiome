@@ -287,14 +287,14 @@ dream_pairwise_mt <- function(seurat_object, output_loc, condition_combinations,
   
   # show head of the tables if we are being verbose
   if(verbose){
-    print('aggregated metadata head:')
+    message('aggregated metadata head:')
     print(head(aggregate_metadata))
-    print('aggregated counts head:')
+    message('aggregated counts head:')
     print(head(geneExpr[['counts']]))
-    print('cell numbers head')
+    message('cell numbers head')
     #print(head(cell_numbers[order(cell_numbers[['nr']]), ]))
     print(head(cell_numbers))
-    print('complexity head:')
+    message('complexity head:')
     print(head(data.frame('aggregate' = cell_numbers[['aggregate']], 'complexity' = complexity)))
   }
   # plot the metrics if they were requested
@@ -317,7 +317,7 @@ dream_pairwise_mt <- function(seurat_object, output_loc, condition_combinations,
   }
   
   if(verbose){
-    print(paste('formula:', model_formula))
+    message(paste('formula:', model_formula))
   }
   
   # and turn into a formula
@@ -330,17 +330,26 @@ dream_pairwise_mt <- function(seurat_object, output_loc, condition_combinations,
   # let's set up some things for the permutation
   if (permute) {
     # if we have a seed, we'll use that, otherwise we need to get one
-    if (!is.null(seed) & !is.na(seed)) {
+    if (!(is.null(seed))) {
       permutation_seed <- seed
+      if(verbose){
+        message(paste('permuting with set seed of', as.character(permutation_seed), sep = ' ', collapse = ' '))
+      }
     }
     else {
       # get a seed
-      permutation_seed <- .Machine$integer.max * runif(1)
+      permutation_seed <- round(.Machine$integer.max * runif(1), digits = 0)
+      if(verbose){
+        message(paste('permuting with random seed of', as.character(permutation_seed), sep = ' ', collapse = ' '))
+      }
     }
     # set this seed
     set.seed(permutation_seed)
+    if (length(fixed_effects > 1)) {
+      warning(paste('when permuting with multithreading enabled, only the first fixed effect can be permuted, in this case using', fixed_effects[1]))
+    }
     # then permute the combination we are looking at
-    aggregate_metadata_to_use[[combination_name]] <- sample(aggregate_metadata_to_use[[combination_name]], size = nrow(aggregate_metadata_to_use), replace = F)
+    aggregate_metadata_to_use[[fixed_effects[1]]] <- sample(aggregate_metadata_to_use[[fixed_effects[1]]], size = nrow(aggregate_metadata_to_use), replace = F)
   }
   
   # get the number of rows
@@ -381,14 +390,20 @@ dream_pairwise_mt <- function(seurat_object, output_loc, condition_combinations,
   
   # which will be a bit different when we are permuting
   if (permute) {
-    limma_output_loc <- (paste(output_loc, combination_name, '.', permutation_seed, '.tsv.gz', sep = ''))
+    limma_output_loc <- (paste(output_loc, names(condition_combinations)[[1]], '.', permutation_seed, '.tsv.gz', sep = ''))
+    # we'll also order by the name of the feature
+    limma_result <- limma_result[order(limma_result[['feature']]), ]
+  }
+  else {
+    # otherwise we order by the significance
+    limma_result <- limma_result[order(limma_result[['P.Value']]), ]
   }
   
   # also write the model we used
   limma_formula_loc <- paste(output_loc, names(condition_combinations)[[1]], '.formula', sep = '')
   
   if(verbose){
-    print(paste('writing result', paste(output_loc, names(condition_combinations)[[1]], '.tsv.gz', sep = '')))
+    message(paste('writing result', paste(output_loc, names(condition_combinations)[[1]], '.tsv.gz', sep = '')))
   }
   
   # write the result
@@ -543,11 +558,11 @@ dream_pairwise <- function(seurat_object, output_loc, condition_combinations, ag
   
   # show head of the tables if we are being verbose
   if(verbose){
-    print('aggregated metadata head:')
+    message('aggregated metadata head:')
     print(head(aggregate_metadata))
-    print('aggregated counts head:')
+    message('aggregated counts head:')
     print(head(geneExpr[['counts']]))
-    print('cell numbers head')
+    message('cell numbers head')
     #print(head(cell_numbers[order(cell_numbers[['nr']]), ]))
     print(head(cell_numbers))
   }
@@ -571,13 +586,13 @@ dream_pairwise <- function(seurat_object, output_loc, condition_combinations, ag
   }
   
   if(verbose){
-    print(paste('formula:', model_formula))
+    message(paste('formula:', model_formula))
   }
   
   # and turn into a formula
   form <- as.formula(model_formula)
-  tryCatch(
-    {
+  # tryCatch(
+  #   {
       # estimate weights using linear mixed model of dream
       vobjDream = voomWithDreamWeights( counts = geneExpr, formula = form, data = aggregate_metadata, weights = cell_numbers[['nr']] ) # the cell numbers are in the same order as the metadata, and as such can be passed like this
       
@@ -587,7 +602,7 @@ dream_pairwise <- function(seurat_object, output_loc, condition_combinations, ag
         combination <- condition_combinations[[combination_name]]
         
         if(verbose){
-          print(paste('doing combination:', combination_name, sep = ' ', collapse = ' '))
+          message(paste('doing combination:', combination_name, sep = ' ', collapse = ' '))
         }
         
         # if we are doing a permutation run, we'll have to change some metadata. We'll use a different variable, so we keep the original as a backup
@@ -597,12 +612,18 @@ dream_pairwise <- function(seurat_object, output_loc, condition_combinations, ag
         # let's set up some things for the permutation
         if (permute) {
           # if we have a seed, we'll use that, otherwise we need to get one
-          if (!is.null(seed) & !is.na(seed)) {
+          if (!is.null(seed)) {
             permutation_seed <- seed
+            if(verbose){
+              message(paste('permuting with set seed of', as.character(permutation_seed), sep = ' ', collapse = ' '))
+            }
           }
           else {
             # get a seed
-            permutation_seed <- .Machine$integer.max * runif(1)
+            permutation_seed <- round(.Machine$integer.max * runif(1), digits = 0)
+            if(verbose){
+              message(paste('permuting with random seed of', as.character(permutation_seed), sep = ' ', collapse = ' '))
+            }
           }
           # set this seed
           set.seed(permutation_seed)
@@ -610,8 +631,8 @@ dream_pairwise <- function(seurat_object, output_loc, condition_combinations, ag
           aggregate_metadata_to_use[[combination_name]] <- sample(aggregate_metadata_to_use[[combination_name]], size = nrow(aggregate_metadata_to_use), replace = F)
         }
         
-        tryCatch(
-          {
+        # tryCatch(
+        #   {
             # define and then cbind contrasts
             L = getContrast( vobjDream, form, aggregate_metadata_to_use, c(paste(combination_name, combination[1], sep=''), paste(combination_name, combination[2], sep='')))
             
@@ -620,7 +641,6 @@ dream_pairwise <- function(seurat_object, output_loc, condition_combinations, ag
             
             # grab the exact fit
             limma_result <- topTable(fit, coef='L1', number=length(fit$F.p.value))
-            
             
             # add bonferroni adjustment
             limma_result[['p.bonferroni']] <- p.adjust(limma_result[['P.Value']], method = 'bonferroni')
@@ -662,13 +682,19 @@ dream_pairwise <- function(seurat_object, output_loc, condition_combinations, ag
             # which will be a bit different when we are permuting
             if (permute) {
               limma_output_loc <- (paste(output_loc, combination_name, '.', permutation_seed, '.tsv.gz', sep = ''))
+              # we'll also order by the name of the feature
+              limma_result <- limma_result[order(limma_result[['feature']]), ]
+            }
+            else {
+              # otherwise we order by the significance
+              limma_result <- limma_result[order(limma_result[['P.Value']]), ]
             }
             
             # also write the model we used
             limma_formula_loc <- paste(output_loc, combination_name, '.formula', sep = '')
             
             if(verbose){
-              print(paste('writing result', paste(output_loc, combination_name, '.tsv.gz', sep = '')))
+              message(paste('writing result', limma_output_loc))
             }
             
             # write the result
@@ -676,7 +702,7 @@ dream_pairwise <- function(seurat_object, output_loc, condition_combinations, ag
             # and the formula
             write.table(model_formula, limma_formula_loc, row.names = F, col.names = F)
             # write md5
-            mdfiver::create_md5_for_file(paste(output_loc, combination_name, '.tsv.gz', sep = ''))
+            mdfiver::create_md5_for_file(limma_output_loc)
             
             # now write just the nominally significant values as well, if we don't permute
             if (!permute) {
@@ -685,17 +711,17 @@ dream_pairwise <- function(seurat_object, output_loc, condition_combinations, ag
               write.table(limma_result, gzfile(limma_output_nomsig_loc), sep = '\t', row.names = F)
               mdfiver::create_md5_for_file(paste(output_loc, names(condition_combinations)[[1]], '.nominal_significant.tsv.gz', sep = ''))
             }
-          }, error=function(cond) {
-            print(paste('analysis failed in', combination))
-            message(cond)
-          }
-        )
+        #   }, error=function(cond) {
+        #     print(paste('analysis failed in', combination))
+        #     message(cond)
+        #   }
+        # )
       }
-    }, error=function(cond) {
-      print(paste('model build failed'))
-      message(cond)
-    }
-  )
+  #   }, error=function(cond) {
+  #     print(paste('model build failed'))
+  #     message(cond)
+  #   }
+  # )
   return(0)
 }
 
@@ -744,10 +770,10 @@ do_limma_dream_pairwise_per_celltype <- function(seurat_object, output_loc, cond
     seurat_object_celltype <- seurat_object[, seurat_object@meta.data[[celltype_column]] == cell_type]
     # perform the analysis
     # if (nthreads == 1) {
-      dream_pairwise(seurat_object = seurat_object_celltype, output_loc = output_loc_celltype, condition_combinations = condition_combinations, aggregates = aggregates, fixed_effects = fixed_effects, random_effects = random_effects, minimal_cells = minimal_cells, min_peaks = min_peaks, minimal_complexity = minimal_complexity, verbose = verbose, permute = permute, seed = seed, nthreads = nthreads)
+    #  dream_pairwise(seurat_object = seurat_object_celltype, output_loc = output_loc_celltype, condition_combinations = condition_combinations, aggregates = aggregates, fixed_effects = fixed_effects, random_effects = random_effects, minimal_cells = minimal_cells, min_peaks = min_peaks, minimal_complexity = minimal_complexity, verbose = verbose, permute = permute, seed = seed, nthreads = nthreads)
     # }
     # else if (nthreads > 1) {
-    #   dream_pairwise_mt(seurat_object = seurat_object_celltype, output_loc = output_loc_celltype, condition_combinations = condition_combinations, aggregates = aggregates, fixed_effects = fixed_effects, random_effects = random_effects, minimal_cells = minimal_cells, min_peaks = min_peaks, minimal_complexity = minimal_complexity, verbose = verbose, nthreads = nthreads, permute = permute, seed = seed)
+       dream_pairwise_mt(seurat_object = seurat_object_celltype, output_loc = output_loc_celltype, condition_combinations = condition_combinations, aggregates = aggregates, fixed_effects = fixed_effects, random_effects = random_effects, minimal_cells = minimal_cells, min_peaks = min_peaks, minimal_complexity = minimal_complexity, verbose = verbose, nthreads = nthreads, permute = permute, seed = seed)
     # }
     # else {
     #   stop(paste('nthreads should be a positive number, now is', as.character(nthreads)))
@@ -863,7 +889,7 @@ do_debug <- function() {
   # fill the opt
   opt <- list()
   opt[['out']] <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/differential_accessibility/limma_dream/output/stimulation/pct01/'
-  opt[['file']] <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_monocyte_wstatus_1_80_20240701.rds'
+  opt[['file']] <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_dc_wstatus_1_80_20240701.rds'
   opt[['cell_type_column']] <- 'cell_type'
   opt[['min_cells']] <- 10
   opt[['min_peaks']] <- 200
