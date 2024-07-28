@@ -338,6 +338,7 @@ dream_pairwise_mt <- function(seurat_object, output_loc, condition_combinations,
     }
     else {
       # get a seed
+      set.seed(NULL)
       permutation_seed <- round(.Machine$integer.max * runif(1), digits = 0)
       if(verbose){
         message(paste('permuting with random seed of', as.character(permutation_seed), sep = ' ', collapse = ' '))
@@ -385,6 +386,10 @@ dream_pairwise_mt <- function(seurat_object, output_loc, condition_combinations,
   # add bonferroni correction
   limma_result[['p.bonferroni']] <- p.adjust(limma_result[['P.Value']], method = 'bonferroni')
   
+  # now add the permutation status and seed
+  limma_result[['permuted']] <- permute
+  limma_result[['seed']] <- permutation_seed
+  
   # set an output location
   limma_output_loc <- (paste(output_loc, names(condition_combinations)[[1]], '.tsv.gz', sep = ''))
   
@@ -403,7 +408,7 @@ dream_pairwise_mt <- function(seurat_object, output_loc, condition_combinations,
   limma_formula_loc <- paste(output_loc, names(condition_combinations)[[1]], '.formula', sep = '')
   
   if(verbose){
-    message(paste('writing result', paste(output_loc, names(condition_combinations)[[1]], '.tsv.gz', sep = '')))
+    message(paste('writing result', limma_output_loc, sep = ' '))
   }
   
   # write the result
@@ -411,7 +416,7 @@ dream_pairwise_mt <- function(seurat_object, output_loc, condition_combinations,
   # and the formula
   write.table(model_formula, limma_formula_loc, row.names = F, col.names = F)
   # write md5
-  mdfiver::create_md5_for_file(paste(output_loc, names(condition_combinations)[[1]], '.tsv.gz', sep = ''))
+  mdfiver::create_md5_for_file(limma_output_loc)
   
   # now write just the nominally significant values as well, but only if we don't permute
   if (!permute) {
@@ -620,6 +625,7 @@ dream_pairwise <- function(seurat_object, output_loc, condition_combinations, ag
           }
           else {
             # get a seed
+            set.seed(NULL)
             permutation_seed <- round(.Machine$integer.max * runif(1), digits = 0)
             if(verbose){
               message(paste('permuting with random seed of', as.character(permutation_seed), sep = ' ', collapse = ' '))
@@ -937,7 +943,8 @@ do_debug <- function() {
   seurat_object@meta.data[['condition_final']] <- paste('c', seurat_object@meta.data[['condition_final']], sep = '')
   
   # do the bulk analysis
-  do_limma_dream_pairwise_per_celltype(seurat_object, 
+  for(i in 1:9){
+    do_limma_dream_pairwise_per_celltype(seurat_object, 
                                        output_loc = limma_output_loc, 
                                        condition_combinations=list('condition_final' =  c('c24hCA', 'cUT')),
                                        celltype_column = celltype_column, 
@@ -948,7 +955,8 @@ do_debug <- function() {
                                        min_peaks = min_cell_umis, 
                                        minimal_complexity = min_pseudo_umis, 
                                        nthreads = 5, 
-                                       permute = F)
+                                       permute = T)
+  }
 }
 
 
