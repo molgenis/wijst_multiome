@@ -374,7 +374,7 @@ dream_pairwise_mt <- function(seurat_object, output_loc, condition_combinations,
     # extract these rows
     geneExprChunk <- geneExpr[chunk_start : chunk_stop, ]
     # do the limma run for this chunk
-    limma_result_chunk <- do_dream(geneExprChunk, aggregate_metadata, cell_numbers, form, condition_combinations, verbose)
+    limma_result_chunk <- do_dream(geneExprChunk, aggregate_metadata_to_use, cell_numbers, form, condition_combinations, verbose)
     return(limma_result_chunk)
   }
   # merge chuncks
@@ -895,7 +895,7 @@ do_debug <- function() {
   # fill the opt
   opt <- list()
   opt[['out']] <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/differential_accessibility/limma_dream/output/stimulation/pct01/'
-  opt[['file']] <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_dc_wstatus_1_80_20240701.rds'
+  opt[['file']] <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_dc_wstatus_1_80_20240709.rds'
   opt[['cell_type_column']] <- 'cell_type'
   opt[['min_cells']] <- 10
   opt[['min_peaks']] <- 200
