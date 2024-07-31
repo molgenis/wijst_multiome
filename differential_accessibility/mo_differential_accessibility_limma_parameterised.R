@@ -57,21 +57,21 @@ get_peaks_to_bed <- function(exp_per_group) {
 
 
 get_peak_info <- function(peaks_object) {
-    # calculate average expression
-    avg_peaks <- AverageExpression(peaks_object)[['peaks']]
-    # calculate average expression
-    sum_peaks <- AggregateExpression(peaks_object)[['peaks']]
-    # calculate pct exp
-    counts_as_row_sparse <- as(peaks_object@assays$peaks@counts, "RsparseMatrix") # turn into row-wise sparse matrix
-    non_zero_cell_nr <- as.vector(unlist(rowSums(counts_as_row_sparse != 0))) # do a rowsum on the T/F value you get from the zero-or-not comparison
-    pct_peaks <- non_zero_cell_nr / ncol(peaks_object@assays$peaks@counts) # the percentage expressed is that number of cells divided by the total number
-    # turn the exp per group into a bed
-    peaks_bed <- get_peaks_to_bed(sum_peaks)[[1]]
-    # add the other info
-    peaks_bed[['avg']] <-  unlist(as.vector(avg_peaks[, 1]))
-    peaks_bed[['ncell']] <-  ncol(peaks_object)
-    peaks_bed[['pct_exp']] <- pct_peaks
-    return(peaks_bed)
+  # calculate average expression
+  avg_peaks <- AverageExpression(peaks_object)[['peaks']]
+  # calculate average expression
+  sum_peaks <- AggregateExpression(peaks_object)[['peaks']]
+  # calculate pct exp
+  counts_as_row_sparse <- as(peaks_object@assays$peaks@counts, "RsparseMatrix") # turn into row-wise sparse matrix
+  non_zero_cell_nr <- as.vector(unlist(rowSums(counts_as_row_sparse != 0))) # do a rowsum on the T/F value you get from the zero-or-not comparison
+  pct_peaks <- non_zero_cell_nr / ncol(peaks_object@assays$peaks@counts) # the percentage expressed is that number of cells divided by the total number
+  # turn the exp per group into a bed
+  peaks_bed <- get_peaks_to_bed(sum_peaks)[[1]]
+  # add the other info
+  peaks_bed[['avg']] <-  unlist(as.vector(avg_peaks[, 1]))
+  peaks_bed[['ncell']] <-  ncol(peaks_object)
+  peaks_bed[['pct_exp']] <- pct_peaks
+  return(peaks_bed)
 }
 
 
@@ -514,7 +514,7 @@ dream_pairwise <- function(seurat_object, output_loc, condition_combinations, ag
   colnames(cell_numbers) <- c('aggregate', 'nr')
   # order the same as the metadata
   cell_numbers <- cell_numbers[match(aggregate_metadata[['aggregate']], cell_numbers[['aggregate']]), ]
-
+  
   # filter by the number of cells if requested
   if (minimal_cells > 0) {
     # get the indices of where the cell numbers are above this
@@ -598,131 +598,131 @@ dream_pairwise <- function(seurat_object, output_loc, condition_combinations, ag
   form <- as.formula(model_formula)
   # tryCatch(
   #   {
-      # estimate weights using linear mixed model of dream
-      vobjDream = voomWithDreamWeights( counts = geneExpr, formula = form, data = aggregate_metadata, weights = cell_numbers[['nr']] ) # the cell numbers are in the same order as the metadata, and as such can be passed like this
-      
-      # do each combination
-      for(combination_name in names(condition_combinations)){
-        # grab the combination
-        combination <- condition_combinations[[combination_name]]
-        
+  # estimate weights using linear mixed model of dream
+  vobjDream = voomWithDreamWeights( counts = geneExpr, formula = form, data = aggregate_metadata, weights = cell_numbers[['nr']] ) # the cell numbers are in the same order as the metadata, and as such can be passed like this
+  
+  # do each combination
+  for(combination_name in names(condition_combinations)){
+    # grab the combination
+    combination <- condition_combinations[[combination_name]]
+    
+    if(verbose){
+      message(paste('doing combination:', combination_name, sep = ' ', collapse = ' '))
+    }
+    
+    # if we are doing a permutation run, we'll have to change some metadata. We'll use a different variable, so we keep the original as a backup
+    aggregate_metadata_to_use <- aggregate_metadata
+    # the permutation seed we'll save, though it will only be used if there is an actual permutation
+    permutation_seed <- NA
+    # let's set up some things for the permutation
+    if (permute) {
+      # if we have a seed, we'll use that, otherwise we need to get one
+      if (!is.null(seed)) {
+        permutation_seed <- seed
         if(verbose){
-          message(paste('doing combination:', combination_name, sep = ' ', collapse = ' '))
+          message(paste('permuting with set seed of', as.character(permutation_seed), sep = ' ', collapse = ' '))
         }
-        
-        # if we are doing a permutation run, we'll have to change some metadata. We'll use a different variable, so we keep the original as a backup
-        aggregate_metadata_to_use <- aggregate_metadata
-        # the permutation seed we'll save, though it will only be used if there is an actual permutation
-        permutation_seed <- NA
-        # let's set up some things for the permutation
-        if (permute) {
-          # if we have a seed, we'll use that, otherwise we need to get one
-          if (!is.null(seed)) {
-            permutation_seed <- seed
-            if(verbose){
-              message(paste('permuting with set seed of', as.character(permutation_seed), sep = ' ', collapse = ' '))
-            }
-          }
-          else {
-            # get a seed
-            set.seed(NULL)
-            permutation_seed <- round(.Machine$integer.max * runif(1), digits = 0)
-            if(verbose){
-              message(paste('permuting with random seed of', as.character(permutation_seed), sep = ' ', collapse = ' '))
-            }
-          }
-          # set this seed
-          set.seed(permutation_seed)
-          # then permute the combination we are looking at
-          aggregate_metadata_to_use[[combination_name]] <- sample(aggregate_metadata_to_use[[combination_name]], size = nrow(aggregate_metadata_to_use), replace = F)
-        }
-        
-        # tryCatch(
-        #   {
-            # define and then cbind contrasts
-            L = getContrast( vobjDream, form, aggregate_metadata_to_use, c(paste(combination_name, combination[1], sep=''), paste(combination_name, combination[2], sep='')))
-            
-            # fit contrast
-            fit = dream( vobjDream, form, aggregate_metadata_to_use, L)
-            
-            # grab the exact fit
-            limma_result <- topTable(fit, coef='L1', number=length(fit$F.p.value))
-            
-            # add bonferroni adjustment
-            limma_result[['p.bonferroni']] <- p.adjust(limma_result[['P.Value']], method = 'bonferroni')
-            
-            # add some statistics
-            result_stats_list <- list()
-            # check each condition
-            result_stats_list[['combination']] <- data.frame(combination=rep(paste(combination_name, paste(combination, collapse='-'), sep = '.'), times = nrow(limma_result)))
-            for (condition in combination) {
-              # get the cell numbers for the condition
-              cell_numbers_condition <- cell_numbers[cell_numbers[[combination_name]] == condition, ]
-              result_stats_list[[paste('nsample', condition, sep = '_')]] <- data.frame(nsample=rep(nrow(cell_numbers_condition), times = nrow(limma_result)))
-              result_stats_list[[paste('ncell', condition, sep = '_')]] <- data.frame(ncells=rep(
-                paste(as.character(min(cell_numbers_condition[['nr']])),
-                      as.character(quantile(cell_numbers_condition[['nr']])[['25%']]),
-                      as.character(quantile(cell_numbers_condition[['nr']])[['50%']]),
-                      as.character(quantile(cell_numbers_condition[['nr']])[['75%']]),
-                      as.character(max(cell_numbers_condition[['nr']])),
-                      sep = ';'
-                ), times = nrow(limma_result)))
-            }
-            # merge all
-            result_stats <- do.call('cbind', result_stats_list)
-            colnames(result_stats) <- names(result_stats_list)
-            
-            # now add the permutation status and seed
-            result_stats[['permuted']] <- permute
-            result_stats[['seed']] <- permutation_seed
-            
-            # add combination as first column
-            limma_result <- cbind(result_stats, limma_result)
-            
-            # finally also add the feature as an explicit column
-            limma_result <- cbind(data.frame(feature = rownames(limma_result)), limma_result)
-            
-            # set an output location
-            limma_output_loc <- (paste(output_loc, combination_name, '.tsv.gz', sep = ''))
-            
-            # which will be a bit different when we are permuting
-            if (permute) {
-              limma_output_loc <- (paste(output_loc, combination_name, '.', permutation_seed, '.tsv.gz', sep = ''))
-              # we'll also order by the name of the feature
-              limma_result <- limma_result[order(limma_result[['feature']]), ]
-            }
-            else {
-              # otherwise we order by the significance
-              limma_result <- limma_result[order(limma_result[['P.Value']]), ]
-            }
-            
-            # also write the model we used
-            limma_formula_loc <- paste(output_loc, combination_name, '.formula', sep = '')
-            
-            if(verbose){
-              message(paste('writing result', limma_output_loc))
-            }
-            
-            # write the result
-            write.table(limma_result, gzfile(limma_output_loc), sep = '\t', row.names = F)
-            # and the formula
-            write.table(model_formula, limma_formula_loc, row.names = F, col.names = F)
-            # write md5
-            mdfiver::create_md5_for_file(limma_output_loc)
-            
-            # now write just the nominally significant values as well, if we don't permute
-            if (!permute) {
-              limma_result <- limma_result[limma_result[['P.Value']] < 0.05, ]
-              limma_output_nomsig_loc <- (paste(output_loc, names(condition_combinations)[[1]], '.nominal_significant.tsv.gz', sep = ''))
-              write.table(limma_result, gzfile(limma_output_nomsig_loc), sep = '\t', row.names = F)
-              mdfiver::create_md5_for_file(paste(output_loc, names(condition_combinations)[[1]], '.nominal_significant.tsv.gz', sep = ''))
-            }
-        #   }, error=function(cond) {
-        #     print(paste('analysis failed in', combination))
-        #     message(cond)
-        #   }
-        # )
       }
+      else {
+        # get a seed
+        set.seed(NULL)
+        permutation_seed <- round(.Machine$integer.max * runif(1), digits = 0)
+        if(verbose){
+          message(paste('permuting with random seed of', as.character(permutation_seed), sep = ' ', collapse = ' '))
+        }
+      }
+      # set this seed
+      set.seed(permutation_seed)
+      # then permute the combination we are looking at
+      aggregate_metadata_to_use[[combination_name]] <- sample(aggregate_metadata_to_use[[combination_name]], size = nrow(aggregate_metadata_to_use), replace = F)
+    }
+    
+    # tryCatch(
+    #   {
+    # define and then cbind contrasts
+    L = getContrast( vobjDream, form, aggregate_metadata_to_use, c(paste(combination_name, combination[1], sep=''), paste(combination_name, combination[2], sep='')))
+    
+    # fit contrast
+    fit = dream( vobjDream, form, aggregate_metadata_to_use, L)
+    
+    # grab the exact fit
+    limma_result <- topTable(fit, coef='L1', number=length(fit$F.p.value))
+    
+    # add bonferroni adjustment
+    limma_result[['p.bonferroni']] <- p.adjust(limma_result[['P.Value']], method = 'bonferroni')
+    
+    # add some statistics
+    result_stats_list <- list()
+    # check each condition
+    result_stats_list[['combination']] <- data.frame(combination=rep(paste(combination_name, paste(combination, collapse='-'), sep = '.'), times = nrow(limma_result)))
+    for (condition in combination) {
+      # get the cell numbers for the condition
+      cell_numbers_condition <- cell_numbers[cell_numbers[[combination_name]] == condition, ]
+      result_stats_list[[paste('nsample', condition, sep = '_')]] <- data.frame(nsample=rep(nrow(cell_numbers_condition), times = nrow(limma_result)))
+      result_stats_list[[paste('ncell', condition, sep = '_')]] <- data.frame(ncells=rep(
+        paste(as.character(min(cell_numbers_condition[['nr']])),
+              as.character(quantile(cell_numbers_condition[['nr']])[['25%']]),
+              as.character(quantile(cell_numbers_condition[['nr']])[['50%']]),
+              as.character(quantile(cell_numbers_condition[['nr']])[['75%']]),
+              as.character(max(cell_numbers_condition[['nr']])),
+              sep = ';'
+        ), times = nrow(limma_result)))
+    }
+    # merge all
+    result_stats <- do.call('cbind', result_stats_list)
+    colnames(result_stats) <- names(result_stats_list)
+    
+    # now add the permutation status and seed
+    result_stats[['permuted']] <- permute
+    result_stats[['seed']] <- permutation_seed
+    
+    # add combination as first column
+    limma_result <- cbind(result_stats, limma_result)
+    
+    # finally also add the feature as an explicit column
+    limma_result <- cbind(data.frame(feature = rownames(limma_result)), limma_result)
+    
+    # set an output location
+    limma_output_loc <- (paste(output_loc, combination_name, '.tsv.gz', sep = ''))
+    
+    # which will be a bit different when we are permuting
+    if (permute) {
+      limma_output_loc <- (paste(output_loc, combination_name, '.', permutation_seed, '.tsv.gz', sep = ''))
+      # we'll also order by the name of the feature
+      limma_result <- limma_result[order(limma_result[['feature']]), ]
+    }
+    else {
+      # otherwise we order by the significance
+      limma_result <- limma_result[order(limma_result[['P.Value']]), ]
+    }
+    
+    # also write the model we used
+    limma_formula_loc <- paste(output_loc, combination_name, '.formula', sep = '')
+    
+    if(verbose){
+      message(paste('writing result', limma_output_loc))
+    }
+    
+    # write the result
+    write.table(limma_result, gzfile(limma_output_loc), sep = '\t', row.names = F)
+    # and the formula
+    write.table(model_formula, limma_formula_loc, row.names = F, col.names = F)
+    # write md5
+    mdfiver::create_md5_for_file(limma_output_loc)
+    
+    # now write just the nominally significant values as well, if we don't permute
+    if (!permute) {
+      limma_result <- limma_result[limma_result[['P.Value']] < 0.05, ]
+      limma_output_nomsig_loc <- (paste(output_loc, names(condition_combinations)[[1]], '.nominal_significant.tsv.gz', sep = ''))
+      write.table(limma_result, gzfile(limma_output_nomsig_loc), sep = '\t', row.names = F)
+      mdfiver::create_md5_for_file(paste(output_loc, names(condition_combinations)[[1]], '.nominal_significant.tsv.gz', sep = ''))
+    }
+    #   }, error=function(cond) {
+    #     print(paste('analysis failed in', combination))
+    #     message(cond)
+    #   }
+    # )
+  }
   #   }, error=function(cond) {
   #     print(paste('model build failed'))
   #     message(cond)
@@ -779,7 +779,7 @@ do_limma_dream_pairwise_per_celltype <- function(seurat_object, output_loc, cond
     #  dream_pairwise(seurat_object = seurat_object_celltype, output_loc = output_loc_celltype, condition_combinations = condition_combinations, aggregates = aggregates, fixed_effects = fixed_effects, random_effects = random_effects, minimal_cells = minimal_cells, min_peaks = min_peaks, minimal_complexity = minimal_complexity, verbose = verbose, permute = permute, seed = seed, nthreads = nthreads)
     # }
     # else if (nthreads > 1) {
-       dream_pairwise_mt(seurat_object = seurat_object_celltype, output_loc = output_loc_celltype, condition_combinations = condition_combinations, aggregates = aggregates, fixed_effects = fixed_effects, random_effects = random_effects, minimal_cells = minimal_cells, min_peaks = min_peaks, minimal_complexity = minimal_complexity, verbose = verbose, nthreads = nthreads, permute = permute, seed = seed)
+    dream_pairwise_mt(seurat_object = seurat_object_celltype, output_loc = output_loc_celltype, condition_combinations = condition_combinations, aggregates = aggregates, fixed_effects = fixed_effects, random_effects = random_effects, minimal_cells = minimal_cells, min_peaks = min_peaks, minimal_complexity = minimal_complexity, verbose = verbose, nthreads = nthreads, permute = permute, seed = seed)
     # }
     # else {
     #   stop(paste('nthreads should be a positive number, now is', as.character(nthreads)))
@@ -891,6 +891,80 @@ get_nr_cells_aggregate_combination <- function(aggregate_df, seurat_metadata) {
 }
 
 
+create_permutation_p_values_distribution <- function(permutation_directory, permutation_prepend, permutation_append, pval_column='P.Value', feature_column='feature') {
+  # list all the permutation files
+  permutation_file_regex <- paste(permutation_prepend, '\\d+', permutation_append, '$', sep = '')
+  # list all the files
+  permutation_files <- list.files(permutation_directory, permutation_file_regex)
+  # keep the sorted p values in a list
+  p_values_per_permutation <- list()
+  # let's read the files
+  for (perm_file in permutation_files) {
+    # read only the p value
+    p_values_per_permutation[[perm_file]] <- fread(paste(permutation_directory, '/', perm_file, sep = ''), select = c(feature_column, pval_column))
+    # set the P value column to be the name of the file
+    colnames(p_values_per_permutation[[perm_file]]) <- c(feature_column, perm_file)
+  }
+  # now combine them
+  p_values_permutations <- Reduce(function(...) merge(..., all = F, by = feature_column), p_values_per_permutation)
+  # remove the feature column now
+  p_values_permutations[[feature_column]] <- NULL
+  # get the mean p per feature
+  p_values_means <- as.vector(rowMeans(p_values_permutations))
+  return(p_values_means)
+}
+
+
+calculate_permutation_fdr <- function(result_table, permutation_p_vector, result_table_p_column='P.Value', verbose=F) {
+  # check the number of rows of the result table
+  n_features <- nrow(result_table)
+  # add a new column denoting the permutation-based FDR]
+  result_table[['perm_FDR']] <- NA
+  # check how many permuted P values we have
+  n_permuted_ps <- length(permutation_p_vector)
+  # sort both of these
+  result_table <- result_table[order(result_table[[result_table_p_column]], decreasing = T), ]
+  permutation_p_vector <- permutation_p_vector[order(permutation_p_vector, decreasing = T)]
+  # set an index of where we are 
+  i_permuted_p_vector <- 1
+  # and extract that p
+  permuted_p_at_index <- permutation_p_vector[i_permuted_p_vector]
+  # check each p value in the result table
+  for (i_p_true in 1:nrow(result_table)) {
+    # extract by index
+    p_true <- result_table[i_p_true, result_table_p_column]
+    # if there are no more permuted values, and we went trough them all, that means there is no permuted p smaller than the real p
+    if (i_permuted_p_vector == length(permutation_p_vector)) {
+      result_table[i_p_true, 'perm_FDR'] <- 0
+    }
+    # otherwise keep searching
+    else{
+      # walk through the permuted p values until one is found that is equal or smaller than the true one
+      while(p_true < permuted_p_at_index & i_permuted_p_vector <= length(permutation_p_vector)) {
+        # update the index  
+        i_permuted_p_vector <- i_permuted_p_vector + 1
+        # and update the value
+        permuted_p_at_index <- permutation_p_vector[i_permuted_p_vector]
+        if (verbose & (i_permuted_p_vector %% 1000) == 0) {
+          message(paste('processed', as.character(i_permuted_p_vector), 'permuted P-values'))
+        }
+      }
+      # if we stopped because of no more p values left
+      if (i_permuted_p_vector == length(permutation_p_vector) & i_p_true < permuted_p_at_index) {
+        result_table[i_p_true, 'perm_FDR'] <- 0
+      }
+      # otherwise calculate the fraction of permuted p values that was better than the true one
+      else {
+        result_table[i_p_true, 'perm_FDR'] <- 1 - ((i_permuted_p_vector - 1) / length(permutation_p_vector))
+      }
+    }
+    if (verbose & (i_p_true %% 1000) == 0) {
+      message(paste('processed', as.character(i_p_true), 'features'))
+    }
+  }
+  return(result_table)
+}
+
 do_debug <- function() {
   # fill the opt
   opt <- list()
@@ -943,19 +1017,19 @@ do_debug <- function() {
   seurat_object@meta.data[['condition_final']] <- paste('c', seurat_object@meta.data[['condition_final']], sep = '')
   
   # do the bulk analysis
-  for(i in 1:9){
+  for(i in 1:10){
     do_limma_dream_pairwise_per_celltype(seurat_object, 
-                                       output_loc = limma_output_loc, 
-                                       condition_combinations=list('condition_final' =  c('c24hCA', 'cUT')),
-                                       celltype_column = celltype_column, 
-                                       aggregates = c('condition_final', 'lane', 'sample_final'), 
-                                       fixed_effects = c('condition_final', 'age', 'sex'), 
-                                       random_effects = c('sample_final', 'lane'),
-                                       minimal_cells = min_cells,
-                                       min_peaks = min_cell_umis, 
-                                       minimal_complexity = min_pseudo_umis, 
-                                       nthreads = 5, 
-                                       permute = T)
+                                         output_loc = limma_output_loc, 
+                                         condition_combinations=list('condition_final' =  c('c24hCA', 'cUT')),
+                                         celltype_column = celltype_column, 
+                                         aggregates = c('condition_final', 'lane', 'sample_final'), 
+                                         fixed_effects = c('condition_final', 'age', 'sex'), 
+                                         random_effects = c('sample_final', 'lane'),
+                                         minimal_cells = min_cells,
+                                         min_peaks = min_cell_umis, 
+                                         minimal_complexity = min_pseudo_umis, 
+                                         nthreads = 5, 
+                                         permute = T)
   }
 }
 
@@ -1050,4 +1124,4 @@ do_limma_dream_pairwise_per_celltype(seurat_object,
                                      nthreads = nthreads,
                                      permute = permute,
                                      seed = seed
-                                     )
+)
