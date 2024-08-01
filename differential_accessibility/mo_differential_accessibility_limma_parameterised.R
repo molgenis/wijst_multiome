@@ -910,8 +910,8 @@ create_permutation_p_values_distribution <- function(permutation_directory, perm
   # remove the feature column now
   p_values_permutations[[feature_column]] <- NULL
   # get the mean p per feature
-  p_values_means <- as.vector(rowMeans(p_values_permutations))
-  return(p_values_means)
+  p_values_mins <- as.vector(apply(p_values_permutations, 1, FUN = min, na.rm = TRUE))
+  return(p_values_mins)
 }
 
 
@@ -967,7 +967,7 @@ do_debug <- function() {
   # fill the opt
   opt <- list()
   opt[['out']] <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/differential_accessibility/limma_dream/output/stimulation/pct01/'
-  opt[['file']] <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_dc_wstatus_1_80_20240709.rds'
+  opt[['file']] <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_monocyte_wstatus_1_80_20240709.rds'
   opt[['cell_type_column']] <- 'cell_type'
   opt[['min_cells']] <- 10
   opt[['min_peaks']] <- 200
