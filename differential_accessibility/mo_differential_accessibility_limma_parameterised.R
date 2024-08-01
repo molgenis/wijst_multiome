@@ -933,12 +933,7 @@ calculate_permutation_fdr <- function(result_table, permutation_p_vector, result
   for (i_p_true in 1:nrow(result_table)) {
     # extract by index
     p_true <- result_table[i_p_true, result_table_p_column]
-    # if there are no more permuted values, and we went trough them all, that means there is no permuted p smaller than the real p
-    if (i_permuted_p_vector == length(permutation_p_vector)) {
-      result_table[i_p_true, 'perm_FDR'] <- 0
-    }
     # otherwise keep searching
-    else{
       # walk through the permuted p values until one is found that is equal or smaller than the true one
       while(p_true < permuted_p_at_index & i_permuted_p_vector <= length(permutation_p_vector)) {
         # update the index  
@@ -950,14 +945,17 @@ calculate_permutation_fdr <- function(result_table, permutation_p_vector, result
         }
       }
       # if we stopped because of no more p values left
-      if (i_permuted_p_vector == length(permutation_p_vector) & i_p_true < permuted_p_at_index) {
+      if (i_permuted_p_vector == length(permutation_p_vector) & p_true < permuted_p_at_index) {
         result_table[i_p_true, 'perm_FDR'] <- 0
+      }
+      # if this last one is better
+      if (i_permuted_p_vector == length(permutation_p_vector) & p_true == permuted_p_at_index) {
+        result_table[i_p_true, 'perm_FDR'] <- 1 / length(permutation_p_vector)
       }
       # otherwise calculate the fraction of permuted p values that was better than the true one
       else {
         result_table[i_p_true, 'perm_FDR'] <- 1 - ((i_permuted_p_vector - 1) / length(permutation_p_vector))
       }
-    }
     if (verbose & (i_p_true %% 1000) == 0) {
       message(paste('processed', as.character(i_p_true), 'features'))
     }
@@ -1017,7 +1015,7 @@ do_debug <- function() {
   seurat_object@meta.data[['condition_final']] <- paste('c', seurat_object@meta.data[['condition_final']], sep = '')
   
   # do the bulk analysis
-  for(i in 1:10){
+  #for(i in 1:10){
     do_limma_dream_pairwise_per_celltype(seurat_object, 
                                          output_loc = limma_output_loc, 
                                          condition_combinations=list('condition_final' =  c('c24hCA', 'cUT')),
@@ -1029,8 +1027,8 @@ do_debug <- function() {
                                          min_peaks = min_cell_umis, 
                                          minimal_complexity = min_pseudo_umis, 
                                          nthreads = 5, 
-                                         permute = T)
-  }
+                                         permute = F)
+  #}
 }
 
 
