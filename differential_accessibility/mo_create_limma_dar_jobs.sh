@@ -9,7 +9,8 @@
 #/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_ \
 #/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/differential_accessibility/limma_dream/output/stimulation/pct01/ \
 #cell_type \
-#/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/differential_accessibility/limma_dream/jobs/stimulation/pct01/
+#/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/differential_accessibility/limma_dream/jobs/stimulation/pct01/ \
+#0
 ###################################################################
 
 # standard parameters
@@ -31,6 +32,11 @@ seurat_objects_loc=$1 # like /groups/umcg-franke-scrna/tmp03/projects/multiome/o
 output_loc=$2 # like /groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/differential_expression/limma_dream/output/LONG_COVID/
 cell_type_column=$3 # celltype_imputed_lowerres
 jobs_loc=$4 # /groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/differential_expression/limma_dream/jobs/LONG_COVID/
+
+# whether or not to permute
+PERMUTE=$5
+# and if we permute, how many times
+N_PERMUTATIONS=$6
 
 # set the number of iteractions as one if we are doing a true run
 iterations=(1)
@@ -90,13 +96,13 @@ for object in ${REGEX_SEURAT_OBJECTS}
         # if we are permuting, add that as true
         if [ ${PERMUTE} -eq 1 ]
             then
-                echo '-p T
+                echo '--permute T
 ' >> ${JOB_LOC}
             fi
         # and false if we are not
         if [ ${PERMUTE} -eq 0 ]
             then
-                echo '-p F
+                echo '--permute F
 ' >> ${JOB_LOC}
         fi
     done
@@ -108,3 +114,25 @@ done
 # /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/differential_accessibility/limma_dream/output/stimulation/pct01/ \
 # cell_type \
 # /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/differential_accessibility/limma_dream/jobs/stimulation/pct01/
+# 0
+# ./mo_create_limma_dar_jobs.sh \
+# /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_ \
+# /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/differential_accessibility/limma_dream/output/stimulation/pct01/ \
+# cell_type \
+# /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/differential_accessibility/limma_dream/jobs/stimulation/pct01/ \
+# 1 \
+# 10
+
+# ./mo_create_limma_dar_jobs.sh \
+# /scratch/hb-functionalgenomics/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_ \
+# /scratch/hb-functionalgenomics/projects/multiome/ongoing/differential_accessibility/limma_dream/output/stimulation/pct01/ \
+# cell_type \
+# /scratch/hb-functionalgenomics/projects/multiome/ongoing/differential_accessibility/limma_dream/jobs/stimulation/pct01/ \
+# 0
+# ./mo_create_limma_dar_jobs.sh \
+# /scratch/hb-functionalgenomics/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_ \
+# /scratch/hb-functionalgenomics/projects/multiome/ongoing/differential_accessibility/limma_dream/output/stimulation/pct01/ \
+# cell_type \
+# /scratch/hb-functionalgenomics/projects/multiome/ongoing/differential_accessibility/limma_dream/jobs/stimulation/pct01/ \
+# 1 \
+# 10 
