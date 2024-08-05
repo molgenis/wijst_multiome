@@ -1015,7 +1015,7 @@ do_debug <- function() {
   seurat_object@meta.data[['condition_final']] <- paste('c', seurat_object@meta.data[['condition_final']], sep = '')
   
   # do the bulk analysis
-  #for(i in 1:10){
+  for(i in 1:10){
     do_limma_dream_pairwise_per_celltype(seurat_object, 
                                          output_loc = limma_output_loc, 
                                          condition_combinations=list('condition_final' =  c('c24hCA', 'cUT')),
@@ -1027,8 +1027,8 @@ do_debug <- function() {
                                          min_peaks = min_cell_umis, 
                                          minimal_complexity = min_pseudo_umis, 
                                          nthreads = 5, 
-                                         permute = F)
-  #}
+                                         permute = T)
+  }
 }
 
 
@@ -1052,7 +1052,7 @@ option_list <- list(
               help="minimal number of UMIs for a pseudobulk to consider it in the analysis [default= %default]", metavar="numeric"),
   make_option(c("-t", "--threads"), type="numeric", default=8,
               help="number of threads to use [default= %default]", metavar="numeric"),
-  make_option(c("-p", "--permute"), type="numeric", default=F,
+  make_option(c("-p", "--permute"), type="boolean", default=F,
               help="do a permutation run instead [default= %default]", metavar="boolean"),
   make_option(c("-s", "--seed"), type="numeric", default=NULL,
               help="do a permutation run instead [default= %default]", metavar="numeric")
