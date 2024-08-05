@@ -1052,8 +1052,8 @@ option_list <- list(
               help="minimal number of UMIs for a pseudobulk to consider it in the analysis [default= %default]", metavar="numeric"),
   make_option(c("-t", "--threads"), type="numeric", default=8,
               help="number of threads to use [default= %default]", metavar="numeric"),
-  make_option(c("-p", "--permute"), type="boolean", default=F,
-              help="do a permutation run instead [default= %default]", metavar="boolean"),
+  make_option(c("-p", "--permute"), type="character", default='False',
+              help="do a permutation run instead [default= %default]", metavar="character"),
   make_option(c("-s", "--seed"), type="numeric", default=NULL,
               help="do a permutation run instead [default= %default]", metavar="numeric")
 )
@@ -1083,7 +1083,15 @@ min_pseudo_umis <- opt[['min_complexity']]
 # number of threads
 nthreads <- opt[['threads']]
 # whether or not to run permutation
-permute <- opt[['permute']]
+permute_string <- opt[['permute']]
+permute <- F
+if (permute_string %in% c('True', 'true', 'TRUE', 't', 'T', '1')) {
+  permute <- T
+}else if (permute_string %in% c('False', 'false', 'FALSE', 'f', 'F', '0')) {
+  permute <- F
+}else {
+  stop(paste('invalid option for permutation, valid options are \'TRUE\' or \'FALSE\''))
+}
 # and the seed
 seed <- opt[['seed']]
 
