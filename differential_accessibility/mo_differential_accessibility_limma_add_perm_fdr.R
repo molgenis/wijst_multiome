@@ -74,15 +74,15 @@ calculate_permutation_fdr <- function(result_table, permutation_p_vector, result
       }
       # if we stopped because of no more p values left
       if (i_permuted_p_vector == length(permutation_p_vector) & p_true < permuted_p_at_index) {
-        result_table[i_p_true, 'perm_FDR'] <- 0
+        result_table[i_p_true, 'perm.FDR'] <- 0
       }
       # if this last one is better
       if (i_permuted_p_vector == length(permutation_p_vector) & p_true == permuted_p_at_index) {
-        result_table[i_p_true, 'perm_FDR'] <- 1 / length(permutation_p_vector)
+        result_table[i_p_true, 'perm.FDR'] <- 1 / length(permutation_p_vector)
       }
       # otherwise calculate the fraction of permuted p values that was better than the true one
       else {
-        result_table[i_p_true, 'perm_FDR'] <- 1 - ((i_permuted_p_vector - 1) / length(permutation_p_vector))
+        result_table[i_p_true, 'perm.FDR'] <- 1 - ((i_permuted_p_vector - 1) / length(permutation_p_vector))
       }
     if (verbose & (i_p_true %% 1000) == 0) {
       message(paste('processed', as.character(i_p_true), 'features'))
@@ -108,7 +108,9 @@ option_list <- list(
   make_option(c("-e", "--perm_append"), type="character", default=NULL,
               help="what each permuted result ends with [default= %default]", metavar="character"),
   make_option(c("-t", "--threads"), type="numeric", default=8,
-              help="number of threads to use [default= %default]", metavar="numeric")            
+              help="number of threads to use [default= %default]", metavar="numeric"),
+  make_option(c("-v", "--verbose"), type="character", default='TRUE',
+              help="print status messages [default= %default]", metavar="character")            
 )
 
 # initialize optparser
@@ -131,12 +133,31 @@ if (is.null(opt[['input']])) {
 } else if (!dir.exists(opt[['perm_directory']])) {
   stop(paste('permutation directory', opt[['perm_directory']], 'does not exist'))
 } else {
-  # get the minimal P-values
-  minimal_permuted_ps <- create_permutation_p_values_distribution(opt[['perm_directory']], opt[['perm_prepend']], opt[['perm_append']])
-  # read the results table
-  result_table <- read.table(opt[['input']], header = T, sep = '\t')
-  # add the permuted p value
-  result_table <- calculate_permutation_fdr(result_table = result_table, permutation_p_vector = minimal_permuted_ps)
-  # save result
-  write.table(result_table, gzfile(opt[['output']]), row.names = F, col.names = T, sep = '\t')
+    # set verbosity
+    verbose = F
+    # get verbosity
+    if (opt[['verbose']] %in% c('True', 'true', 'TRUE', 't', 'T', '1')) {
+        verbose <- T
+    }else if (opt[['verbose']] %in% c('False', 'false', 'FALSE', 'f', 'F', '0')) {
+        verbose <- F
+    }else {
+        stop(paste('invalid option for verbosity, valid options are \'TRUE\' or \'FALSE\''))
+    }
+    if (verbose) {
+        message(paste('reading permutations with pattern ', opt[['perm_directory']], opt[['perm_prepend']], '\\d+', opt[['perm_append']], sep = ''))
+    }
+    # get the minimal P-values
+    minimal_permuted_ps <- create_permutation_p_values_distribution(opt[['perm_directory']], opt[['perm_prepend']], opt[['perm_append']])
+    if (verbose) {
+        message(paste('reading true result at', opt[['input']]))
+    }
+    # read the results table
+    result_table <- read.table(opt[['input']], header = T, sep = '\t')
+    # add the permuted p value
+    result_table <- calculate_permutation_fdr(result_table = result_table, permutation_p_vector = minimal_permuted_ps, verbose = verbose)
+    if(verbose) {
+        message(paste('writing result at', opt[['output']]))
+    }
+    # save result
+    write.table(result_table, gzfile(opt[['output']]), row.names = F, col.names = T, sep = '\t')
 }
