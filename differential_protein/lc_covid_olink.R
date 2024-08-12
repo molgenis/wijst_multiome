@@ -42,15 +42,17 @@ plot_plate_layout <- function(olink_data, well_id_column='WellID', plate_id_colu
 ####################
 
 # location of the protein data
-protein_data_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/olink_protein/OLINK2023-037_INF_EXTENDED_NPX_2024-07-10.csv'
+protein_data_loc <- '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/olink_protein/OLINK2023-037_INF_EXTENDED_NPX_2024-07-10.csv'
 # location of the sample mapping
-sample_mapping_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/olink_protein/OV21_00402_linkage_file_olink_20240719.csv'
+sample_mapping_loc <- '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/olink_protein/OV21_00402_linkage_file_olink_20240719.csv'
 # the full id table
-mo_full_id_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/metadata/mo_full_id_table.tsv.gz'
+mo_full_id_loc <- '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/metadata/mo_full_id_table.tsv.gz'
 # get the other id table
-mo_other_id_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/metadata/mo_id_to_otherids.tsv.gz'
+mo_other_id_loc <- '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/metadata/mo_id_to_otherids.tsv.gz'
 # and the 'realids'
-mo_realid_assignments_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/metadata/mo_sample_sheet_final.tsv'
+mo_realid_assignments_loc <- '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/metadata/mo_sample_sheet_final.tsv'
+# the age/sex for the mo participant
+mo_age_sex_loc <- '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/metadata/mo_age_sex.tsv.gz'
 
 # load the data
 protein_data <- read_NPX(protein_data_loc)
@@ -85,24 +87,60 @@ protein_data[['SampleID']] <- gsub('^(\\d+)$', 'MO\\1', protein_data[['SampleID'
 #protein_data_realid <- mo_realid_assignments[match(protein_data[['SampleID']], mo_realid_assignments[['sample_final']]), 'realid_final']
 protein_data_realid <- mo_realid_assignments[match(protein_data[['SampleID']], mo_realid_assignments[['sample']]), 'realid_final']
 # replace the sample name where possible
-protein_data[!is.na(protein_data_realid), 'SampleID'] <- protein_data_realid[!is.na(protein_data_realid)]
-
-# get combination of well and plate
-protein_data_well_plate <- paste(protein_data[['PlateID']], protein_data[['WellID']], sep = '_')
-# match the sample ID that we have
-protein_data_sample_id <- sample_mapping[match(protein_data_well_plate, sample_mapping[['well_plate']]), 'project_pseudo_id']
-# replace the sample name where possible
-protein_data[!is.na(protein_data_sample_id), 'SampleID'] <- protein_data_sample_id[!is.na(protein_data_sample_id)]
+protein_data[!is.na(protein_data_realid), 'realid'] <- protein_data_realid[!is.na(protein_data_realid)]
+# if the ID already starts with ll-next, we can just copy that
+protein_data[!is.na(protein_data[['SampleID']]) & startsWith(protein_data[['SampleID']], 'LL-NEXT'), 'realid'] <- protein_data[!is.na(protein_data[['SampleID']]) & startsWith(protein_data[['SampleID']], 'LL-NEXT'), 'SampleID']
 
 # now do the LLNEXT and COVID19 samples one as well
 protein_data_next_id <- mo_other_id[match(protein_data[['SampleID']], mo_other_id[['Other.ID']]), 'PROJECT_PSEUDO_ID_NEW']
 # replace the sample name where possible
-protein_data[!is.na(protein_data_next_id) & protein_data_next_id != '' & protein_data_next_id != ' ', 'SampleID'] <- protein_data_next_id[!is.na(protein_data_next_id) & protein_data_next_id != '' & protein_data_next_id != ' ']
+protein_data[!is.na(protein_data_next_id) & protein_data_next_id != '' & protein_data_next_id != ' ', 'llnextcovid_pseudo'] <- protein_data_next_id[!is.na(protein_data_next_id) & protein_data_next_id != '' & protein_data_next_id != ' ']
 
 # try from the other one we have as well
 protein_data_next2_id <- mo_full_id[match(protein_data[['SampleID']], mo_full_id[['COVID_ID']]), 'll_pseudo_id']
 # replace the sample name where possible
-protein_data[!is.na(protein_data_next2_id) & protein_data_next2_id != '' & protein_data_next2_id != ' ', 'SampleID'] <- protein_data_next2_id[!is.na(protein_data_next2_id) & protein_data_next2_id != '' & protein_data_next2_id != ' ']
+protein_data[!is.na(protein_data_next2_id) & protein_data_next2_id != '' & protein_data_next2_id != ' ', 'llnextcovid_pseudo'] <- protein_data_next2_id[!is.na(protein_data_next2_id) & protein_data_next2_id != '' & protein_data_next2_id != ' ']
+
+# add the case/control status
+protein_data[['case_control']] <- NA
+# get combination of well and plate
+protein_data_well_plate <- paste(protein_data[['PlateID']], protein_data[['WellID']], sep = '_')
+# use that for case/control inference
+protein_data[['case_control']] <- sample_mapping[match(protein_data_well_plate, sample_mapping[['well_plate']]), 'Case.Control']
+# where we don't have data, the data was pre-pandemic
+protein_data[['pandemic']] <- ifelse(is.na(protein_data[['case_control']]), 'prepandemic', 'postpandemic')
+# furthermore, if it was pre-pandemic, the case/control status must be case
+protein_data[is.na(protein_data[['case_control']]), 'case_control'] <- 'control'
+
+# match the sample ID that we have for the data in the sample mapping
+protein_data_sample_id <- sample_mapping[match(protein_data_well_plate, sample_mapping[['well_plate']]), 'project_pseudo_id']
+# replace the sample name where possible
+protein_data[!is.na(protein_data_sample_id), 'llnextcovid_pseudo'] <- protein_data_sample_id[!is.na(protein_data_sample_id)]
+
+# read the age/sex file
+mo_age_sex <- read.table(mo_age_sex_loc, header = T, sep = '\t')
+# match to realid
+protein_data_sex <- mo_age_sex[match(protein_data[['realid']], mo_age_sex[['sample']]), 'sex']
+protein_data_age <- mo_age_sex[match(protein_data[['realid']], mo_age_sex[['sample']]), 'age']
+# replace the sample name where possible
+protein_data[!is.na(protein_data_sex), 'sex'] <- protein_data_sex[!is.na(protein_data_sex)]
+protein_data[!is.na(protein_data_age), 'age'] <- protein_data_age[!is.na(protein_data_age)]
+# make the sex lowercase in the sample mapping
+sample_mapping[['Gender']] <- tolower(sample_mapping[['Gender']])
+# get those as well 
+protein_data_sex2 <- sample_mapping[match(protein_data[['SampleID']], sample_mapping[['SampleID']]), 'Gender']
+protein_data_age2 <- sample_mapping[match(protein_data[['SampleID']], sample_mapping[['SampleID']]), 'Age']
+# again add sex and age
+protein_data[!is.na(protein_data_sex2), 'sex'] <- protein_data_sex2[!is.na(protein_data_sex2)]
+protein_data[!is.na(protein_data_age2), 'age'] <- protein_data_age2[!is.na(protein_data_age2)]
+
 
 # plot the plates to see how they line up
-plot_plate_layout(protein_data)
+plot_plate_layout(protein_data) + scale_fill_manual(values = roycols::get_color_list(protein_data[['PlateID']]))
+plot_plate_layout(protein_data, sample_column = 'case_control') + scale_fill_manual(values = roycols::get_color_list(protein_data[['PlateID']]))
+plot_plate_layout(protein_data, sample_column = 'pandemic') + scale_fill_manual(values = roycols::get_color_list(protein_data[['PlateID']]))
+plot_plate_layout(protein_data, sample_column = 'sex') + scale_fill_manual(values = roycols::get_color_list(protein_data[['PlateID']]))
+plot_plate_layout(protein_data, sample_column = 'age') + scale_fill_manual(values = roycols::get_color_list(protein_data[['PlateID']]))
+
+# now do actual statistical analysis
+olink_lmer(protein_data, variable = c('case_control', 'pandemic'), random = c('SampleID'))
