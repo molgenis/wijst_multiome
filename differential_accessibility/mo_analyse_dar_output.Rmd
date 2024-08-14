@@ -240,7 +240,7 @@ get_de_genes_per_celltype <- function(de_output_path, de_method, pval_column='p.
 #' @param p.val.cutoff the p-value cutoff to use for filtering
 #' @returns a table with the 'celltype' as the first column, and the 'number' as the second column
 #' 
-de_outputs_to_table <- function(de_output_per_celltype, celltype_snip='_condition_final', p_val_column='p.bonferroni', p_val_cutoff=0.05) {
+de_outputs_to_table <- function(de_output_per_celltype, celltype_snip='_condition_final', p_val_column='p.bonferroni', p_val_cutoff=0.05, collapse_column=NULL) {
   # create a new dataframe
   nr_df <- data.frame(celltype = rep(NA, times = length(names(de_output_per_celltype))),
                       number = rep(0, times = length(names(de_output_per_celltype))))
@@ -252,6 +252,10 @@ de_outputs_to_table <- function(de_output_per_celltype, celltype_snip='_conditio
     output <- de_output_per_celltype[[celltype]]
     # filter by significance
     output <- output[output[[p_val_column]] < p_val_cutoff, ]
+    # if we have a collapse column, we can group effects that share something together, such as the gene
+    if (!is.null(collapse_column)) {
+      output <- output[!duplicated(output[[collapse_column]]), ]
+    }
     # count how many results
     nr_genes <- nrow(output)
     # snip something from the name if requested
@@ -393,7 +397,7 @@ limma_stim_nolane_base_output_path <- '/groups/umcg-franke-scrna/tmp04/projects/
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # get the output per celltype
-de_genes_limma_stim <- get_de_genes_per_celltype(limma_stim_base_output_path, de_method = 'limma')
+de_genes_limma_stim <- get_de_genes_per_celltype(limma_stim_base_output_path, de_method = 'limma', pattern = '*_condition_final.wpermfdr.wgene.tsv.gz$')
 # fix up names
 names(de_genes_limma_stim) <- gsub('_condition_final', '', names(de_genes_limma_stim))
 # get the numbers as well
@@ -431,4 +435,50 @@ plot_DE_sharing_per_celltype(de_genes_cd8t_different_runs, use_label_dict = F, u
 grid.text("correcting vs not correcting for lane in DAR identification for CD8+ T",x = 0.65, y=0.95, gp=gpar(fontsize=10))
 
 ```
+```{r plot_archr_sharing, include=TRUE, fig.width=10, fig.height=5}
 
+# read the UT regions from archR
+archr_ut_mono <- read.table('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/pycistopic/monocytes_all_cells/region_sets/model_20_topics/DARS_stim_unstim/UT.bed', header = F, sep = '\t')
+# paste features
+archr_ut_mono_features <- paste(archr_ut_mono$V1, archr_ut_mono$V2, archr_ut_mono$V3, sep = '-')
+# 24hCA as well
+archr_24hca_mono <- read.table('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/pycistopic/monocytes_all_cells/region_sets/model_20_topics/DARS_stim_unstim/24hCA.bed', header = F, sep = '\t')
+archr_24hca_mono_features <- paste(archr_24hca_mono$V1, archr_24hca_mono$V2, archr_24hca_mono$V3, sep = '-')
+# now get just lists for limma
+de_genes_limma_stim_nolane_features <- de_genes_limma_stim_nolane[['monocyte']][de_genes_limma_stim_nolane[['monocyte']][['p.bonferroni']] < 0.05, 'feature']
+de_genes_limma_stim_features <- de_genes_limma_stim[['monocyte']][de_genes_limma_stim[['monocyte']][['p.bonferroni']] < 0.05, 'feature']
+
+# make new list with the different runs for the same celltype
+de_genes_mono_w_archr <- list('without lane' = de_genes_limma_stim_nolane_features, 'with lane' = de_genes_limma_stim_features, 'UT archR' = archr_ut_mono_features, '24hCA archR' = archr_24hca_mono_features)
+# plot overlap
+upset(fromList(de_genes_mono_w_archr), order.by = 'freq')
+grid.text("DAR identification for monocytes archR and limma",x = 0.65, y=0.95, gp=gpar(fontsize=10))
+
+# get total DARs
+archr_dars <- unique(c(archr_ut_mono_features, archr_ut_mono_features))
+limma_dars <- de_genes_limma_stim_nolane_features
+all_dars <- unique(c(archr_dars, de_genes_limma_stim_nolane_features))
+overlapping_dars <- intersect(archr_dars, limma_dars)
+
+```
+```{r plot_stim_numbers, include=TRUE, fig.width=10, fig.height=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# get the numbers as well
+de_genes_limma_stim_numbers_genes <- de_outputs_to_table(de_genes_limma_stim, collapse_column = 'gene_id')
+# plot them
+de_gene_numbers_to_plot(de_genes_limma_stim_numbers_genes, legendless = T, use_label_dict = T) + 
+  ylab('Number of DAR-linked genes') + 
+  xlab('Cell type') + 
+  ggtitle('Number of DAR-linked genes using Limma') +
+  scale_fill_manual(values = get_color_coding_dict())
+
+```
+
+```{r plot_stim_sharing, include=TRUE, fig.width=10, fig.height=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# plot the sharing of region
+plot_DE_sharing_per_celltype(de_genes_limma_stim, feature_column = 'gene_id')
+
+```

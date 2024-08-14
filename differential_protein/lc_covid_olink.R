@@ -2,7 +2,7 @@
 ############################################################################################################################
 # Authors: Roy Oelen
 # Name: lc_covid_olink.R
-# Function: create L2 azimuth specific Seurat objects
+# Function: run differential protein expression on the olink data
 ############################################################################################################################
 
 ####################
@@ -13,6 +13,17 @@
 library(OlinkAnalyze)
 # for plotting
 library(ggplot2)
+library(cowplot)
+# we'll do correlations in parallel
+library(foreach)
+library(doParallel)
+# limma DE dependencies
+library(variancePartition)
+library(edgeR)
+library(BiocParallel)
+# manual regression
+library(lme4)
+library(lmerTest)
 
 ####################
 # Functions        #
@@ -36,40 +47,292 @@ plot_plate_layout <- function(olink_data, well_id_column='WellID', plate_id_colu
   return(p)
 }
 
+correlate_samples <- function(olink_data, sample_column='SampleID', protein_name_column='OlinkID', value_column='NPX', cor_method = 'spearman') {
+  # get the unique samples
+  samples_present <- unique(olink_data[[sample_column]])
+  # remove empty ones
+  samples_present <- samples_present[!is.na(samples_present)]
+  # get the number of samples
+  n_samples <- length(samples_present)
+  # check each row in the square matrix
+  res_per_sample_on_row <- foreach(i = 1:n_samples, .combine = 'rbind') %dopar% {
+    # this is how many correlations we'll calculate
+    n_cors <- n_samples - i + 1
+    # reserve memory
+    res_frame <- data.frame(matrix(NA, nrow = n_cors, ncol = 6))
+    # set the column names
+    colnames(res_frame) <- c('sample1', 'sample2', 'nproteins_s1', 'nproteins_s2', 'nproteins_both', 'correlation')
+    # we need to keep an index to know what values to fill in for the res_frame
+    res_frame_i <- 1
+    # correlate with other samples
+    for (i2 in i:n_samples) {
+        # extract sample 1 and sample 2
+        sample_1 <- samples_present[i]
+        sample_2 <- samples_present[i2]
+        # subset to values for these two samples
+        sample_1_data <- olink_data[
+          !is.na(olink_data[[sample_column]]) &
+            olink_data[[sample_column]] == sample_1, 
+            c(protein_name_column, value_column), 
+        ]
+        sample_2_data <- olink_data[
+          !is.na(olink_data[[sample_column]]) &
+            olink_data[[sample_column]] == sample_2, 
+            c(protein_name_column, value_column)
+        ]
+        # let's check how many proteins we have for each of these
+        proteins_sample_1_wna <- unique(sample_1_data[[protein_name_column]])
+        proteins_sample_2_wna <- unique(sample_2_data[[protein_name_column]])
+        # drop NA as well
+        proteins_sample_1 <- proteins_sample_1_wna[!is.na(sample_1_data[match(proteins_sample_1_wna, sample_1_data[[protein_name_column]]), value_column])]
+        proteins_sample_2 <- proteins_sample_2_wna[!is.na(sample_2_data[match(proteins_sample_2_wna, sample_2_data[[protein_name_column]]), value_column])]
+        # warn if dropping due to NA
+        if (length(proteins_sample_1) < length(proteins_sample_1_wna)) {
+          warning(paste('dropping proteins when from', sample_1, 'due to NA values:', paste(setdiff(proteins_sample_1_wna, proteins_sample_1)), '\n'))
+        }
+        if (length(proteins_sample_2) < length(proteins_sample_2_wna)) {
+          warning(paste('dropping proteins when from', sample_2, 'due to NA values:', paste(setdiff(proteins_sample_2_wna, proteins_sample_2)), '\n'))
+        }
+        # let's check the inner join of those two sets of proteins
+        proteins_sample_both <- intersect(proteins_sample_1, proteins_sample_2)
+        # if the sizes are different, we will drop proteins, let them know which ones
+        if (length(proteins_sample_both) < length(proteins_sample_1)) {
+          warning(paste('dropping proteins when correlating', sample_1, 'and', sample_2, 'from', sample_1, ':', paste(setdiff(proteins_sample_1, proteins_sample_both)), '\n'))
+        }
+        if (length(proteins_sample_both) < length(proteins_sample_2)) {
+          warning(paste('dropping proteins when correlating', sample_1, 'and', sample_2, 'from', sample_2, ':', paste(setdiff(proteins_sample_2, proteins_sample_both)), '\n'))
+        }
+        # subset to those proteins
+        prot_values_sample1 <- sample_1_data[match(proteins_sample_both, sample_1_data[[protein_name_column]]), value_column]
+        prot_values_sample2 <- sample_2_data[match(proteins_sample_both, sample_2_data[[protein_name_column]]), value_column]
+        # calculate the correlation
+        cor_both <- cor(prot_values_sample1, prot_values_sample2, method = cor_method, use = 'complete.obs')
+        # make result into table c('sample1', 'sample2', 'nproteins_s1', 'nproteins_s2', 'nproteins_both', 'correlation')
+        res <- c(sample_1, sample_2, length(proteins_sample_1), length(proteins_sample_2), length(proteins_sample_both), cor_both)
+        res_frame[res_frame_i, ] <- res
+        # and update the result frame index
+        res_frame_i <- res_frame_i + 1
+    }
+    return(res_frame)
+  }
+  # make correlation numeric again
+  res_per_sample_on_row[['correlation']] <- as.numeric(res_per_sample_on_row[['correlation']])
+  return(res_per_sample_on_row)
+}
+
+
+create_confusion_matrix <- function(assignment_table, truth_column, prediction_column, truth_column_label=NULL, prediction_column_label=NULL, angle_labels=T, confusion_table=NULL, freq_column='freq', show_text=T, axis_text_x_size=3, axis_text_y_size=3){
+  # create confusion table from assignments
+  if (is.null(confusion_table)) {
+    confusion_table <- create_confusion_table(assignment_table, truth_column, prediction_column)
+  }
+  # unless we already have the confusion table
+  else {
+    # then we just need to harmonize the value
+    confusion_table$freq <- confusion_table[[freq_column]]
+    confusion_table$truth <- confusion_table[[truth_column]]
+    confusion_table$prediction <- confusion_table[[prediction_column]]
+  }
+  # round the frequency off to a sensible cutoff
+  confusion_table$freq <- round(confusion_table$freq, digits=2)
+  # turn into plot
+  p <- ggplot(data=confusion_table, aes(x=truth, y=prediction, fill=freq)) + geom_tile() + scale_fill_gradient2(low='red', high='blue', mid = 'white')
+  # add text if requested
+  if (show_text) {
+    p <- p + geom_text(aes(label=freq))
+  }
+  # some options
+  if(!is.null(truth_column_label)){
+    p <- p + xlab(truth_column_label)
+  }
+  if(!is.null(prediction_column_label)){
+    p <- p + ylab(prediction_column_label)
+  }
+  if (angle_labels) {
+    p <- p + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+  }
+  # set text sizes
+  p <- p + theme(axis.text.x = element_text(color = "grey20", size = axis_text_x_size, face = "plain"),
+        axis.text.y = element_text(size = axis_text_y_size, face = "plain"))
+  return(p)
+}
+
+
+olink_to_limma_format <- function(olink_data, metadata_columns_of_interest, sample_column='SampleID', olink_protein_name_column='OlinkID', olink_protein_value_column='NPX') {
+  # we'll make a standard dataframe from this
+  olink_data <- data.frame(olink_data)
+  # extract the metadata we care about
+  metadata_of_interest <- unique(olink_data[, unique(c(metadata_columns_of_interest, sample_column))])
+  # get the samplew
+  samples <- unique(olink_data[[sample_column]])
+  # get the proteins
+  proteins <- unique(olink_data[[olink_protein_name_column]])
+  # create a matrix
+  expression_matrix <- matrix(NA, nrow = length(proteins), ncol = length(samples), dimnames = list(proteins, samples))
+  # start filling the matrix
+  for (i in 1:nrow(olink_data)) {
+    # add each entry
+    expression_matrix[olink_data[i, olink_protein_name_column], olink_data[i, sample_column]] <- olink_data[i, olink_protein_value_column]
+  }
+  # make sure they are in the same order
+  metadata_of_interest <- metadata_of_interest[match(colnames(expression_matrix), metadata_of_interest[[sample_column]]), ]
+  # save the these in a list
+  return(list('expression' = expression_matrix, 'metadata' = metadata_of_interest))
+}
+
+
+plot_olink_expression <- function(olink, protein_name, protein_name_column='OlinkID', protein_value_column='NPX', group_column='case_control', olinkid_to_uid_loc=NULL, uniprotid_to_gs_loc=NULL, violin=F, paper_style=T, legendless=T, pointless=F, use_label_dict=F, plot_order=NULL){
+  # subset to the protein we care about
+  olink <- olink[olink[[protein_name_column]] == protein_name, ]
+  # add extra column
+  olink$protein_expression <- olink[[protein_value_column]]
+  # order the x
+  if (!is.null(plot_order)) {
+    olink[[group_column]] <- factor(olink[[group_column]], levels = plot_order)
+  }
+  # create the plot
+  p <- NULL
+  if(violin){
+    p <- ggplot(data=olink, mapping=aes(x=.data[[group_column]], y=protein_expression, fill=.data[[group_column]])) +
+      geom_violin() +
+      geom_jitter(size = 0.5, alpha = 0.5)
+  }
+  else{
+    p <- ggplot(data=olink, mapping=aes(x=.data[[group_column]], y=protein_expression, fill=.data[[group_column]])) +
+      geom_boxplot(outlier.shape = NA) +
+      geom_jitter(size = 0.5, alpha = 0.5)
+  }
+  # create title
+  title <- paste('protein expression of', protein_name)
+  if(!is.null(olinkid_to_uid_loc)){
+    # read mapping of olink ID to uniprot ID
+    olinkid_to_uid <- read.table(olinkid_to_uid_loc, sep = '\t', header = T, stringsAsFactors = F)
+    # get the uid
+    uid <- olinkid_to_uid[olinkid_to_uid$OlinkID == protein_name, 'Uniprot.ID']
+    # add to title
+    title <- paste(title, '-', uid, sep = '')
+    # if there is a gene symbol mapping, do that one as well
+    if(!is.null(uniprotid_to_gs_loc)){
+      uniprotid_to_gs <- read.table(uniprotid_to_gs_loc, sep = '\t', header = T, stringsAsFactors = F)
+      gs <- uniprotid_to_gs[uniprotid_to_gs$From == uid, 'To']
+      # add to title
+      title <- paste(title, '(', gs, ')')
+    }
+  }
+  # add paper style if requested
+  if (paper_style) {
+    p <- p + theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+  }
+  # remove points if requested
+  if (pointless) {
+    p <- p + theme(axis.text.x=element_blank(),
+                   axis.ticks = element_blank(),
+                   axis.title.x = element_blank())
+  }
+  # remove legend if requested
+  if (legendless) {
+    p <- p + theme(legend.position = 'none')
+  }
+  # add title
+  p <- p + ggtitle(title)
+  # and y lab
+  p <- p + ylab('protein expression')
+  return(p)
+}
+
+
+do_regression <- function(protein_data, protein_name_column='OlinkID', protein_value_column='NPX', fixed_effects=c('age', 'sex', 'pandemic', 'case_control'), random_effects=c('SampleID'), value_of_interest='case_control') {
+  # paste together the model
+  model_formula <- paste(protein_value_column, '~ 0')
+  for(fixed_effect in fixed_effects){
+    model_formula <- paste(model_formula, fixed_effect, sep = ' + ')
+  }
+  for(random_effect in random_effects){
+    model_formula <- paste(model_formula, ' + (1|', random_effect, ')', sep = '')
+  }
+  # and turn into a formula
+  form <- as.formula(model_formula)
+  
+  # check each protein
+  res_per_protein <- list()
+  for (protein in unique(protein_data[[protein_name_column]])) {
+    # subset to that protein
+    protein_data_protein <- protein_data[!is.na(protein_data[[protein_name_column]]) & protein_data[[protein_name_column]] == protein, ]
+    # subset to complete data
+    protein_data_protein <- protein_data_protein[complete.cases(protein_data_protein[, c(fixed_effects, random_effects)]), ]
+    tryCatch({
+      if (nrow(protein_data_protein) > 0) {
+        # do analysis
+        res_per_protein[[protein]] <- lmer(form, data = protein_data_protein)
+      }
+    }, error=function(cond) {
+      print(paste('model build failed'))
+      message(cond)
+    })
+  }
+  
+  # convert to dataframe
+  df_per_protein <- list()
+  for (protein in names(res_per_protein)) {
+    # extract the result
+    res_protein <- res_per_protein[[protein]]
+    # turn into dataframe
+    protein_df <- data.frame(summary(res_protein)$coefficients)
+    # add the rownames as explicit column
+    protein_df <- cbind(data.frame(term = rownames(protein_df)), protein_df)
+    # add the protein
+    protein_df <- cbind(data.frame(protein = rep(protein, times = nrow(protein_df))), protein_df)
+    # put in list
+    df_per_protein[[protein]] <- protein_df
+  }
+  # save in big table
+  df_proteins <- do.call('rbind', df_per_protein)
+  return(df_proteins)
+}
+
 
 ####################
 # Main Code        #
 ####################
 
 # location of the protein data
+
 protein_data_loc <- '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/olink_protein/OLINK2023-037_INF_EXTENDED_NPX_2024-07-10.csv'
 # location of the sample mapping
-sample_mapping_loc <- '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/olink_protein/OV21_00402_linkage_file_olink_20240719.csv'
+sample_mapping_loc <- '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/olink_protein/OV21_00402_linkage_file_olink_20240719.tsv.gz'
 # the full id table
 mo_full_id_loc <- '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/metadata/mo_full_id_table.tsv.gz'
-# get the other id table
-mo_other_id_loc <- '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/metadata/mo_id_to_otherids.tsv.gz'
-# and the 'realids'
-mo_realid_assignments_loc <- '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/metadata/mo_sample_sheet_final.tsv'
 # the age/sex for the mo participant
 mo_age_sex_loc <- '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/metadata/mo_age_sex.tsv.gz'
+# the mapping of the covid assignments
+lc_assignments_loc <- '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/olink_protein/mo_case_dob_sex.tsv'
+# the next info
+mo_sample_sheet_loc <- '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/metadata/mo_age_sex_ids.tsv.gz'
 
 # load the data
 protein_data <- read_NPX(protein_data_loc)
 # load the sample data
-sample_mapping <- read.table(sample_mapping_loc, header = T, sep = ',')
+sample_mapping <- read.table(sample_mapping_loc, header = T, sep = '\t')
 
-# load other ID data
-mo_full_id <- read.table(mo_full_id_loc, header = T, sep = '\t')
-mo_other_id <- read.table(mo_other_id_loc, header = T, sep = '\t')
-mo_realid_assignments <- read.table(mo_realid_assignments_loc, header = T, sep = '\t')
-# fix the sample IDs in the realid table
-mo_realid_assignments[['sample_final']] <- mo_realid_assignments$SampleID_CORRECT
-mo_realid_assignments[is.na(mo_realid_assignments$SampleID_CORRECT) | mo_realid_assignments$SampleID_CORRECT == '', 'sample_final']  <- mo_realid_assignments[is.na(mo_realid_assignments$SampleID_CORRECT) | mo_realid_assignments$SampleID_CORRECT == '', 'sample']
-mo_realid_assignments[['realid_final']] <- mo_realid_assignments$RealID
-mo_realid_assignments[is.na(mo_realid_assignments$RealID) | mo_realid_assignments$RealID == '', 'realid_final']  <- mo_realid_assignments[is.na(mo_realid_assignments$RealID) | mo_realid_assignments$RealID == '', 'sample_final']
-# replace spaces in other ID for the covid identifiers
-mo_other_id[['Other.ID']] <- gsub(' ', '', mo_other_id[['Other.ID']])
+# load sample sheet
+mo_sample_sheet <- read.table(mo_sample_sheet_loc, header = T, sep = '\t')
+
+# load the sample data
+sample_mapping <- read.table(sample_mapping_loc, header = T, sep = '\t')
+# make sex lowercase
+sample_mapping[['Gender']] <- tolower(sample_mapping[['Gender']])
+
+# add assignment data
+lc_assignments <- read.table(lc_assignments_loc, header = T, sep = '\t')
+# making sex lowercase
+lc_assignments[['sex']] <- tolower(lc_assignments[['sex']])
+# and add MO to the name
+lc_assignments[['olink_id']] <- paste('MO', lc_assignments[['olink_id']], sep = '')
+# add the MO olink identifier to hte sample mapping file
+sample_mapping[['olink_id']] <- lc_assignments[match(paste(sample_mapping[['dob']], sample_mapping[['Gender']]), paste(lc_assignments[['date_of_birth']], lc_assignments[['sex']])), 'olink_id']
+
+# load age/sex data
+mo_age_sex <- read.table(mo_age_sex_loc, header = T, sep = '\t')
 
 # rename the plate
 sample_mapping[['plate']] <- gsub('OV210402EDPL0', 'PlateLayout_Plate', sample_mapping$Release.Rack)
@@ -83,57 +346,50 @@ sample_mapping[['well_plate']] <- paste(sample_mapping[['plate']], sample_mappin
 
 # the entries with just a number are MO ones, rename them
 protein_data[['SampleID']] <- gsub('^(\\d+)$', 'MO\\1', protein_data[['SampleID']])
+# also the duplicated one
+protein_data[['SampleID']] <- gsub('(82_1)|(82_2)', 'MO82', protein_data[['SampleID']])
 # get more descriptive ID for those
 #protein_data_realid <- mo_realid_assignments[match(protein_data[['SampleID']], mo_realid_assignments[['sample_final']]), 'realid_final']
-protein_data_realid <- mo_realid_assignments[match(protein_data[['SampleID']], mo_realid_assignments[['sample']]), 'realid_final']
+#protein_data_realid <- lc_assignments[match(protein_data[['SampleID']], lc_assignments[['olink']]), 'realid']
 # replace the sample name where possible
-protein_data[!is.na(protein_data_realid), 'realid'] <- protein_data_realid[!is.na(protein_data_realid)]
+#protein_data[!is.na(protein_data_realid), 'realid'] <- protein_data_realid[!is.na(protein_data_realid)]
 # if the ID already starts with ll-next, we can just copy that
 protein_data[!is.na(protein_data[['SampleID']]) & startsWith(protein_data[['SampleID']], 'LL-NEXT'), 'realid'] <- protein_data[!is.na(protein_data[['SampleID']]) & startsWith(protein_data[['SampleID']], 'LL-NEXT'), 'SampleID']
 
-# now do the LLNEXT and COVID19 samples one as well
-protein_data_next_id <- mo_other_id[match(protein_data[['SampleID']], mo_other_id[['Other.ID']]), 'PROJECT_PSEUDO_ID_NEW']
-# replace the sample name where possible
-protein_data[!is.na(protein_data_next_id) & protein_data_next_id != '' & protein_data_next_id != ' ', 'llnextcovid_pseudo'] <- protein_data_next_id[!is.na(protein_data_next_id) & protein_data_next_id != '' & protein_data_next_id != ' ']
-
-# try from the other one we have as well
-protein_data_next2_id <- mo_full_id[match(protein_data[['SampleID']], mo_full_id[['COVID_ID']]), 'll_pseudo_id']
-# replace the sample name where possible
-protein_data[!is.na(protein_data_next2_id) & protein_data_next2_id != '' & protein_data_next2_id != ' ', 'llnextcovid_pseudo'] <- protein_data_next2_id[!is.na(protein_data_next2_id) & protein_data_next2_id != '' & protein_data_next2_id != ' ']
-
-# add the case/control status
-protein_data[['case_control']] <- NA
-# get combination of well and plate
-protein_data_well_plate <- paste(protein_data[['PlateID']], protein_data[['WellID']], sep = '_')
-# use that for case/control inference
-protein_data[['case_control']] <- sample_mapping[match(protein_data_well_plate, sample_mapping[['well_plate']]), 'Case.Control']
-# where we don't have data, the data was pre-pandemic
-protein_data[['pandemic']] <- ifelse(is.na(protein_data[['case_control']]), 'prepandemic', 'postpandemic')
-# furthermore, if it was pre-pandemic, the case/control status must be case
-protein_data[is.na(protein_data[['case_control']]), 'case_control'] <- 'control'
-
-# match the sample ID that we have for the data in the sample mapping
-protein_data_sample_id <- sample_mapping[match(protein_data_well_plate, sample_mapping[['well_plate']]), 'project_pseudo_id']
-# replace the sample name where possible
-protein_data[!is.na(protein_data_sample_id), 'llnextcovid_pseudo'] <- protein_data_sample_id[!is.na(protein_data_sample_id)]
-
-# read the age/sex file
-mo_age_sex <- read.table(mo_age_sex_loc, header = T, sep = '\t')
-# match to realid
-protein_data_sex <- mo_age_sex[match(protein_data[['realid']], mo_age_sex[['sample']]), 'sex']
-protein_data_age <- mo_age_sex[match(protein_data[['realid']], mo_age_sex[['sample']]), 'age']
-# replace the sample name where possible
-protein_data[!is.na(protein_data_sex), 'sex'] <- protein_data_sex[!is.na(protein_data_sex)]
-protein_data[!is.na(protein_data_age), 'age'] <- protein_data_age[!is.na(protein_data_age)]
-# make the sex lowercase in the sample mapping
-sample_mapping[['Gender']] <- tolower(sample_mapping[['Gender']])
-# get those as well 
+# get the samples from lifelines
 protein_data_sex2 <- sample_mapping[match(protein_data[['SampleID']], sample_mapping[['SampleID']]), 'Gender']
 protein_data_age2 <- sample_mapping[match(protein_data[['SampleID']], sample_mapping[['SampleID']]), 'Age']
 # again add sex and age
 protein_data[!is.na(protein_data_sex2), 'sex'] <- protein_data_sex2[!is.na(protein_data_sex2)]
 protein_data[!is.na(protein_data_age2), 'age'] <- protein_data_age2[!is.na(protein_data_age2)]
+# and the mo ones
+protein_data_sex4 <- mo_age_sex[match(protein_data[['SampleID']], mo_age_sex[['sample']]), 'sex']
+protein_data_age4 <- mo_age_sex[match(protein_data[['SampleID']], mo_age_sex[['sample']]), 'age']
+protein_data[!is.na(protein_data_sex4), 'sex'] <- protein_data_sex4[!is.na(protein_data_sex4)]
+protein_data[!is.na(protein_data_age4), 'age'] <- protein_data_age4[!is.na(protein_data_age4)]
 
+# everything that is LL or MO, is a pre-pandemic control
+protein_data[!(grepl('(MO\\d+)', protein_data[['SampleID']])), 'case_control'] <- 'control'
+# set pandemic status as well
+protein_data[['pandemic']] <- ifelse(grepl('(MO\\d+)', protein_data[['SampleID']]), 'postpandemic', 'prepandemic')
+# get combination of well and plate
+protein_data_well_plate <- paste(protein_data[['PlateID']], protein_data[['WellID']], sep = '_')
+
+# add case control status
+protein_data[['case_control']] <- NA
+# get the status where we can
+protein_data_case <- lc_assignments[match(protein_data[['SampleID']], lc_assignments[['olink_id']]), 'case_controle']
+# and add that information
+protein_data[!is.na(protein_data_case), 'case_control'] <- protein_data_case[!is.na(protein_data_case)]
+# the ones that are pre-pandemic are controls
+protein_data[!is.na(protein_data[['pandemic']]) & protein_data[['pandemic']] == 'prepandemic', 'case_control'] <- 'control'
+
+# add the final sample id
+protein_data[['sample_final']] <- protein_data[['SampleID']]
+# add inferred olink id
+protein_data[['olink_id']] <- sample_mapping[!is.na(sample_mapping[['olink_id']]) & sample_mapping[['olink_id']] != 'MO' & sample_mapping[['olink_id']] != '', ][match(protein_data[['SampleID']], sample_mapping[!is.na(sample_mapping[['olink_id']]) & sample_mapping[['olink_id']] != 'MO' & sample_mapping[['olink_id']] != '', 'SampleID']), 'olink_id']
+# use that instead of the sample id where possible
+protein_data[!is.na(protein_data[['olink_id']]), 'sample_final'] <- protein_data[!is.na(protein_data[['olink_id']]), 'olink_id']
 
 # plot the plates to see how they line up
 plot_plate_layout(protein_data) + scale_fill_manual(values = roycols::get_color_list(protein_data[['PlateID']]))
@@ -141,6 +397,51 @@ plot_plate_layout(protein_data, sample_column = 'case_control') + scale_fill_man
 plot_plate_layout(protein_data, sample_column = 'pandemic') + scale_fill_manual(values = roycols::get_color_list(protein_data[['PlateID']]))
 plot_plate_layout(protein_data, sample_column = 'sex') + scale_fill_manual(values = roycols::get_color_list(protein_data[['PlateID']]))
 plot_plate_layout(protein_data, sample_column = 'age') + scale_fill_manual(values = roycols::get_color_list(protein_data[['PlateID']]))
+
+# correlate the samples to one another
+protein_correlations_samples <- correlate_samples(protein_data)
+# also add the reverse sample comparison (we have A-B, but we also want B-A there explicitly)
+protein_correlations_samples <- rbind(protein_correlations_samples,
+                                      data.frame(sample1 = protein_correlations_samples[['sample2']],
+                                                 sample2 = protein_correlations_samples[['sample1']],
+                                                 nproteins_s1 = protein_correlations_samples[['nproteins_s2']], 
+                                                 nproteins_s2 = protein_correlations_samples[['nproteins_s1']],
+                                                 nproteins_both = protein_correlations_samples[['nproteins_both']], 
+                                                 correlation = protein_correlations_samples[['correlation']]))
+# unfortunately that duplicated the A-A ones as well, so let's remove the duplicates
+protein_correlations_samples <- protein_correlations_samples[!duplicated(paste(protein_correlations_samples[['sample1']], protein_correlations_samples[['sample2']])), ]
+# let's plot a tile, to see if there is any pattern at all
+create_confusion_matrix(assignment_table = NULL, confusion_table = protein_correlations_samples, freq_column = 'correlation', truth_column = 'sample1', prediction_column = 'sample2', truth_column_label='sample', prediction_column_label='sample', angle_labels=T, show_text = F)
+
+
+# save in big table
+df_proteins <- do_regression(protein_data, random_effects=c('sample_final'))
+# subset to the variate we care about
+df_proteins_casecontrol <- df_proteins[df_proteins[['term']] == 'case_controlcontrol', ]
+# do B&H correction
+df_proteins_casecontrol[['BH']] <- p.adjust(df_proteins_casecontrol[['Pr...t..']], method = 'BH')
+
+# plot the significant ones
+plot_grid(
+  plot_olink_expression(olink = protein_data[protein_data$pandemic == 'postpandemic', ], protein_name = 'OID20477', plot_order = c('control', 'case')) + scale_fill_manual(values = roycols::get_color_list(protein_data$case_control)) + xlab('sample status') + ggtitle('Interleukin-17C'),
+  plot_olink_expression(olink = protein_data[protein_data$pandemic == 'postpandemic', ], protein_name = 'OID20504', plot_order = c('control', 'case')) + scale_fill_manual(values = roycols::get_color_list(protein_data$case_control)) + xlab('sample status') + ggtitle('Integral membrane protein 2A'),
+  plot_olink_expression(olink = protein_data[protein_data$pandemic == 'postpandemic', ], protein_name = 'OID20524', plot_order = c('control', 'case')) + scale_fill_manual(values = roycols::get_color_list(protein_data$case_control)) + xlab('sample status') + ggtitle('Dual adapter for phosphotyrosine and\n3-phosphotyrosine and 3-phosphoinositide'),
+  plot_olink_expression(olink = protein_data[protein_data$pandemic == 'postpandemic', ], protein_name = 'OID20563', plot_order = c('control', 'case')) + scale_fill_manual(values = roycols::get_color_list(protein_data$case_control)) + xlab('sample status') + ggtitle('Interleukin-6'),
+  plot_olink_expression(olink = protein_data[protein_data$pandemic == 'postpandemic', ], protein_name = 'OID20577', plot_order = c('control', 'case')) + scale_fill_manual(values = roycols::get_color_list(protein_data$case_control)) + xlab('sample status') + ggtitle('Interleukin-1 receptor-associated kinase 4'),
+  plot_olink_expression(olink = protein_data[protein_data$pandemic == 'postpandemic', ], protein_name = 'OID20717', plot_order = c('control', 'case')) + scale_fill_manual(values = roycols::get_color_list(protein_data$case_control)) + xlab('sample status') + ggtitle('Tyrosine-protein phosphatase non-receptor type 6'),
+  nrow = 3,
+  ncol = 2
+)
+plot_grid(
+  plot_olink_expression(olink = protein_data, protein_name = 'OID20477', plot_order = c('control', 'case')) + scale_fill_manual(values = roycols::get_color_list(protein_data$case_control)) + xlab('sample status'),
+  plot_olink_expression(olink = protein_data, protein_name = 'OID20504', plot_order = c('control', 'case')) + scale_fill_manual(values = roycols::get_color_list(protein_data$case_control)) + xlab('sample status'),
+  plot_olink_expression(olink = protein_data, protein_name = 'OID20524', plot_order = c('control', 'case')) + scale_fill_manual(values = roycols::get_color_list(protein_data$case_control)) + xlab('sample status'),
+  plot_olink_expression(olink = protein_data, protein_name = 'OID20563', plot_order = c('control', 'case')) + scale_fill_manual(values = roycols::get_color_list(protein_data$case_control)) + xlab('sample status'),
+  plot_olink_expression(olink = protein_data, protein_name = 'OID20577', plot_order = c('control', 'case')) + scale_fill_manual(values = roycols::get_color_list(protein_data$case_control)) + xlab('sample status'),
+  plot_olink_expression(olink = protein_data, protein_name = 'OID20717', plot_order = c('control', 'case')) + scale_fill_manual(values = roycols::get_color_list(protein_data$case_control)) + xlab('sample status'),
+  nrow = 3,
+  ncol = 2
+)
 
 # now do actual statistical analysis
 olink_lmer(protein_data, variable = c('case_control', 'pandemic'), random = c('SampleID'))
