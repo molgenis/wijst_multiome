@@ -1,8 +1,8 @@
 #!/usr/bin/env Rscript
 ############################################################################################################################
 # Authors: Roy Oelen
-# Name: mo_scanpy_to_h5seurat.R
-# Function: preprocess the count data
+# Name: mo_get_arc_metadata.R
+# Function: get cellranger arc metadata
 ############################################################################################################################
 
 
@@ -10,47 +10,46 @@
 # libraries        #
 ####################
 
-# required to create object
-library(Seurat)
-library(SeuratDisk)
+# none
+
 
 ####################
 # Functions        #
 ####################
 
-convert_scanpy_to_h5seurat <- function(scanpy_objects_loc, h5seurat_objects_loc, lanes, scanpy_object_prepend='mo_', scanpy_object_append='.h5ad', h5seurat_object_prepend='mo_', h5seurat_object_append='.h5seurat') {
+get_arc_metadata <- function(cellranger_loc, lanes, metadata_append='outs/per_barcode_metrics.csv') {
+  # store per lane first
+  metadata_per_lane <- list()
   # check each lane
   for (lane in lanes) {
-    # get the path to the scanpy file
-    scanpy_object_loc <- paste(scanpy_objects_loc, scanpy_object_prepend, lane, scanpy_object_append, sep = '')
-    # and the seurat file
-    h5seurat_object_loc <- paste(h5seurat_objects_loc, h5seurat_object_prepend, lane, h5seurat_object_append, sep = '')
-    # check if the original exists
-    if (file.exists(scanpy_object_loc)) {
-      # actually convert
-      try({
-        # an error will be thrown when closing, but the file created is still valid: https://github.com/mojaveazure/seurat-disk/issues/82
-        Convert(scanpy_object_loc, dest = h5seurat_object_loc, overwrite = TRUE)
-      })
-    }
-    else {
-      warning(paste('missing for lane ', lane, ', at ', scanpy_object_loc, '. Skipping', sep = ''))
-    }
+    # paste the path together
+    metadata_loc <- paste(cellranger_loc, '/', lane, '/', metadata_append, sep = '')
+    # read the table
+    metadata_table <- read.table(metadata_loc, sep = ',', header = T)
+    # add lane as column
+    metadata_table[['lane']] <- lane
+    # create some metadata, for now, we'll first just store the lane here
+    barcodes_short <- gsub('(-\\d+)', '', metadata_table[['barcode']])
+    barcodes_lane <- paste(barcodes_short, rep(lane, times = length(barcodes_short)), sep = '_')
+    # add short barcode and lane+barcode
+    metadata_table[['barcode_1']] <- metadata_table[['barcode']]
+    metadata_table[['barcode_lane']] <- barcodes_lane
+    metadata_table[['barcode']] <- barcodes_short
+    # put in list
+    metadata_per_lane[[lane]] <- metadata_table
   }
-  return(0)
+  # merge all together
+  metadata_all <- do.call('rbind', metadata_per_lane)
+  rownames(metadata_all) <- metadata_all[['barcode_lane']]
+  return(metadata_all)
 }
- 
+
 
 ####################
 # Main Code        #
 ####################
 
-# the location of the scanpy objects
-scanpy_objects_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/scanpy_preprocess_samples/objects/'
-# the location where we want the h5Seurat objects
-h5seurat_objects_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/seurat_preprocess_samples/objects/'
-
-# these are the lanes we care about
+# these are the lanes
 lanes <- c('230105_lane1', '230105_lane2', '230105_lane3', '230105_lane4',
            '230105_lane5', '230105_lane6', '230105_lane7', '230105_lane8',
            '230112_lane1', '230112_lane2', '230112_lane3', '230112_lane4',
@@ -73,5 +72,11 @@ lanes <- c('230105_lane1', '230105_lane2', '230105_lane3', '230105_lane4',
            '230316_lane5', '230316_lane6', '230316_lane7'
 )
 
-# now let's try to convert
-convert_scanpy_to_h5seurat(scanpy_objects_loc, h5seurat_objects_loc, lanes)
+# get cellranger loc
+cellranger_loc <- '/groups/umcg-franke-scrna/prm02/projects/multiome/processed/joint/alignment/b38/'
+# get the metdatadata
+arc_metadata <- get_arc_metadata(cellranger_loc, lanes)
+# get where to store the metadata
+arc_metadata_loc <- gz('/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/metadata/arc_metadata.tsv.gz')
+# save the file
+write.table(arc_metadata, arc_metadata_loc, sep = '\t', row.names = F, col.names = T)
