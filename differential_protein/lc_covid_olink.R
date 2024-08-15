@@ -136,7 +136,7 @@ create_confusion_matrix <- function(assignment_table, truth_column, prediction_c
   # round the frequency off to a sensible cutoff
   confusion_table$freq <- round(confusion_table$freq, digits=2)
   # turn into plot
-  p <- ggplot(data=confusion_table, aes(x=truth, y=prediction, fill=freq)) + geom_tile() + scale_fill_gradient2(low='red', high='blue', mid = 'white')
+  p <- ggplot(data=confusion_table, aes(x=truth, y=prediction, fill=freq)) + geom_tile() + scale_fill_gradient2(low='red', high='blue', mid = 'white', limits = c(-1, 1))
   # add text if requested
   if (show_text) {
     p <- p + geom_text(aes(label=freq))
@@ -241,6 +241,24 @@ plot_olink_expression <- function(olink, protein_name, protein_name_column='Olin
 }
 
 
+do_inverse_normal <- function(protein_data, protein_name_column='OlinkID', protein_value_column='NPX', new_protein_value_column_name='INE') {
+  # add this new normalized value as a column
+  protein_data[[new_protein_value_column_name]] <- NA
+  # check each protein
+  for (protein_name in unique(protein_data[[protein_name_column]])) {
+    # get indices of this protein
+    protein_indices <- which(!is.na(protein_data[[protein_name_column]]) & protein_data[[protein_name_column]] == protein_name)
+    # extract the values for that
+    protein_expression_raw <- protein_data[protein_indices, protein_value_column]
+    # normalize these
+    protein_expression_norm <- qnorm((rank(protein_expression_raw, na.last = "keep") -0.5) / sum(!is.na(protein_expression_raw)))
+    # and add these values
+    protein_data[protein_indices, new_protein_value_column_name] <- protein_expression_norm
+  }
+  return(protein_data)
+}
+
+
 do_regression <- function(protein_data, protein_name_column='OlinkID', protein_value_column='NPX', fixed_effects=c('age', 'sex', 'pandemic', 'case_control'), random_effects=c('SampleID'), value_of_interest='case_control') {
   # paste together the model
   model_formula <- paste(protein_value_column, '~ 0')
@@ -263,7 +281,12 @@ do_regression <- function(protein_data, protein_name_column='OlinkID', protein_v
     tryCatch({
       if (nrow(protein_data_protein) > 0) {
         # do analysis
-        res_per_protein[[protein]] <- lmer(form, data = protein_data_protein)
+        if (length(random_effects) > 0) {
+          res_per_protein[[protein]] <- lmer(form, data = protein_data_protein)
+        }
+        else {
+          res_per_protein[[protein]] <- glm(form, data = protein_data_protein)
+        }
       }
     }, error=function(cond) {
       print(paste('model build failed'))
@@ -368,21 +391,26 @@ protein_data_age4 <- mo_age_sex[match(protein_data[['SampleID']], mo_age_sex[['s
 protein_data[!is.na(protein_data_sex4), 'sex'] <- protein_data_sex4[!is.na(protein_data_sex4)]
 protein_data[!is.na(protein_data_age4), 'age'] <- protein_data_age4[!is.na(protein_data_age4)]
 
-# everything that is LL or MO, is a pre-pandemic control
+# everything that is not MO, is a control
 protein_data[!(grepl('(MO\\d+)', protein_data[['SampleID']])), 'case_control'] <- 'control'
 # set pandemic status as well
-protein_data[['pandemic']] <- ifelse(grepl('(MO\\d+)', protein_data[['SampleID']]), 'postpandemic', 'prepandemic')
+protein_data[protein_data[['PlateID']] %in% c('PlateLayout_Plate1', 'PlateLayout_Plate2', 'PlateLayout_Plate3'), 'pandemic'] <- 'postpandemic'
+protein_data[protein_data[['PlateID']] %in% c('PlateLayout_Plate4', 'PlateLayout_Plate5'), 'pandemic'] <- 'prepandemic'
+# the NEXT samples on the other plates are still post-pandemic
+protein_data[(grepl('(LL-NEXT)', protein_data[['SampleID']])), 'pandemic'] <- 'postpandemic'
+
 # get combination of well and plate
 protein_data_well_plate <- paste(protein_data[['PlateID']], protein_data[['WellID']], sep = '_')
 
-# add case control status
-protein_data[['case_control']] <- NA
 # get the status where we can
 protein_data_case <- lc_assignments[match(protein_data[['SampleID']], lc_assignments[['olink_id']]), 'case_controle']
 # and add that information
 protein_data[!is.na(protein_data_case), 'case_control'] <- protein_data_case[!is.na(protein_data_case)]
-# the ones that are pre-pandemic are controls
-protein_data[!is.na(protein_data[['pandemic']]) & protein_data[['pandemic']] == 'prepandemic', 'case_control'] <- 'control'
+# add the combination of case/control
+protein_data[['casecontrolpandemic']] <- NA
+protein_data[protein_data[['pandemic']] == 'postpandemic' & protein_data[['case_control']] == 'case', 'casecontrolpandemic'] <- 'case'
+protein_data[protein_data[['pandemic']] == 'postpandemic' & protein_data[['case_control']] == 'control', 'casecontrolpandemic'] <- 'control-recent'
+protein_data[protein_data[['pandemic']] == 'prepandemic' & protein_data[['case_control']] == 'control', 'casecontrolpandemic'] <- 'control-old'
 
 # add the final sample id
 protein_data[['sample_final']] <- protein_data[['SampleID']]
@@ -398,8 +426,10 @@ plot_plate_layout(protein_data, sample_column = 'pandemic') + scale_fill_manual(
 plot_plate_layout(protein_data, sample_column = 'sex') + scale_fill_manual(values = roycols::get_color_list(protein_data[['PlateID']]))
 plot_plate_layout(protein_data, sample_column = 'age') + scale_fill_manual(values = roycols::get_color_list(protein_data[['PlateID']]))
 
+# we may have matched samples in some cases, so we'll combine some columns to make those samples unique
+protein_data[['sample_unique']] <- paste(protein_data[['sample_final']], protein_data[['PlateID']], protein_data[['WellID']])
 # correlate the samples to one another
-protein_correlations_samples <- correlate_samples(protein_data)
+protein_correlations_samples <- correlate_samples(protein_data, sample_column = 'sample_unique')
 # also add the reverse sample comparison (we have A-B, but we also want B-A there explicitly)
 protein_correlations_samples <- rbind(protein_correlations_samples,
                                       data.frame(sample1 = protein_correlations_samples[['sample2']],
@@ -412,14 +442,108 @@ protein_correlations_samples <- rbind(protein_correlations_samples,
 protein_correlations_samples <- protein_correlations_samples[!duplicated(paste(protein_correlations_samples[['sample1']], protein_correlations_samples[['sample2']])), ]
 # let's plot a tile, to see if there is any pattern at all
 create_confusion_matrix(assignment_table = NULL, confusion_table = protein_correlations_samples, freq_column = 'correlation', truth_column = 'sample1', prediction_column = 'sample2', truth_column_label='sample', prediction_column_label='sample', angle_labels=T, show_text = F)
+# also plot specifically the different controls agains one another
+plot_grid(
+  create_confusion_matrix(assignment_table = NULL, confusion_table = protein_correlations_samples[protein_correlations_samples[['sample1']] %in% unique(data.frame(protein_data)[data.frame(protein_data)[['casecontrolpandemic']] == 'control-old', 'sample_unique']) &
+                                                                                                    protein_correlations_samples[['sample2']] %in% unique(data.frame(protein_data)[data.frame(protein_data)[['casecontrolpandemic']] == 'control-recent', 'sample_unique']), ], freq_column = 'correlation', truth_column = 'sample1', prediction_column = 'sample2', truth_column_label='sample', prediction_column_label='sample', angle_labels=T, show_text = F) +
+    ggtitle('control-old vs control-recent'),
+  create_confusion_matrix(assignment_table = NULL, confusion_table = protein_correlations_samples[protein_correlations_samples[['sample1']] %in% unique(data.frame(protein_data)[data.frame(protein_data)[['casecontrolpandemic']] == 'case', 'sample_unique']) &
+                                                                                                    protein_correlations_samples[['sample2']] %in% unique(data.frame(protein_data)[data.frame(protein_data)[['casecontrolpandemic']] == 'control-recent', 'sample_unique']), ], freq_column = 'correlation', truth_column = 'sample1', prediction_column = 'sample2', truth_column_label='sample', prediction_column_label='sample', angle_labels=T, show_text = F) + 
+    ggtitle('case vs control-recent'),
+  create_confusion_matrix(assignment_table = NULL, confusion_table = protein_correlations_samples[protein_correlations_samples[['sample1']] %in% unique(data.frame(protein_data)[data.frame(protein_data)[['casecontrolpandemic']] == 'case', 'sample_unique']) &
+                                                                                                    protein_correlations_samples[['sample2']] %in% unique(data.frame(protein_data)[data.frame(protein_data)[['casecontrolpandemic']] == 'control-old', 'sample_unique']), ], freq_column = 'correlation', truth_column = 'sample1', prediction_column = 'sample2', truth_column_label='sample', prediction_column_label='sample', angle_labels=T, show_text = F) + 
+    ggtitle('case vs control-old'),
+  nrow = 2,
+  ncol = 2
+  
+)
 
 
+# add inverse normal transformation
+protein_data <- do_inverse_normal(protein_data)
 # save in big table
-df_proteins <- do_regression(protein_data, random_effects=c('sample_final'))
+df_proteins <- do_regression(protein_data, random_effects=c('sample_final', 'PlateID'))
 # subset to the variate we care about
 df_proteins_casecontrol <- df_proteins[df_proteins[['term']] == 'case_controlcontrol', ]
 # do B&H correction
 df_proteins_casecontrol[['BH']] <- p.adjust(df_proteins_casecontrol[['Pr...t..']], method = 'BH')
+df_proteins_casecontrol[['p.bonferroni']] <- p.adjust(df_proteins_casecontrol[['Pr...t..']], method = 'bonferroni')
+df_proteins_casecontrol <- df_proteins_casecontrol[order(df_proteins_casecontrol[['Pr...t..']]), ]
+# add Z-score
+df_proteins_casecontrol[['z']] <- df_proteins_casecontrol[['Estimate']] / df_proteins_casecontrol[['Std..Error']]
+
+# try inverse normal as well
+df_proteins_ine <- do_regression(protein_data, random_effects=c('sample_final', 'PlateID'), protein_value_column = 'INE')
+df_proteins_ine_casecontrol <- df_proteins_ine[df_proteins_ine[['term']] == 'case_controlcontrol', ]
+df_proteins_ine_casecontrol[['BH']] <- p.adjust(df_proteins_ine_casecontrol[['Pr...t..']], method = 'BH')
+df_proteins_ine_casecontrol[['p.bonferroni']] <- p.adjust(df_proteins_ine_casecontrol[['Pr...t..']], method = 'bonferroni')
+df_proteins_ine_casecontrol <- df_proteins_ine_casecontrol[order(df_proteins_ine_casecontrol[['Pr...t..']]), ]
+
+# fit model for only the first three plates
+df_proteins_plate123 <- do_regression(protein_data[protein_data[['PlateID']] %in% c('PlateLayout_Plate1', 'PlateLayout_Plate2', 'PlateLayout_Plate3'), ], random_effects=c('sample_final', 'PlateID'), fixed_effects=c('age', 'sex', 'case_control'))
+df_proteins_plate123_casecontrol <- df_proteins_plate123[df_proteins_plate123[['term']] == 'case_controlcontrol', ]
+df_proteins_plate123_casecontrol[['BH']] <- p.adjust(df_proteins_plate123_casecontrol[['Pr...t..']], method = 'BH')
+df_proteins_plate123_casecontrol[['p.bonferroni']] <- p.adjust(df_proteins_plate123_casecontrol[['Pr...t..']], method = 'bonferroni')
+df_proteins_plate123_casecontrol <- df_proteins_plate123_casecontrol[order(df_proteins_plate123_casecontrol[['Pr...t..']]), ]
+df_proteins_plate123_casecontrol[['z']] <- df_proteins_plate123_casecontrol[['Estimate']] / df_proteins_plate123_casecontrol[['Std..Error']]
+
+# let's also try to do plate one and two separately
+df_proteins_plate1 <- do_regression(protein_data[protein_data[['PlateID']] == 'PlateLayout_Plate1', ], random_effects=c('sample_final'), fixed_effects=c('age', 'sex', 'case_control'))
+df_proteins_plate1_casecontrol <- df_proteins_plate1[df_proteins_plate1[['term']] == 'case_controlcontrol', ]
+df_proteins_plate1_casecontrol[['BH']] <- p.adjust(df_proteins_plate1_casecontrol[['Pr...t..']], method = 'BH')
+df_proteins_plate1_casecontrol[['p.bonferroni']] <- p.adjust(df_proteins_plate1_casecontrol[['Pr...t..']], method = 'bonferroni')
+df_proteins_plate1_casecontrol <- df_proteins_plate1_casecontrol[order(df_proteins_plate1_casecontrol[['Pr...t..']]), ]
+df_proteins_plate2 <- do_regression(protein_data[protein_data[['PlateID']] == 'PlateLayout_Plate2', ], random_effects=c(), fixed_effects=c('age', 'sex', 'case_control'))
+df_proteins_plate2_casecontrol <- df_proteins_plate2[df_proteins_plate2[['term']] == 'case_controlcontrol', ]
+df_proteins_plate2_casecontrol[['BH']] <- p.adjust(df_proteins_plate2_casecontrol[['Pr...t..']], method = 'BH')
+df_proteins_plate2_casecontrol[['p.bonferroni']] <- p.adjust(df_proteins_plate2_casecontrol[['Pr...t..']], method = 'bonferroni')
+df_proteins_plate2_casecontrol <- df_proteins_plate2_casecontrol[order(df_proteins_plate2_casecontrol[['Pr...t..']]), ]
+df_proteins_plate3 <- do_regression(protein_data[protein_data[['PlateID']] == 'PlateLayout_Plate3', ], random_effects=c(), fixed_effects=c('age', 'sex', 'case_control'))
+df_proteins_plate3_casecontrol <- df_proteins_plate3[df_proteins_plate3[['term']] == 'case_controlcontrol', ]
+df_proteins_plate3_casecontrol[['BH']] <- p.adjust(df_proteins_plate3_casecontrol[['Pr...t..']], method = 'BH')
+df_proteins_plate3_casecontrol[['p.bonferroni']] <- p.adjust(df_proteins_plate3_casecontrol[['Pr...t..']], method = 'bonferroni')
+df_proteins_plate3_casecontrol <- df_proteins_plate3_casecontrol[order(df_proteins_plate3_casecontrol[['Pr...t..']]), ]
+# merge the results of these runs
+df_proteins_plates_casecontrol <- merge(df_proteins_plate1_casecontrol[, c('protein', 'Estimate', 'Std..Error', 't.value', 'Pr...t..')], df_proteins_plate2_casecontrol[, c('protein', 'Estimate', 'Std..Error', 't.value', 'Pr...t..')], by = 'protein')
+# set colnames
+colnames(df_proteins_plates_casecontrol) <- c('protein', 'Estimate.1', 'Std..Error.1', 't.value.1', 'P.1', 'Estimate.2',  'Std.Error.2', 't.value.2', 'P.2')
+# merge third table
+df_proteins_plates_casecontrol <- merge(df_proteins_plates_casecontrol, df_proteins_plate3_casecontrol[, c('protein', 'Estimate', 'Std..Error', 't.value', 'Pr...t..')], by = 'protein')
+# set colnames
+colnames(df_proteins_plates_casecontrol) <- c('protein', 'Estimate.1', 'Std.Error.1', 't.value.1', 'P.1', 'Estimate.2',  'Std.Error.2', 't.value.2', 'P.2', 'Estimate.3', 'Std.Error.3', 't.value.3', 'P.3')
+# join the p of the full analysis on there
+df_proteins_plates_casecontrol[['P.all']] <- df_proteins_casecontrol[match(df_proteins_plates_casecontrol[['protein']], df_proteins_casecontrol[['protein']]), 'Pr...t..']
+# and the one of the first three plates
+df_proteins_plates_casecontrol[['P.123']] <- df_proteins_plate3_casecontrol[match(df_proteins_plates_casecontrol[['protein']], df_proteins_plate3_casecontrol[['protein']]), 'Pr...t..']
+# add z scores
+df_proteins_plates_casecontrol[['z.1']] <- df_proteins_plates_casecontrol[['Estimate.1']] / df_proteins_plates_casecontrol[['Std.Error.1']]
+df_proteins_plates_casecontrol[['z.2']] <- df_proteins_plates_casecontrol[['Estimate.2']] / df_proteins_plates_casecontrol[['Std.Error.2']]
+df_proteins_plates_casecontrol[['z.3']] <- df_proteins_plates_casecontrol[['Estimate.3']] / df_proteins_plates_casecontrol[['Std.Error.3']]
+# check the z score of using plate 4 and 5 or not
+ggplot(data = merge(df_proteins_casecontrol, df_proteins_plate123_casecontrol, by = 'protein'), mapping = aes(x = z.x, y = z.y)) + 
+  geom_point() +
+  xlab('Z score all plates') +
+  ylab('Z score plates 1,2,3')
+# and the -log10 p values
+ggplot(data = merge(df_proteins_casecontrol, df_proteins_plate123_casecontrol, by = 'protein'), mapping = aes(x = -log10(Pr...t...x), y = -log10(Pr...t...y))) + 
+  geom_point() +
+  xlab('-log10 p all plates') +
+  ylab('-log10 p plates 1,2,3')
+
+# let's plot per control and case
+plot_olink_expression(olink = protein_data, protein_name = 'OID20524', plot_order = c('control-old', 'control-recent', 'case'), group_column = 'casecontrolpandemic') + scale_fill_manual(values = roycols::get_color_list(protein_data$casecontrolpandemic)) + xlab('sample status')
+# check how much the plates differ
+plot_olink_expression(olink = protein_data, protein_name = 'OID20524', group_column = 'PlateID') + scale_fill_manual(values = roycols::get_color_list(protein_data$PlateID)) + xlab('plate')
+# check how case/control differs in each plate separately
+plot_grid(
+  plot_olink_expression(olink = protein_data[protein_data[['PlateID']] == 'PlateLayout_Plate1' & !((grepl('^(PC)|(NC)|(SC)', protein_data$sample_final))), ], protein_name = 'OID20524', plot_order = c('control-old', 'control-recent', 'case'), group_column = 'casecontrolpandemic') + scale_fill_manual(values = roycols::get_color_list(protein_data$casecontrolpandemic)) + xlab('sample status') + ylim(c(-2,10)) + ggtitle('OID20524 plate 1'),
+  plot_olink_expression(olink = protein_data[protein_data[['PlateID']] == 'PlateLayout_Plate2' & !((grepl('^(PC)|(NC)|(SC)', protein_data$sample_final))), ], protein_name = 'OID20524', plot_order = c('control-old', 'control-recent', 'case'), group_column = 'casecontrolpandemic') + scale_fill_manual(values = roycols::get_color_list(protein_data$casecontrolpandemic)) + xlab('sample status') + ylim(c(-2,10)) + ggtitle('OID20524 plate 2'),
+  plot_olink_expression(olink = protein_data[protein_data[['PlateID']] == 'PlateLayout_Plate3' & !((grepl('^(PC)|(NC)|(SC)', protein_data$sample_final))), ], protein_name = 'OID20524', plot_order = c('control-old', 'control-recent', 'case'), group_column = 'casecontrolpandemic') + scale_fill_manual(values = roycols::get_color_list(protein_data$casecontrolpandemic)) + xlab('sample status') + ylim(c(-2,10)) + ggtitle('OID20524 plate 3'),
+  plot_olink_expression(olink = protein_data[protein_data[['PlateID']] == 'PlateLayout_Plate4' & !((grepl('^(PC)|(NC)|(SC)', protein_data$sample_final))), ], protein_name = 'OID20524', plot_order = c('control-old', 'control-recent', 'case'), group_column = 'casecontrolpandemic') + scale_fill_manual(values = roycols::get_color_list(protein_data$casecontrolpandemic)) + xlab('sample status') + ylim(c(-2,10)) + ggtitle('OID20524 plate 4'),
+  plot_olink_expression(olink = protein_data[protein_data[['PlateID']] == 'PlateLayout_Plate5' & !((grepl('^(PC)|(NC)|(SC)', protein_data$sample_final))), ], protein_name = 'OID20524', plot_order = c('control-old', 'control-recent', 'case'), group_column = 'casecontrolpandemic') + scale_fill_manual(values = roycols::get_color_list(protein_data$casecontrolpandemic)) + xlab('sample status') + ylim(c(-2,10)) + ggtitle('OID20524 plate 5'),
+  nrow = 3,
+  ncol = 2
+)
 
 # plot the significant ones
 plot_grid(
@@ -442,6 +566,3 @@ plot_grid(
   nrow = 3,
   ncol = 2
 )
-
-# now do actual statistical analysis
-olink_lmer(protein_data, variable = c('case_control', 'pandemic'), random = c('SampleID'))
