@@ -1043,3 +1043,120 @@ do_debug <- function() {
 # Main Code        #
 ####################
 
+# make command line options
+option_list <- list(
+  make_option(c("-f", "--file"), type="character", default=NULL,
+              help="seurat object input", metavar="character"),
+  make_option(c("-o", "--out"), type="character", default="./",
+              help="output file name [default= %default]", metavar="character"),
+  make_option(c("-c", "--cell_type_column"), type="character", default='cell_type_safe',
+              help="column describing the celltype in the Seurat metadata [default= %default]", metavar="character"),
+  make_option(c("-m", "--min_cells"), type="numeric", default=0,
+              help="minimal number of cells required for a pseudobulk to consider it in the analysis [default= %default]", metavar="numeric"),
+  make_option(c("-u", "--min_peaks"), type="numeric", default=200,
+              help="minimal UMIs for a cell to keep it for pseudobulking [default= %default]", metavar="numeric"),
+  make_option(c("-l", "--min_complexity"), type="numeric", default=0,
+              help="minimal number of UMIs for a pseudobulk to consider it in the analysis [default= %default]", metavar="numeric"),
+  make_option(c("-t", "--threads"), type="numeric", default=8,
+              help="number of threads to use [default= %default]", metavar="numeric"),
+  make_option(c("-p", "--permute"), type="character", default='False',
+              help="do a permutation run instead [default= %default]", metavar="character"),
+  make_option(c("-s", "--seed"), type="numeric", default=NULL,
+              help="do a permutation run instead [default= %default]", metavar="numeric"),
+  make_option(c("-a", "--topic_ann"), type="character", default=NULL,
+              help="seurat object input", metavar="character"),
+  make_option(c("-i", "--topic"), type="character", default=NULL,
+              help="specific topic to use", metavar="character")
+)
+
+# initialize optparser
+opt_parser <- OptionParser(option_list=option_list)
+opt <- parse_args(opt_parser)
+
+# we need a Seurat object
+if (is.null(opt[['file']])){
+  print_help(opt_parser)
+  stop('no seurat object specified', call.=FALSE)
+}
+
+# location of the DE
+limma_output_loc <- opt[['out']]
+# locations of objects
+seurat_object_object_loc <- opt[['file']]
+# celltype column
+celltype_column <- opt[['cell_type_column']]
+# minimal number of cells
+min_cells <- opt[['min_cells']]
+# minimal UMIs
+min_cell_umis <- opt[['min_peaks']]
+# minimal number of UMIs of pseudobulk
+min_pseudo_umis <- opt[['min_complexity']]
+# number of threads
+nthreads <- opt[['threads']]
+# whether or not to run permutation
+permute_string <- opt[['permute']]
+permute <- F
+if (permute_string %in% c('True', 'true', 'TRUE', 't', 'T', '1')) {
+  permute <- T
+}else if (permute_string %in% c('False', 'false', 'FALSE', 'f', 'F', '0')) {
+  permute <- F
+}else {
+  stop(paste('invalid option for permutation, valid options are \'TRUE\' or \'FALSE\''))
+}
+# and the seed
+seed <- opt[['seed']]
+
+# set number of parallel threads
+parallel::mcaffinity(1:nthreads)
+registerDoParallel(cores=nthreads)
+
+# read the Seurat object
+seurat_object <- readRDS(seurat_object_object_loc)
+
+# replace underscore with dash for the lane
+seurat_object@meta.data[['lane']] <- gsub('_', '-', seurat_object@meta.data[['lane']])
+# add the day to the metadata
+seurat_object@meta.data[['day']] <- gsub('_lane\\d+', '', seurat_object@meta.data[['lane']])
+
+# filter where we don't have the sex
+seurat_object <- seurat_object[, !is.na(seurat_object@meta.data[['sex']])]
+# or the age
+seurat_object <- seurat_object[, !is.na(seurat_object@meta.data[['age']])]
+# or the inflammation status
+seurat_object <- seurat_object[, !is.na(seurat_object@meta.data[['condition_final']]) & seurat_object@meta.data[['condition_final']] != 'unknown']
+# add c to conditions so we won't have issues with the aggregation
+seurat_object@meta.data[['condition_final']] <- paste('c', seurat_object@meta.data[['condition_final']], sep = '')
+
+# read the topic annotation file
+topic_ann <- read.table(opt[['topic_ann']], header = T, sep = '\t', row.names = 1)
+# keep only the topics
+topic_ann <- topic_ann[, grep('Topic', colnames(topic_ann))]
+# keep only cells we have topic annotation info for
+seurat_object <- seurat_object[, colnames(seurat_object) %in% rownames(topic_ann)]
+# add the topic annotation data
+seurat_object <- AddMetaData(seurat_object, topic_ann)
+
+# these are the topics we'll consider
+topics <- colnames(topic_ann)
+# we'll do only a specific topic if requested
+if (!is.null(opt[['topic']])) {
+  topics <- c(opt[['topic']])
+}
+
+# do the bulk analysis
+for(topic in topics){
+  condition_combinations <- list()
+  condition_combinations[[topic]] <- c('True', 'False')
+  do_limma_dream_pairwise_per_celltype(seurat_object, 
+                                       output_loc = limma_output_loc, 
+                                       condition_combinations = condition_combinations,
+                                       celltype_column = celltype_column, 
+                                       aggregates = c(topic, 'lane', 'sample_final'), 
+                                       fixed_effects = c(topic, 'age', 'sex'), 
+                                       random_effects = c('sample_final', 'lane'),
+                                       minimal_cells = min_cells,
+                                       min_peaks = min_cell_umis, 
+                                       minimal_complexity = min_pseudo_umis, 
+                                       nthreads = nthreads, 
+                                       permute = permute)
+}
