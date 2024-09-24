@@ -486,11 +486,11 @@ write_peak_matrices <- function(signac_object_list, output_folder) {
 ####################
 
 # location of the condition assignment
-condition_assignment_loc <- '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/metadata/mo_monocyte_based_condition_numbers.tsv'
+condition_assignment_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/metadata/mo_monocyte_based_condition_numbers.tsv'
 
 # location of the cell type objects
-cell_type_objects_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_percelltypemajor_1_64.rds'
-cell_type_objects_wstatus_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_percelltypemajor_wstatus_1_64.rds'
+cell_type_objects_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_percelltypemajor_1_80.rds'
+cell_type_objects_wstatus_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_percelltypemajor_wstatus_1_80.rds'
 
 # read the object
 cell_type_objects <- readRDS(cell_type_objects_loc)
@@ -504,7 +504,7 @@ for(cell_type in names(cell_type_objects)) {
 }
 
 # get the assignment matrices
-correlation_mapping_per_barcode_all <- read.table('/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/demultiplexing/souporcell/assignments/mo_souporcell_gex_corrected_sample_matched_vs_all.tsv', header = T, sep = '\t')
+correlation_mapping_per_barcode_all <- read.table('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/demultiplexing/souporcell/assignments/mo_souporcell_gex_corrected_sample_matched_vs_all.tsv', header = T, sep = '\t')
 # set barcodes and remove data we already have
 rownames(correlation_mapping_per_barcode_all) <- correlation_mapping_per_barcode_all[['barcode_lane']]
 correlation_mapping_per_barcode_all[, c('lane', 'barcode_lane', 'barcode', 'barcode_original')] <- NULL
@@ -535,7 +535,25 @@ for (cell_type in names(cell_type_objects)) {
 # now split by inflammation status
 cell_type_objects_condition <- split_by_column(cell_type_objects, 'inflammation_final')
 # and make the beds
-summarize_peak_info(cell_type_objects_condition, output_prepend = '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/signac_peaks/output/mo_peaks_lane1to64_')
+summarize_peak_info(cell_type_objects_condition, output_prepend = '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/signac_peaks/output/mo_peaks_lane1to80_')
+
+# read the cell type annotations
+celltype_annotations <- read.table('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cell_type_assignment/azimuth/10x_multiome_PBMCs/mo_azimuth_ct_10xmultiome.tsv', header = T, sep = '\t')
+# subset to those
+rna_infos <- celltype_annotations[['barcode']]
+# also do this filtering for the matched ATAC and RNA
+for(ct_cond in names(cell_type_objects_condition)) {
+  # extract
+  celltype_cond <- cell_type_objects_condition[[ct_cond]]
+  # subset to ones we have the celltype annotations for, which are the matched RNA/ATAC ones
+  celltype_cond <- celltype_cond[, colnames(celltype_cond) %in% rna_infos]
+  # put in a new list
+  celltype_cond_list <- list()
+  celltype_cond_list[[ct_cond]] <- celltype_cond
+  # write this dummy list
+  summarize_peak_info(celltype_cond_list, output_prepend = '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/signac_peaks/output/mo_peaks_lane1to80_wrna_')
+}
+
 # do 
 plot_peak_sharing_from_beds('/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/signac_peaks/output/mo_peaks_lane1to64_UT_', filter_column = 'exp', filter_value = 1) # minimal ten counts per cell type
 plot_peak_sharing_from_beds('/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/signac_peaks/output/mo_peaks_lane1to64_UT_', filter_column = 'avg', filter_value = .1) # on average expressed in one out of ten cells

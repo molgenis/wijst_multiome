@@ -286,6 +286,7 @@ inverse_normalize <- function(norm_count_matrix, verbose = T) {
   ncol_matrix <- ncol(norm_count_matrix)
   # calculate how many rows a chunk would be
   nrow_chunk <- chunk_size / ncol_matrix
+  nrow_chunk <- ceiling(nrow_chunk)
   # calculate how many chunks we need
   n_chunks <- nrow_matrix / nrow_chunk
   # round up because we need that last chunk
@@ -1206,3 +1207,82 @@ do_limix_input_pipeline(seurat_object = cell_type_objects[['monocyte']],
 # split into stim and unstim
 split_samples_by_metadata('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/L1/quantile/merged/', 
                           '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/L1/quantile/')
+
+# read the cell type annotations
+celltype_annotations <- read.table('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cell_type_assignment/azimuth/10x_multiome_PBMCs/mo_azimuth_ct_10xmultiome.tsv', header = T, sep = '\t')
+# subset to those
+rna_infos <- celltype_annotations[['barcode']]
+
+# add to the object
+cell_type_objects[['monocyte']]@meta.data[['lane_both']] <- as.vector(unlist(lane_remapping[cell_type_objects[['monocyte']]@meta.data[['lane']]]))
+cell_type_objects[['monocyte']]@meta.data[['cell_type']] <- 'monocyte'
+# create input matrices
+do_limix_input_pipeline(seurat_object = cell_type_objects[['monocyte']][, cell_type_objects[['monocyte']][['inflammation_final']] == 'UT' & colnames(cell_type_objects[['monocyte']]) %in% rna_infos], 
+                        psam = donor_annotation_psam, 
+                        output_loc='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/L1/rnafiltered/UT/',
+                        participant_column='best_match_sample', 
+                        pool_column='lane', 
+                        condition_column='inflammation_final', 
+                        celltype_column='cell_type',
+                        join_pools=F,
+                        min_cell_number=5, 
+                        min_peaks=200,
+                        npcs=10,
+                        sample_cor_column='best_match_correlation', 
+                        min_sample_cor=0,
+                        merge_pcs_into_covariates=F, 
+                        verbose=T,
+                        quantile=F)
+do_limix_input_pipeline(seurat_object = cell_type_objects[['monocyte']][, cell_type_objects[['monocyte']][['inflammation_final']] == '24hCA' & colnames(cell_type_objects[['monocyte']]) %in% rna_infos], 
+                        psam = donor_annotation_psam, 
+                        output_loc='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/L1/rnafiltered/24hCA/',
+                        participant_column='best_match_sample', 
+                        pool_column='lane', 
+                        condition_column='inflammation_final', 
+                        celltype_column='cell_type',
+                        join_pools=F,
+                        min_cell_number=5, 
+                        min_peaks=200,
+                        npcs=10,
+                        sample_cor_column='best_match_correlation', 
+                        min_sample_cor=0,
+                        merge_pcs_into_covariates=F, 
+                        verbose=T,
+                        quantile=F)
+
+# add to the object
+cell_type_objects[['DC']]@meta.data[['lane_both']] <- as.vector(unlist(lane_remapping[cell_type_objects[['DC']]@meta.data[['lane']]]))
+cell_type_objects[['DC']]@meta.data[['cell_type']] <- 'DC'
+# create input matrices
+do_limix_input_pipeline(seurat_object = cell_type_objects[['DC']][, cell_type_objects[['DC']][['inflammation_final']] == 'UT' & colnames(cell_type_objects[['DC']]) %in% rna_infos], 
+                        psam = donor_annotation_psam, 
+                        output_loc='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/L1/rnafiltered/UT/',
+                        participant_column='best_match_sample', 
+                        pool_column='lane', 
+                        condition_column='inflammation_final', 
+                        celltype_column='cell_type',
+                        join_pools=F,
+                        min_cell_number=5, 
+                        min_peaks=200,
+                        npcs=10,
+                        sample_cor_column='best_match_correlation', 
+                        min_sample_cor=0,
+                        merge_pcs_into_covariates=F, 
+                        verbose=T,
+                        quantile=F)
+do_limix_input_pipeline(seurat_object = cell_type_objects[['DC']][, cell_type_objects[['DC']][['inflammation_final']] == '24hCA' & colnames(cell_type_objects[['DC']]) %in% rna_infos], 
+                        psam = donor_annotation_psam, 
+                        output_loc='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/L1/rnafiltered/24hCA/',
+                        participant_column='best_match_sample', 
+                        pool_column='lane', 
+                        condition_column='inflammation_final', 
+                        celltype_column='cell_type',
+                        join_pools=F,
+                        min_cell_number=5, 
+                        min_peaks=200,
+                        npcs=10,
+                        sample_cor_column='best_match_correlation', 
+                        min_sample_cor=0,
+                        merge_pcs_into_covariates=F, 
+                        verbose=T,
+                        quantile=F)
