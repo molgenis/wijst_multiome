@@ -1286,3 +1286,51 @@ do_limix_input_pipeline(seurat_object = cell_type_objects[['DC']][, cell_type_ob
                         merge_pcs_into_covariates=F, 
                         verbose=T,
                         quantile=F)
+
+
+# read the archr metadata
+archr_metadata_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/metadata/mo_archr_metadata.tsv.gz'
+archr_metadata <- read.table(archr_metadata_loc, header = T, sep = '\t')
+# add some extra info
+archr_metadata[['barcode_1']] <- gsub('\\d+_lane\\d+#', '', archr_metadata[['barcode_archr']])
+archr_metadata[['barcode_bare']] <- gsub('-\\d+', '', archr_metadata[['barcode_1']])
+archr_metadata[['barcode_lane']] <- paste(archr_metadata[['barcode_bare']], '_', archr_metadata[['Sample']], sep = '')
+arch_matched <- archr_metadata[['barcode_lane']]
+
+# add to the object
+cell_type_objects[['monocyte']]@meta.data[['lane_both']] <- as.vector(unlist(lane_remapping[cell_type_objects[['monocyte']]@meta.data[['lane']]]))
+cell_type_objects[['monocyte']]@meta.data[['cell_type']] <- 'monocyte'
+# create input matrices
+do_limix_input_pipeline(seurat_object = cell_type_objects[['monocyte']][, cell_type_objects[['monocyte']][['inflammation_final']] == 'UT' & colnames(cell_type_objects[['monocyte']]) %in% arch_matched], 
+                        psam = donor_annotation_psam, 
+                        output_loc='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/L1/archrfiltered/UT/',
+                        participant_column='best_match_sample', 
+                        pool_column='lane', 
+                        condition_column='inflammation_final', 
+                        celltype_column='cell_type',
+                        join_pools=F,
+                        min_cell_number=5, 
+                        min_peaks=200,
+                        npcs=10,
+                        sample_cor_column='best_match_correlation', 
+                        min_sample_cor=0,
+                        merge_pcs_into_covariates=F, 
+                        verbose=T,
+                        quantile=F)
+do_limix_input_pipeline(seurat_object = cell_type_objects[['monocyte']][, cell_type_objects[['monocyte']][['inflammation_final']] == '24hCA' & colnames(cell_type_objects[['monocyte']]) %in% arch_matched], 
+                        psam = donor_annotation_psam, 
+                        output_loc='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/L1/archrfiltered/24hCA/',
+                        participant_column='best_match_sample', 
+                        pool_column='lane', 
+                        condition_column='inflammation_final', 
+                        celltype_column='cell_type',
+                        join_pools=F,
+                        min_cell_number=5, 
+                        min_peaks=200,
+                        npcs=10,
+                        sample_cor_column='best_match_correlation', 
+                        min_sample_cor=0,
+                        merge_pcs_into_covariates=F, 
+                        verbose=T,
+                        quantile=F)
+
