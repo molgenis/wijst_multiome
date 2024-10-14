@@ -917,9 +917,9 @@ nthreads <- 4
 topic_ann_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/differential_accessibility/topic_annotations/mo_topic_20_otsu.tsv'
 limma_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/differential_accessibility/limma_dream/output/topics20_otsu_imputed/'
 celltype_column <- 'cell_type'
-min_cells <- 0
+min_cells <- 10
 min_cell_umis <- 200
-min_pseudo_umis <- 0
+min_pseudo_umis <- 10000
 permute <- F
 
 # set number of parallel threads
@@ -955,7 +955,6 @@ topics <- colnames(topic_ann)
 # if (!is.null(opt[['topic']])) {
   # topics <- c(opt[['topic']])
 # }
-topics <- 'Topic18'
 topics <- paste('Topic', c(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,19,20), sep = '')
 
 
