@@ -86,5 +86,5 @@ merge_chunked_topic <- function(dar_output_base_loc) {
 ####################
 
 # dar output folder
-dar_output_base_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/differential_accessibility/limma_dream/output/topics20_otsu_imputed/'
+dar_output_base_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/differential_accessibility/limma_dream/output/topics20_otsu_imputed_confined_ncell5/'
 merge_chunked_topic(dar_output_base_loc)

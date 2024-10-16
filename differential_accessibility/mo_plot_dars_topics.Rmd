@@ -115,7 +115,7 @@ knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 ####################
 
 # dar output folder
-dar_output_base_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/differential_accessibility/limma_dream/output/topics20_otsu_imputed/'
+dar_output_base_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/differential_accessibility/limma_dream/output/topics20_otsu_imputed_confined_ncell5/'
 
 ```
 
@@ -133,7 +133,12 @@ mono_output_per_topic <- list()
 
 # read each topic
 for (topic in topics) {
-  mono_output_per_topic[[topic]] <- read.table(paste(dar_monocyte_base_loc, 'monocyte_', topic, '.nominal_significant.tsv.gz', sep = ''), header = T, sep = '\t')
+  # set the topic location
+  topic_loc <- paste(dar_monocyte_base_loc, 'monocyte_', topic, '.nominal_significant.tsv.gz', sep = '')
+  # check if the topic exists
+  if (file.exists(topic_loc)) {
+    mono_output_per_topic[[topic]] <- read.table(topic_loc, header = T, sep = '\t')
+  }
 }
 
 plot_DE_sharing_per_celltype(

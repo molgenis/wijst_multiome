@@ -269,6 +269,40 @@ dream_pairwise_mt <- function(seurat_object, output_loc, condition_combinations,
     complexity <- complexity[indices_above_complexity, ]
   }
   
+  # we might need to filter the effects
+  fixed_effects_filtered <- c()
+  random_effects_filtered <- c()
+  # check the aggregate metadata for values that are present only once, or have as many levels as there are observations
+  for (fixed_effect in fixed_effects) {
+    noccurence <- length(unique(aggregate_metadata[[fixed_effect]]))
+    # and drop it if present
+    if (noccurence == 1) {
+      warning(paste('dropping fixed effect', fixed_effect, 'due to there being only one observation'))
+    }
+    else if(noccurence == nrow(aggregate_metadata)) {
+      warning(paste('dropping fixed effect', fixed_effect, 'due to there being a unique value for each observation'))
+    }
+    else {
+      fixed_effects_filtered <- c(fixed_effects_filtered, fixed_effect)
+    }
+  }
+  for (random_effect in random_effects) {
+    noccurence <- length(unique(aggregate_metadata[[random_effect]]))
+    # and drop it if present
+    if (noccurence == 1) {
+      warning(paste('dropping random effect', random_effect, 'due to there being only one observation'))
+    }
+    else if(noccurence == nrow(aggregate_metadata)) {
+      warning(paste('dropping random effect', random_effect, 'due to there being a unique value for each observation'))
+    }
+    else {
+      random_effects_filtered <- c(random_effects_filtered, random_effect)
+    }
+  }
+  # now use the filtered ones
+  fixed_effects <- fixed_effects_filtered
+  random_effects <- random_effects_filtered
+  
   # filter genes by number of counts
   isexpr = rowSums(cpm(aggregate_countMatrix)>0.1) >= 5
   
@@ -399,6 +433,9 @@ dream_pairwise_mt <- function(seurat_object, output_loc, condition_combinations,
     # otherwise we order by the significance
     limma_result <- limma_result[order(limma_result[['P.Value']]), ]
   }
+  
+  # add the formula to the chunk
+  limma_result[['formula']] <- model_formula
   
   # also write the model we used
   limma_formula_loc <- paste(output_loc, names(condition_combinations)[[1]], '.formula', sep = '')
@@ -915,11 +952,12 @@ signac_celltype <- readRDS(signac_object_loc)
 # and parameters
 nthreads <- 4
 topic_ann_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/differential_accessibility/topic_annotations/mo_topic_20_otsu.tsv'
-limma_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/differential_accessibility/limma_dream/output/topics20_otsu_imputed/'
+topic_confinement_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/differential_accessibility/topic_annotations/mo_topic_to_region_20_otsu.tsv.gz'
+limma_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/differential_accessibility/limma_dream/output/topics20_otsu_imputed_confined_ncell5/'
 celltype_column <- 'cell_type'
-min_cells <- 10
-min_cell_umis <- 200
-min_pseudo_umis <- 10000
+min_cells <- 5
+min_cell_umis <- 10
+min_pseudo_umis <- 0
 permute <- F
 
 # set number of parallel threads
@@ -949,13 +987,18 @@ signac_celltype <- signac_celltype[, colnames(signac_celltype) %in% rownames(top
 # add the topic annotation data
 signac_celltype <- AddMetaData(signac_celltype, topic_ann)
 
+# read the topic confinement file
+topic_confinement <- read.table(topic_confinement_loc, header = T, sep = '\t')
+# replace colon with dash
+topic_confinement[['region']] <- gsub(':', '-', topic_confinement[['region']])
+
 # these are the topics we'll consider
 topics <- colnames(topic_ann)
 # we'll do only a specific topic if requested
 # if (!is.null(opt[['topic']])) {
   # topics <- c(opt[['topic']])
 # }
-topics <- paste('Topic', c(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,19,20), sep = '')
+topics <- paste('Topic', c(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20), sep = '')
 
 
 # the location of the input matrices
@@ -1019,20 +1062,34 @@ for (matrix_file in matrix_files) {
   dir.create(output_dir_full, recursive = T, showWarnings = F)
   # do the bulk analysis
   for(topic in topics){
-    condition_combinations <- list()
-    condition_combinations[[topic]] <- c('True', 'False')
-    do_limma_dream_pairwise_per_celltype(seurat_object_regions, 
-                                         output_loc = output_dir_full, 
-                                         condition_combinations = condition_combinations,
-                                         celltype_column = celltype_column, 
-                                         aggregates = c(topic, 'lane', 'sample_final'), 
-                                         fixed_effects = c(topic, 'age', 'sex'), 
-                                         random_effects = c('sample_final', 'lane'),
-                                         minimal_cells = min_cells,
-                                         min_peaks = min_cell_umis, 
-                                         minimal_complexity = min_pseudo_umis, 
-                                         nthreads = nthreads, 
-                                         permute = permute)
+    # get the regions associated to this topic
+    regions_topic <- topic_confinement[topic_confinement[[topic]] == 'True', 'region']
+    # check if any regions in this chunk overlap with the confinement
+    regions_overlapping <- intersect(regions_topic, rownames(seurat_object_regions))
+    # if so, we do this chunk
+    if (length(regions_overlapping) > 1) {
+      # subset to the regions we care about
+      seurat_object_regions <- seurat_object_regions[regions_overlapping, ]
+      # do the rest of the pipeline
+      condition_combinations <- list()
+      condition_combinations[[topic]] <- c('True', 'False')
+      do_limma_dream_pairwise_per_celltype(seurat_object_regions, 
+                                           output_loc = output_dir_full, 
+                                           condition_combinations = condition_combinations,
+                                           celltype_column = celltype_column, 
+                                           aggregates = c(topic, 'lane', 'sample_final'), 
+                                           fixed_effects = c(topic, 'age', 'sex'), 
+                                           random_effects = c('sample_final', 'lane'),
+                                           minimal_cells = min_cells,
+                                           min_peaks = min_cell_umis, 
+                                           minimal_complexity = min_pseudo_umis, 
+                                           nthreads = 1, 
+                                           permute = permute)
+    }
+    else{
+      print(paste('skipped chunk', matrix_file, 'because no regions were associated with topic', topic))
+    }
+    
   }
 }
 
