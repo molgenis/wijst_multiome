@@ -10,6 +10,7 @@
 ####################
 
 library(mdfiver)
+library(qvalue)
 
 
 ####################
@@ -25,9 +26,13 @@ library(mdfiver)
 #' @param significance_column column denoting significance
 #' @param significance_cutoff cutoff for which to set significance
 #' @param verbose print progress
+#' @param add_mtc add multiple testing before filtering down
+#' @param mtc_column the column of values to apply multiple testing on
+#' @param feature_mtc_column the column that has the feature group to perform the multiple testing on
+#' @param mtc_column_to_add the name of the column that has the mtc-corrected values
 #' @returns 0 if success
 #' 
-filter_output_by_significance <- function(unfiltered_loc, unfiltered_file='qtl_results_all.txt.gz', filtered_loc=NULL, filtered_file=NULL, significance_column='p_value', significance_cutoff=0.05, verbose=T) {
+filter_output_by_significance <- function(unfiltered_loc, unfiltered_file='qtl_results_all.txt.gz', filtered_loc=NULL, filtered_file=NULL, significance_column='p_value', significance_cutoff=0.05, verbose=T, add_mtc=T, mtc_column='empirical_feature_p_value', feature_mtc_column='feature_id', mtc_column_to_add='feature_q_value') {
   # get the folders in the directory, which should be the cell types
   cell_types <- list.dirs(unfiltered_loc, full.names = F, recursive = F)
   # we will store the results in a list for now
@@ -42,6 +47,20 @@ filter_output_by_significance <- function(unfiltered_loc, unfiltered_file='qtl_r
     }
     # read the file
     cell_type_output <- read.table(full_cell_type_path, sep = '\t', header = T)
+    
+    # get the features and the emperical p value
+    if (add_mtc) {
+      # get just the two columns we care about
+      cell_type_output_features <- cell_type_output[, c(feature_mtc_column, mtc_column)]
+      # order by significance
+      cell_type_output_features <- cell_type_output_features[order(cell_type_output_features[[mtc_column]]), ]
+      # keep only the first entry
+      cell_type_output_features[!duplicated(cell_type_output_features[[feature_mtc_column]]), ]
+      # add multiple testing correction
+      cell_type_output_features[['qvalue']] <- qvalue(p = cell_type_output_features[[mtc_column]])$qvalues
+      # now add back to the original table
+      cell_type_output[[mtc_column_to_add]] <- cell_type_output_features[match(cell_type_output[[feature_mtc_column]], cell_type_output_features[[feature_mtc_column]]), 'qvalue']
+    }
     
     # print progress if requested
     if (verbose) {
@@ -113,4 +132,24 @@ filter_output_by_significance(
   significance_column='p_value', 
   significance_cutoff=0.05, 
   verbose=T
+)
+filter_output_by_significance(
+  unfiltered_loc=eqtl_output_loc, 
+  unfiltered_file='qtl_results_all_nominally_significant.txt.gz', 
+  filtered_loc=NULL, 
+  filtered_file='qtl_results_all_fdr01_significant.txt.gz', 
+  significance_column='feature_q_value', 
+  significance_cutoff=0.1, 
+  verbose=T, 
+  add_mtc = F
+)
+filter_output_by_significance(
+  unfiltered_loc=caqtl_output_loc, 
+  unfiltered_file='qtl_results_all_nominally_significant.txt.gz', 
+  filtered_loc=NULL, 
+  filtered_file='qtl_results_all_fdr01_significant.txt.gz', 
+  significance_column='feature_q_value', 
+  significance_cutoff=0.1, 
+  verbose=T, 
+  add_mtc = F
 )
