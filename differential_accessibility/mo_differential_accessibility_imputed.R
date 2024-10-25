@@ -24,7 +24,8 @@ library(doParallel)
 library(Matrix)
 #library(Matrix.utils) # NOT IN CONTAINER! als grr or remotes::install_github("cvarrichio/Matrix.utils")
 library(optparse) # NOT IN CONTAINER
-
+# to allow for larger matrices
+library(spam64)
 
 ####################
 # Functions        #
@@ -990,7 +991,7 @@ signac_celltype <- AddMetaData(signac_celltype, topic_ann)
 # read the topic confinement file
 topic_confinement <- read.table(topic_confinement_loc, header = T, sep = '\t')
 # replace colon with dash
-topic_confinement[['region']] <- gsub(':', '-', topic_confinement[['region']])
+#topic_confinement[['region']] <- gsub(':', '-', topic_confinement[['region']])
 
 # these are the topics we'll consider
 topics <- colnames(topic_ann)
@@ -998,7 +999,7 @@ topics <- colnames(topic_ann)
 # if (!is.null(opt[['topic']])) {
   # topics <- c(opt[['topic']])
 # }
-topics <- paste('Topic', c(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20), sep = '')
+topics <- paste('Topic', c(14,20,16,15), sep = '')
 
 
 # the location of the input matrices
@@ -1023,73 +1024,187 @@ barcodes <- read.table(barcodes_loc, header = F)$V1
 # get the feature names
 feature_names <- features$V4
 
-# go through each matrix
-for (matrix_file in matrix_files) {
-  # extract the region
-  regions_string <- stringr::str_extract(matrix_file, '(\\d+)_(\\d+)')
-  # split by underscore
-  regions_vector <- regions_string[[1]]
-  # read the accompanying features file
-  features_matrix_loc <- paste(imputed_matrix_loc, 'features_', regions_string, '.tsv.gz', sep = '')
-  features_matrix <- read.table(features_matrix_loc)$V1
-  # read the matrix
-  matrix_regions <- Matrix::readMM(paste(imputed_matrix_loc, matrix_file, sep = ''))
-  # set the features and barcodes
-  colnames(matrix_regions) <- barcodes
-  rownames(matrix_regions) <- features_matrix
-  # extract the metadata
-  signac_metadata <- signac_celltype@meta.data
-  signac_fragments <- Fragments(signac_celltype)
-  # create the chromatin assay
-  chrom_assay <- CreateChromatinAssay(
-    counts = matrix_regions,
-    sep = c(":", "-"),
-    fragments = signac_fragments,
-    min.cells = 10,
-    min.features = 200
-  )
-  # create object
-  seurat_object_regions <- CreateSeuratObject(
-    counts = chrom_assay,
-    assay = "peaks",
-    meta.data = signac_metadata[barcodes, ],
-    project = 'wijst_multiome'
-  )
-  # set the annotations to the object now
-  #Annotation(seurat_object) <- annotations
-  # create the output directory
-  output_dir_full <- paste(limma_output_loc, '/', cell_type, '/', regions_string, '/', sep = '')
-  dir.create(output_dir_full, recursive = T, showWarnings = F)
-  # do the bulk analysis
-  for(topic in topics){
-    # get the regions associated to this topic
-    regions_topic <- topic_confinement[topic_confinement[[topic]] == 'True', 'region']
-    # check if any regions in this chunk overlap with the confinement
-    regions_overlapping <- intersect(regions_topic, rownames(seurat_object_regions))
-    # if so, we do this chunk
-    if (length(regions_overlapping) > 1) {
-      # subset to the regions we care about
-      seurat_object_regions <- seurat_object_regions[regions_overlapping, ]
-      # do the rest of the pipeline
-      condition_combinations <- list()
-      condition_combinations[[topic]] <- c('True', 'False')
-      do_limma_dream_pairwise_per_celltype(seurat_object_regions, 
-                                           output_loc = output_dir_full, 
-                                           condition_combinations = condition_combinations,
-                                           celltype_column = celltype_column, 
-                                           aggregates = c(topic, 'lane', 'sample_final'), 
-                                           fixed_effects = c(topic, 'age', 'sex'), 
-                                           random_effects = c('sample_final', 'lane'),
-                                           minimal_cells = min_cells,
-                                           min_peaks = min_cell_umis, 
-                                           minimal_complexity = min_pseudo_umis, 
-                                           nthreads = 1, 
-                                           permute = permute)
-    }
-    else{
-      print(paste('skipped chunk', matrix_file, 'because no regions were associated with topic', topic))
-    }
-    
-  }
-}
+# # go through each matrix
+# for (matrix_file in matrix_files) {
+#   # extract the region
+#   regions_string <- stringr::str_extract(matrix_file, '(\\d+)_(\\d+)')
+#   # split by underscore
+#   regions_vector <- regions_string[[1]]
+#   # read the accompanying features file
+#   features_matrix_loc <- paste(imputed_matrix_loc, 'features_', regions_string, '.tsv.gz', sep = '')
+#   features_matrix <- read.table(features_matrix_loc)$V1
+#   # read the matrix
+#   matrix_regions <- Matrix::readMM(paste(imputed_matrix_loc, matrix_file, sep = ''))
+#   # set the features and barcodes
+#   colnames(matrix_regions) <- barcodes
+#   rownames(matrix_regions) <- features_matrix
+#   # extract the metadata
+#   signac_metadata <- signac_celltype@meta.data
+#   signac_fragments <- Fragments(signac_celltype)
+#   # create the chromatin assay
+#   chrom_assay <- CreateChromatinAssay(
+#     counts = matrix_regions,
+#     sep = c(":", "-"),
+#     fragments = signac_fragments,
+#     min.cells = 10,
+#     min.features = 200
+#   )
+#   # create object
+#   seurat_object_regions <- CreateSeuratObject(
+#     counts = chrom_assay,
+#     assay = "peaks",
+#     meta.data = signac_metadata[barcodes, ],
+#     project = 'wijst_multiome'
+#   )
+#   # set the annotations to the object now
+#   #Annotation(seurat_object) <- annotations
+#   # create the output directory
+#   output_dir_full <- paste(limma_output_loc, '/', cell_type, '/', regions_string, '/', sep = '')
+#   dir.create(output_dir_full, recursive = T, showWarnings = F)
+#   # do the bulk analysis
+#   for(topic in topics){
+#     # get the regions associated to this topic
+#     regions_topic <- topic_confinement[topic_confinement[[topic]] == 'True', 'region']
+#     # check if any regions in this chunk overlap with the confinement
+#     regions_overlapping <- intersect(regions_topic, rownames(seurat_object_regions))
+#     # if so, we do this chunk
+#     if (length(regions_overlapping) > 1) {
+#       # subset to the regions we care about
+#       seurat_object_regions <- seurat_object_regions[regions_overlapping, ]
+#       # do the rest of the pipeline
+#       condition_combinations <- list()
+#       condition_combinations[[topic]] <- c('True', 'False')
+#       do_limma_dream_pairwise_per_celltype(seurat_object_regions, 
+#                                            output_loc = output_dir_full, 
+#                                            condition_combinations = condition_combinations,
+#                                            celltype_column = celltype_column, 
+#                                            aggregates = c(topic, 'lane', 'sample_final'), 
+#                                            fixed_effects = c(topic, 'age', 'sex'), 
+#                                            random_effects = c('sample_final', 'lane'),
+#                                            minimal_cells = min_cells,
+#                                            min_peaks = min_cell_umis, 
+#                                            minimal_complexity = min_pseudo_umis, 
+#                                            nthreads = 1, 
+#                                            permute = permute)
+#     }
+#     else{
+#       print(paste('skipped chunk', matrix_file, 'because no regions were associated with topic', topic))
+#     }
+#     
+#   }
+# }
 
+# do the bulk analysis
+for(topic in topics){
+  print(paste('doing topic:', topic))
+  # get the regions associated to this topic
+  regions_topic <- topic_confinement[topic_confinement[[topic]] == 'True', 'region']
+  # we'll first store a matrix per chunk
+  matrices_chunks <- list()
+  # as well as the total nonzeroes
+  matrices_totals_nozeroes <- list()
+  # and the features
+  features_chunks <- list()
+  # go through each matrix
+  for (matrix_file in matrix_files) {
+    print(paste('reading matrix', matrix_file))
+    # extract the region
+    regions_string <- stringr::str_extract(matrix_file, '(\\d+)_(\\d+)')
+    # split by underscore
+    regions_vector <- regions_string[[1]]
+    # read the accompanying features file
+    features_matrix_loc <- paste(imputed_matrix_loc, 'features_', regions_string, '.tsv.gz', sep = '')
+    features_matrix <- read.table(features_matrix_loc)$V1
+    # read the matrix
+    matrix_regions <- Matrix::readMM(paste(imputed_matrix_loc, matrix_file, sep = ''))
+    # subset the matrices to only have the features we care about
+    regions_overlapping <- intersect(regions_topic, features_matrix)
+    if (length(regions_overlapping) > 0) {
+      # read the matrix
+      matrix_regions <- Matrix::readMM(paste(imputed_matrix_loc, matrix_file, sep = ''))
+      # subset to overlapping regions
+      matrix_regions <- matrix_regions[features_matrix %in% regions_overlapping, ]
+      # set the features and barcodes
+      colnames(matrix_regions) <- barcodes
+      rownames(matrix_regions) <- features_matrix[features_matrix %in% regions_overlapping]
+      # add to the list
+      matrices_chunks[[matrix_file]] <- matrix_regions
+      features_chunks[[matrix_file]] <- features_matrix[features_matrix %in% regions_overlapping]
+      # now count the number of entries
+      total_nonz <- sum(tabulate(matrix_regions@j + 1))
+      # add to the list
+      matrices_totals_nozeroes[[matrix_file]] <- total_nonz
+    }
+  }
+  # get the output
+  output_dir_full <- paste(limma_output_loc, '/', cell_type, '/', 'merged_regions', '/', sep = '')
+  # do the rest of the pipeline
+  condition_combinations <- list()
+  condition_combinations[[topic]] <- c('True', 'False')
+  # we will put subsets of chunks in the list
+  matrix_chunks_subsets <- list()
+  features_chunks_subsets <- list()
+  # check if the number of values is too big
+  if (sum(unlist(matrices_totals_nozeroes)) > 2^31-1) {
+    # then we will split into two
+    matrices_chunks_1 <- matrices_chunks[1:(length(matrices_chunks) / 2)]
+    matrices_chunks_2 <- matrices_chunks[(length(matrices_chunks) / 2 + 1) : length(matrices_chunks)]
+    matrix_chunks_subsets[[1]] <- matrices_chunks_1
+    matrix_chunks_subsets[[2]] <- matrices_chunks_2
+    features_chunks_1 <- features_chunks[1:(length(features_chunks) / 2)]
+    features_chunks_2 <- features_chunks[(length(features_chunks) / 2 + 1) : length(features_chunks)]
+    features_chunks_subsets[[1]] <- features_chunks_1
+    features_chunks_subsets[[2]] <- features_chunks_2
+  } else {
+    matrix_chunks_subsets[[1]] <- matrices_chunks
+    features_chunks_subsets[[1]] <- features_chunks
+  }
+  # now do each set of chunks
+  for (chunk_set in 1:length(matrix_chunks_subsets)) {
+    print(paste('merging matrices for topic', topic))
+    # now merge everything
+    matrix_all <- do.call('rbind', matrix_chunks_subsets[[chunk_set]])
+    features_all <- do.call('c', features_chunks_subsets[[chunk_set]])
+    # set the features and barcodes
+    colnames(matrix_all) <- barcodes
+    rownames(matrix_all) <- features_all
+    # extract the metadata
+    signac_metadata <- signac_celltype@meta.data
+    signac_fragments <- Fragments(signac_celltype)
+    # create the chromatin assay
+    chrom_assay <- CreateChromatinAssay(
+      counts = matrix_all,
+      sep = c(":", "-"),
+      fragments = signac_fragments,
+      min.cells = 10,
+      min.features = 200
+    )
+    # create object
+    seurat_object_regions <- CreateSeuratObject(
+      counts = chrom_assay,
+      assay = "peaks",
+      meta.data = signac_metadata[barcodes, ],
+      project = 'wijst_multiome'
+    )
+    # change the output path if we are doing a subset of chunks
+    output_dir_full_set <- output_dir_full
+    if (length(matrix_chunks_subsets) > 1) {
+      output_dir_full_set <- paste(output_dir_full, '/', as.character(chunk_set), '/', sep = '')
+      dir.create(output_dir_full_set)
+    }
+    # do the analysis
+    do_limma_dream_pairwise_per_celltype(seurat_object_regions, 
+                                         output_loc = output_dir_full_set, 
+                                         condition_combinations = condition_combinations,
+                                         celltype_column = celltype_column, 
+                                         aggregates = c(topic, 'lane', 'sample_final'), 
+                                         fixed_effects = c(topic, 'age', 'sex'), 
+                                         random_effects = c('sample_final', 'lane'),
+                                         minimal_cells = min_cells,
+                                         min_peaks = min_cell_umis, 
+                                         minimal_complexity = min_pseudo_umis, 
+                                         nthreads = 4, 
+                                         permute = permute)
+  }
+  
+}
