@@ -77,7 +77,7 @@ split_output_by_column <- function(input_dir, input_file='qtl_results_all.txt.gz
       # add multiple testing correction
       cell_type_output_features[['qvalue']] <- qvalue(cell_type_output_features[[mtc_column]])$qvalues
       # now add back to the original table
-      cell_type_output[[mtc_column_to_add]] <- cell_type_output_features[match(cell_type_output[[feature_mtc_column]], cell_type_output_features[[feature_mtc_column]]), 'qvalue']
+      cell_type_output[[mtc_column_to_add]] <- cell_type_output_features[match(cell_type_output[[feature_mtc_column]], cell_type_output_features[[feature_mtc_column]]), 'qvalue'][['qvalue']]
     }
     
     # print progress if requested
@@ -233,42 +233,77 @@ split_output_by_column(
   mtc_column_to_add='feature_q_value',
   verbose=T
 )
-# perform filtering
-filter_output_by_significance(
-  unfiltered_loc=eqtl_output_loc, 
-  unfiltered_file='qtl_results_all.txt.gz', 
-  filtered_loc=NULL, 
-  filtered_file='qtl_results_all_nominally_significant.txt.gz', 
-  significance_column='p_value', 
-  significance_cutoff=0.05, 
+# for caQTL as well
+split_output_by_column(
+  input_dir=caqtl_output_loc,
+  input_file='qtl_results_all.txt.gz',
+  output_dir=NULL,
+  output_file_prepend='qtl_results_all_qval_',
+  output_file_append='.txt.gz',
+  split_column='feature_chromosome',
+  add_mtc=T,
+  mtc_column='empirical_feature_p_value',
+  feature_mtc_column='feature_id',
+  mtc_column_to_add='feature_q_value',
   verbose=T
 )
-filter_output_by_significance(
-  unfiltered_loc=caqtl_output_loc, 
-  unfiltered_file='qtl_results_all.txt.gz', 
-  filtered_loc=NULL, 
-  filtered_file='qtl_results_all_nominally_significant.txt.gz', 
-  significance_column='p_value', 
-  significance_cutoff=0.05, 
-  verbose=T
-)
-filter_output_by_significance(
-  unfiltered_loc=eqtl_output_loc, 
-  unfiltered_file='qtl_results_all_nominally_significant.txt.gz', 
-  filtered_loc=NULL, 
-  filtered_file='qtl_results_all_fdr01_significant.txt.gz', 
-  significance_column='feature_q_value', 
-  significance_cutoff=0.1, 
-  verbose=T, 
-  add_mtc = F
-)
-filter_output_by_significance(
-  unfiltered_loc=caqtl_output_loc, 
-  unfiltered_file='qtl_results_all_nominally_significant.txt.gz', 
-  filtered_loc=NULL, 
-  filtered_file='qtl_results_all_fdr01_significant.txt.gz', 
-  significance_column='feature_q_value', 
-  significance_cutoff=0.1, 
-  verbose=T, 
-  add_mtc = F
-)
+# check each chromosome
+for (chrom in 1:22) {
+  # in location
+  in_file <- paste('qtl_results_all_qval_', chrom, '.txt.gz', sep = '')
+  # out location
+  out_file <- paste('qtl_results_all_qval_', chrom, '_nominally_significant.txt.gz', sep = '')
+  # do filtering
+  filter_output_by_significance(
+    unfiltered_loc=eqtl_output_loc, 
+    unfiltered_file=in_file, 
+    filtered_loc=NULL, 
+    filtered_file=out_file, 
+    significance_column='p_value', 
+    significance_cutoff=0.05, 
+    verbose=T, 
+    add_mtc = F
+  )
+  # now filter on FDR as well
+  fdr_file <- paste('qtl_results_all_qval_', chrom, '_fdr01_significant.txt.gz', sep = '')
+  filter_output_by_significance(
+    unfiltered_loc=eqtl_output_loc, 
+    unfiltered_file=out_file, 
+    filtered_loc=NULL, 
+    filtered_file=fdr_file, 
+    significance_column='feature_q_value', 
+    significance_cutoff=0.1, 
+    verbose=T, 
+    add_mtc = F
+  )
+}
+# check each chromosome
+for (chrom in 1:22) {
+  # in location
+  in_file <- paste('qtl_results_all_qval_', chrom, '.txt.gz', sep = '')
+  # out location
+  out_file <- paste('qtl_results_all_qval_', chrom, '_nominally_significant.txt.gz', sep = '')
+  # do filtering
+  filter_output_by_significance(
+    unfiltered_loc=caqtl_output_loc, 
+    unfiltered_file=in_file, 
+    filtered_loc=NULL, 
+    filtered_file=out_file, 
+    significance_column='p_value', 
+    significance_cutoff=0.05, 
+    verbose=T, 
+    add_mtc = F
+  )
+  # now filter on FDR as well
+  fdr_file <- paste('qtl_results_all_qval_', chrom, '_fdr01_significant.txt.gz', sep = '')
+  filter_output_by_significance(
+    unfiltered_loc=caqtl_output_loc, 
+    unfiltered_file=out_file, 
+    filtered_loc=NULL, 
+    filtered_file=fdr_file, 
+    significance_column='feature_q_value', 
+    significance_cutoff=0.1, 
+    verbose=T, 
+    add_mtc = F
+  )
+}
