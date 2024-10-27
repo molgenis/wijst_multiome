@@ -274,7 +274,7 @@ split_strings_with_max_length <- function(strings, max_length=15) {
 #' @param gene_column which column to use as the gene identifier
 #' @returns a dataframe with the cell type in the 'cell_type' column, and the number of eGenes in the 'nr' column
 #' 
-get_egene_numbers_per_celltype_limix <- function(qtl_output_loc, output_file='qtl_results_all.txt.gz', gene_column='feature_id', significance_column='empirical_feature_p_value', significance_cutoff=0.05, verbose=T) {
+get_egene_numbers_per_celltype_limix <- function(qtl_output_loc, output_file='qtl_results_all.txt.gz', gene_column='feature_id', significance_column='feature_q_value', significance_cutoff=0.05, verbose=T) {
   # get the folders in the directory, which should be the cell types
   cell_types <- list.dirs(qtl_output_loc, full.names = F, recursive = F)
   # we will store the results in a list for now
@@ -636,7 +636,7 @@ caqtl_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/q
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # get the number of ca peaks
-caqtl_peak_numbers <- get_egene_numbers_per_celltype_limix(caqtl_output_loc, output_file = 'qtl_results_all_fdr01_significant.txt.gz')
+caqtl_peak_numbers <- get_egene_numbers_per_celltype_limix(caqtl_output_loc, output_file = 'qtl_results_all_qval_allchroms_fdr01_significant.txt.gz')
 
 ```
 
@@ -644,7 +644,7 @@ caqtl_peak_numbers <- get_egene_numbers_per_celltype_limix(caqtl_output_loc, out
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # get the number of ca peaks
-eqtl_gene_numbers <- get_egene_numbers_per_celltype_limix(eqtl_output_loc, output_file = 'qtl_results_all_fdr01_significant.txt.gz')
+eqtl_gene_numbers <- get_egene_numbers_per_celltype_limix(eqtl_output_loc, output_file = 'qtl_results_all_qval_allchroms_fdr01_significant.txt.gz')
 
 ```
 
@@ -676,7 +676,7 @@ p_eqtl_peak_numbers
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # location of mono ca output
-mono_caqtl_significant_loc <- paste(caqtl_output_loc, '/', 'monocyte', '/', 'qtl_results_all_fdr01_significant.txt.gz', sep = '')
+mono_caqtl_significant_loc <- paste(caqtl_output_loc, '/', 'monocyte', '/', 'qtl_results_all_qval_allchroms_fdr01_significant.txt.gz', sep = '')
 # read the table
 mono_caqtl_significant <- fread(mono_caqtl_significant_loc, header = T, sep = '\t')
 
@@ -686,7 +686,7 @@ mono_caqtl_significant <- fread(mono_caqtl_significant_loc, header = T, sep = '\
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # location of mono ca output
-mono_eqtl_significant_loc <- paste(eqtl_output_loc, '/', 'Mono', '/', 'qtl_results_all_fdr01_significant.txt.gz', sep = '')
+mono_eqtl_significant_loc <- paste(eqtl_output_loc, '/', 'Mono', '/', 'qtl_results_all_qval_allchroms_fdr01_significant.txt.gz', sep = '')
 # read the table
 mono_eqtl_significant <- fread(mono_eqtl_significant_loc, header = T, sep = '\t')
 
@@ -697,12 +697,12 @@ knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # add new columns
 mono_eqtl_significant[['beta_e']] <- mono_eqtl_significant[['beta']]
-mono_eqtl_significant[['empirical_feature_p_value_e']] <- mono_eqtl_significant[['empirical_feature_p_value']]
+mono_eqtl_significant[['feature_q_value_e']] <- mono_eqtl_significant[['feature_q_value']]
 mono_caqtl_significant[['beta_ca']] <- mono_caqtl_significant[['beta']]
-mono_caqtl_significant[['empirical_feature_p_value_ca']] <- mono_caqtl_significant[['empirical_feature_p_value']]
+mono_caqtl_significant[['feature_q_value_ca']] <- mono_caqtl_significant[['feature_q_value']]
 # merge the things we care about
-mono_qtl_significant <- merge(mono_eqtl_significant[mono_eqtl_significant[['empirical_feature_p_value_e']] < 0.05, c('snp_id', 'beta_e', 'empirical_feature_p_value_e')],
-                              mono_caqtl_significant[mono_caqtl_significant[['empirical_feature_p_value_ca']] < 0.05, c('snp_id', 'beta_ca', 'empirical_feature_p_value_ca')], by = 'snp_id', all = F)
+mono_qtl_significant <- merge(mono_eqtl_significant[mono_eqtl_significant[['feature_q_value']] < 0.05, c('snp_id', 'beta_e', 'feature_q_value_e')],
+                              mono_caqtl_significant[mono_caqtl_significant[['feature_q_value']] < 0.05, c('snp_id', 'beta_ca', 'feature_q_value_ca')], by = 'snp_id', all = F)
 # get max significant beta
 max_beta_eqtl <- max(abs(mono_qtl_significant[['beta_e']]))
 max_beta_caqtl <- max(abs(mono_qtl_significant[['beta_ca']]))

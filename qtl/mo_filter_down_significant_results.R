@@ -212,6 +212,57 @@ filter_output_by_significance <- function(unfiltered_loc, unfiltered_file='qtl_r
 }
 
 
+merge_chromosome_output <- function(input_dir, input_prepend='qtl_results_all_qval_', input_append='_fdr01_significant.txt.gz', output_dir=NULL, output_file='qtl_results_all_qval_allchroms_fdr01_significant.txt.gz') {
+  # get the folders in the directory, which should be the cell types
+  cell_types <- list.dirs(input_dir, full.names = F, recursive = F)
+  # we will store the results in a list for now
+  numbers_per_celltype <- list()
+  # check each cell type
+  for (cell_type in cell_types) {
+    # paste together the cell type folder
+    input_celltype_dir <- paste(input_dir, '/', cell_type, '/', sep = '')
+    # list the files
+    input_files_celltype <- list.files(input_celltype_dir)
+    # now filter only for the ones we want
+    input_files_celltype <- input_files_celltype[grep(paste(input_prepend, '\\d+', input_append, '$', sep  = ''), input_files_celltype)]
+    # we'll store each file in a list
+    input_files_celltype_list <- list()
+    # and go through each file
+    for (input_file_celltype in input_files_celltype) {
+      # read the file
+      input_celltype_chrom <- fread(paste(input_celltype_dir, '/', input_file_celltype, sep = ''), header = T, sep = '\t')
+      # put in the list
+      if (nrow(input_celltype_chrom) > 0) {
+        input_files_celltype_list[[input_file_celltype]] <- input_celltype_chrom
+      }
+      else {
+        warning(paste('skipping', paste(input_celltype_dir, '/', input_file_celltype, sep = ''), 'because it has no rows'))
+      }
+    }
+    # now merge all of them
+    input_celltypes_all <- do.call('rbind', input_files_celltype_list)
+    # get the output location
+    output_location <- input_dir
+    # if supplied, set the output directory
+    if (!is.null(output_dir)) {
+      output_location <- output_dir
+    }
+    # make full output location
+    full_output_loc <- paste(output_location, '/', cell_type, '/', output_file, sep = '')
+    # store the gz connection if we need it
+    full_output_loc_wzip <- full_output_loc
+    # gzip it if the extention ends on gz
+    if (grepl('.gz$', full_output_loc)) {
+      full_output_loc_wzip <- gzfile(full_output_loc)
+    }
+    # write result
+    write.table(input_celltypes_all, full_output_loc_wzip, sep = '\t', row.names= F, col.names = T)
+    # create md5
+    mdfiver::create_md5_for_file(full_output_loc)
+  }
+  return(0)
+}
+
 ####################
 # Main Code        #
 ####################
@@ -307,3 +358,18 @@ for (chrom in 1:22) {
     add_mtc = F
   )
 }
+# now merge the significant ones
+merge_chromosome_output(
+  input_dir=eqtl_output_loc, 
+  input_prepend='qtl_results_all_qval_', 
+  input_append='_fdr01_significant.txt.gz', 
+  output_dir=NULL, 
+  output_file='qtl_results_all_qval_allchroms_fdr01_significant.txt.gz'
+)
+merge_chromosome_output(
+  input_dir=caqtl_output_loc, 
+  input_prepend='qtl_results_all_qval_', 
+  input_append='_fdr01_significant.txt.gz', 
+  output_dir=NULL, 
+  output_file='qtl_results_all_qval_allchroms_fdr01_significant.txt.gz'
+)
