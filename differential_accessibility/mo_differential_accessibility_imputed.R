@@ -999,7 +999,7 @@ topics <- colnames(topic_ann)
 # if (!is.null(opt[['topic']])) {
   # topics <- c(opt[['topic']])
 # }
-topics <- paste('Topic', c(14,20,16,15), sep = '')
+topics <- paste('Topic', c(20,16,15), sep = '')
 
 
 # the location of the input matrices

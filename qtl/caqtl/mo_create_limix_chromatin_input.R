@@ -1287,50 +1287,102 @@ do_limix_input_pipeline(seurat_object = cell_type_objects[['DC']][, cell_type_ob
                         verbose=T,
                         quantile=F)
 
-
-# read the archr metadata
-archr_metadata_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/metadata/mo_archr_metadata.tsv.gz'
-archr_metadata <- read.table(archr_metadata_loc, header = T, sep = '\t')
-# add some extra info
-archr_metadata[['barcode_1']] <- gsub('\\d+_lane\\d+#', '', archr_metadata[['barcode_archr']])
-archr_metadata[['barcode_bare']] <- gsub('-\\d+', '', archr_metadata[['barcode_1']])
-archr_metadata[['barcode_lane']] <- paste(archr_metadata[['barcode_bare']], '_', archr_metadata[['Sample']], sep = '')
-arch_matched <- archr_metadata[['barcode_lane']]
-
-# add to the object
-cell_type_objects[['monocyte']]@meta.data[['lane_both']] <- as.vector(unlist(lane_remapping[cell_type_objects[['monocyte']]@meta.data[['lane']]]))
-cell_type_objects[['monocyte']]@meta.data[['cell_type']] <- 'monocyte'
-# create input matrices
-do_limix_input_pipeline(seurat_object = cell_type_objects[['monocyte']][, cell_type_objects[['monocyte']][['inflammation_final']] == 'UT' & colnames(cell_type_objects[['monocyte']]) %in% arch_matched], 
-                        psam = donor_annotation_psam, 
-                        output_loc='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/L1/archrfiltered/UT/',
-                        participant_column='best_match_sample', 
-                        pool_column='lane', 
-                        condition_column='inflammation_final', 
-                        celltype_column='cell_type',
-                        join_pools=F,
-                        min_cell_number=5, 
-                        min_peaks=200,
-                        npcs=10,
-                        sample_cor_column='best_match_correlation', 
-                        min_sample_cor=0,
-                        merge_pcs_into_covariates=F, 
-                        verbose=T,
-                        quantile=F)
-do_limix_input_pipeline(seurat_object = cell_type_objects[['monocyte']][, cell_type_objects[['monocyte']][['inflammation_final']] == '24hCA' & colnames(cell_type_objects[['monocyte']]) %in% arch_matched], 
-                        psam = donor_annotation_psam, 
-                        output_loc='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/L1/archrfiltered/24hCA/',
-                        participant_column='best_match_sample', 
-                        pool_column='lane', 
-                        condition_column='inflammation_final', 
-                        celltype_column='cell_type',
-                        join_pools=F,
-                        min_cell_number=5, 
-                        min_peaks=200,
-                        npcs=10,
-                        sample_cor_column='best_match_correlation', 
-                        min_sample_cor=0,
-                        merge_pcs_into_covariates=F, 
-                        verbose=T,
-                        quantile=F)
-
+# now do one of the imputed chunks
+cell_type <- 'monocyte'
+imputed_matrix_loc <- paste('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/pycistopic/imputed_pycistopic_matrices/', cell_type, '/', sep = '')
+# the prepend
+imputed_matrix_prepend <- 'matrix_'
+# the append
+imputed_matrix_append <- '.mtx.gz'
+# the chunk to do
+matrix_files <- list.files(imputed_matrix_loc, pattern = '\\d+_\\d+.mtx.gz')
+# get the location of the barcodes and features files
+features_loc <- paste(imputed_matrix_loc, 'regiondata.tsv.gz', sep = '')
+barcodes_loc <- paste(imputed_matrix_loc, 'barcodes.tsv.gz', sep = '')
+# read the features file
+features <- read.table(features_loc, header = F, sep = '\t')
+# read the barcodes
+barcodes <- read.table(barcodes_loc, header = F)$V1
+# location of the object
+signac_object_loc <- paste('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_', cell_type, '_wstatus_1_80_20240709.rds', sep = '')
+signac_celltype <- readRDS(signac_object_loc)
+# replace underscore with dash for the lane
+signac_celltype@meta.data[['lane']] <- gsub('_', '-', signac_celltype@meta.data[['lane']])
+# add the day to the metadata
+signac_celltype@meta.data[['day']] <- gsub('_lane\\d+', '', signac_celltype@meta.data[['lane']])
+# filter where we don't have the sex
+signac_celltype <- signac_celltype[, !is.na(signac_celltype@meta.data[['sex']])]
+# or the age
+signac_celltype <- signac_celltype[, !is.na(signac_celltype@meta.data[['age']])]
+# or the inflammation status
+signac_celltype <- signac_celltype[, !is.na(signac_celltype@meta.data[['condition_final']]) & signac_celltype@meta.data[['condition_final']] != 'unknown']
+# go through each matrix
+for (matrix_file in matrix_files) {
+  # extract the region
+  regions_string <- stringr::str_extract(matrix_file, '(\\d+)_(\\d+)')
+  # split by underscore
+  regions_vector <- regions_string[[1]]
+  # read the accompanying features file
+  features_matrix_loc <- paste(imputed_matrix_loc, 'features_', regions_string, '.tsv.gz', sep = '')
+  features_matrix <- read.table(features_matrix_loc)$V1
+  # read the matrix
+  matrix_regions <- Matrix::readMM(paste(imputed_matrix_loc, matrix_file, sep = ''))
+  # set the features and barcodes
+  colnames(matrix_regions) <- barcodes
+  rownames(matrix_regions) <- features_matrix
+  # extract the metadata
+  signac_metadata <- signac_celltype@meta.data
+  signac_fragments <- Fragments(signac_celltype)
+  # create the chromatin assay
+  chrom_assay <- CreateChromatinAssay(
+    counts = matrix_regions,
+    sep = c(":", "-"),
+    fragments = signac_fragments,
+    min.cells = 10,
+    min.features = 200
+  )
+  # create object
+  seurat_object_regions <- CreateSeuratObject(
+    counts = chrom_assay,
+    assay = "peaks",
+    meta.data = signac_metadata[barcodes, ],
+    project = 'wijst_multiome'
+  )
+  # set the annotations to the object now
+  #Annotation(seurat_object) <- annotations
+  # create input matrices
+  dir.create(paste('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/L1/imputed/', regions_string, '/UT/', sep = ''), recursive = T)
+  do_limix_input_pipeline(seurat_object = seurat_object_regions[, seurat_object_regions[['inflammation_final']] == 'UT'], 
+                          psam = donor_annotation_psam, 
+                          output_loc=paste('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/L1/imputed/', regions_string, '/UT/', sep = ''),
+                          participant_column='best_match_sample', 
+                          pool_column='lane', 
+                          condition_column='inflammation_final', 
+                          celltype_column='cell_type',
+                          join_pools=F,
+                          min_cell_number=5, 
+                          min_peaks=200,
+                          npcs=10,
+                          sample_cor_column='best_match_correlation', 
+                          min_sample_cor=0,
+                          merge_pcs_into_covariates=F, 
+                          verbose=T,
+                          quantile=F)
+  dir.create(paste('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/L1/imputed/', regions_string, '/24hCA/', sep = ''), recursive = T)
+  do_limix_input_pipeline(seurat_object = seurat_object_regions[, seurat_object_regions[['inflammation_final']] == '24hCA'], 
+                          psam = donor_annotation_psam, 
+                          output_loc=paste('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/L1/imputed/', regions_string, '/24hCA/', sep = ''),
+                          participant_column='best_match_sample', 
+                          pool_column='lane', 
+                          condition_column='inflammation_final', 
+                          celltype_column='cell_type',
+                          join_pools=F,
+                          min_cell_number=5, 
+                          min_peaks=200,
+                          npcs=10,
+                          sample_cor_column='best_match_correlation', 
+                          min_sample_cor=0,
+                          merge_pcs_into_covariates=F, 
+                          verbose=T,
+                          quantile=F)
+}
