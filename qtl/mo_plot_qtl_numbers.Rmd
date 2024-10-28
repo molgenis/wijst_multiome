@@ -29,6 +29,7 @@ library(cowplot)
 library(RColorBrewer)
 library(roycols)
 library(ggrastr)
+library(ggpubr)
 
 
 ```
@@ -648,19 +649,26 @@ eqtl_gene_numbers <- get_egene_numbers_per_celltype_limix(eqtl_output_loc, outpu
 
 ```
 
-```{r get_capeak_numbers_plots, include=TRUE, fig.width=7, fig.height=7}
+```{r get_capeak_numbers_plots, include=TRUE, fig.width=8, fig.height=6}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # make a plot of the numbers
-p_caqtl_peak_numbers <- egene_numbers_to_plot(caqtl_peak_numbers, legendless = T, use_color_dict = T) +
+p_caqtl_peak_numbers <- egene_numbers_to_plot(caqtl_peak_numbers, legendless = T, use_color_dict = T, angle_labels = F) +
   ggtitle('Number of open chromatin peaks affected by genetic variants') +
   xlab('Cell type') +
-  ylab('Number of peaks')
+  ylab('Number of peaks') +
+  # label sizes
+  theme(
+    axis.title.x = element_text(size = 14),
+    axis.title.y = element_text(size = 14),
+    axis.text.x = element_text(size = 12),
+    plot.title = element_text(size = 16)
+  )
 p_caqtl_peak_numbers
 
 ```
 
-```{r get_egene_numbers_plots, include=TRUE, fig.width=10, fig.height=10}
+```{r get_egene_numbers_plots, include=TRUE, fig.width=7, fig.height=7}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # make a plot of the numbers
@@ -692,7 +700,7 @@ mono_eqtl_significant <- fread(mono_eqtl_significant_loc, header = T, sep = '\t'
 
 ```
 
-```{r merge_qtls_mono, include=TRUE, fig.width=10, fig.height=10}
+```{r merge_qtls_mono, include=TRUE, fig.width=7, fig.height=7}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # add new columns
@@ -738,9 +746,206 @@ p_ca_e_betas <- ggplot(data = mono_qtl_significant, mapping = aes(x = beta_ca, y
   # labels
   xlab('caQTL beta') +
   ylab('eQTL beta') +
-  ggtitle('Betas of caQTLs vs eQTLs')
+  ggtitle('Betas of caQTLs vs eQTLs') +
+  
+  # label sizes
+  theme(
+    axis.title.x = element_text(size = 14),
+    axis.title.y = element_text(size = 14),
+    axis.text.x = element_text(size = 12),
+    plot.title = element_text(size = 16)
+  )
 
 ggsave('~/mo_monocyte_e_vs_ca_betas.pdf', plot = p_ca_e_betas, width=10, height=10)
 p_ca_e_betas
+
+```
+
+```{r cor_qtls_mono, include=TRUE, fig.width=10, fig.height=10}
+
+# calculate the correlation of the effect sizes
+correlation <- cor(x = mono_qtl_significant[['beta_ca']], y = mono_qtl_significant[['beta_e']], method = 'spearman')
+# get effects
+n_effects <- nrow(mono_qtl_significant)
+# get number of concordant effects
+n_concordant <- sum(sign(mono_qtl_significant[['beta_ca']]) == sign(mono_qtl_significant[['beta_e']]))
+# calculate concordance
+concordance <- n_concordant / n_effects
+
+```
+
+```{r sceqtlgen_numbers, include=TRUE, fig.width=10, fig.height=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# read the sc-eQTLgen numbers
+sceqtlgen_effect_numbers_loc <- '~/sceqtlgen_phase1_eqtl_numbers.tsv'
+sceqtlgen_effect_numbers <- read.table(sceqtlgen_effect_numbers_loc, header = T, sep = '\t')
+# make the table long
+sceqtlgen_effect_numbers_long <- rbind(
+  data.frame(celltype = sceqtlgen_effect_numbers[['celltype']], number = sceqtlgen_effect_numbers[['eGenes']], effect = rep('eGenes', times = nrow(sceqtlgen_effect_numbers))),
+  data.frame(celltype = sceqtlgen_effect_numbers[['celltype']], number = sceqtlgen_effect_numbers[['eQTLs']], effect = rep('independent eQTLs', times = nrow(sceqtlgen_effect_numbers))),
+  data.frame(celltype = sceqtlgen_effect_numbers[['celltype']], number = sceqtlgen_effect_numbers[['eQTLs']] - sceqtlgen_effect_numbers[['eGenes']], effect = rep('independent effects', times = nrow(sceqtlgen_effect_numbers)))
+)
+# add a column for the effect and the celltype
+sceqtlgen_effect_numbers_long[['celltype_effect']] <- paste(sceqtlgen_effect_numbers_long[['celltype']], sceqtlgen_effect_numbers_long[['effect']])
+# set order of effects for the eGenes first
+sceqtlgen_effect_numbers_long[['celltype_effect']] <- factor(sceqtlgen_effect_numbers_long[['celltype_effect']], levels = rev(c(paste(unique(sceqtlgen_effect_numbers_long[['celltype']]), 'eGenes'), paste(unique(sceqtlgen_effect_numbers_long[['celltype']]), 'independent eQTLs'), paste(unique(sceqtlgen_effect_numbers_long[['celltype']]), 'independent effects'))))
+
+
+# set the effect with an order
+sceqtlgen_effect_numbers_long[['effect']] <- factor(sceqtlgen_effect_numbers_long[['effect']], levels = c('independent effects', 'independent eQTLs', 'eGenes'))
+# order the cell types as well
+sceqtlgen_effect_numbers_long[['celltype']] <- factor(sceqtlgen_effect_numbers_long[['celltype']])
+# now get the ordering that we like, based on celltype first, and then the effect
+sceqtlgen_effect_numbers_ordering <- sceqtlgen_effect_numbers_long[order(sceqtlgen_effect_numbers_long[['celltype']], sceqtlgen_effect_numbers_long[['effect']]), 'celltype_effect']
+# and set that in the dataframe
+sceqtlgen_effect_numbers_long[['celltype_effect']] <- factor(sceqtlgen_effect_numbers_long[['celltype_effect']], levels = sceqtlgen_effect_numbers_ordering)
+
+# make a colour mapping
+pct_whitening=40
+# set the cell type colors
+sceqtlgen_color_coding <- list()
+sceqtlgen_color_coding[["Monocyte"]] <- "#EDBA1B"
+sceqtlgen_color_coding[["NK"]] <- "#E64B50"
+sceqtlgen_color_coding[["B"]] <- "#71BC4B"
+sceqtlgen_color_coding[["DC"]] <- "#965EC8"
+sceqtlgen_color_coding[["CD4+ T"]] <- "#153057"
+sceqtlgen_color_coding[["CD8+ T"]] <- "#009DDB"
+sceqtlgen_color_coding[["Monocyte eGenes"]] <- "#EDBA1B"
+sceqtlgen_color_coding[["NK eGenes"]] <- "#E64B50"
+sceqtlgen_color_coding[["B eGenes"]] <- "#71BC4B"
+sceqtlgen_color_coding[["DC eGenes"]] <- "#965EC8"
+sceqtlgen_color_coding[["CD4+ T eGenes"]] <- "#153057"
+sceqtlgen_color_coding[["CD8+ T eGenes"]] <- "#009DDB"
+sceqtlgen_color_coding[["Monocyte independent eQTLs"]] <- colorRampPalette(c(sceqtlgen_color_coding[["Monocyte eGenes"]], "white"))(100)[pct_whitening]
+sceqtlgen_color_coding[["NK independent eQTLs"]] <- colorRampPalette(c(sceqtlgen_color_coding[["NK eGenes"]], "white"))(100)[pct_whitening]
+sceqtlgen_color_coding[["B independent eQTLs"]] <- colorRampPalette(c(sceqtlgen_color_coding[["B eGenes"]], "white"))(100)[pct_whitening]
+sceqtlgen_color_coding[["DC independent eQTLs"]] <- colorRampPalette(c(sceqtlgen_color_coding[["DC eGenes"]], "white"))(100)[pct_whitening]
+sceqtlgen_color_coding[["CD4+ T independent eQTLs"]] <- colorRampPalette(c(sceqtlgen_color_coding[["CD4+ T eGenes"]], "white"))(100)[pct_whitening]
+sceqtlgen_color_coding[["CD8+ T independent eQTLs"]] <- colorRampPalette(c(sceqtlgen_color_coding[["CD8+ T eGenes"]], "white"))(100)[pct_whitening]
+sceqtlgen_color_coding[["Monocyte independent effects"]] <- colorRampPalette(c(sceqtlgen_color_coding[["Monocyte eGenes"]], "white"))(100)[pct_whitening]
+sceqtlgen_color_coding[["NK independent effects"]] <- colorRampPalette(c(sceqtlgen_color_coding[["NK eGenes"]], "white"))(100)[pct_whitening]
+sceqtlgen_color_coding[["B independent effects"]] <- colorRampPalette(c(sceqtlgen_color_coding[["B eGenes"]], "white"))(100)[pct_whitening]
+sceqtlgen_color_coding[["DC independent effects"]] <- colorRampPalette(c(sceqtlgen_color_coding[["DC eGenes"]], "white"))(100)[pct_whitening]
+sceqtlgen_color_coding[["CD4+ T independent effects"]] <- colorRampPalette(c(sceqtlgen_color_coding[["CD4+ T eGenes"]], "white"))(100)[pct_whitening]
+sceqtlgen_color_coding[["CD8+ T independent effects"]] <- colorRampPalette(c(sceqtlgen_color_coding[["CD8+ T eGenes"]], "white"))(100)[pct_whitening]
+# make the plot
+p <- ggplot(data = sceqtlgen_effect_numbers_long[sceqtlgen_effect_numbers_long[['effect']] != 'independent eQTLs', ], mapping = aes(x = celltype, y = number, fill = celltype_effect)) +
+    geom_bar(stat='identity', position = 'stack') + 
+    xlab('Cell type') + 
+    ylab('Number of effects') +
+    theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) +
+    scale_fill_manual(values = sceqtlgen_color_coding) + 
+  ggtitle('Number of eQTLs identified in sc-eQTLgen phase 1') +
+  labs(fill='effect')
+
+# extract the legend
+p_legend <- as_ggplot(get_legend(p))
+# now plot with the legend separately
+plot_grid(p + theme(legend.position = 'none'), # remove legend in plot itself, because it takes up too much space
+          p_legend,
+          nrow = 1, 
+          rel_widths = c(3, 1)) # instead set the width manually
+
+# redo, but now we change the order
+sceqtlgen_effect_numbers_long[['effect']] <- factor(sceqtlgen_effect_numbers_long[['effect']], levels = c('eGenes', 'independent effects', 'independent eQTLs'))
+# order the cell types as well
+sceqtlgen_effect_numbers_long[['celltype']] <- factor(sceqtlgen_effect_numbers_long[['celltype']])
+# now get the ordering that we like, based on celltype first, and then the effect
+sceqtlgen_effect_numbers_ordering <- sceqtlgen_effect_numbers_long[order(sceqtlgen_effect_numbers_long[['celltype']], sceqtlgen_effect_numbers_long[['effect']]), 'celltype_effect']
+# and set that in the dataframe
+sceqtlgen_effect_numbers_long[['celltype_effect']] <- factor(sceqtlgen_effect_numbers_long[['celltype_effect']], levels = sceqtlgen_effect_numbers_ordering)
+
+
+p2 <- ggplot(data = sceqtlgen_effect_numbers_long[sceqtlgen_effect_numbers_long[['effect']] != 'independent effects', ], mapping = aes(x = celltype, y = number, fill = celltype_effect)) +
+    geom_bar(stat='identity', position = position_dodge()) + 
+    xlab('Cell type') + 
+    ylab('Number of effects') +
+    theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) +
+    scale_fill_manual(values = sceqtlgen_color_coding) + 
+  ggtitle('Number of eQTLs identified in sc-eQTLgen phase 1') +
+  labs(fill='effect')
+# extract the legend
+p2_legend <- as_ggplot(get_legend(p2))
+# now plot with the legend separately
+plot_grid(p2 + theme(legend.position = 'none'), # remove legend in plot itself, because it takes up too much space
+          p2_legend,
+          nrow = 1, 
+          rel_widths = c(3, 1)) # instead set the width manually
+
+
+```
+```{r path_setup, include=FALSE}
+
+# location of CREs
+cre_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/eQTA/'
+
+```
+
+```{r get_cre_numbers, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# get the number of ca peaks
+cre_numbers <- get_egene_numbers_per_celltype_limix(cre_output_loc, output_file = 'qtl_results_FDR_corrected.tsv', gene_column = 'snp_id', significance_column = 'p_value', significance_cutoff = 0.05)
+
+```
+
+```{r get_cre_numbers_plots, include=TRUE, fig.width=8, fig.height=6}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# make a plot of the numbers
+p_cre_numbers <- egene_numbers_to_plot(cre_numbers, legendless = T, use_color_dict = T, angle_labels = F) +
+  ggtitle('Number of Cis Regulatory Elements') +
+  xlab('Cell type') +
+  ylab('Number of CREs') +
+    theme(
+    axis.title.x = element_text(size = 14),
+    axis.title.y = element_text(size = 14),
+    axis.text.x = element_text(size = 12),
+    plot.title = element_text(size = 16)
+  )
+p_cre_numbers
+
+```
+
+```{r get_peak_data, include=FALSE, fig.width=8, fig.height=6}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# location of peak annotation
+monocyte_potential_regions_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/signac_peaks/output/mo_peaks_lane1to80_UT_monocyte.bed'
+cd4t_potential_regions_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/signac_peaks/output/mo_peaks_lane1to80_UT_CD4T.bed'
+# read the files
+monocyte_potential_regions <- fread(monocyte_potential_regions_loc, header = T, sep = '\t')
+cd4t_potential_regions <- fread(cd4t_potential_regions_loc, header = T, sep = '\t')
+
+# merge them, so we can plot them against one another
+potential_regions_both <- merge(monocyte_potential_regions[, c('name', 'pct_exp')], cd4t_potential_regions[, c('name', 'pct_exp')], by = 'name')
+# set the column names
+colnames(potential_regions_both) <- c('region', 'pct_exp_monocyte', 'pct_exp_cd4t')
+# add -log10
+potential_regions_both[['pct_exp_monocyte_log']] <- -log10(potential_regions_both[['pct_exp_monocyte']])
+potential_regions_both[['pct_exp_cd4t_log']] <- -log10(potential_regions_both[['pct_exp_cd4t']])
+```
+
+```{r plot_peak_data, include=TRUE, fig.width=7, fig.height=7}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# using the data from the previous chunk
+ggplot(data = potential_regions_both, mapping = aes(x = pct_exp_monocyte_log, y = pct_exp_cd4t_log)) + 
+  # and rasterize
+  ggrastr::rasterise(geom_point(size = 0.1, alpha = 0.5, colour = 'darkblue')) +
+  # theme we like
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) +
+  # labels
+  xlab('-log10 fraction cells reads at peaks in monocytes') +
+  ylab('-log10 fraction cells reads at peaks in CD4+ T cells') +
+  ggtitle('Chromatin openness in monocytes versus CD4+ T cells')  +
+  # font sizes
+  theme(
+    axis.title.x = element_text(size = 14),
+    axis.title.y = element_text(size = 14),
+    axis.text.x = element_text(size = 12),
+    plot.title = element_text(size = 16)
+  )
 
 ```
