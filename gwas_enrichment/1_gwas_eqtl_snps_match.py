@@ -7,7 +7,7 @@ example usage:
 python 1_gwas_eqtl_snps_match.py \
     --gwas_loc /groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/GRN-reconstruction/GWAS/gwas_filtered_updated_08032024.tsv.gz \
     --variant_feature_loc /groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/Meta_14/Finemapping/finemapped_monocyte_enrichment_input.tsv.gz \
-    --out_loc /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/gwas_enrichment/eqtl/sceqtlgen/finemapped/finemapped_monocyte_enrichment_output.tsv.gz
+    --out_loc /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/gwas_enrichment/eqtl/sceqtlgen/finemapped/finemapped_monocyte_enrichment_snp_gwas_qtl_for_ld_output.tsv.gz
 
 
 """
