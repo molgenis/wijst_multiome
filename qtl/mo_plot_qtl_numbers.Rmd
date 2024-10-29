@@ -627,9 +627,9 @@ knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 ####################
 
 # location of eQTL
-eqtl_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/output/L1/UT/'
+eqtl_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/output/L1/UT/'
 # location of caQTL output
-caqtl_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/output_cis_50kb_updated_features/L1/UT/'
+caqtl_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/output_cis_50kb_updated_features/L1/UT/'
 
 ```
 
@@ -700,17 +700,53 @@ mono_eqtl_significant <- fread(mono_eqtl_significant_loc, header = T, sep = '\t'
 
 ```
 
+```{r get_peaktogene_mono, include=TRUE, fig.width=10, fig.height=10}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# annotation of closest feature
+mono_peak_closestfeature_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/closest_feature_monocyte.tsv'
+# read the closest feature file
+mono_peak_closestfeature <- fread(mono_peak_closestfeature_loc, header = T, sep = '\t')
+
+```
+
+```{r add_peaktogene_mono, include=TRUE, fig.width=10, fig.height=10}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# add the ensemble ID
+mono_caqtl_significant <- cbind(mono_caqtl_significant, mono_peak_closestfeature[match(mono_caqtl_significant[['feature_id']], mono_peak_closestfeature[['query_region']]), c('gene_id', 'distance')])
+
+```
+
 ```{r merge_qtls_mono, include=TRUE, fig.width=7, fig.height=7}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # add new columns
+mono_eqtl_significant[['varfeature']] <- paste(mono_eqtl_significant[['snp_id']], mono_eqtl_significant[['ENSG']], sep = ';')
 mono_eqtl_significant[['beta_e']] <- mono_eqtl_significant[['beta']]
 mono_eqtl_significant[['feature_q_value_e']] <- mono_eqtl_significant[['feature_q_value']]
+mono_eqtl_significant[['assessed_allele_e']] <- mono_eqtl_significant[['assessed_allele']]
+mono_eqtl_significant[['feature_id_e']] <- mono_eqtl_significant[['feature_id']]
+mono_caqtl_significant[['varfeature']] <- paste(mono_caqtl_significant[['snp_id']], mono_caqtl_significant[['gene_id']], sep = ';')
 mono_caqtl_significant[['beta_ca']] <- mono_caqtl_significant[['beta']]
 mono_caqtl_significant[['feature_q_value_ca']] <- mono_caqtl_significant[['feature_q_value']]
+mono_caqtl_significant[['assessed_allele_ca']] <- mono_caqtl_significant[['assessed_allele']]
+mono_caqtl_significant[['feature_id_ca']] <- mono_caqtl_significant[['feature_id']]
+
+# take the top eQTL effect only
+# mono_eqtl_significant <- mono_eqtl_significant[order(mono_eqtl_significant[['p_value']]), ]
+# mono_eqtl_significant <- mono_eqtl_significant[!duplicated(mono_eqtl_significant[['feature_id']]), ]
+
 # merge the things we care about
-mono_qtl_significant <- merge(mono_eqtl_significant[mono_eqtl_significant[['feature_q_value']] < 0.05, c('snp_id', 'beta_e', 'feature_q_value_e')],
-                              mono_caqtl_significant[mono_caqtl_significant[['feature_q_value']] < 0.05, c('snp_id', 'beta_ca', 'feature_q_value_ca')], by = 'snp_id', all = F)
+mono_qtl_significant <- merge(mono_eqtl_significant[mono_eqtl_significant[['feature_q_value']] < 0.05, c('snp_id', 'varfeature', 'beta_e', 'feature_q_value_e', 'assessed_allele_e', 'feature_id_e')],
+                              mono_caqtl_significant[mono_caqtl_significant[['feature_q_value']] < 0.05, c('varfeature', 'beta_ca', 'feature_q_value_ca', 'assessed_allele_ca', 'feature_id_ca')], by = 'varfeature', all = F)
+
+
+```
+
+```{r plot_qtls_mono, include=TRUE, fig.width=7, fig.height=7}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
 # get max significant beta
 max_beta_eqtl <- max(abs(mono_qtl_significant[['beta_e']]))
 max_beta_caqtl <- max(abs(mono_qtl_significant[['beta_ca']]))
@@ -720,7 +756,8 @@ min_beta_caqtl <- min(abs(mono_qtl_significant[['beta_ca']]))
 
 # plot the effect sizes against one another
 p_ca_e_betas <- ggplot(data = mono_qtl_significant, mapping = aes(x = beta_ca, y = beta_e)) + 
-  ggrastr::rasterise(geom_point(size = 0.1)) +
+  #ggrastr::rasterise(geom_point(size = 0.1, alpha = 0.5)) +
+  geom_point(size = 0.1, alpha = 0.5) +
   theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) +
   
   # left to right block of non-significant effects
@@ -735,10 +772,10 @@ p_ca_e_betas <- ggplot(data = mono_qtl_significant, mapping = aes(x = beta_ca, y
             fill = "#0072B2", alpha = 0.01) +
   # bottom right block
   geom_rect(aes(xmin = min_beta_caqtl, xmax = max_beta_caqtl, ymin = -1 * max_beta_eqtl, ymax = -1 * min_beta_eqtl), 
-            fill = "#D55E00", alpha = 0.01) +
+            fill = "#880808", alpha = 0.01) +
   # top left block
   geom_rect(aes(xmin = -1 * max_beta_caqtl, xmax = -1 *min_beta_caqtl, ymin = min_beta_eqtl, ymax = max_beta_eqtl), 
-            fill = "#D55E00", alpha = 0.01) + 
+            fill = "#880808", alpha = 0.01) + 
   # top right block
   geom_rect(aes(xmin = min_beta_caqtl, xmax = max_beta_caqtl, ymin = min_beta_eqtl, ymax = max_beta_eqtl), 
             fill = "#0072B2", alpha = 0.01) +
@@ -771,6 +808,16 @@ n_effects <- nrow(mono_qtl_significant)
 n_concordant <- sum(sign(mono_qtl_significant[['beta_ca']]) == sign(mono_qtl_significant[['beta_e']]))
 # calculate concordance
 concordance <- n_concordant / n_effects
+# get correlation of directions
+correlation_pos <- cor(x = mono_qtl_significant[sign(mono_qtl_significant[['beta_ca']]) > 0 & sign(mono_qtl_significant[['beta_e']]) > 0, ][['beta_ca']], y = mono_qtl_significant[sign(mono_qtl_significant[['beta_ca']]) > 0 & sign(mono_qtl_significant[['beta_e']]) > 0, ][['beta_e']], method = 'spearman')
+correlation_neg <- cor(x = mono_qtl_significant[sign(mono_qtl_significant[['beta_ca']]) < 0 & sign(mono_qtl_significant[['beta_e']]) < 0, ][['beta_ca']], y = mono_qtl_significant[sign(mono_qtl_significant[['beta_ca']]) < 0 & sign(mono_qtl_significant[['beta_e']]) < 0, ][['beta_e']], method = 'spearman')
+
+```
+
+```{r write_qtls_mon, include=TRUE, fig.width=10, fig.height=10}
+
+# write the table
+write.table(mono_qtl_significant, gzfile('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/mo_monocyte_qtl_overlaps.tsv.gz'), row.names = F, col.names = T, sep = '\t', quote = F)
 
 ```
 
@@ -878,7 +925,7 @@ plot_grid(p2 + theme(legend.position = 'none'), # remove legend in plot itself, 
 ```{r path_setup, include=FALSE}
 
 # location of CREs
-cre_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/eQTA/'
+cre_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/eQTA/'
 
 ```
 
@@ -912,8 +959,8 @@ p_cre_numbers
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # location of peak annotation
-monocyte_potential_regions_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/signac_peaks/output/mo_peaks_lane1to80_UT_monocyte.bed'
-cd4t_potential_regions_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/signac_peaks/output/mo_peaks_lane1to80_UT_CD4T.bed'
+monocyte_potential_regions_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/signac_peaks/output/mo_peaks_lane1to80_UT_monocyte.bed'
+cd4t_potential_regions_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/signac_peaks/output/mo_peaks_lane1to80_UT_CD4T.bed'
 # read the files
 monocyte_potential_regions <- fread(monocyte_potential_regions_loc, header = T, sep = '\t')
 cd4t_potential_regions <- fread(cd4t_potential_regions_loc, header = T, sep = '\t')
