@@ -87,4 +87,4 @@ finemapped_eqtls_monocyte <- get_finemapped_variants_per_feature_hardcutoff('/gr
 # remove where there is no credible set defined
 finemapped_eqtls_monocyte <- finemapped_eqtls_monocyte[!is.na(finemapped_eqtls_monocyte[['SusieRss_CS']])]
 # write the result
-write.table(data.frame(coQTL = paste(finemapped_eqtls_monocyte[['snp_id']], finemapped_eqtls_monocyte[['feature_id']], sep = ';')), '/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/Meta_14/Finemapping/finemapped_monocyte_enrichment_input.tsv.gz', row.names = F, col.names = T, quote = F, sep = '\t')
+write.table(data.frame(coQTL = paste(finemapped_eqtls_monocyte[['snp_id']], finemapped_eqtls_monocyte[['feature_id']], sep = ';')), gzfile('/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/Meta_14/Finemapping/finemapped_monocyte_enrichment_input.tsv.gz'), row.names = F, col.names = T, quote = F, sep = '\t')
