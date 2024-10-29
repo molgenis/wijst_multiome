@@ -736,6 +736,10 @@ mono_caqtl_significant[['feature_id_ca']] <- mono_caqtl_significant[['feature_id
 # take the top eQTL effect only
 # mono_eqtl_significant <- mono_eqtl_significant[order(mono_eqtl_significant[['p_value']]), ]
 # mono_eqtl_significant <- mono_eqtl_significant[!duplicated(mono_eqtl_significant[['feature_id']]), ]
+# take the top caQTL effect only
+# mono_caqtl_significant <- mono_caqtl_significant[order(mono_caqtl_significant[['p_value']]), ]
+# mono_caqtl_significant <- mono_caqtl_significant[!duplicated(mono_caqtl_significant[['feature_id']]), ]
+
 
 # merge the things we care about
 mono_qtl_significant <- merge(mono_eqtl_significant[mono_eqtl_significant[['feature_q_value']] < 0.05, c('snp_id', 'varfeature', 'beta_e', 'feature_q_value_e', 'assessed_allele_e', 'feature_id_e')],
@@ -757,7 +761,7 @@ min_beta_caqtl <- min(abs(mono_qtl_significant[['beta_ca']]))
 # plot the effect sizes against one another
 p_ca_e_betas <- ggplot(data = mono_qtl_significant, mapping = aes(x = beta_ca, y = beta_e)) + 
   #ggrastr::rasterise(geom_point(size = 0.1, alpha = 0.5)) +
-  geom_point(size = 0.1, alpha = 0.5) +
+  geom_point(size = 1, alpha = 0.5) +
   theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) +
   
   # left to right block of non-significant effects
