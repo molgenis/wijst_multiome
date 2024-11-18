@@ -333,9 +333,10 @@ get_egene_numbers_per_celltype_limix <- function(qtl_output_loc, output_file='qt
 #' @param color_indices supply specific indices relating to colours to use from the distinct colour palette. Use 'get_available_colours_grid' to get the colours and their indices (optional, unused by default)
 #' @param use_label_dict change names to a more pleasing format
 #' @param make_labels_multiline make labels multiline if they are long
+#' @param x_order to order the values on the x axis
 #' @returns a barplot with the number of eGenes per cell type
 #' 
-egene_numbers_to_plot <- function(egene_numbers, celltype_column='cell_type', number_column='nr', pointless=F, legendless=F, ylim=NULL, paper_style=T, angle_labels=T, use_distinct_colours=T, use_sampling=F, color_indices=NULL, use_color_dict=F, use_label_dict=T, split_long_labels_to_lines=T) {
+egene_numbers_to_plot <- function(egene_numbers, celltype_column='cell_type', number_column='nr', pointless=F, legendless=F, ylim=NULL, paper_style=T, angle_labels=T, use_distinct_colours=T, use_sampling=F, color_indices=NULL, use_color_dict=F, use_label_dict=T, split_long_labels_to_lines=T, x_order=NULL) {
   # remap names if requested
   if (use_label_dict) {
     egene_numbers[[celltype_column]] <- remap_with_label_dict(egene_numbers[[celltype_column]])
@@ -343,6 +344,10 @@ egene_numbers_to_plot <- function(egene_numbers, celltype_column='cell_type', nu
   # make them multiline
   if (split_long_labels_to_lines) {
     egene_numbers[[celltype_column]] <- split_strings_with_max_length(egene_numbers[[celltype_column]])
+  }
+  # order the x axis if requested
+  if (!is.null(x_order)) {
+    egene_numbers[[celltype_column]] <- factor(egene_numbers[[celltype_column]], levels = x_order)
   }
   # start plot
   p <- ggplot(mapping = aes(x = egene_numbers[[celltype_column]], y = egene_numbers[[number_column]], fill = egene_numbers[[celltype_column]])) +
@@ -524,17 +529,28 @@ get_ndonors_celltype <- function(covariates_folder, min_cell=10, ncell_column='C
   return(ndonors_celltype_merged)
 }
 
-get_ncells_celltype <- function(covariates_folder, min_cell=0, ncell_column='CellCount', covariates_append='.covariates.txt') {
+get_ncells_celltype <- function(covariates_folder, min_cell=0, ncell_column='CellCount', covariates_append='.covariates.txt.gz', qtlinput_append='.qtlInput.txt.gz', covariates_sample_column='Donor_Pool') {
   # we will store per cell type
   ndonors_celltype <- list()
   # list the files
   covar_files <- list.files(covariates_folder, pattern = paste('*', covariates_append, sep = ''))
   # check each file
   for (covar_file in covar_files) {
+    # get the celltype from the filename
+    celltype <- gsub(covariates_append, '', covar_file)
+    # read the expression file as well
+    expression_file_loc <- paste(covariates_folder, '/', celltype, qtlinput_append, sep = '')
+    # but only the first row
+    expression_file <- read.table(expression_file_loc, header = T, sep = '\t', row.names = 1, nrows = 1, comment.char = '', check.names = F)
+    print(head(expression_file))
+    # get the samples that are there
+    expression_samples <- colnames(expression_file)
     # get the full location
     covar_full <- paste(covariates_folder, covar_file, sep = '')
     # read the covariates
     covars <- read.table(covar_full, header = T, sep = '\t', comment.char = '', check.names = F)
+    # keep only the entries that we included for the QTL mapping
+    covars <- covars[covars[[covariates_sample_column]] %in% expression_samples, ]
     # get the cell counts
     cell_counts <- covars[[ncell_column]]
     # count how many have more than the given number
@@ -616,6 +632,26 @@ plot_de_number_vs_celltype_totals <- function(de_numbers, cell_numbers, de_numbe
   return(p)
 }
 
+create_confusion_matrix <- function(assignment_table, truth_column, prediction_column, truth_column_label=NULL, prediction_column_label=NULL, angle_labels=T){
+  confusion_table <- create_confusion_table(assignment_table, truth_column, prediction_column)
+  # round the frequency off to a sensible cutoff
+  confusion_table$freq <- round(confusion_table$freq, digits=2)
+  # turn into plot
+  p <- ggplot(data=confusion_table, aes(x=truth, y=prediction, fill=freq)) + geom_tile() + scale_fill_gradient(low='red', high='blue') + geom_text(aes(label=freq))
+  # some options
+  if(!is.null(truth_column_label)){
+    p <- p + xlab(truth_column_label)
+  }
+  if(!is.null(prediction_column_label)){
+    p <- p + ylab(prediction_column_label)
+  }
+  if (angle_labels) {
+    p <- p + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+  }
+  return(p)
+}
+
+
 ```
 
 
@@ -652,19 +688,67 @@ eqtl_gene_numbers <- get_egene_numbers_per_celltype_limix(eqtl_output_loc, outpu
 ```{r get_capeak_numbers_plots, include=TRUE, fig.width=8, fig.height=6}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
+# instead get the numbers that Maryna reported
+caqtl_peak_numbers_maryna <- data.frame(
+  cell_type = c('B', 'CD4T', 'CD8T', 'DC', 'monocyte', 'NK'), 
+  nr = c(1915, 6042, 2935, 1390, 11596, 3063)
+)
+
 # make a plot of the numbers
-p_caqtl_peak_numbers <- egene_numbers_to_plot(caqtl_peak_numbers, legendless = T, use_color_dict = T, angle_labels = F) +
+p_caqtl_peak_numbers <- egene_numbers_to_plot(caqtl_peak_numbers_maryna, legendless = T, use_color_dict = T, angle_labels = F) +
   ggtitle('Number of open chromatin peaks affected by genetic variants') +
   xlab('Cell type') +
   ylab('Number of peaks') +
   # label sizes
   theme(
-    axis.title.x = element_text(size = 14),
-    axis.title.y = element_text(size = 14),
-    axis.text.x = element_text(size = 12),
-    plot.title = element_text(size = 16)
+    axis.title.x = element_text(size = 18),
+    axis.title.y = element_text(size = 18),
+    axis.text.x = element_text(size = 16),
+    axis.text.y = element_text(size = 16),
+    plot.title = element_text(size = 20)
   )
 p_caqtl_peak_numbers
+ggsave('~/ashg_multiome_epeak_numbers.pdf', width = 8, height = 8, plot = p_caqtl_peak_numbers)
+
+```
+
+```{r sceqtlgen_ncells, include=TRUE, fig.width=10, fig.height=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# get then number of cells
+caqtl_peak_ncells <- get_ncells_celltype('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/L1/UT/')
+# make a plot of the numbers
+p_caqtl_peak_ncells <- egene_numbers_to_plot(caqtl_peak_ncells, legendless = T, use_color_dict = T, angle_labels = F, number_column = 'number') +
+  ggtitle('Number of cells used in caQTL mapping') +
+  xlab('Cell type') +
+  ylab('Number of cells') +
+  # label sizes
+  theme(
+    axis.title.x = element_text(size = 18),
+    axis.title.y = element_text(size = 18),
+    axis.text.x = element_text(size = 16),
+    axis.text.y = element_text(size = 16),
+    plot.title = element_text(size = 20)
+  )
+p_caqtl_peak_ncells
+ggsave('~/ashg_multiome_epeak_cells.pdf', width = 8, height = 8, plot = p_caqtl_peak_ncells)
+
+# knowing that, let's plot again, but with our order
+p_caqtl_peak_numbers <- egene_numbers_to_plot(caqtl_peak_numbers_maryna, legendless = T, use_color_dict = T, angle_labels = F, x_order = c('Monocyte', 'CD4+ T', 'CD8+ T', 'NK', 'B', 'DC')) +
+  ggtitle('Number of open chromatin peaks\naffected by genetic variants') +
+  xlab('Cell type') +
+  ylab('Number of peaks') +
+  # label sizes
+  theme(
+    axis.title.x = element_text(size = 18),
+    axis.title.y = element_text(size = 18),
+    axis.text.x = element_text(size = 16),
+    axis.text.y = element_text(size = 16),
+    plot.title = element_text(size = 20)
+  )
+p_caqtl_peak_numbers
+ggsave('~/ashg_multiome_epeak_numbers_ncellorderded.pdf', width = 8, height = 8, plot = p_caqtl_peak_numbers)
+
 
 ```
 
@@ -685,6 +769,7 @@ knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # location of mono ca output
 mono_caqtl_significant_loc <- paste(caqtl_output_loc, '/', 'monocyte', '/', 'qtl_results_all_qval_allchroms_fdr01_significant.txt.gz', sep = '')
+mono_caqtl_significant_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/output_cis_50kb_updated_features/final_FDR/subset_of_significant_qtls/fdr_subset_UT_monocyte.tsv'
 # read the table
 mono_caqtl_significant <- fread(mono_caqtl_significant_loc, header = T, sep = '\t')
 
@@ -729,7 +814,7 @@ mono_eqtl_significant[['assessed_allele_e']] <- mono_eqtl_significant[['assessed
 mono_eqtl_significant[['feature_id_e']] <- mono_eqtl_significant[['feature_id']]
 mono_caqtl_significant[['varfeature']] <- paste(mono_caqtl_significant[['snp_id']], mono_caqtl_significant[['gene_id']], sep = ';')
 mono_caqtl_significant[['beta_ca']] <- mono_caqtl_significant[['beta']]
-mono_caqtl_significant[['feature_q_value_ca']] <- mono_caqtl_significant[['feature_q_value']]
+#mono_caqtl_significant[['feature_q_value_ca']] <- mono_caqtl_significant[['feature_q_value']]
 mono_caqtl_significant[['assessed_allele_ca']] <- mono_caqtl_significant[['assessed_allele']]
 mono_caqtl_significant[['feature_id_ca']] <- mono_caqtl_significant[['feature_id']]
 
@@ -737,13 +822,20 @@ mono_caqtl_significant[['feature_id_ca']] <- mono_caqtl_significant[['feature_id
 # mono_eqtl_significant <- mono_eqtl_significant[order(mono_eqtl_significant[['p_value']]), ]
 # mono_eqtl_significant <- mono_eqtl_significant[!duplicated(mono_eqtl_significant[['feature_id']]), ]
 # take the top caQTL effect only
-# mono_caqtl_significant <- mono_caqtl_significant[order(mono_caqtl_significant[['p_value']]), ]
-# mono_caqtl_significant <- mono_caqtl_significant[!duplicated(mono_caqtl_significant[['feature_id']]), ]
+mono_caqtl_significant <- mono_caqtl_significant[order(mono_caqtl_significant[['p_value']]), ]
+mono_caqtl_significant <- mono_caqtl_significant[!duplicated(mono_caqtl_significant[['feature_id']]), ]
 
 
 # merge the things we care about
+# mono_qtl_significant <- merge(mono_eqtl_significant[mono_eqtl_significant[['feature_q_value']] < 0.05, c('snp_id', 'varfeature', 'beta_e', 'feature_q_value_e', 'assessed_allele_e', 'feature_id_e')],
+#                               mono_caqtl_significant[mono_caqtl_significant[['feature_q_value']] < 0.05, c('varfeature', 'beta_ca', 'feature_q_value_ca', 'assessed_allele_ca', 'feature_id_ca')], by = 'varfeature', all = F)
 mono_qtl_significant <- merge(mono_eqtl_significant[mono_eqtl_significant[['feature_q_value']] < 0.05, c('snp_id', 'varfeature', 'beta_e', 'feature_q_value_e', 'assessed_allele_e', 'feature_id_e')],
-                              mono_caqtl_significant[mono_caqtl_significant[['feature_q_value']] < 0.05, c('varfeature', 'beta_ca', 'feature_q_value_ca', 'assessed_allele_ca', 'feature_id_ca')], by = 'varfeature', all = F)
+                              mono_caqtl_significant[, c('varfeature', 'beta_ca', 'assessed_allele_ca', 'feature_id_ca')], by = 'varfeature', all = F)
+
+# add concordance
+mono_qtl_significant[['concordance']] <- ''
+mono_qtl_significant[sign(mono_qtl_significant[['beta_e']]) == sign(mono_qtl_significant[['beta_ca']]), 'concordance'] <- 'concordant'
+mono_qtl_significant[sign(mono_qtl_significant[['beta_e']]) != sign(mono_qtl_significant[['beta_ca']]), 'concordance'] <- 'disconcordant'
 
 
 ```
@@ -761,7 +853,7 @@ min_beta_caqtl <- min(abs(mono_qtl_significant[['beta_ca']]))
 # plot the effect sizes against one another
 p_ca_e_betas <- ggplot(data = mono_qtl_significant, mapping = aes(x = beta_ca, y = beta_e)) + 
   #ggrastr::rasterise(geom_point(size = 0.1, alpha = 0.5)) +
-  geom_point(size = 1, alpha = 0.5) +
+  geom_point(size = 1, alpha = 1) +
   theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) +
   
   # left to right block of non-significant effects
@@ -773,31 +865,32 @@ p_ca_e_betas <- ggplot(data = mono_qtl_significant, mapping = aes(x = beta_ca, y
   
   # bottom left block
   geom_rect(aes(xmin = -1 * max_beta_caqtl, xmax = -1 *min_beta_caqtl, ymin = -1 * max_beta_eqtl, ymax = -1 * min_beta_eqtl), 
-            fill = "#0072B2", alpha = 0.01) +
+            fill = "#90d5ff", alpha = 0.01) +
   # bottom right block
   geom_rect(aes(xmin = min_beta_caqtl, xmax = max_beta_caqtl, ymin = -1 * max_beta_eqtl, ymax = -1 * min_beta_eqtl), 
-            fill = "#880808", alpha = 0.01) +
+            fill = "#FAA0A0", alpha = 0.01) +
   # top left block
   geom_rect(aes(xmin = -1 * max_beta_caqtl, xmax = -1 *min_beta_caqtl, ymin = min_beta_eqtl, ymax = max_beta_eqtl), 
-            fill = "#880808", alpha = 0.01) + 
+            fill = "#FAA0A0", alpha = 0.01) + 
   # top right block
   geom_rect(aes(xmin = min_beta_caqtl, xmax = max_beta_caqtl, ymin = min_beta_eqtl, ymax = max_beta_eqtl), 
-            fill = "#0072B2", alpha = 0.01) +
+            fill = "#90d5ff", alpha = 0.01) +
   
   # labels
-  xlab('caQTL beta') +
-  ylab('eQTL beta') +
+  xlab('caQTL effect (beta)') +
+  ylab('eQTL effect (beta)') +
   ggtitle('Betas of caQTLs vs eQTLs') +
   
   # label sizes
   theme(
-    axis.title.x = element_text(size = 14),
-    axis.title.y = element_text(size = 14),
-    axis.text.x = element_text(size = 12),
-    plot.title = element_text(size = 16)
+    axis.title.x = element_text(size = 16),
+    axis.title.y = element_text(size = 16),
+    axis.text.x = element_text(size = 14),
+    axis.text.y = element_text(size = 14),
+    plot.title = element_text(size = 19)
   )
 
-ggsave('~/mo_monocyte_e_vs_ca_betas.pdf', plot = p_ca_e_betas, width=10, height=10)
+ggsave('~/ashg_monocyte_e_vs_ca_betas.pdf', plot = p_ca_e_betas, width=8, height=8)
 p_ca_e_betas
 
 ```
@@ -817,6 +910,50 @@ correlation_pos <- cor(x = mono_qtl_significant[sign(mono_qtl_significant[['beta
 correlation_neg <- cor(x = mono_qtl_significant[sign(mono_qtl_significant[['beta_ca']]) < 0 & sign(mono_qtl_significant[['beta_e']]) < 0, ][['beta_ca']], y = mono_qtl_significant[sign(mono_qtl_significant[['beta_ca']]) < 0 & sign(mono_qtl_significant[['beta_e']]) < 0, ][['beta_e']], method = 'spearman')
 
 ```
+
+```{r plot_qtls_mono_alt, include=TRUE, fig.width=8, fig.height=6}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# plot the effect sizes against one another
+p_ca_e_betas <- ggplot(data = mono_qtl_significant, mapping = aes(x = beta_ca, y = beta_e, color = concordance)) + 
+  #ggrastr::rasterise(geom_point(size = 0.1, alpha = 0.5)) +
+  geom_point(size = 1, alpha = 1) +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) +
+  # lines through zero
+  geom_hline(yintercept = 0) +
+  geom_vline(xintercept = 0) +
+  # and limits
+  xlim(c(-1 *max_beta_caqtl, max_beta_caqtl)) +
+  ylim(c(-1 *max_beta_eqtl, max_beta_eqtl)) +
+  # labels
+  xlab('caQTL beta') +
+  ylab('eQTL beta') +
+  ggtitle('Betas of caQTLs vs eQTLs') +
+  
+  # label sizes
+  theme(
+    axis.title.x = element_text(size = 16),
+    axis.title.y = element_text(size = 16),
+    axis.text.x = element_text(size = 14),
+    axis.text.y = element_text(size = 14),
+    plot.title = element_text(size = 19)
+  ) +
+  scale_color_manual(values = list('concordant' = '#0072B2', 'disconcordant' = '#880808'))
+# extract legend
+p_ca_e_betas_legend <- as_ggplot(get_legend(p_ca_e_betas))
+# make into plot
+p_ca_e_betas <- plot_grid(
+  p_ca_e_betas + theme(legend.position = 'none'), # remove legend in plot itself, because it takes up too much space
+  p_ca_e_betas_legend,
+  nrow = 1, 
+  rel_widths = c(3, 1)
+) # instead set the width manually
+
+ggsave('~/ashg_monocyte_e_vs_ca_betas_alt.pdf', plot = p_ca_e_betas, width=8, height=6)
+p_ca_e_betas
+
+```
+
 
 ```{r write_qtls_mon, include=TRUE, fig.width=10, fig.height=10}
 
@@ -915,7 +1052,14 @@ p2 <- ggplot(data = sceqtlgen_effect_numbers_long[sceqtlgen_effect_numbers_long[
     theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) +
     scale_fill_manual(values = sceqtlgen_color_coding) + 
   ggtitle('Number of eQTLs identified in sc-eQTLgen phase 1') +
-  labs(fill='effect')
+  labs(fill='effect') + 
+  theme(
+    axis.title.x = element_text(size = 16),
+    axis.title.y = element_text(size = 16),
+    axis.text.x = element_text(size = 14),
+    axis.text.y = element_text(size = 14),
+    plot.title = element_text(size = 18)
+  )
 # extract the legend
 p2_legend <- as_ggplot(get_legend(p2))
 # now plot with the legend separately
@@ -924,8 +1068,29 @@ plot_grid(p2 + theme(legend.position = 'none'), # remove legend in plot itself, 
           nrow = 1, 
           rel_widths = c(3, 1)) # instead set the width manually
 
+# now just the effects
+p3 <- ggplot(data = sceqtlgen_effect_numbers_long[sceqtlgen_effect_numbers_long[['effect']] == 'eGenes', ], mapping = aes(x = celltype, y = number, fill = celltype)) +
+    geom_bar(stat='identity') + 
+    xlab('Cell type') + 
+    ylab('Number of eGenes') +
+    theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) +
+    scale_fill_manual(values = sceqtlgen_color_coding) + 
+  ggtitle('Number of eQTLs identified in sc-eQTLgen phase 1') +
+  theme(legend.position = 'none')  +
+  theme(
+    axis.title.x = element_text(size = 16),
+    axis.title.y = element_text(size = 16),
+    axis.text.x = element_text(size = 14),
+    axis.text.y = element_text(size = 14),
+    plot.title = element_text(size = 18)
+  )
+p3
+ggsave('~/ashg_sceqtlgen_egene_numbers.pdf', width = 8, height = 8, plot = p3)
+ggsave('~/ashg_sceqtlgen_eqtleffect_numbers.pdf', width = 12, height = 6, plot = p2)
+
 
 ```
+
 ```{r path_setup, include=FALSE}
 
 # location of CREs
@@ -941,7 +1106,7 @@ cre_numbers <- get_egene_numbers_per_celltype_limix(cre_output_loc, output_file 
 
 ```
 
-```{r get_cre_numbers_plots, include=TRUE, fig.width=8, fig.height=6}
+```{r get_cre_numbers_plots, include=TRUE, fig.width=6, fig.height=6}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # make a plot of the numbers
@@ -949,13 +1114,33 @@ p_cre_numbers <- egene_numbers_to_plot(cre_numbers, legendless = T, use_color_di
   ggtitle('Number of Cis Regulatory Elements') +
   xlab('Cell type') +
   ylab('Number of CREs') +
-    theme(
-    axis.title.x = element_text(size = 14),
-    axis.title.y = element_text(size = 14),
-    axis.text.x = element_text(size = 12),
-    plot.title = element_text(size = 16)
+  theme(
+    axis.title.x = element_text(size = 16),
+    axis.title.y = element_text(size = 16),
+    axis.text.x = element_text(size = 14),
+    axis.text.y = element_text(size = 14),
+    plot.title = element_text(size = 18)
   )
+  
 p_cre_numbers
+ggsave('~/ashg_multiome_cre_numbers.pdf', width = 6, height = 6, plot = p_cre_numbers)
+
+# now in the order of number of cells
+p_cre_numbers <- egene_numbers_to_plot(cre_numbers, legendless = T, use_color_dict = T, angle_labels = F, x_order = c('Monocyte', 'CD4+ T', 'CD8+ T', 'NK', 'B', 'DC')) +
+  ggtitle('Number of Cis Regulatory Elements') +
+  xlab('Cell type') +
+  ylab('Number of CREs') +
+  theme(
+    axis.title.x = element_text(size = 16),
+    axis.title.y = element_text(size = 16),
+    axis.text.x = element_text(size = 14),
+    axis.text.y = element_text(size = 14),
+    plot.title = element_text(size = 18)
+  )
+  
+p_cre_numbers
+ggsave('~/ashg_multiome_cre_numbers_ordered.pdf', width = 6, height = 6, plot = p_cre_numbers)
+
 
 ```
 
@@ -998,5 +1183,371 @@ ggplot(data = potential_regions_both, mapping = aes(x = pct_exp_monocyte_log, y 
     axis.text.x = element_text(size = 12),
     plot.title = element_text(size = 16)
   )
+
+```
+
+```{r plot_peak_replication, include=TRUE, fig.width=7, fig.height=7}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# location of the peak replications
+peak_replication_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/output_cis_50kb_updated_features/intermediate_export/export/replication/summary.tsv'
+# read the peak replication data
+peak_replication <- read.table(peak_replication_loc, header = T, sep = '\t')
+# make into a plot that fits with ggplot
+cell_type_combo <- do.call('rbind', strsplit(colnames(peak_replication)[2:ncol(peak_replication)], '_'))
+# make into dataframe
+peak_replication_long <- data.frame(cell_type_combo)
+# update column names
+colnames(peak_replication_long) <- c('celltype1', 'celltype2')
+# add correlations as column
+peak_replication_long[['correlation']] <- unlist(as.vector(peak_replication[match('Correlation_significant_ct1_in_ct2', peak_replication[['parameter']]), 2:ncol(peak_replication)]))
+# now the opposite as well
+peak_replication_long_opposite <- peak_replication_long[, c('celltype2', 'celltype1')]
+colnames(peak_replication_long_opposite) <- c('celltype1', 'celltype2')
+peak_replication_long_opposite[['correlation']] <- unlist(as.vector(peak_replication[match('Correlation_significant_ct2_in_ct1', peak_replication[['parameter']]), 2:ncol(peak_replication)]))
+# merge both
+peak_replication_long <- rbind(peak_replication_long, peak_replication_long_opposite)
+# add cell to cell as 1
+peak_replication_long <- rbind(peak_replication_long, data.frame(celltype1 = unique(c(peak_replication_long[['celltype1']], peak_replication_long[['celltype2']])), celltype2 = unique(c(peak_replication_long[['celltype1']], peak_replication_long[['celltype2']])), correlation = 1))
+# make the plot
+peak_replication_long[['celltype1']] <-rename_labels(peak_replication_long[['celltype1']])
+peak_replication_long[['celltype2']] <-rename_labels(peak_replication_long[['celltype2']])
+# first round correlation
+peak_replication_long$correlation <- round(as.numeric(peak_replication_long$correlation), digits=2)
+p <- ggplot(data=peak_replication_long, aes(x=celltype1, y=celltype2, fill=correlation)) + geom_tile() + scale_fill_gradient(low='white', high='red', limits = c(0,1)) + geom_text(aes(label=correlation))
+p
+```
+```{r plot_creqtl_example, include=TRUE, fig.width=8, fig.height=6}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# location of the CRE example table
+creqtl_example_loc <- '/groups/umcg-franke-scrna/tmp04/users/umcg-roelen/singularity/rstudio-server/simulated_home/ashg_creqtl_example.tsv.gz'
+# read the table
+creqtl_example <- read.table(creqtl_example_loc, header = T, sep = '\t')
+# get some colors
+qual_col_pals = brewer.pal.info[brewer.pal.info$category == 'qual',]
+col_vector = unlist(mapply(brewer.pal, qual_col_pals$maxcolors, rownames(qual_col_pals)))
+colors <- sample(col_vector, length(unique(creqtl_example[['alleles']])))
+
+# make the interaction plot
+p_interaction <- ggplot(data = creqtl_example, mapping = aes(x = ATAC, y = RNA, color = alleles)) +
+  geom_point(size = 1) + 
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth") +
+  # geom_smooth(method = "loess", 
+  #             formula = y ~ x) + 
+  xlab('chr3-71806694-71807124 accessibility') + 
+  ylab('PROK2 RNA expression') +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) +
+  ggtitle('Gene expression vs open chromatin\nper 3:71800545:A:G genotype') +
+  theme(
+    axis.title.x = element_text(size = 16),
+    axis.title.y = element_text(size = 16),
+    axis.text.x = element_text(size = 14),
+    axis.text.y = element_text(size = 14),
+    plot.title = element_text(size = 18)
+  ) + 
+  scale_color_manual(values = list('AA' = '#218e89', 'AG' = '#fdb638', 'GG' = '#e12a62')) +
+  guides(color=guide_legend("genotype"))
+# extract legend
+p_interaction_legend <- as_ggplot(get_legend(p_interaction))
+# make into plot
+p_interaction <- plot_grid(
+  p_interaction + theme(legend.position = 'none'), # remove legend in plot itself, because it takes up too much space
+  p_interaction_legend,
+  nrow = 1, 
+  rel_widths = c(3, 1)
+) # instead set the width manually
+p_interaction
+ggsave('~/ashg_interaction_plot.pdf', width = 8, height = 6, plot = p_interaction)
+```
+
+```{r plot_creqtl_example_separate, include=TRUE, fig.width=6, fig.height=18}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# make the interaction plot
+p_interaction_aa <- ggplot(data = creqtl_example[creqtl_example[['alleles']] == 'AA', ], mapping = aes(x = ATAC, y = RNA, color = alleles)) +
+  geom_point(size = 1, color = '#218e89') + 
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth", 
+              color = '#218e89') +
+  # geom_smooth(method = "loess", 
+  #             formula = y ~ x) + 
+  xlab('chr3-71806694-71807124 accessibility') + 
+  ylab('PROK2 RNA expression') +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) +
+  ggtitle('Gene expression vs open chromatin\nfor 3:71800545:A:G AA genotype') +
+  theme(
+    axis.title.x = element_text(size = 16),
+    axis.title.y = element_text(size = 16),
+    axis.text.x = element_text(size = 14),
+    axis.text.y = element_text(size = 14),
+    plot.title = element_text(size = 18)
+  )
+p_interaction_ag <- ggplot(data = creqtl_example[creqtl_example[['alleles']] == 'AG', ], mapping = aes(x = ATAC, y = RNA, color = alleles)) +
+  geom_point(size = 1, color = '#fdb638') + 
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth", 
+              color = '#fdb638') +
+  # geom_smooth(method = "loess", 
+  #             formula = y ~ x) + 
+  xlab('chr3-71806694-71807124 accessibility') + 
+  ylab('PROK2 RNA expression') +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) +
+  ggtitle('Gene expression vs open chromatin\nfor 3:71800545:A:G AG genotype') +
+  theme(
+    axis.title.x = element_text(size = 16),
+    axis.title.y = element_text(size = 16),
+    axis.text.x = element_text(size = 14),
+    axis.text.y = element_text(size = 14),
+    plot.title = element_text(size = 18)
+  )
+p_interaction_gg <- ggplot(data = creqtl_example[creqtl_example[['alleles']] == 'GG', ], mapping = aes(x = ATAC, y = RNA, color = alleles)) +
+  geom_point(size = 1, color = '#e12a62') + 
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth", 
+              color = '#e12a62') +
+  # geom_smooth(method = "loess", 
+  #             formula = y ~ x) + 
+  xlab('chr3-71806694-71807124 accessibility') + 
+  ylab('PROK2 RNA expression') +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) +
+  ggtitle('Gene expression vs open chromatin\nfor 3:71800545:A:G GG genotype') +
+  theme(
+    axis.title.x = element_text(size = 16),
+    axis.title.y = element_text(size = 16),
+    axis.text.x = element_text(size = 14),
+    axis.text.y = element_text(size = 14),
+    plot.title = element_text(size = 18)
+  )
+# now plot all three
+p_interaction_separate <- plot_grid(
+  p_interaction_aa, 
+  p_interaction_ag, 
+  p_interaction_gg, 
+  nrow = 3
+)
+# show and save
+p_interaction_separate
+ggsave('~/ashg_interaction_plot_separate.pdf', width = 6, height = 18, plot = p_interaction_separate)
+
+```
+
+```{r plot_creqtl_example, include=TRUE, fig.width=6, fig.height=6}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# location of the CRE example table
+cre_example_loc <- '/groups/umcg-franke-scrna/tmp04/users/umcg-roelen/singularity/rstudio-server/simulated_home/ashg_cre_example.tsv.gz'
+# read the table
+cre_example <- read.table(creqtl_example_loc, header = T, sep = '\t')
+# make the interaction plot
+p_cre <- ggplot(data = creqtl_example, mapping = aes(x = ATAC, y = RNA)) +
+  geom_point(size = 1, alpha = 0.5) + 
+  xlab('chr1-25267721-25268401') + 
+  ylab('RHD RNA expression') +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) +
+  ggtitle('Gene expression vs open chromatin') +
+  theme(
+    axis.title.x = element_text(size = 16),
+    axis.title.y = element_text(size = 16),
+    axis.text.x = element_text(size = 14),
+    axis.text.y = element_text(size = 14),
+    plot.title = element_text(size = 18)
+  ) + 
+  stat_smooth(method = "lm",
+              formula = y ~ x,
+              geom = "smooth")
+
+p_cre
+ggsave('~/ashg_cre_example_plot.pdf', width = 6, height = 6, plot = p_cre)
+
+```
+
+
+```{r plot_qtl_overlap_example, include=TRUE, fig.width=6, fig.height=8}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# location of the file
+qtl_overlap_example_loc <- '/groups/umcg-franke-scrna/tmp04/users/umcg-roelen/singularity/rstudio-server/simulated_home/ashg_qtl_overlap_example.tsv.gz'
+# read the QTL
+qtl_overlap_example <- read.table(qtl_overlap_example_loc, header = T, sep = '\t')
+# set the levels
+qtl_overlap_example[['alleles']] <- factor(qtl_overlap_example[['alleles']], levels = c('TT', 'TC', 'CC'))
+# plot the qtl
+p_eqtl <- ggplot(data = qtl_overlap_example, mapping = aes(x = alleles, y = RNA, fill = alleles)) + 
+    geom_boxplot(outlier.shape = NA) +
+    geom_jitter(size = 0.5, alpha = 0.5, width=0.15) + 
+    theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+    xlab('10:112347540:T:C genotype') + 
+    ylab('AL157786.1 expression') +
+  ggtitle('10:112347540:T:C affecting\nAL157786.1 expression') + 
+  theme(legend.position = 'none') +
+  theme(
+    axis.title.x = element_text(size = 16),
+    axis.title.y = element_text(size = 16),
+    axis.text.x = element_text(size = 14),
+    axis.text.y = element_text(size = 14),
+    plot.title = element_text(size = 18)
+  ) +
+  scale_fill_manual(values = list('TT' = '#218e89', 'TC' = '#fdb638', 'CC' = '#e12a62'))
+
+p_caqtl <- ggplot(data = qtl_overlap_example, mapping = aes(x = alleles, y = ATAC, fill = alleles)) + 
+    geom_boxplot(outlier.shape = NA) +
+    geom_jitter(size = 0.5, alpha = 0.5, width=0.15) + 
+    theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+    xlab('10:112347540:T:C genotype') + 
+    ylab('chr10-112389126-112390073 accessibility') +
+  ggtitle('10:112347540:T:C affecting\nchr10-112389126-112390073 accessibility') + 
+  theme(legend.position = 'none') +
+  theme(
+    axis.title.x = element_text(size = 16),
+    axis.title.y = element_text(size = 16),
+    axis.text.x = element_text(size = 14),
+    axis.text.y = element_text(size = 14),
+    plot.title = element_text(size = 18)
+  ) +
+  scale_fill_manual(values = list('TT' = '#218e89', 'TC' = '#fdb638', 'CC' = '#e12a62'))
+
+ggsave('~/ashg_overlapping_eqtl.pdf', width = 6, height = 6, plot = p_eqtl)
+ggsave('~/ashg_overlapping_caqtl.pdf', width = 6, height = 6, plot = p_caqtl)
+
+p_eqtl
+p_caqtl
+
+```
+
+```{r plot_creqtl_expression_overlap_example, include=TRUE, fig.width=6, fig.height=8}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+p_eqtl <- ggplot(data = creqtl_example, mapping = aes(x = alleles, y = RNA, fill = alleles)) + 
+    geom_boxplot(outlier.shape = NA) +
+    geom_jitter(size = 0.5, alpha = 0.5, width=0.15) + 
+    theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+    xlab('3:71800545:A:G genotype') + 
+    ylab('PROK2 expression') +
+  ggtitle('3:71800545:A:G affecting\nPROK2 expression') + 
+  theme(legend.position = 'none') +
+  theme(
+    axis.title.x = element_text(size = 16),
+    axis.title.y = element_text(size = 16),
+    axis.text.x = element_text(size = 14),
+    axis.text.y = element_text(size = 14),
+    plot.title = element_text(size = 18)
+  ) +
+  scale_fill_manual(values = list('AA' = '#218e89', 'AG' = '#fdb638', 'GG' = '#e12a62'))
+
+ggsave('~/ashg_creqtl_eqtl.pdf', width = 6, height = 6, plot = p_eqtl)
+p_eqtl
+
+
+```
+
+```{r plot_qtl_overlap_example, include=TRUE, fig.width=8, fig.height=6}
+
+# read the distance data of peaks to flanks of ATAC regions
+mono_top_caqtl_distances_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/mo_top_caqtls.tsv.gz'
+mono_top_caqtl_distances <- read.table(mono_top_caqtl_distances_loc, header = T, sep = '\t')
+# add a string based significance column
+mono_top_caqtl_distances[['significant_string']] <- ''
+mono_top_caqtl_distances[mono_top_caqtl_distances[['significant']] == 'True', 'significant_string'] <- 'significant'
+mono_top_caqtl_distances[mono_top_caqtl_distances[['significant']] == 'False', 'significant_string'] <- 'non-significant'
+# now make that into a geom density plot
+p_density <- ggplot(data = mono_top_caqtl_distances, aes(distance, fill = significant_string)) + 
+  geom_density(alpha = 0.2) + 
+  scale_fill_manual(name = 'Significance', values = list('significant' = 'darkblue', 'non-significant' = 'red')) + 
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+  xlab('Distance of top variant to peak') + 
+  ylab('Density') +
+  ggtitle('Density of top variant to peak distances') +
+  theme(
+    axis.title.x = element_text(size = 16),
+    axis.title.y = element_text(size = 16),
+    axis.text.x = element_text(size = 14),
+    axis.text.y = element_text(size = 14),
+    plot.title = element_text(size = 18)
+  )
+
+# extract legend
+p_density_legend <- as_ggplot(get_legend(p_density))
+# make into plot
+p_density <- plot_grid(
+  p_density + theme(legend.position = 'none'), # remove legend in plot itself, because it takes up too much space
+  p_density_legend,
+  nrow = 1, 
+  rel_widths = c(3, 1)
+) # instead set the width manually
+
+p_density
+ggsave('~/ashg_caqtl_distance_density_plot.pdf', width = 8, height = 6, plot = p_density)
+
+```
+
+```{r plot_qtl_overlap_example, include=TRUE, fig.width=8, fig.height=6}
+
+# now make that into a geom density plot
+p_hist <- ggplot(data = mono_top_caqtl_distances, aes(distance, fill = significant_string)) + 
+  geom_histogram(alpha = 0.2) + 
+  scale_fill_manual(name = 'Significance', values = list('significant' = 'darkblue', 'non-significant' = 'red')) + 
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+  xlab('Distance of top variant to peak') + 
+  ylab('Density') +
+  ggtitle('Density of top variant to peak distances') +
+  theme(
+    axis.title.x = element_text(size = 16),
+    axis.title.y = element_text(size = 16),
+    axis.text.x = element_text(size = 14),
+    axis.text.y = element_text(size = 14),
+    plot.title = element_text(size = 18)
+  )
+
+# extract legend
+p_hist_legend <- as_ggplot(get_legend(p_hist))
+# make into plot
+p_hist <- plot_grid(
+  p_hist + theme(legend.position = 'none'), # remove legend in plot itself, because it takes up too much space
+  p_hist_legend,
+  nrow = 1, 
+  rel_widths = c(3, 1)
+) # instead set the width manually
+
+p_hist
+ggsave('~/ashg_caqtl_distance_histogram_plot.pdf', width = 8, height = 6, plot = p_hist)
+
+```
+
+```{r plot_qtl_overlap_example, include=TRUE, fig.width=6, fig.height=6}
+
+# now make that into a geom density plot
+p_hist <- ggplot(data = mono_top_caqtl_distances[mono_top_caqtl_distances[['significant']] == 'True', ], aes(distance)) + 
+  geom_histogram(alpha = 0.2) + 
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+  xlab('Distance of top variant to peak') + 
+  ylab('Frequency') +
+  ggtitle('Frequency of top variant to peak distances') +
+  theme(
+    axis.title.x = element_text(size = 16),
+    axis.title.y = element_text(size = 16),
+    axis.text.x = element_text(size = 14),
+    axis.text.y = element_text(size = 14),
+    plot.title = element_text(size = 18)
+  )
+
+# extract legend
+#p_hist_legend <- as_ggplot(get_legend(p_hist))
+# make into plot
+#p_hist <- plot_grid(
+#  p_hist + theme(legend.position = 'none'), # remove legend in plot itself, because it takes up too much space
+#  p_hist_legend,
+#  nrow = 1, 
+#  rel_widths = c(3, 1)
+#) # instead set the width manually
+
+p_hist
+ggsave('~/ashg_significant_caqtl_distance_histogram_plot.pdf', width = 6, height = 6, plot = p_hist)
+
 
 ```

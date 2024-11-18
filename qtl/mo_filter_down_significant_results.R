@@ -18,6 +18,57 @@ library(data.table)
 # Functions        #
 ####################
 
+
+filter_file_by_significance <- function(input_loc, output_loc, significance_column='p_value', significance_cutoff=0.05, verbose=T, add_mtc=T, mtc_column='empirical_feature_p_value', feature_mtc_column='feature_id', mtc_column_to_add='feature_q_value') {
+  # paste together the full path
+  full_cell_type_path <- input_loc
+  # log if requested
+  if (verbose) {
+    print(paste('reading', full_cell_type_path))
+  }
+  # read the file
+  cell_type_output <- fread(full_cell_type_path, sep = '\t', header = T)
+  
+  # get the features and the emperical p value
+  if (add_mtc) {
+    # get just the two columns we care about
+    cell_type_output_features <- cell_type_output[, c(feature_mtc_column, mtc_column)]
+    # order by significance
+    cell_type_output_features <- cell_type_output_features[order(cell_type_output_features[[mtc_column]]), ]
+    # keep only the first entry
+    cell_type_output_features[!duplicated(cell_type_output_features[[feature_mtc_column]]), ]
+    # set the values that are larger than 1, to be 1, problem with precision
+    cell_type_output_features[cell_type_output_features[[mtc_column]] > 1, mtc_column] <- 1
+    # add multiple testing correction
+    cell_type_output_features[['qvalue']] <- qvalue(cell_type_output_features[[mtc_column]])$qvalues
+    # now add back to the original table
+    cell_type_output[[mtc_column_to_add]] <- cell_type_output_features[match(cell_type_output[[feature_mtc_column]], cell_type_output_features[[feature_mtc_column]]), 'qvalue'][['qvalue']]
+  }
+  
+  # print progress if requested
+  if (verbose) {
+    print(paste('variant+phenotype before filtering', nrow(cell_type_output)))
+  }
+  # filter
+  cell_type_output <- cell_type_output[
+    !is.na(cell_type_output[[significance_column]]) &
+      cell_type_output[[significance_column]] < significance_cutoff, 
+  ]
+  if (verbose) {
+    print(paste('variant+phenotype after filtering', nrow(cell_type_output)))
+  }
+  # store the gz connection if we need it
+  full_output_loc_wzip <- output_loc
+  # gzip it if the extention ends on gz
+  if (grepl('.gz$', output_loc)) {
+    full_output_loc_wzip <- gzfile(output_loc)
+  }
+  # write result
+  write.table(cell_type_output, full_output_loc_wzip, sep = '\t', row.names= F, col.names = T)
+  # create md5
+  mdfiver::create_md5_for_file(output_loc)
+}
+
 #' get the number eGenes per cell type from QTL output
 #' 
 #' @param input_dir base location of the folder containing files to filter
@@ -372,4 +423,14 @@ merge_chromosome_output(
   input_append='_fdr01_significant.txt.gz', 
   output_dir=NULL, 
   output_file='qtl_results_all_qval_allchroms_fdr01_significant.txt.gz'
+)
+# now do the eQTL output of sc-eQTLgen
+sceqtlgen_base_loc <- '/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/Meta_14/'
+filter_file_by_significance(
+    input_loc=paste(sceqtlgen_base_loc, 'Mono.Ds.wg3_Ye_wg3_wijst2018_wg3_sawcer_wg3_oneK1K_wg3_okada_wg3_Li_wg3_Franke_split_v3_wg3_Franke_split_v2_wg3_multiome_UT_wg3_idaghdour.qtl_results_all.txt', sep = ''), 
+    output_loc=paste(sceqtlgen_base_loc, 'Mono.Ds.wg3_Ye_wg3_wijst2018_wg3_sawcer_wg3_oneK1K_wg3_okada_wg3_Li_wg3_Franke_split_v3_wg3_Franke_split_v2_wg3_multiome_UT_wg3_idaghdour.qtl_results_all.qval005.txt.gz', sep = ''), 
+    significance_column='feature_q_value', 
+    significance_cutoff=0.05, 
+    verbose=T, 
+    add_mtc = F
 )

@@ -933,6 +933,134 @@ split_samples_by_metadata <- function(base_input_dir, base_output_dir, metadata_
   return(0)
 }
 
+merge_split_expression_matrices <- function(split_matrices_dir, output_base_dir, expression_file_prepend='', expression_file_append='.Exp.txt.gz', npcs=10, single_thread=F, verbose=T) {
+  # list the directories
+  split_dirs <- list.dirs(split_matrices_dir, recursive = F, full.names = F)
+  # get just the ones that have the matrices
+  split_dirs <- split_dirs[grepl('(\\d+)_(\\d+)', split_dirs)]
+  # we'll save per condition
+  matrices_per_condition <- list()
+  # go through each matrix dir
+  for (matrix_dir in split_dirs) {
+    # paste the path together
+    matrices_condition_dir <- paste(split_matrices_dir, '/', matrix_dir, '/', sep = '')
+    # now list all the conditions
+    conditions <- list.dirs(matrices_condition_dir, recursive = F, full.names = F)
+    # check each condition
+    for (condition in conditions) {
+      # add to the list if not already there
+      if (!(condition %in% names(matrices_per_condition))) {
+        matrices_per_condition[[condition]] <- list()
+      }
+      # paste the path of that condition together
+      matrices_celltypes_dir <- paste(matrices_condition_dir, '/', condition, '/', sep = '')
+      # now list the celltypes in that directory
+      celltype_files <- list.files(matrices_celltypes_dir, full.names = F, include.dirs = F)
+      # now subset to make sure we only have the files we need
+      matrices_celltypes_pattern <- paste(expression_file_prepend, '*', expression_file_append, sep = '')
+      celltype_files <- celltype_files[grepl(matrices_celltypes_pattern, celltype_files)]
+      # check each celltype file
+      for (celltype_file in celltype_files) {
+        # get just the celltype name
+        celltype <- gsub(expression_file_prepend, '', celltype_file)
+        celltype <- gsub(expression_file_append, '', celltype)
+        # add the celltype in the list if it is not already there
+        if (!(celltype %in% names(matrices_per_condition[[condition]]))) {
+          matrices_per_condition[[condition]][[celltype]] <- list()
+        }
+        # read the file
+        expression_input <- read.table(paste(matrices_celltypes_dir, '/', celltype_file, sep = ''), header = T, sep = '\t', check.names = F, comment.char = '', row.names = 1)
+        # add to the list
+        matrices_per_condition[[condition]][[celltype]][[matrix_dir]] <- expression_input
+      }
+    }
+  }
+  # check each condition
+  for (condition in names(matrices_per_condition)) {
+    # check each celltype
+    for (celltype in names(matrices_per_condition[[condition]])) {
+      # now merge all of them
+      merged_matrices_celltype <- NULL
+      for (matrix_name in names(matrices_per_condition[[condition]][[celltype]])) {
+        # get the matrix
+        matrix_celltype <- matrices_per_condition[[condition]][[celltype]][[matrix_name]]
+        # if it was the first part, it will be that one
+        if (is.null(merged_matrices_celltype)) {
+          merged_matrices_celltype <- matrix_celltype
+        }
+        # otherwise we need to merge
+        else {
+          # get sample names in both
+          samples_both <- intersect(colnames(merged_matrices_celltype), colnames(matrix_celltype))
+          # and merge them
+          merged_matrices_celltype <- rbind(merged_matrices_celltype[, samples_both], matrix_celltype[, samples_both])
+        }
+      }
+      # check if we have any cells left
+      if (length(merged_matrices_celltype) != 0 & ncol(merged_matrices_celltype) > 0) {
+        # backup original matrix
+        aggregate_norm_count_matrix <- merged_matrices_celltype
+        # remove genes without any variation
+        row_var_info = rowVars(as.matrix(aggregate_norm_count_matrix))
+        aggregate_norm_count_matrix = aggregate_norm_count_matrix[which(row_var_info != 0), , drop = F]
+        # check if we have any genes left
+        if (length(aggregate_norm_count_matrix) != 0 & nrow(aggregate_norm_count_matrix) > 0) {
+          if (verbose) {
+            message(paste('doing mean expression normalization across', as.character(nrow(aggregate_norm_count_matrix)), 'rows'))
+          }
+          if (single_thread) {
+            # do inverse normal transform per gene.
+            for (r_i in 1:nrow(aggregate_norm_count_matrix)) {
+              aggregate_norm_count_matrix[r_i, ] = qnorm((rank(aggregate_norm_count_matrix[r_i, ], na.last = 'keep')-0.5) / sum(!is.na(aggregate_norm_count_matrix[r_i, ])))
+              if (verbose & r_i %% 10000 == 0) {
+                message(paste('processed', as.character(r_i), 'rows'))
+              }
+            }
+          }
+          else {
+            aggregate_norm_count_matrix <- inverse_normalize(aggregate_norm_count_matrix)
+          }
+          if (verbose) {
+            message('performing PCA')
+          }
+          # Do PCA, and select first x components.
+          pc_out = prcomp(t(aggregate_norm_count_matrix))
+          # check how many pcs we have
+          npcs_present <- ncol(pc_out$x)
+          # now subset to that number of pcs if we can
+          cov_out <- NULL
+          if (npcs <= npcs_present) {
+            cov_out = pc_out$x[, 1:npcs]
+          }
+          else{
+            # if we have less pcs we should warn
+            warning(paste('requested', as.character(npcs), 'pcs, but only', as.character(npcs_present), 'are present for', celltype))
+            cov_out <- pc_out$x
+          }
+          if (verbose) {
+            message(paste('finished', celltype))
+          }
+          # make the output directories
+          qtl_output_loc <- gzfile(paste(output_base_dir, '/', condition,  '/', celltype, '.qtlInput.txt.gz', sep = ''))
+          pcs_output_loc <- gzfile(paste(output_base_dir, '/', condition, '/', celltype, '.qtlInput.Pcs.txt.gz', sep = ''))
+          exp_output_loc <- gzfile(paste(output_base_dir, '/', condition, '/', celltype, '.Exp.txt.gz', sep = ''))
+
+          # write the files
+          write.table(aggregate_norm_count_matrix, qtl_output_loc, quote = F, sep = '\t', col.names = NA)
+          write.table(merged_matrices_celltype, exp_output_loc, quote = F, sep = '\t', col.names = NA)
+          write.table(cov_out, pcs_output_loc, quote = F, sep = '\t', col.names = NA)
+        }
+        else {
+          message(paste('no genes left after checking for variation between genes for', celltype, 'skipping cell type'))
+        }
+      }
+      else {
+        message(paste('no cells left after min_cells filter for', celltype, ', skipping cell type'))
+      }
+    }
+  }
+}
+
 ####################
 # Main Code        #
 ####################
@@ -1386,3 +1514,7 @@ for (matrix_file in matrix_files) {
                           verbose=T,
                           quantile=F)
 }
+
+# merge the split matrices
+merge_split_expression_matrices('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/L1/imputed/', 
+                                '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/L1/imputed/')
