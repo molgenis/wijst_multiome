@@ -69,7 +69,7 @@ for (cell_type in cell_types_to_do) {
 }
 
 # now go through each cell type without taking UT only
-for (cell_type in unique(mo@meta.data$predicted.azipbmc.l2.safe)) {
+for (cell_type in cell_types_to_do) {
   # check for NA
   if (!is.na(cell_type)) {
     # subset to this celltype and condition
