@@ -48,8 +48,12 @@ mo <- AddMetaData(mo, azi_pbmc_annotations[, colnames(azi_pbmc_annotations)])
 # make the l2 cell types without illegal characters
 mo@meta.data[['predicted.azipbmc.l2.safe']] <- make_celltypes_safe(mo@meta.data[['predicted.azipbmc.l2']])
 
+# get the cell types to do
+cell_types_to_do <- unique(mo@meta.data$predicted.azipbmc.l2.safe)
+#cell_types_to_do <- c('NK') # if you need a specific cell type
+
 # now go through each cell type
-for (cell_type in unique(mo@meta.data$predicted.azipbmc.l2.safe)) {
+for (cell_type in cell_types_to_do) {
   # check for NA
   if (!is.na(cell_type)) {
     # subset to this celltype and condition
@@ -59,7 +63,7 @@ for (cell_type in unique(mo@meta.data$predicted.azipbmc.l2.safe)) {
                         mo@meta.data$condition_final == 'UT']
     # write this file
     saveRDS(mo_covid_ct,
-            paste('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/seurat_preprocess_samples/objects/mo_all_20240619_seuratv5_annotated_agesexcovid_', cell_type, '_UT.rds', sep = ''))
+            paste('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/seurat_preprocess_samples/objects/azimuth_pbmc_l2/mo_all_20240619_seuratv5_annotated_agesexcovid_', cell_type, '_UT.rds', sep = ''))
     
   }
 }
@@ -74,7 +78,7 @@ for (cell_type in unique(mo@meta.data$predicted.azipbmc.l2.safe)) {
                         mo@meta.data$predicted.azipbmc.l2.safe == cell_type]
     # write this file
     saveRDS(mo_covid_ct,
-            paste('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/seurat_preprocess_samples/objects/mo_all_20240619_seuratv5_annotated_agesexcovid_', cell_type, '.rds', sep = ''))
+            paste('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/seurat_preprocess_samples/objects/azimuth_pbmc_l2/mo_all_20240619_seuratv5_annotated_agesexcovid_', cell_type, '.rds', sep = ''))
     
   }
 }
