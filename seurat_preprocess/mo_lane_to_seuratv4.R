@@ -5,6 +5,7 @@
 # Function: preprocess the count data
 ############################################################################################################################
 
+# LOAD V4 VERSION OF SEURAT
 
 ####################
 # libraries        #
@@ -110,6 +111,12 @@ for (lane in lanes) {
   try({
     # create the object
     object_lane <- add_data(lane, deconstructed_corrected_matrices_loc)
+    # remove empty genes
+    object_lane <- object_lane[rowSums(object_lane) > 0, ]
+    # remove empty cells
+    object_lane <- object_lane[, colSums(object_lane) > 0]
+    # apply normalization
+    #object_lane <- SCTransform(object_lane, verbose = FALSE)
     # write the result
     object_loc <- paste(seurat_objects_loc, '/', 'mo_', lane, '_v4.rds', sep = '')
     saveRDS(object_lane, object_loc)
