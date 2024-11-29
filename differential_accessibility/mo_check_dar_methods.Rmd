@@ -1,0 +1,185 @@
+---
+title: "mo_check_dar_methods"
+author: "Roy Oelen"
+date: "2024-10-08"
+output: html_document
+---
+
+````{r header, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+#!/usr/bin/env Rscript
+############################################################################################################################
+# Authors: Roy Oelen
+# Name: mo_check_dar_methods.Rmd
+# Function: 
+############################################################################################################################
+```
+
+```{r libraries, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+####################
+# libraries        #
+####################
+library(ggplot2)
+library(cowplot)
+library(RColorBrewer)
+library(UpSetR)
+
+```
+
+```{r functions, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+
+####################
+# Functions        #
+####################
+
+
+merge_split_dar_outputs <- function(output_base_loc, append) {
+  # check each directory
+  dirs_output <- list.dirs(output_base_loc, recursive = F)
+  # we'll store the outputs in a list first
+  outputs_per_chunk <- list()
+  # let's loop through the directories
+  for (direct in dirs_output) {
+    # paste together the full path
+    output_path_full <- paste(direct, '/', append, sep = '')
+    # check if the file exists
+    if (file.exists(output_path_full)) {
+      # then read the file
+      output_chunk <- read.table(output_path_full, header = T, sep = '\t')
+      # and add it to the list
+      outputs_per_chunk[[output_path_full]] <- output_chunk
+    }
+  }
+  # now merge all the outputs
+  outputs_all_chunks <- do.call('rbind', outputs_per_chunk)
+  # redo the B&H, as it was done per chunk, while it needs to be done on all data
+  outputs_all_chunks[['adj.P.Val']] <- p.adjust(outputs_all_chunks[['P.Value']], method = 'BH')
+  # add bonferroni correction
+  outputs_all_chunks[['p.bonferroni']] <- p.adjust(outputs_all_chunks[['P.Value']], method = 'bonferroni')
+  # return result
+  return(outputs_all_chunks)
+}
+
+
+plot_DE_sharing_per_celltype <- function(de_table_per_ct, feature_column='feature', pval_column='p.bonferroni', sig_pval=0.05, only_positive=F, only_negative=F, lfc_column='metafc', use_label_dict=T, use_color_dict=T){
+  DE_genes_per_ct <- list()
+  # get the DE genes for each cell type
+  for(cell_type in names(de_table_per_ct)){
+    # filter to only include the significant results
+    de_table <- de_table_per_ct[[cell_type]][de_table_per_ct[[cell_type]][[pval_column]] <= 0.05, ]
+    # filter for only the positive lfc if required
+    if(only_positive){
+      de_table <- de_table[de_table[[lfc_column]] < 0, ]
+    }
+    # filter for only the positive lfc if required
+    if(only_negative){
+      de_table <- de_table[de_table[[lfc_column]] > 0, ]
+    }
+    # we just care about the gene names
+    sig_genes <- NULL
+    if (is.null(feature_column)) {
+      sig_genes <- rownames(mast)
+    }
+    else {
+      sig_genes <- de_table[[feature_column]]
+    }
+    # store these for the cell type
+    DE_genes_per_ct[[cell_type]] <- sig_genes
+  }
+  if(use_label_dict){
+    names(DE_genes_per_ct) <- rename_labels(names(DE_genes_per_ct))
+  }
+  queries <- list()
+  sets.bar.color <- 'black'
+  if(use_color_dict){
+    # create df to store the number of each set, so we know how to order
+    nrs_df <- NULL
+    # add the colors for the cell types
+    for(i in 1:length(names(DE_genes_per_ct))){
+      cell_type <- names(DE_genes_per_ct)[i]
+      # add for the singles in the intersection sizes
+      ct_list <- list(
+        query = intersects,
+        params = list(cell_type),
+        color = get_color_coding_dict()[[cell_type]],
+        active = T)
+      queries[[i]] <- ct_list
+      # add for the DF to order the set sizes
+      numbers_row <- data.frame(ct=c(cell_type), nr=c(length(DE_genes_per_ct[[cell_type]])), stringsAsFactors = F)
+      if(is.null(nrs_df)){
+        nrs_df <- numbers_row
+      }
+      else{
+        nrs_df <- rbind(nrs_df, numbers_row)
+      }
+    }
+    # get the order of the sets
+    ordered_cts <- nrs_df[order(nrs_df$nr, decreasing = T), 'ct']
+    # add the colors for the sets
+    sets.bar.color <- unlist(get_color_coding_dict()[ordered_cts])
+    upset(fromList(DE_genes_per_ct), order.by = 'freq', nsets = length(DE_genes_per_ct), queries = queries, sets.bar.color=sets.bar.color)
+  }
+  else {
+    upset(fromList(DE_genes_per_ct), order.by = 'freq', nsets = length(DE_genes_per_ct))
+  }
+  
+  #return(DE_genes_per_ct)
+}
+
+
+```
+
+```{r setup_main, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+####################
+# Main Code        #
+####################
+
+# location of Otsu unimputed
+dars_topic18_unimputed_otsu_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/differential_accessibility/limma_dream/output/topics20_otsu/pct01/monocyte_Topic18.nominal_significant.tsv.gz'
+# location of AUCell unimputed
+dars_topic18_unimputed_aucell_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/differential_accessibility/limma_dream/output/topics20_aucell/pct01/monocyte_Topic18.nominal_significant.tsv.gz'
+
+# location of Otsu imputed
+dars_topic18_imputed_otsu_base_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/differential_accessibility/limma_dream/output/topics20_otsu_imputed/monocyte/'
+# location of AUCell imputed
+dars_topic18_imputed_aucell_base_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/differential_accessibility/limma_dream/output/topics20_aucell_imputed/monocyte/'
+
+```
+
+```{r read_nonchunked, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+
+# read the two files that were not chucked
+dars_topic18_unimputed_otsu <- read.table(dars_topic18_unimputed_otsu_loc, header = T, sep = '\t')
+dars_topic18_unimputed_aucell <- read.table(dars_topic18_unimputed_aucell_loc, header = T, sep = '\t')
+
+```
+
+```{r read_chunked, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+
+# read the two files that were not chucked
+dars_topic18_imputed_otsu <- merge_split_dar_outputs(dars_topic18_imputed_otsu_base_loc, 'monocyte_Topic18.tsv.gz')
+dars_topic18_imputed_aucell <- merge_split_dar_outputs(dars_topic18_imputed_aucell_base_loc, 'monocyte_Topic18.tsv.gz')
+
+```
+
+```{r read_nonchunked, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+
+# plot significant dars
+plot_DE_sharing_per_celltype(
+  list(
+    'otsu unimputed' = dars_topic18_unimputed_otsu,
+    'aucell unimputed' = dars_topic18_unimputed_aucell,
+    'otsu imputed' = dars_topic18_imputed_otsu,
+    'aucell imputed' = dars_topic18_imputed_aucell
+  ), 
+  use_label_dict = F, 
+  use_color_dict = F
+)
+
+```

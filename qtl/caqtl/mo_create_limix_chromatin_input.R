@@ -187,7 +187,7 @@ create_aggregated_expression_matrices_quantilemethod <- function(seurat_object, 
     seurat_object <- seurat_object[, indices_cell_type]
     # ignore genes that are never expressed
     seurat_object <-  seurat_object[which(rowSums(seurat_object@assays$peaks@counts) != 0), ]
-
+    
     if (verbose) {
       message('calculating aggregated expression')
     }
@@ -231,7 +231,7 @@ create_aggregated_expression_matrices_quantilemethod <- function(seurat_object, 
         if (verbose) {
           message('doing mean expression normalization')
         }
-
+        
         # get grouping factor
         group_factor <- seurat_object@meta.data[match(colnames(aggregate_norm_count_matrix), seurat_object@meta.data[[participant_column]]), condition_column]
         # drop where we have no groups
@@ -286,6 +286,7 @@ inverse_normalize <- function(norm_count_matrix, verbose = T) {
   ncol_matrix <- ncol(norm_count_matrix)
   # calculate how many rows a chunk would be
   nrow_chunk <- chunk_size / ncol_matrix
+  nrow_chunk <- ceiling(nrow_chunk)
   # calculate how many chunks we need
   n_chunks <- nrow_matrix / nrow_chunk
   # round up because we need that last chunk
@@ -406,7 +407,7 @@ create_aggregated_expression_matrices_rnamethod <- function(seurat_object, parti
     colnames(aggregate_norm_count_matrix) <- unique_id_list
     # and the genes as the rows
     rownames(aggregate_norm_count_matrix) <- rownames(norm_count_matrix)
-
+    
     # save the unfiltered mean expression
     aggregate_norm_count_matrix_unfiltered <- aggregate_norm_count_matrix
     
@@ -880,6 +881,186 @@ add_inflammation_status_each_object <- function(seurat_object_list, sample_sheet
 }
 
 
+split_samples_by_metadata <- function(base_input_dir, base_output_dir, metadata_split_column='sample_condition', metadata_sample_column='Donor_Pool') {
+  # create a regular expression
+  metadata_regex <- paste('*', '.covariates.txt.gz', sep = '')
+  # list the files
+  metadata_files <- list.files(base_input_dir, pattern = metadata_regex)
+  # loop through each file
+  for (metadata_file in metadata_files) {
+    # extract the base name
+    celltype <- gsub('.covariates.txt.gz', '', metadata_file)
+    # now read the actual metadata file
+    metadata <- read.table(paste(base_input_dir, metadata_file, sep = ''), header = T, check.names = F, comment.char = '')
+    # now extract the different splits
+    splits <- unique(metadata[[metadata_split_column]])
+    # but remove empty entries
+    splits <- splits[!is.na(splits)]
+    # now read the qtlInput
+    qtl_input <- read.table(paste(base_input_dir, '/', celltype, '.qtlInput.txt.gz', sep = ''), header = T, check.names = F, comment.char = '', row.names = 1)
+    # and the PCs if present
+    pcs <- NULL
+    pcs_loc <- paste(paste(base_input_dir, '/', celltype, '.qtlInput.Pcs.txt.gz', sep = ''))
+    if (file.exists(pcs_loc)) {
+      pcs <- read.table(pcs_loc, header = T, check.names = F, comment.char = '', row.names = 1)
+    }
+    # now check each split
+    for (split in splits) {
+      # create the folder
+      dir.create(paste(base_output_dir, '/', split, '/', sep = ''), recursive = T)
+      # get the samples in the split
+      samples_split <- metadata[!is.na(metadata[[metadata_split_column]]) & metadata[[metadata_split_column]] == split, metadata_sample_column]
+      # now subset the qtl input
+      qtl_input_split <- qtl_input[, colnames(qtl_input) %in% samples_split]
+      # and write the result
+      qtl_input_split_loc <- paste(base_output_dir, '/', split, '/', celltype, '.qtlInput.txt.gz', sep = '')
+      write.table(qtl_input_split, gzfile(qtl_input_split_loc), quote = F, sep = '\t', col.names = NA)
+      # subset the metadata as well
+      metadata_split <- metadata[!is.na(metadata[[metadata_split_column]]) & metadata[[metadata_split_column]] == split, ]
+      # and write it
+      metadata_split_loc <- paste(base_output_dir, '/', split, '/', celltype, '.covariates.txt.gz', sep = '')
+      write.table(metadata_split, gzfile(metadata_split_loc), quote = F, sep = '\t', col.names = NA)
+      # finally the pcs if they were there
+      if (!is.null(pcs)) {
+        # subset to this split
+        pcs_split <- pcs[rownames(pcs) %in% samples_split, ]
+        # and write result
+        pcs_split_loc <- paste(base_output_dir, '/', split, '/', celltype, '.qtlInput.Pcs.txt.gz', sep = '')
+        write.table(pcs_split, pcs_split_loc, quote = F, sep = '\t', col.names = NA)
+      }
+    }
+  }
+  return(0)
+}
+
+merge_split_expression_matrices <- function(split_matrices_dir, output_base_dir, expression_file_prepend='', expression_file_append='.Exp.txt.gz', npcs=10, single_thread=F, verbose=T) {
+  # list the directories
+  split_dirs <- list.dirs(split_matrices_dir, recursive = F, full.names = F)
+  # get just the ones that have the matrices
+  split_dirs <- split_dirs[grepl('(\\d+)_(\\d+)', split_dirs)]
+  # we'll save per condition
+  matrices_per_condition <- list()
+  # go through each matrix dir
+  for (matrix_dir in split_dirs) {
+    # paste the path together
+    matrices_condition_dir <- paste(split_matrices_dir, '/', matrix_dir, '/', sep = '')
+    # now list all the conditions
+    conditions <- list.dirs(matrices_condition_dir, recursive = F, full.names = F)
+    # check each condition
+    for (condition in conditions) {
+      # add to the list if not already there
+      if (!(condition %in% names(matrices_per_condition))) {
+        matrices_per_condition[[condition]] <- list()
+      }
+      # paste the path of that condition together
+      matrices_celltypes_dir <- paste(matrices_condition_dir, '/', condition, '/', sep = '')
+      # now list the celltypes in that directory
+      celltype_files <- list.files(matrices_celltypes_dir, full.names = F, include.dirs = F)
+      # now subset to make sure we only have the files we need
+      matrices_celltypes_pattern <- paste(expression_file_prepend, '*', expression_file_append, sep = '')
+      celltype_files <- celltype_files[grepl(matrices_celltypes_pattern, celltype_files)]
+      # check each celltype file
+      for (celltype_file in celltype_files) {
+        # get just the celltype name
+        celltype <- gsub(expression_file_prepend, '', celltype_file)
+        celltype <- gsub(expression_file_append, '', celltype)
+        # add the celltype in the list if it is not already there
+        if (!(celltype %in% names(matrices_per_condition[[condition]]))) {
+          matrices_per_condition[[condition]][[celltype]] <- list()
+        }
+        # read the file
+        expression_input <- read.table(paste(matrices_celltypes_dir, '/', celltype_file, sep = ''), header = T, sep = '\t', check.names = F, comment.char = '', row.names = 1)
+        # add to the list
+        matrices_per_condition[[condition]][[celltype]][[matrix_dir]] <- expression_input
+      }
+    }
+  }
+  # check each condition
+  for (condition in names(matrices_per_condition)) {
+    # check each celltype
+    for (celltype in names(matrices_per_condition[[condition]])) {
+      # now merge all of them
+      merged_matrices_celltype <- NULL
+      for (matrix_name in names(matrices_per_condition[[condition]][[celltype]])) {
+        # get the matrix
+        matrix_celltype <- matrices_per_condition[[condition]][[celltype]][[matrix_name]]
+        # if it was the first part, it will be that one
+        if (is.null(merged_matrices_celltype)) {
+          merged_matrices_celltype <- matrix_celltype
+        }
+        # otherwise we need to merge
+        else {
+          # get sample names in both
+          samples_both <- intersect(colnames(merged_matrices_celltype), colnames(matrix_celltype))
+          # and merge them
+          merged_matrices_celltype <- rbind(merged_matrices_celltype[, samples_both], matrix_celltype[, samples_both])
+        }
+      }
+      # check if we have any cells left
+      if (length(merged_matrices_celltype) != 0 & ncol(merged_matrices_celltype) > 0) {
+        # backup original matrix
+        aggregate_norm_count_matrix <- merged_matrices_celltype
+        # remove genes without any variation
+        row_var_info = rowVars(as.matrix(aggregate_norm_count_matrix))
+        aggregate_norm_count_matrix = aggregate_norm_count_matrix[which(row_var_info != 0), , drop = F]
+        # check if we have any genes left
+        if (length(aggregate_norm_count_matrix) != 0 & nrow(aggregate_norm_count_matrix) > 0) {
+          if (verbose) {
+            message(paste('doing mean expression normalization across', as.character(nrow(aggregate_norm_count_matrix)), 'rows'))
+          }
+          if (single_thread) {
+            # do inverse normal transform per gene.
+            for (r_i in 1:nrow(aggregate_norm_count_matrix)) {
+              aggregate_norm_count_matrix[r_i, ] = qnorm((rank(aggregate_norm_count_matrix[r_i, ], na.last = 'keep')-0.5) / sum(!is.na(aggregate_norm_count_matrix[r_i, ])))
+              if (verbose & r_i %% 10000 == 0) {
+                message(paste('processed', as.character(r_i), 'rows'))
+              }
+            }
+          }
+          else {
+            aggregate_norm_count_matrix <- inverse_normalize(aggregate_norm_count_matrix)
+          }
+          if (verbose) {
+            message('performing PCA')
+          }
+          # Do PCA, and select first x components.
+          pc_out = prcomp(t(aggregate_norm_count_matrix))
+          # check how many pcs we have
+          npcs_present <- ncol(pc_out$x)
+          # now subset to that number of pcs if we can
+          cov_out <- NULL
+          if (npcs <= npcs_present) {
+            cov_out = pc_out$x[, 1:npcs]
+          }
+          else{
+            # if we have less pcs we should warn
+            warning(paste('requested', as.character(npcs), 'pcs, but only', as.character(npcs_present), 'are present for', celltype))
+            cov_out <- pc_out$x
+          }
+          if (verbose) {
+            message(paste('finished', celltype))
+          }
+          # make the output directories
+          qtl_output_loc <- gzfile(paste(output_base_dir, '/', condition,  '/', celltype, '.qtlInput.txt.gz', sep = ''))
+          pcs_output_loc <- gzfile(paste(output_base_dir, '/', condition, '/', celltype, '.qtlInput.Pcs.txt.gz', sep = ''))
+          exp_output_loc <- gzfile(paste(output_base_dir, '/', condition, '/', celltype, '.Exp.txt.gz', sep = ''))
+
+          # write the files
+          write.table(aggregate_norm_count_matrix, qtl_output_loc, quote = F, sep = '\t', col.names = NA)
+          write.table(merged_matrices_celltype, exp_output_loc, quote = F, sep = '\t', col.names = NA)
+          write.table(cov_out, pcs_output_loc, quote = F, sep = '\t', col.names = NA)
+        }
+        else {
+          message(paste('no genes left after checking for variation between genes for', celltype, 'skipping cell type'))
+        }
+      }
+      else {
+        message(paste('no cells left after min_cells filter for', celltype, ', skipping cell type'))
+      }
+    }
+  }
+}
+
 ####################
 # Main Code        #
 ####################
@@ -898,12 +1079,12 @@ chunk_size <- 5000000
 registerDoParallel(cores = 8)
 
 # location of the condition assignment
-condition_assignment_loc <- '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/metadata/mo_monocyte_based_condition_numbers.tsv'
+condition_assignment_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/metadata/mo_monocyte_based_condition_numbers.tsv'
 # read the conditions
 condition_assignments <- read.table(condition_assignment_loc, header = T, sep = '\t')
 
 # location of the cell type objects
-cell_type_objects_loc <- '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_percelltypemajor_1_80.rds'
+cell_type_objects_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_percelltypemajor_1_80.rds'
 
 # read the object
 cell_type_objects <- readRDS(cell_type_objects_loc)
@@ -913,7 +1094,7 @@ for(cell_type in names(cell_type_objects)) {
   cell_type_objects[[cell_type]] <- read_barcode_and_lane(cell_type_objects[[cell_type]])
 }
 # get the assignment matrices
-correlation_mapping_per_barcode_all <- read.table('/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/demultiplexing/souporcell/assignments/mo_souporcell_gex_corrected_sample_matched_vs_all.tsv', header = T, sep = '\t')
+correlation_mapping_per_barcode_all <- read.table('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/demultiplexing/souporcell/assignments/mo_souporcell_gex_corrected_sample_matched_vs_all.tsv', header = T, sep = '\t')
 # set barcodes and remove data we already have
 rownames(correlation_mapping_per_barcode_all) <- correlation_mapping_per_barcode_all[['barcode_lane']]
 correlation_mapping_per_barcode_all[, c('lane', 'barcode_lane', 'barcode', 'barcode_original')] <- NULL
@@ -942,11 +1123,11 @@ for (cell_type in names(cell_type_objects)) {
 }
 
 # donor annotation psam
-donor_annotation_psam_batch1_loc <- '/groups/umcg-franke-scrna/tmp03/projects/multiome/processed/genotype/GSA2023_1044_025_V3/unimputed/GSA2022_1044_025_V3.psam'
+donor_annotation_psam_batch1_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/processed/genotype/GSA2023_1044_025_V3/unimputed/GSA2022_1044_025_V3.psam'
 donor_annotation_psam_batch1 <- read.delim(donor_annotation_psam_batch1_loc, as.is = T, check.names = F)
-donor_annotation_psam_batch2_loc <- '/groups/umcg-franke-scrna/tmp03/projects/multiome/processed/genotype/GSA2023_1009/unimputed/mo_individuals.psam'
+donor_annotation_psam_batch2_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/processed/genotype/GSA2023_1009/unimputed/mo_individuals.psam'
 donor_annotation_psam_batch2 <- read.delim(donor_annotation_psam_batch2_loc, as.is = T, check.names = F)
-donor_annotation_psam_batch3_loc <- '/groups/umcg-franke-scrna/tmp03/projects/multiome/processed/genotype/ugli/unimputed/chr_all.psam'
+donor_annotation_psam_batch3_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/processed/genotype/ugli/unimputed/chr_all.psam'
 donor_annotation_psam_batch3 <- read.delim(donor_annotation_psam_batch3_loc, as.is = T, check.names = F)
 # merge all
 donor_annotation_psam <- rbind(donor_annotation_psam_batch1, donor_annotation_psam_batch2)
@@ -960,24 +1141,24 @@ cell_type_objects[['monocyte']]@meta.data[['lane_both']] <- as.vector(unlist(lan
 cell_type_objects[['monocyte']]@meta.data[['cell_type']] <- 'monocyte'
 # create input matrices
 do_limix_input_pipeline(seurat_object = cell_type_objects[['monocyte']][, cell_type_objects[['monocyte']][['inflammation_final']] == 'UT'], 
-                                    psam = donor_annotation_psam, 
-                                    output_loc='/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/L1/UT/',
-                                    participant_column='best_match_sample', 
-                                    pool_column='lane', 
-                                    condition_column='inflammation_final', 
-                                    celltype_column='cell_type',
-                                    join_pools=F,
-                                    min_cell_number=5, 
-                                    min_peaks=200,
-                                    npcs=10,
-                                    sample_cor_column='best_match_correlation', 
-                                    min_sample_cor=0,
-                                    merge_pcs_into_covariates=F, 
-                                    verbose=T,
-                                    quantile=F)
+                        psam = donor_annotation_psam, 
+                        output_loc='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/L1/UT/',
+                        participant_column='best_match_sample', 
+                        pool_column='lane', 
+                        condition_column='inflammation_final', 
+                        celltype_column='cell_type',
+                        join_pools=F,
+                        min_cell_number=5, 
+                        min_peaks=200,
+                        npcs=10,
+                        sample_cor_column='best_match_correlation', 
+                        min_sample_cor=0,
+                        merge_pcs_into_covariates=F, 
+                        verbose=T,
+                        quantile=F)
 do_limix_input_pipeline(seurat_object = cell_type_objects[['monocyte']][, cell_type_objects[['monocyte']][['inflammation_final']] == '24hCA'], 
                         psam = donor_annotation_psam, 
-                        output_loc='/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/L1/24hCA/',
+                        output_loc='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/L1/24hCA/',
                         participant_column='best_match_sample', 
                         pool_column='lane', 
                         condition_column='inflammation_final', 
@@ -998,7 +1179,7 @@ cell_type_objects[['NK']]@meta.data[['cell_type']] <- 'NK'
 # create input matrices
 do_limix_input_pipeline(seurat_object = cell_type_objects[['NK']][, cell_type_objects[['NK']][['inflammation_final']] == 'UT'], 
                         psam = donor_annotation_psam, 
-                        output_loc='/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/L1/UT/',
+                        output_loc='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/L1/UT/',
                         participant_column='best_match_sample', 
                         pool_column='lane', 
                         condition_column='inflammation_final', 
@@ -1014,7 +1195,7 @@ do_limix_input_pipeline(seurat_object = cell_type_objects[['NK']][, cell_type_ob
                         quantile=F)
 do_limix_input_pipeline(seurat_object = cell_type_objects[['NK']][, cell_type_objects[['NK']][['inflammation_final']] == '24hCA'], 
                         psam = donor_annotation_psam, 
-                        output_loc='/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/L1/24hCA/',
+                        output_loc='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/L1/24hCA/',
                         participant_column='best_match_sample', 
                         pool_column='lane', 
                         condition_column='inflammation_final', 
@@ -1033,7 +1214,7 @@ cell_type_objects[['CD4T']]@meta.data[['lane_both']] <- as.vector(unlist(lane_re
 cell_type_objects[['CD4T']]@meta.data[['cell_type']] <- 'CD4T'
 do_limix_input_pipeline(seurat_object = cell_type_objects[['CD4T']][, cell_type_objects[['CD4T']][['inflammation_final']] == 'UT'], 
                         psam = donor_annotation_psam, 
-                        output_loc='/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/L1/UT/',
+                        output_loc='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/L1/UT/',
                         participant_column='best_match_sample', 
                         pool_column='lane', 
                         condition_column='inflammation_final', 
@@ -1049,7 +1230,7 @@ do_limix_input_pipeline(seurat_object = cell_type_objects[['CD4T']][, cell_type_
                         quantile=F)
 do_limix_input_pipeline(seurat_object = cell_type_objects[['CD4T']][, cell_type_objects[['CD4T']][['inflammation_final']] == '24hCA'], 
                         psam = donor_annotation_psam, 
-                        output_loc='/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/L1/24hCA/',
+                        output_loc='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/L1/24hCA/',
                         participant_column='best_match_sample', 
                         pool_column='lane', 
                         condition_column='inflammation_final', 
@@ -1068,7 +1249,7 @@ cell_type_objects[['B']]@meta.data[['lane_both']] <- as.vector(unlist(lane_remap
 cell_type_objects[['B']]@meta.data[['cell_type']] <- 'B'
 do_limix_input_pipeline(seurat_object = cell_type_objects[['B']][, cell_type_objects[['B']][['inflammation_final']] == 'UT'], 
                         psam = donor_annotation_psam, 
-                        output_loc='/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/L1/UT/',
+                        output_loc='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/L1/UT/',
                         participant_column='best_match_sample', 
                         pool_column='lane', 
                         condition_column='inflammation_final', 
@@ -1084,7 +1265,7 @@ do_limix_input_pipeline(seurat_object = cell_type_objects[['B']][, cell_type_obj
                         quantile=F)
 do_limix_input_pipeline(seurat_object = cell_type_objects[['B']][, cell_type_objects[['B']][['inflammation_final']] == '24hCA'], 
                         psam = donor_annotation_psam, 
-                        output_loc='/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/L1/24hCA/',
+                        output_loc='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/L1/24hCA/',
                         participant_column='best_match_sample', 
                         pool_column='lane', 
                         condition_column='inflammation_final', 
@@ -1103,7 +1284,7 @@ cell_type_objects[['DC']]@meta.data[['lane_both']] <- as.vector(unlist(lane_rema
 cell_type_objects[['DC']]@meta.data[['cell_type']] <- 'DC'
 do_limix_input_pipeline(seurat_object = cell_type_objects[['DC']][, cell_type_objects[['DC']][['inflammation_final']] == 'UT'], 
                         psam = donor_annotation_psam, 
-                        output_loc='/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/L1/UT/',
+                        output_loc='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/L1/UT/',
                         participant_column='best_match_sample', 
                         pool_column='lane', 
                         condition_column='inflammation_final', 
@@ -1119,7 +1300,7 @@ do_limix_input_pipeline(seurat_object = cell_type_objects[['DC']][, cell_type_ob
                         quantile=F)
 do_limix_input_pipeline(seurat_object = cell_type_objects[['DC']][, cell_type_objects[['DC']][['inflammation_final']] == '24hCA'], 
                         psam = donor_annotation_psam, 
-                        output_loc='/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/L1/24hCA/',
+                        output_loc='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/L1/24hCA/',
                         participant_column='best_match_sample', 
                         pool_column='lane', 
                         condition_column='inflammation_final', 
@@ -1133,3 +1314,207 @@ do_limix_input_pipeline(seurat_object = cell_type_objects[['DC']][, cell_type_ob
                         merge_pcs_into_covariates=F, 
                         verbose=T,
                         quantile=F)
+
+# create input matrices, after normalizing with smooth quantile
+do_limix_input_pipeline(seurat_object = cell_type_objects[['monocyte']], 
+                        psam = donor_annotation_psam, 
+                        output_loc='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/L1/quantile/merged/',
+                        participant_column='best_match_sample', 
+                        pool_column='lane', 
+                        condition_column='inflammation_final', 
+                        celltype_column='cell_type',
+                        join_pools=F,
+                        min_cell_number=5, 
+                        min_peaks=200,
+                        npcs=10,
+                        sample_cor_column='best_match_correlation', 
+                        min_sample_cor=0,
+                        merge_pcs_into_covariates=F, 
+                        verbose=T,
+                        quantile=T)
+# split into stim and unstim
+split_samples_by_metadata('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/L1/quantile/merged/', 
+                          '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/L1/quantile/')
+
+# read the cell type annotations
+celltype_annotations <- read.table('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cell_type_assignment/azimuth/10x_multiome_PBMCs/mo_azimuth_ct_10xmultiome.tsv', header = T, sep = '\t')
+# subset to those
+rna_infos <- celltype_annotations[['barcode']]
+
+# add to the object
+cell_type_objects[['monocyte']]@meta.data[['lane_both']] <- as.vector(unlist(lane_remapping[cell_type_objects[['monocyte']]@meta.data[['lane']]]))
+cell_type_objects[['monocyte']]@meta.data[['cell_type']] <- 'monocyte'
+# create input matrices
+do_limix_input_pipeline(seurat_object = cell_type_objects[['monocyte']][, cell_type_objects[['monocyte']][['inflammation_final']] == 'UT' & colnames(cell_type_objects[['monocyte']]) %in% rna_infos], 
+                        psam = donor_annotation_psam, 
+                        output_loc='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/L1/rnafiltered/UT/',
+                        participant_column='best_match_sample', 
+                        pool_column='lane', 
+                        condition_column='inflammation_final', 
+                        celltype_column='cell_type',
+                        join_pools=F,
+                        min_cell_number=5, 
+                        min_peaks=200,
+                        npcs=10,
+                        sample_cor_column='best_match_correlation', 
+                        min_sample_cor=0,
+                        merge_pcs_into_covariates=F, 
+                        verbose=T,
+                        quantile=F)
+do_limix_input_pipeline(seurat_object = cell_type_objects[['monocyte']][, cell_type_objects[['monocyte']][['inflammation_final']] == '24hCA' & colnames(cell_type_objects[['monocyte']]) %in% rna_infos], 
+                        psam = donor_annotation_psam, 
+                        output_loc='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/L1/rnafiltered/24hCA/',
+                        participant_column='best_match_sample', 
+                        pool_column='lane', 
+                        condition_column='inflammation_final', 
+                        celltype_column='cell_type',
+                        join_pools=F,
+                        min_cell_number=5, 
+                        min_peaks=200,
+                        npcs=10,
+                        sample_cor_column='best_match_correlation', 
+                        min_sample_cor=0,
+                        merge_pcs_into_covariates=F, 
+                        verbose=T,
+                        quantile=F)
+
+# add to the object
+cell_type_objects[['DC']]@meta.data[['lane_both']] <- as.vector(unlist(lane_remapping[cell_type_objects[['DC']]@meta.data[['lane']]]))
+cell_type_objects[['DC']]@meta.data[['cell_type']] <- 'DC'
+# create input matrices
+do_limix_input_pipeline(seurat_object = cell_type_objects[['DC']][, cell_type_objects[['DC']][['inflammation_final']] == 'UT' & colnames(cell_type_objects[['DC']]) %in% rna_infos], 
+                        psam = donor_annotation_psam, 
+                        output_loc='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/L1/rnafiltered/UT/',
+                        participant_column='best_match_sample', 
+                        pool_column='lane', 
+                        condition_column='inflammation_final', 
+                        celltype_column='cell_type',
+                        join_pools=F,
+                        min_cell_number=5, 
+                        min_peaks=200,
+                        npcs=10,
+                        sample_cor_column='best_match_correlation', 
+                        min_sample_cor=0,
+                        merge_pcs_into_covariates=F, 
+                        verbose=T,
+                        quantile=F)
+do_limix_input_pipeline(seurat_object = cell_type_objects[['DC']][, cell_type_objects[['DC']][['inflammation_final']] == '24hCA' & colnames(cell_type_objects[['DC']]) %in% rna_infos], 
+                        psam = donor_annotation_psam, 
+                        output_loc='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/L1/rnafiltered/24hCA/',
+                        participant_column='best_match_sample', 
+                        pool_column='lane', 
+                        condition_column='inflammation_final', 
+                        celltype_column='cell_type',
+                        join_pools=F,
+                        min_cell_number=5, 
+                        min_peaks=200,
+                        npcs=10,
+                        sample_cor_column='best_match_correlation', 
+                        min_sample_cor=0,
+                        merge_pcs_into_covariates=F, 
+                        verbose=T,
+                        quantile=F)
+
+# now do one of the imputed chunks
+cell_type <- 'monocyte'
+imputed_matrix_loc <- paste('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/pycistopic/imputed_pycistopic_matrices/', cell_type, '/', sep = '')
+# the prepend
+imputed_matrix_prepend <- 'matrix_'
+# the append
+imputed_matrix_append <- '.mtx.gz'
+# the chunk to do
+matrix_files <- list.files(imputed_matrix_loc, pattern = '\\d+_\\d+.mtx.gz')
+# get the location of the barcodes and features files
+features_loc <- paste(imputed_matrix_loc, 'regiondata.tsv.gz', sep = '')
+barcodes_loc <- paste(imputed_matrix_loc, 'barcodes.tsv.gz', sep = '')
+# read the features file
+features <- read.table(features_loc, header = F, sep = '\t')
+# read the barcodes
+barcodes <- read.table(barcodes_loc, header = F)$V1
+# location of the object
+signac_object_loc <- paste('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_', cell_type, '_wstatus_1_80_20240709.rds', sep = '')
+signac_celltype <- readRDS(signac_object_loc)
+# replace underscore with dash for the lane
+signac_celltype@meta.data[['lane']] <- gsub('_', '-', signac_celltype@meta.data[['lane']])
+# add the day to the metadata
+signac_celltype@meta.data[['day']] <- gsub('_lane\\d+', '', signac_celltype@meta.data[['lane']])
+# filter where we don't have the sex
+signac_celltype <- signac_celltype[, !is.na(signac_celltype@meta.data[['sex']])]
+# or the age
+signac_celltype <- signac_celltype[, !is.na(signac_celltype@meta.data[['age']])]
+# or the inflammation status
+signac_celltype <- signac_celltype[, !is.na(signac_celltype@meta.data[['condition_final']]) & signac_celltype@meta.data[['condition_final']] != 'unknown']
+# go through each matrix
+for (matrix_file in matrix_files) {
+  # extract the region
+  regions_string <- stringr::str_extract(matrix_file, '(\\d+)_(\\d+)')
+  # split by underscore
+  regions_vector <- regions_string[[1]]
+  # read the accompanying features file
+  features_matrix_loc <- paste(imputed_matrix_loc, 'features_', regions_string, '.tsv.gz', sep = '')
+  features_matrix <- read.table(features_matrix_loc)$V1
+  # read the matrix
+  matrix_regions <- Matrix::readMM(paste(imputed_matrix_loc, matrix_file, sep = ''))
+  # set the features and barcodes
+  colnames(matrix_regions) <- barcodes
+  rownames(matrix_regions) <- features_matrix
+  # extract the metadata
+  signac_metadata <- signac_celltype@meta.data
+  signac_fragments <- Fragments(signac_celltype)
+  # create the chromatin assay
+  chrom_assay <- CreateChromatinAssay(
+    counts = matrix_regions,
+    sep = c(":", "-"),
+    fragments = signac_fragments,
+    min.cells = 10,
+    min.features = 200
+  )
+  # create object
+  seurat_object_regions <- CreateSeuratObject(
+    counts = chrom_assay,
+    assay = "peaks",
+    meta.data = signac_metadata[barcodes, ],
+    project = 'wijst_multiome'
+  )
+  # set the annotations to the object now
+  #Annotation(seurat_object) <- annotations
+  # create input matrices
+  dir.create(paste('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/L1/imputed/', regions_string, '/UT/', sep = ''), recursive = T)
+  do_limix_input_pipeline(seurat_object = seurat_object_regions[, seurat_object_regions[['inflammation_final']] == 'UT'], 
+                          psam = donor_annotation_psam, 
+                          output_loc=paste('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/L1/imputed/', regions_string, '/UT/', sep = ''),
+                          participant_column='best_match_sample', 
+                          pool_column='lane', 
+                          condition_column='inflammation_final', 
+                          celltype_column='cell_type',
+                          join_pools=F,
+                          min_cell_number=5, 
+                          min_peaks=200,
+                          npcs=10,
+                          sample_cor_column='best_match_correlation', 
+                          min_sample_cor=0,
+                          merge_pcs_into_covariates=F, 
+                          verbose=T,
+                          quantile=F)
+  dir.create(paste('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/L1/imputed/', regions_string, '/24hCA/', sep = ''), recursive = T)
+  do_limix_input_pipeline(seurat_object = seurat_object_regions[, seurat_object_regions[['inflammation_final']] == '24hCA'], 
+                          psam = donor_annotation_psam, 
+                          output_loc=paste('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/L1/imputed/', regions_string, '/24hCA/', sep = ''),
+                          participant_column='best_match_sample', 
+                          pool_column='lane', 
+                          condition_column='inflammation_final', 
+                          celltype_column='cell_type',
+                          join_pools=F,
+                          min_cell_number=5, 
+                          min_peaks=200,
+                          npcs=10,
+                          sample_cor_column='best_match_correlation', 
+                          min_sample_cor=0,
+                          merge_pcs_into_covariates=F, 
+                          verbose=T,
+                          quantile=F)
+}
+
+# merge the split matrices
+merge_split_expression_matrices('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/L1/imputed/', 
+                                '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/L1/imputed/')

@@ -1,0 +1,150 @@
+---
+title: "mo_plot_dars_topics"
+author: "Roy Oelen"
+date: "2024-10-14"
+output: html_document
+---
+
+```{r header, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+#!/usr/bin/env Rscript
+############################################################################################################################
+# Authors: Roy Oelen
+# Name: mo_plot_dars_topics.Rmd
+# Function: plot DAR output
+############################################################################################################################
+```
+
+```{r libraries, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+####################
+# libraries        #
+####################
+
+# for plotting
+library(ggplot2)
+library(cowplot)
+library(roycols)
+library(RColorBrewer)
+library(UpSetR)
+library(grid)
+
+```
+
+```{r functions, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+####################
+# Functions        #
+####################
+
+plot_DE_sharing_per_celltype <- function(de_table_per_ct, feature_column='feature', pval_column='p.bonferroni', sig_pval=0.05, only_positive=F, only_negative=F, lfc_column='metafc', use_label_dict=T, use_color_dict=T){
+  DE_genes_per_ct <- list()
+  # get the DE genes for each cell type
+  for(cell_type in names(de_table_per_ct)){
+    # filter to only include the significant results
+    de_table <- de_table_per_ct[[cell_type]][de_table_per_ct[[cell_type]][[pval_column]] <= 0.05, ]
+    # filter for only the positive lfc if required
+    if(only_positive){
+      de_table <- de_table[de_table[[lfc_column]] < 0, ]
+    }
+    # filter for only the positive lfc if required
+    if(only_negative){
+      de_table <- de_table[de_table[[lfc_column]] > 0, ]
+    }
+    # we just care about the gene names
+    sig_genes <- NULL
+    if (is.null(feature_column)) {
+      sig_genes <- rownames(mast)
+    }
+    else {
+      sig_genes <- de_table[[feature_column]]
+    }
+    # store these for the cell type
+    DE_genes_per_ct[[cell_type]] <- sig_genes
+  }
+  if(use_label_dict){
+    names(DE_genes_per_ct) <- rename_labels(names(DE_genes_per_ct))
+  }
+  queries <- list()
+  sets.bar.color <- 'black'
+  if(use_color_dict){
+    # create df to store the number of each set, so we know how to order
+    nrs_df <- NULL
+    # add the colors for the cell types
+    for(i in 1:length(names(DE_genes_per_ct))){
+      cell_type <- names(DE_genes_per_ct)[i]
+      # add for the singles in the intersection sizes
+      ct_list <- list(
+        query = intersects,
+        params = list(cell_type),
+        color = get_color_coding_dict()[[cell_type]],
+        active = T)
+      queries[[i]] <- ct_list
+      # add for the DF to order the set sizes
+      numbers_row <- data.frame(ct=c(cell_type), nr=c(length(DE_genes_per_ct[[cell_type]])), stringsAsFactors = F)
+      if(is.null(nrs_df)){
+        nrs_df <- numbers_row
+      }
+      else{
+        nrs_df <- rbind(nrs_df, numbers_row)
+      }
+    }
+    # get the order of the sets
+    ordered_cts <- nrs_df[order(nrs_df$nr, decreasing = T), 'ct']
+    # add the colors for the sets
+    sets.bar.color <- unlist(get_color_coding_dict()[ordered_cts])
+    upset(fromList(DE_genes_per_ct), order.by = 'freq', nsets = length(DE_genes_per_ct), queries = queries, sets.bar.color=sets.bar.color)
+  }
+  else {
+    upset(fromList(DE_genes_per_ct), order.by = 'freq', nsets = length(DE_genes_per_ct))
+  }
+  
+  #return(DE_genes_per_ct)
+}
+
+
+```
+
+```{r setup_paths, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+####################
+# Main Code        #
+####################
+
+# dar output folder
+dar_output_base_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/differential_accessibility/limma_dream/output/topics20_otsu_imputed_confined_ncell5/'
+
+```
+
+```{r monocyte_dars, include=TRUE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# get location of monocyte DARs
+dar_monocyte_base_loc <- paste(dar_output_base_loc, '/', 'monocyte', '/', sep = '')
+
+# we will look at these topics
+topics <- paste('Topic', 1:20, sep = '')
+
+# we'll store the output of each topic
+mono_output_per_topic <- list()
+
+# read each topic
+for (topic in topics) {
+  # set the topic location
+  topic_loc <- paste(dar_monocyte_base_loc, 'monocyte_', topic, '.nominal_significant.tsv.gz', sep = '')
+  # check if the topic exists
+  if (file.exists(topic_loc)) {
+    mono_output_per_topic[[topic]] <- read.table(topic_loc, header = T, sep = '\t')
+  }
+}
+
+plot_DE_sharing_per_celltype(
+  mono_output_per_topic,
+  use_label_dict = F, 
+  use_color_dict = F
+)
+
+```
