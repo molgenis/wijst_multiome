@@ -1,7 +1,17 @@
 """
-This script is for createing a scanpy object
+This script is for creating a scanpy object
 
 authors: Roy Oelen
+
+example usage:
+
+python mo_parts_to_scanpy.py \
+    --matrix_location /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scanpy_objects/deconstructed_objects/ASDC/RNA/counts/matrix.mtx \
+    --barcodes_location /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scanpy_objects/deconstructed_objects/ASDC/RNA/counts/barcodes.tsv.gz \
+    --features_location /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scanpy_objects/deconstructed_objects/ASDC/RNA/counts/features.tsv.gz \
+    --output_location /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scanpy_objects/reconstructed_objects/ASDC.h5ad \
+    --metadata_location /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scanpy_objects/deconstructed_objects/ASDC/metadata.tsv.gz
+
 """
 
 # imports
@@ -20,17 +30,17 @@ parser.add_argument('-o', '--output_location', type = str, help = 'location of t
 parser.add_argument('-d', '--metadata_location', type = str, help = 'location of metadata to add to the object, first column must be the index (string)', default = None)
 args = parser.parse_args()
 
-# lead count data
-object_raw = sc.read_mtx(args.matrix_location)
+# read count data
+object_counts = sc.read_mtx(args.matrix_location)
 # read barcodes
-object_bc=pd.read_csv(args.barcodes_location, header=None)
+object_bc = pd.read_csv(args.barcodes_location, header=None)
 # read features
-object_raw=pd.read_csv(args.features_location, header=None)
+object_features = pd.read_csv(args.features_location, header=None)
 # transpose to scanpy format
-object_raw = object_raw.T
+object_raw = sc.AnnData(object_counts.T)
 # add barcodes and genes to obs and vars
-object_raw.obs['cell_id']= object_bc[0].tolist()
-object_raw.var['gene_name']= object_features[0].tolist()
+object_raw.obs['cell_id'] = object_bc[0].tolist()
+object_raw.var['gene_name'] = object_features[0].tolist()
 # set indices for the obs and vars
 object_raw.obs.index = object_raw.obs['cell_id']
 object_raw.var.index = object_raw.var['gene_name']
@@ -62,7 +72,6 @@ sc.tl.leiden(
     object_raw,
     resolution=0.9,
     random_state=0,
-    flavor="igraph",
     n_iterations=2,
     directed=False,
 )
