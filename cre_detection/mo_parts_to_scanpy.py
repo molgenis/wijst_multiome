@@ -6,11 +6,11 @@ authors: Roy Oelen
 example usage:
 
 python mo_parts_to_scanpy.py \
-    --matrix_location /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scanpy_objects/deconstructed_objects/ASDC/RNA/counts/matrix.mtx \
-    --barcodes_location /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scanpy_objects/deconstructed_objects/ASDC/RNA/counts/barcodes.tsv.gz \
-    --features_location /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scanpy_objects/deconstructed_objects/ASDC/RNA/counts/features.tsv.gz \
-    --output_location /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scanpy_objects/reconstructed_objects/ASDC.h5ad \
-    --metadata_location /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scanpy_objects/deconstructed_objects/ASDC/metadata.tsv.gz
+    --matrix_location /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scanpy_objects/deconstructed_objects/monocyte/RNA/counts/matrix.mtx \
+    --barcodes_location /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scanpy_objects/deconstructed_objects/monocyte/RNA/counts/barcodes.tsv.gz \
+    --features_location /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scanpy_objects/deconstructed_objects/monocyte/RNA/counts/features.tsv.gz \
+    --output_location /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scanpy_objects/reconstructed_objects/monocyte.h5ad \
+    --metadata_location /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scanpy_objects/deconstructed_objects/monocyte/metadata.tsv.gz
 
 """
 

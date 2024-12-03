@@ -60,7 +60,7 @@ deconstruct_seurat_object <- function(seurat_object_loc, output_folder='./') {
     # extract the raw count data
     counts_raw <- seurat_object@assays$RNA@layers$counts
     # extract the cell barcodes
-    cell_barcodes_raw <- colnames(counts_raw)
+    cell_barcodes_raw <- colnames(seurat_object)
     # write those barcodes
     write.table(data.frame(x = cell_barcodes_raw), gzfile(paste(output_folder, '/RNA/counts/barcodes.tsv.gz', sep = '')), row.names = F, col.names = F, quote = F)
     # write the matrix
