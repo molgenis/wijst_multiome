@@ -1,7 +1,7 @@
 input_data:
   cisTopic_obj_fname: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/pycistopic/monocytes_all_cells/cistopic_objects/cistopic_obj_20_topics_model.pkl"
   GEX_anndata_fname: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scanpy_objects/reconstructed_objects/monocyte.h5ad"
-  region_set_folder: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_limma/region_sets/model_20_topics/Topics_otsu/"
+  region_set_folder: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_limma/region_sets/model_20_topics/"
   ctx_db_fname: "/groups/umcg-franke-scrna/tmp04/external_datasets/cistarget/hg38_screen_v10_clust.regions_vs_motifs.rankings.feather"
   dem_db_fname: "/groups/umcg-franke-scrna/tmp04/external_datasets/cistarget/hg38_screen_v10_clust.regions_vs_motifs.scores.feather"
   path_to_motif_annotations: "/groups/umcg-franke-scrna/tmp04/external_datasets/cistarget/motifs-v10nr_clust-nr.hgnc-m0.001-o0.0.tbl"
