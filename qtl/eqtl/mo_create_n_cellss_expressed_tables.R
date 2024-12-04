@@ -204,8 +204,10 @@ out_tables_folder <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/
 for (cell_type in c('B', 'CD4T', 'CD8T', 'DC', 'monocyte', 'NK')) {
   # read the file
   seurat_object_ct <- readRDS(paste(objects_loc, '/', seurat_object_prepend, cell_type, seurat_object_append, sep = ''))
+  # add sample + lane
+  seurat_object_ct@meta.data[['sample_lane']] <- paste(seurat_object_ct@meta.data[['sample_final']], seurat_object_ct@meta.data[['lane']], sep = ';;')
   # get the table
-  expr_celltype <- get_ncell_expressed_matrix(seurat_object_ct, 'sample_final')
+  expr_celltype <- get_ncell_expressed_matrix(seurat_object_ct, 'sample_lane')
   # write the result
   write.table(expr_celltype, gzfile(paste(out_tables_folder, '/', cell_type, '.tsv.gz', sep = '')), row.names = F, col.names = T, sep = '\t', quote = F)
 }
