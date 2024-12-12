@@ -11,6 +11,7 @@
 
 # for reading Seurat object
 library(Seurat)
+library(Signac)
 # for saving the results
 library(data.table)
 
@@ -157,6 +158,21 @@ combine_lanes <- function(lanes) {
   return(lane_remapping)
 }
 
+read_barcode_and_lane <- function(seurat_object) {
+  # do the split first
+  seurat_object_rowsnames_split <- strsplit(colnames(seurat_object), split = '_')
+  # now do a list apply
+  df_per_barcode <- lapply(seurat_object_rowsnames_split, FUN = function(x) {
+    data.frame(lane = paste(x[2], x[3], sep = '_'), barcode = x[1])
+  })
+  # merge all of them together
+  extra_metadata <- do.call('rbind', df_per_barcode)
+  # set the rownames to be the original ones
+  rownames(extra_metadata) <- colnames(seurat_object)
+  # now add the extra data we have
+  seurat_object <- AddMetaData(seurat_object, extra_metadata)
+  return(seurat_object)
+}
 
 #' add the inflammation assignments  to the Seurat object
 #' 
@@ -209,6 +225,23 @@ add_inflammation_status <- function(seurat_object, sample_sheet, seurat_lane_col
 }
 
 
+add_inflammation_status_each_object <- function(seurat_object_list, sample_sheet, seurat_lane_column='lane', sheet_lane_column='lane', seurat_participant_column='soup_final_sample_assignment', sheet_participants_column='genoid', seurat_inflammation_column='inflammation_status', sheet_inflammation_column='inflammation_status') {
+  # let's go over each object
+  for (object_name in names(seurat_object_list)) {
+    # do the condition assignment
+    seurat_object_list[[object_name]] <- add_inflammation_status(
+      seurat_object_list[[object_name]],
+      sample_sheet=sample_sheet, 
+      seurat_lane_column=seurat_lane_column,
+      sheet_lane_column=sheet_lane_column, 
+      seurat_participant_column=seurat_participant_column, 
+      sheet_participants_column=sheet_participants_column, 
+      seurat_inflammation_column=seurat_inflammation_column, 
+      sheet_inflammation_column=sheet_inflammation_column
+    )
+  }
+  return(seurat_object_list)
+}
 
 
 ####################
@@ -276,18 +309,6 @@ for (cell_type in names(cell_type_objects)) {
   cell_type_objects[[cell_type]] <- cell_type_object
 }
 
-# donor annotation psam
-donor_annotation_psam_batch1_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/processed/genotype/GSA2023_1044_025_V3/unimputed/GSA2022_1044_025_V3.psam'
-donor_annotation_psam_batch1 <- read.delim(donor_annotation_psam_batch1_loc, as.is = T, check.names = F)
-donor_annotation_psam_batch2_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/processed/genotype/GSA2023_1009/unimputed/mo_individuals.psam'
-donor_annotation_psam_batch2 <- read.delim(donor_annotation_psam_batch2_loc, as.is = T, check.names = F)
-donor_annotation_psam_batch3_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/processed/genotype/ugli/unimputed/chr_all.psam'
-donor_annotation_psam_batch3 <- read.delim(donor_annotation_psam_batch3_loc, as.is = T, check.names = F)
-# merge all
-donor_annotation_psam <- rbind(donor_annotation_psam_batch1, donor_annotation_psam_batch2)
-donor_annotation_psam <- rbind(donor_annotation_psam, donor_annotation_psam_batch3)
-
-
 # add pool column
 lane_remapping <- combine_lanes(unique(cell_type_objects[['monocyte']]@meta.data$lane))
 # add to the object
@@ -295,6 +316,6 @@ cell_type_objects[['monocyte']]@meta.data[['lane_both']] <- as.vector(unlist(lan
 cell_type_objects[['monocyte']]@meta.data[['cell_type']] <- 'monocyte'
 cell_type_objects[['monocyte']]@meta.data[['sample_lane']] <- paste(cell_type_objects[['monocyte']]@meta.data[['sample_final']], cell_type_objects[['monocyte']]@meta.data[['lane']], sep = ';;')
 # get the table
-acc_celltype <- get_ncell_expressed_matrix(cell_type_objects[['monocyte']], 'sample_lane', assay = 'peaks')
+acc_mono <- get_ncell_expressed_matrix(cell_type_objects[['monocyte']], 'sample_lane', assay = 'peaks')
   # write the result
-write.table(acc_celltype, gzfile(paste(out_tables_folder, '/', 'monocyte', '.tsv.gz', sep = '')), row.names = F, col.names = T, sep = '\t', quote = F)
+write.table(acc_mono, gzfile(paste(out_tables_folder, '/', 'monocyte', '.tsv.gz', sep = '')), row.names = F, col.names = T, sep = '\t', quote = F)
