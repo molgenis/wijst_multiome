@@ -1,7 +1,7 @@
 #!/usr/bin/env Rscript
 ############################################################################################################################
 # Authors: Roy Oelen, Marc-Jan Bonder
-# Name: mo_create_limix_chromatin_input.R
+# Name: mo_create_limix_chromatin_interaction_input.R
 # Function: create the limix-QTL compatible input files from the Seurat object
 ############################################################################################################################
 
@@ -147,6 +147,7 @@ create_metadata_tables <- function(seurat_object_metadata, psam, participant_col
 #' @param seurat_object the metadata (from Seurat) to use to create a metadata annotation file
 #' @param participant_column the seurat metadata column that denotes the participant
 #' @param celltype_column the seurat metadata column that denotes the celltype of the cell
+#' @param condition_column the interaction term condition column
 #' @param batch_column the batch the sample was processed in (optional)
 #' @param min_cell_number the minimal number of cells to need to build a pseudobulk, pseudobulks with less cells are removed
 #' @param min_peaks the minimal number of peaks to include a cell for pseudobulk
@@ -263,6 +264,19 @@ create_aggregated_expression_matrices_quantilemethod <- function(seurat_object, 
         if (verbose) {
           message(paste('finished', cell_type))
         }
+        # get the interaction term status for each sample
+        part_to_interaction <- unique(seurat_object@meta.data[, c(participant_column, condition_column)])
+        # first get the original rownames and colnames
+        cov_rownames <- rownames(cov_out)
+        cov_colnames <- colnames(cov_out)
+        # get the conditions for the samples
+        conditions <- part_to_interaction[match(rownames(cov_out), part_to_interaction[[participant_column]]), condition_column]
+        # add the condition info
+        cov_out <- cbind(conditions, cov_out)
+        # set the dimension names again
+        rownames(cov_out) <- cov_rownames
+        colnames(cov_out) <- c(condition_column, cov_colnames)
+        
         # put the results in a list
         aggregate_summary <- list('cell_type' = cell_type, 'expression' = aggregate_norm_count_matrix, 'expression_unfiltered' = aggregate_norm_count_matrix_unfiltered, 'pc' = cov_out)
         # which in turn is put into another list
@@ -326,6 +340,7 @@ inverse_normalize <- function(norm_count_matrix, verbose = T) {
 #' @param seurat_object the metadata (from Seurat) to use to create a metadata annotation file
 #' @param participant_column the seurat metadata column that denotes the participant
 #' @param celltype_column the seurat metadata column that denotes the celltype of the cell
+#' @param condition_column the interaction term condition column
 #' @param batch_column the batch the sample was processed in (optional)
 #' @param min_cell_number the minimal number of cells to need to build a pseudobulk, pseudobulks with less cells are removed
 #' @param min_peaks the minimal number of peaks to include a cell for pseudobulk
@@ -334,7 +349,7 @@ inverse_normalize <- function(norm_count_matrix, verbose = T) {
 #' @param min_sample_cor the minimal sample correlation to keep a cell (leave at zero to do no filtering)
 #' @param verbose print progress or not
 #' @returns a list per cell type, each cell type has a list with the raw pseudobulk expression, the filtered pseudobulk expression, and the pcs
-create_aggregated_expression_matrices_rnamethod <- function(seurat_object, participant_column='donor_final', celltype_column='cell_type_safe', batch_column=NULL, min_cell_number=5, min_peaks=200, npcs=10, sample_cor_column='best_match_correlation', min_sample_cor=0, verbose=T, single_thread=F) {
+create_aggregated_expression_matrices_rnamethod <- function(seurat_object, participant_column='donor_final', celltype_column='cell_type_safe', condition_column='inflammation_final', batch_column=NULL, min_cell_number=5, min_peaks=200, npcs=10, sample_cor_column='best_match_correlation', min_sample_cor=0, verbose=T, single_thread=F) {
   # subset object if min_peaks parameter is given
   if (!is.null(min_peaks) & !is.na(min_peaks) & min_peaks > 0) {
     seurat_object <- seurat_object[, seurat_object@meta.data[['nCount_peaks']] >= min_peaks]
@@ -373,8 +388,24 @@ create_aggregated_expression_matrices_rnamethod <- function(seurat_object, parti
     ids <- metadata[[participant_column]]
     unique_id_list <- unique(ids)
     
+    # do pseudobulking for the non-normalized counts
+    aggregate_raw_count_matrix <- as.data.frame(
+      pblapply(
+        # go through each ID
+        unique_id_list, FUN = function(x){
+          # get the sparse means over the cells of a participant
+          sparse_Means(count_matrix[, ids == x, drop = FALSE], rowMeans = TRUE)
+        }
+      )
+    )
+    # set the colnames to be the participants
+    colnames(aggregate_raw_count_matrix) <- unique_id_list
+    # and the genes as the rows
+    rownames(aggregate_raw_count_matrix) <- rownames(count_matrix)
+    
     # create new object to store the counts in
     norm_count_matrix <- count_matrix
+    # clear memory
     rm(count_matrix)
     gc()
     
@@ -461,8 +492,21 @@ create_aggregated_expression_matrices_rnamethod <- function(seurat_object, parti
         if (verbose) {
           message(paste('finished', cell_type))
         }
+        # get the interaction term status for each sample
+        part_to_interaction <- unique(seurat_object@meta.data[, c(participant_column, condition_column)])
+        # first get the original rownames and colnames
+        cov_rownames <- rownames(cov_out)
+        cov_colnames <- colnames(cov_out)
+        # get the conditions for the samples
+        conditions <- part_to_interaction[match(rownames(cov_out), part_to_interaction[[participant_column]]), condition_column]
+        # add the condition info
+        cov_out <- cbind(conditions, cov_out)
+        # set the dimension names again
+        rownames(cov_out) <- cov_rownames
+        colnames(cov_out) <- c(condition_column, cov_colnames)
+        
         # put the results in a list
-        aggregate_summary <- list('cell_type' = cell_type, 'expression' = aggregate_norm_count_matrix, 'expression_unfiltered' = aggregate_norm_count_matrix_unfiltered, 'pc' = cov_out)
+        aggregate_summary <- list('cell_type' = cell_type, 'expression' = aggregate_norm_count_matrix, 'expression_unfiltered' = aggregate_norm_count_matrix_unfiltered, 'expression_nonorm' = aggregate_raw_count_matrix, 'pc' = cov_out)
         # which in turn is put into another list
         aggregation_per_celltype[[cell_type]] <- aggregate_summary
       }
@@ -482,6 +526,7 @@ create_aggregated_expression_matrices_rnamethod <- function(seurat_object, parti
 #' @param seurat_object the metadata (from Seurat) to use to create a metadata annotation file
 #' @param participant_column the seurat metadata column that denotes the participant
 #' @param celltype_column the seurat metadata column that denotes the celltype of the cell
+#' @param condition_column the interaction term condition column
 #' @param batch_column the batch the sample was processed in (optional)
 #' @param min_cell_number the minimal number of cells to need to build a pseudobulk, pseudobulks with less cells are removed
 #' @param min_peaks the minimal number of peaks to include a cell for pseudobulk
@@ -493,11 +538,13 @@ create_aggregated_expression_matrices_rnamethod <- function(seurat_object, parti
 #' @returns a list per cell type, each cell type has a list with the raw pseudobulk expression, the filtered pseudobulk expression, and the pcs
 #' expression_per_celltype <- create_aggregated_expression_matrices(seurat_object, participant_column = 'soup_final_sample_assignment')
 create_aggregated_expression_matrices <- function(seurat_object, participant_column='donor_final', celltype_column='cell_type_safe', condition_column='inflammation_final', batch_column=NULL, min_cell_number=5, min_peaks=200, npcs=10, sample_cor_column='best_match_correlation', min_sample_cor=0, verbose=T, quantile=T) {
+  expression_per_celltype <- NULL
   if (quantile) {
     expression_per_celltype <- create_aggregated_expression_matrices_quantilemethod(
       seurat_object = seurat_object, 
       participant_column = participant_column, 
       celltype_column = celltype_column, 
+      condition_column = condition_column,
       batch_column = batch_column,
       min_cell_number = min_cell_number, 
       npcs = npcs, 
@@ -512,6 +559,7 @@ create_aggregated_expression_matrices <- function(seurat_object, participant_col
       seurat_object = seurat_object, 
       participant_column = participant_column, 
       celltype_column = celltype_column, 
+      condition_column = condition_column, 
       batch_column = batch_column,
       min_cell_number = min_cell_number, 
       npcs = npcs, 
@@ -521,6 +569,7 @@ create_aggregated_expression_matrices <- function(seurat_object, participant_col
       verbose = verbose
     )
   }
+  return(expression_per_celltype)
 }
 
 
@@ -580,6 +629,11 @@ write_limix_input <- function(expression_per_celltype, metadata_per_celltype, ou
     # write the files
     write.table(qtl_expression, qtl_output_loc, quote = F, sep = '\t', col.names = NA)
     write.table(mean_expression, exp_output_loc, quote = F, sep = '\t', col.names = NA)
+    # in the case of pflogpf we also have a pseudobulk without pflogpf
+    if ('expression_nonorm' %in% names(expression_per_celltype[[cell_type]])) {
+      raw_output_loc <- gzfile(paste(output_loc, '/', cell_type, '.Exp.raw.txt.gz', sep = ''))
+      write.table(expression_per_celltype[[cell_type]][['expression_nonorm']], raw_output_loc, quote = F, sep = '\t', col.names = NA)
+    }
     # change X.FFID back to #FID
     colnames(metadata) <- gsub('X\\.FID', '#FID', colnames(metadata))
     # either write the PCs together or separate from the covariates
@@ -662,7 +716,7 @@ do_limix_input_pipeline <- function(seurat_object,
                                     min_sample_cor=0,
                                     merge_pcs_into_covariates=F, 
                                     verbose=T,
-                                    quantile=T) {
+                                    quantile=F) {
   if (verbose) {
     message('creating metadata files')
   }
@@ -692,6 +746,7 @@ do_limix_input_pipeline <- function(seurat_object,
     seurat_object = seurat_object, 
     participant_column = participant_column, 
     celltype_column = celltype_column, 
+    condition_column = condition_column, 
     batch_column = batch_column,
     min_cell_number = min_cell_number, 
     npcs = npcs, 
@@ -1044,7 +1099,7 @@ merge_split_expression_matrices <- function(split_matrices_dir, output_base_dir,
           qtl_output_loc <- gzfile(paste(output_base_dir, '/', condition,  '/', celltype, '.qtlInput.txt.gz', sep = ''))
           pcs_output_loc <- gzfile(paste(output_base_dir, '/', condition, '/', celltype, '.qtlInput.Pcs.txt.gz', sep = ''))
           exp_output_loc <- gzfile(paste(output_base_dir, '/', condition, '/', celltype, '.Exp.txt.gz', sep = ''))
-
+          
           # write the files
           write.table(aggregate_norm_count_matrix, qtl_output_loc, quote = F, sep = '\t', col.names = NA)
           write.table(merged_matrices_celltype, exp_output_loc, quote = F, sep = '\t', col.names = NA)
@@ -1142,7 +1197,7 @@ cell_type_objects[['monocyte']]@meta.data[['cell_type']] <- 'monocyte'
 # create input matrices
 do_limix_input_pipeline(seurat_object = cell_type_objects[['monocyte']], 
                         psam = donor_annotation_psam, 
-                        output_loc='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_caqtl/sc-eqtlgen/input/L1/UT/',
+                        output_loc='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_caqtl/sc-eqtlgen/input/L1/',
                         participant_column='best_match_sample', 
                         pool_column='lane', 
                         condition_column='inflammation_final', 
@@ -1156,15 +1211,13 @@ do_limix_input_pipeline(seurat_object = cell_type_objects[['monocyte']],
                         merge_pcs_into_covariates=F, 
                         verbose=T,
                         quantile=F)
-
-
 # add to the object
 cell_type_objects[['NK']]@meta.data[['lane_both']] <- as.vector(unlist(lane_remapping[cell_type_objects[['NK']]@meta.data[['lane']]]))
 cell_type_objects[['NK']]@meta.data[['cell_type']] <- 'NK'
 # create input matrices
 do_limix_input_pipeline(seurat_object = cell_type_objects[['NK']], 
                         psam = donor_annotation_psam, 
-                        output_loc='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_caqtl/sc-eqtlgen/input/L1/UT/',
+                        output_loc='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_caqtl/sc-eqtlgen/input/L1/',
                         participant_column='best_match_sample', 
                         pool_column='lane', 
                         condition_column='inflammation_final', 
@@ -1178,12 +1231,13 @@ do_limix_input_pipeline(seurat_object = cell_type_objects[['NK']],
                         merge_pcs_into_covariates=F, 
                         verbose=T,
                         quantile=F)
-# CD4T bow
+# add to the object
 cell_type_objects[['CD4T']]@meta.data[['lane_both']] <- as.vector(unlist(lane_remapping[cell_type_objects[['CD4T']]@meta.data[['lane']]]))
 cell_type_objects[['CD4T']]@meta.data[['cell_type']] <- 'CD4T'
+# create input matrices
 do_limix_input_pipeline(seurat_object = cell_type_objects[['CD4T']], 
                         psam = donor_annotation_psam, 
-                        output_loc='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_caqtl/sc-eqtlgen/input/L1/UT/',
+                        output_loc='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_caqtl/sc-eqtlgen/input/L1/',
                         participant_column='best_match_sample', 
                         pool_column='lane', 
                         condition_column='inflammation_final', 
@@ -1197,12 +1251,13 @@ do_limix_input_pipeline(seurat_object = cell_type_objects[['CD4T']],
                         merge_pcs_into_covariates=F, 
                         verbose=T,
                         quantile=F)
-# B
-cell_type_objects[['B']]@meta.data[['lane_both']] <- as.vector(unlist(lane_remapping[cell_type_objects[['B']]@meta.data[['lane']]]))
-cell_type_objects[['B']]@meta.data[['cell_type']] <- 'B'
-do_limix_input_pipeline(seurat_object = cell_type_objects[['B']][, cell_type_objects[['B']][['inflammation_final']] == 'UT'], 
+# add to the object
+cell_type_objects[['CD8T']]@meta.data[['lane_both']] <- as.vector(unlist(lane_remapping[cell_type_objects[['CD8T']]@meta.data[['lane']]]))
+cell_type_objects[['CD8T']]@meta.data[['cell_type']] <- 'CD8T'
+# create input matrices
+do_limix_input_pipeline(seurat_object = cell_type_objects[['CD8T']], 
                         psam = donor_annotation_psam, 
-                        output_loc='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_caqtl/sc-eqtlgen/input/L1/UT/',
+                        output_loc='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_caqtl/sc-eqtlgen/input/L1/',
                         participant_column='best_match_sample', 
                         pool_column='lane', 
                         condition_column='inflammation_final', 
@@ -1216,29 +1271,13 @@ do_limix_input_pipeline(seurat_object = cell_type_objects[['B']][, cell_type_obj
                         merge_pcs_into_covariates=F, 
                         verbose=T,
                         quantile=F)
-
-# DC
+# add to the object
 cell_type_objects[['DC']]@meta.data[['lane_both']] <- as.vector(unlist(lane_remapping[cell_type_objects[['DC']]@meta.data[['lane']]]))
 cell_type_objects[['DC']]@meta.data[['cell_type']] <- 'DC'
-do_limix_input_pipeline(seurat_object = cell_type_objects[['DC']][, cell_type_objects[['DC']][['inflammation_final']] == 'UT'], 
+# create input matrices
+do_limix_input_pipeline(seurat_object = cell_type_objects[['DC']], 
                         psam = donor_annotation_psam, 
-                        output_loc='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_caqtl/sc-eqtlgen/input/L1/UT/',
-                        participant_column='best_match_sample', 
-                        pool_column='lane', 
-                        condition_column='inflammation_final', 
-                        celltype_column='cell_type',
-                        join_pools=F,
-                        min_cell_number=5, 
-                        min_peaks=200,
-                        npcs=10,
-                        sample_cor_column='best_match_correlation', 
-                        min_sample_cor=0,
-                        merge_pcs_into_covariates=F, 
-                        verbose=T,
-                        quantile=F)
-do_limix_input_pipeline(seurat_object = cell_type_objects[['DC']][, cell_type_objects[['DC']][['inflammation_final']] == '24hCA'], 
-                        psam = donor_annotation_psam, 
-                        output_loc='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_caqtl/sc-eqtlgen/input/L1/24hCA/',
+                        output_loc='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_caqtl/sc-eqtlgen/input/L1/',
                         participant_column='best_match_sample', 
                         pool_column='lane', 
                         condition_column='inflammation_final', 

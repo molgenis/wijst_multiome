@@ -327,13 +327,19 @@ acc_nk <- get_ncell_expressed_matrix(cell_type_objects[['NK']], 'sample_lane', a
 write.table(acc_nk, gzfile(paste(out_tables_folder, '/', 'NK', '.tsv.gz', sep = '')), row.names = F, col.names = T, sep = '\t', quote = F)
 # now CD4T
 cell_type_objects[['CD4T']]@meta.data[['lane_both']] <- as.vector(unlist(lane_remapping[cell_type_objects[['CD4T']]@meta.data[['lane']]]))
-cell_type_objects[['CD4T']]@meta.data[['cell_type']] <- 'NK'
+cell_type_objects[['CD4T']]@meta.data[['cell_type']] <- 'CD4T'
 cell_type_objects[['CD4T']]@meta.data[['sample_lane']] <- paste(cell_type_objects[['CD4T']]@meta.data[['best_match_sample']], cell_type_objects[['CD4T']]@meta.data[['lane']], sep = ';;')
 acc_cd4t <- get_ncell_expressed_matrix(cell_type_objects[['CD4T']], 'sample_lane', assay = 'peaks', multithread=F)
 write.table(acc_cd4t, gzfile(paste(out_tables_folder, '/', 'CD4T', '.tsv.gz', sep = '')), row.names = F, col.names = T, sep = '\t', quote = F)
 # now CD8T
 cell_type_objects[['CD8T']]@meta.data[['lane_both']] <- as.vector(unlist(lane_remapping[cell_type_objects[['CD8T']]@meta.data[['lane']]]))
-cell_type_objects[['CD8T']]@meta.data[['cell_type']] <- 'NK'
+cell_type_objects[['CD8T']]@meta.data[['cell_type']] <- 'CD8T'
 cell_type_objects[['CD8T']]@meta.data[['sample_lane']] <- paste(cell_type_objects[['CD8T']]@meta.data[['best_match_sample']], cell_type_objects[['CD8T']]@meta.data[['lane']], sep = ';;')
 acc_cd8t <- get_ncell_expressed_matrix(cell_type_objects[['CD8T']], 'sample_lane', assay = 'peaks', multithread=F)
 write.table(acc_cd8t, gzfile(paste(out_tables_folder, '/', 'CD8T', '.tsv.gz', sep = '')), row.names = F, col.names = T, sep = '\t', quote = F)
+# now DC
+cell_type_objects[['DC']]@meta.data[['lane_both']] <- as.vector(unlist(lane_remapping[cell_type_objects[['DC']]@meta.data[['lane']]]))
+cell_type_objects[['DC']]@meta.data[['cell_type']] <- 'DC'
+cell_type_objects[['DC']]@meta.data[['sample_lane']] <- paste(cell_type_objects[['DC']]@meta.data[['best_match_sample']], cell_type_objects[['DC']]@meta.data[['lane']], sep = ';;')
+acc_dc <- get_ncell_expressed_matrix(cell_type_objects[['DC']], 'sample_lane', assay = 'peaks', multithread=F)
+write.table(acc_dc, gzfile(paste(out_tables_folder, '/', 'DC', '.tsv.gz', sep = '')), row.names = F, col.names = T, sep = '\t', quote = F)
