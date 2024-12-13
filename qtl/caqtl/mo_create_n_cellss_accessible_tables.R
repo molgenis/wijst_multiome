@@ -314,8 +314,26 @@ lane_remapping <- combine_lanes(unique(cell_type_objects[['monocyte']]@meta.data
 # add to the object
 cell_type_objects[['monocyte']]@meta.data[['lane_both']] <- as.vector(unlist(lane_remapping[cell_type_objects[['monocyte']]@meta.data[['lane']]]))
 cell_type_objects[['monocyte']]@meta.data[['cell_type']] <- 'monocyte'
-cell_type_objects[['monocyte']]@meta.data[['sample_lane']] <- paste(cell_type_objects[['monocyte']]@meta.data[['sample_final']], cell_type_objects[['monocyte']]@meta.data[['lane']], sep = ';;')
+cell_type_objects[['monocyte']]@meta.data[['sample_lane']] <- paste(cell_type_objects[['monocyte']]@meta.data[['best_match_sample']], cell_type_objects[['monocyte']]@meta.data[['lane']], sep = ';;')
 # get the table
-acc_mono <- get_ncell_expressed_matrix(cell_type_objects[['monocyte']], 'sample_lane', assay = 'peaks')
-  # write the result
+acc_mono <- get_ncell_expressed_matrix(cell_type_objects[['monocyte']], 'sample_lane', assay = 'peaks', multithread=F)
+# write the result
 write.table(acc_mono, gzfile(paste(out_tables_folder, '/', 'monocyte', '.tsv.gz', sep = '')), row.names = F, col.names = T, sep = '\t', quote = F)
+# now NK
+cell_type_objects[['NK']]@meta.data[['lane_both']] <- as.vector(unlist(lane_remapping[cell_type_objects[['NK']]@meta.data[['lane']]]))
+cell_type_objects[['NK']]@meta.data[['cell_type']] <- 'NK'
+cell_type_objects[['NK']]@meta.data[['sample_lane']] <- paste(cell_type_objects[['NK']]@meta.data[['best_match_sample']], cell_type_objects[['NK']]@meta.data[['lane']], sep = ';;')
+acc_nk <- get_ncell_expressed_matrix(cell_type_objects[['NK']], 'sample_lane', assay = 'peaks', multithread=F)
+write.table(acc_nk, gzfile(paste(out_tables_folder, '/', 'NK', '.tsv.gz', sep = '')), row.names = F, col.names = T, sep = '\t', quote = F)
+# now CD4T
+cell_type_objects[['CD4T']]@meta.data[['lane_both']] <- as.vector(unlist(lane_remapping[cell_type_objects[['CD4T']]@meta.data[['lane']]]))
+cell_type_objects[['CD4T']]@meta.data[['cell_type']] <- 'NK'
+cell_type_objects[['CD4T']]@meta.data[['sample_lane']] <- paste(cell_type_objects[['CD4T']]@meta.data[['best_match_sample']], cell_type_objects[['CD4T']]@meta.data[['lane']], sep = ';;')
+acc_cd4t <- get_ncell_expressed_matrix(cell_type_objects[['CD4T']], 'sample_lane', assay = 'peaks', multithread=F)
+write.table(acc_cd4t, gzfile(paste(out_tables_folder, '/', 'CD4T', '.tsv.gz', sep = '')), row.names = F, col.names = T, sep = '\t', quote = F)
+# now CD8T
+cell_type_objects[['CD8T']]@meta.data[['lane_both']] <- as.vector(unlist(lane_remapping[cell_type_objects[['CD8T']]@meta.data[['lane']]]))
+cell_type_objects[['CD8T']]@meta.data[['cell_type']] <- 'NK'
+cell_type_objects[['CD8T']]@meta.data[['sample_lane']] <- paste(cell_type_objects[['CD8T']]@meta.data[['best_match_sample']], cell_type_objects[['CD8T']]@meta.data[['lane']], sep = ';;')
+acc_cd8t <- get_ncell_expressed_matrix(cell_type_objects[['CD8T']], 'sample_lane', assay = 'peaks', multithread=F)
+write.table(acc_cd8t, gzfile(paste(out_tables_folder, '/', 'CD8T', '.tsv.gz', sep = '')), row.names = F, col.names = T, sep = '\t', quote = F)
