@@ -1291,4 +1291,24 @@ do_limix_input_pipeline(seurat_object = cell_type_objects[['DC']],
                         merge_pcs_into_covariates=F, 
                         verbose=T,
                         quantile=F)
+# add to the object
+cell_type_objects[['B']]@meta.data[['lane_both']] <- as.vector(unlist(lane_remapping[cell_type_objects[['B']]@meta.data[['lane']]]))
+cell_type_objects[['B']]@meta.data[['cell_type']] <- 'B'
+# create input matrices
+do_limix_input_pipeline(seurat_object = cell_type_objects[['B']], 
+                        psam = donor_annotation_psam, 
+                        output_loc='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_caqtl/sc-eqtlgen/input/L1/',
+                        participant_column='best_match_sample', 
+                        pool_column='lane', 
+                        condition_column='inflammation_final', 
+                        celltype_column='cell_type',
+                        join_pools=F,
+                        min_cell_number=5, 
+                        min_peaks=200,
+                        npcs=10,
+                        sample_cor_column='best_match_correlation', 
+                        min_sample_cor=0,
+                        merge_pcs_into_covariates=F, 
+                        verbose=T,
+                        quantile=F)
 
