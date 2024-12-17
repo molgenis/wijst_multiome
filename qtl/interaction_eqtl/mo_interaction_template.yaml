@@ -1,0 +1,75 @@
+# config for eqtl pipeline
+# use empty string for missing files (eg kinship, randomeff, ...)
+
+#####################################################################################
+###### The following arguments are for indicating file locations on your system #####
+#####################################################################################
+
+# The path to the folder within which the simgularity image & "wp3.simg" is located
+wp3_image_loc: /scratch/hb-sceqtlgen/containers/wp3.simg
+# The path to the folder within which the simgularity image & "limixDec22.simg" is located
+limix_image_loc: /scratch/hb-sceqtlgen/containers/limixDec22.simg
+# This folder will be bound to Singularty (needs to be highr up then every data item.
+top_dir: /scratch/hb-sceqtlgen/
+# where the scripts are located, should be inside the container
+script_folder: /tools/WG3-pipeline-QTL/scripts/
+# where the limix QTL pipeline is located, should be outside the container
+limix_loc: /scratch/hb-sceqtlgen/Limix_QTL/
+# genotype inputs
+genotype_loc: /groups/umcg-franke-scrna/tmp01/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/genotype_input/
+genotype_prepend: EUR_imputed_hg38_varFiltered_chr
+genotype_append: .bgen
+# phenotype inputs
+phenotype_loc: /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/input/L1/combined/
+phenotype_prepend: 
+phenotype_append: .qtlInput.txt.gz
+# covariates and as such, interaction terms
+covariates_loc: /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/input/L1/combined/
+covariates_prepend: 
+covariates_append: .qtlInput.Pcs.txt.gz
+# location of kinship file
+kinship_loc: /scratch/hb-sceqtlgen/oneK1K/input/sample.kinship
+# location of the chunking file
+chunking_file_loc: /scratch/hb-sceqtlgen/oneK1K/eqtlgen_coeqtl_map/input/chunking.txt
+# location of the limix annotation file
+limix_annotation_loc: /scratch/hb-sceqtlgen/oneK1K/eqtlgen_coeqtl_map/input/
+limix_annotation_prepend: LimixAnnotationFile
+limix_annotation_append: .tsv.gz
+# location of the sample mapping file
+smf_loc: /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/input/L1/combined/smf.txt
+# location of the variant-features to test for interactions
+variant_feature_confinement: 
+
+#####################################
+##       input files/folders       ###
+#####################################
+
+WG3_folder: /scratch/hb-sceqtlgen/oneK1K/ 
+out_folder: /scratch/hb-sceqtlgen/oneK1K/iQTL/output_Mono/ 
+cov_folder: /scratch/hb-sceqtlgen/oneK1K/ct_comp_gwas/ 
+
+interaction_terms: 
+    - CD16_Mono_in_Mono
+    - CD14_Mono_in_Mono
+
+######################################
+######        Do not change      #####
+######################################
+numberOfPermutations: '0'
+minorAlleleFrequency: '0.01'
+windowSize: '1' # gene + cis window from one side
+hardyWeinbergCutoff: '0.0001'
+compressFiles: true
+
+celltypes:
+#    - L1/B ##done
+#    - L1/CD4_T
+#    - L1/CD8_T
+#    - L1/DC ##Done
+    - L1/Mono
+#    - L1/NK
+#    - L1/Eryth
+#    - L1/HSPC
+#    - L1/ILC
+#    - L1/Platelet
+#    - L1/Other_T
