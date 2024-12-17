@@ -14,6 +14,8 @@ library(Seurat)
 library(matrixStats)
 library(textTinyR) # NOT IN CONTAINER
 library(pbapply)
+library(doParallel)
+
 
 ####################
 # Functions        #
@@ -187,6 +189,7 @@ inverse_normalize <- function(norm_count_matrix, verbose = T) {
 #' @param participant_column the seurat metadata column that denotes the participant
 #' @param celltype_column the seurat metadata column that denotes the celltype of the cell
 #' @param batch_column the batch the sample was processed in (optional)
+#' @param condition_column the seurat metadata column that denotes the condition of the sample (inflamed, non-inflamed)
 #' @param min_cell_number the minimal number of cells to need to build a pseudobulk, pseudobulks with less cells are removed
 #' @param min_numi the minimal number of UMIs to include a cell for pseudobulk
 #' @param npcs the number of PCs to return
@@ -196,7 +199,7 @@ inverse_normalize <- function(norm_count_matrix, verbose = T) {
 #' @param single_thread do all work on a single thread (for debugging purposes)
 #' @returns a list per cell type, each cell type has a list with the raw pseudobulk expression, the filtered pseudobulk expression, and the pcs
 #' expression_per_celltype <- create_aggregated_expression_matrices(seurat_object, participant_column = 'soup_final_sample_assignment')
-create_aggregated_expression_matrices <- function(seurat_object, participant_column='donor_final', celltype_column='cell_type_safe', batch_column=NULL, min_cell_number=5, min_numi=200, npcs=10, sample_cor_column='best_match_correlation', min_sample_cor=0, verbose=T, single_thread=F) {
+create_aggregated_expression_matrices <- function(seurat_object, participant_column='donor_final', celltype_column='cell_type_safe', batch_column=NULL, condition_column='inflammation_final', min_cell_number=5, min_numi=200, npcs=10, sample_cor_column='best_match_correlation', min_sample_cor=0, verbose=T, single_thread=F) {
   # subset object if min_numi parameter is given
   if (!is.null(min_numi) & !is.na(min_numi) & min_numi > 0) {
     seurat_object <- seurat_object[, seurat_object@meta.data[['nFeature_SCT']] >= min_numi]
@@ -538,6 +541,7 @@ do_limix_input_pipeline <- function(seurat_object,
     participant_column = participant_column, 
     celltype_column = celltype_column, 
     batch_column = batch_column,
+    condition_column = condition_column, 
     min_cell_number = min_cell_number, 
     npcs = npcs, 
     sample_cor_column = sample_cor_column,
@@ -669,7 +673,7 @@ condition_assignment_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/o
 condition_assignments <- read.table(condition_assignment_loc, header = T, sep = '\t')
 
 # locations of objects
-objects_loc <- '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/seurat_preprocess_samples/objects/'
+objects_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/seurat_preprocess_samples/objects/'
 mo_object_loc <- paste(objects_loc, 'mo_all_20240223_seuratv5_normalized.rds', sep = '')
 # read the Seurat object
 seurat_object <- readRDS(mo_object_loc)
@@ -711,11 +715,11 @@ seurat_object <- seurat_object[, !is.na(seurat_object@meta.data[['celltype_imput
                                  !is.na(seurat_object@meta.data[['inflammation_final']])]
 
 # donor annotation psam
-donor_annotation_psam_batch1_loc <- '/groups/umcg-franke-scrna/tmp03/projects/multiome/processed/genotype/GSA2023_1044_025_V3/unimputed/GSA2022_1044_025_V3.psam'
+donor_annotation_psam_batch1_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/processed/genotype/GSA2023_1044_025_V3/unimputed/GSA2022_1044_025_V3.psam'
 donor_annotation_psam_batch1 <- read.delim(donor_annotation_psam_batch1_loc, as.is = T, check.names = F)
-donor_annotation_psam_batch2_loc <- '/groups/umcg-franke-scrna/tmp03/projects/multiome/processed/genotype/GSA2023_1009/unimputed/mo_individuals.psam'
+donor_annotation_psam_batch2_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/processed/genotype/GSA2023_1009/unimputed/mo_individuals.psam'
 donor_annotation_psam_batch2 <- read.delim(donor_annotation_psam_batch2_loc, as.is = T, check.names = F)
-donor_annotation_psam_batch3_loc <- '/groups/umcg-franke-scrna/tmp03/projects/multiome/processed/genotype/ugli/unimputed/chr_all.psam'
+donor_annotation_psam_batch3_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/processed/genotype/ugli/unimputed/chr_all.psam'
 donor_annotation_psam_batch3 <- read.delim(donor_annotation_psam_batch3_loc, as.is = T, check.names = F)
 # merge all
 donor_annotation_psam <- rbind(donor_annotation_psam_batch1, donor_annotation_psam_batch2)
