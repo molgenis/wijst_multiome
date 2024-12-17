@@ -6,17 +6,19 @@
 #####################################################################################
 
 # The path to the folder within which the simgularity image & "wp3.simg" is located
-wp3_image_loc: /scratch/hb-sceqtlgen/containers/wp3.simg
+wp3_image_loc: /groups/umcg-franke-scrna/tmp04/software/wp3.simg
 # The path to the folder within which the simgularity image & "limixDec22.simg" is located
-limix_image_loc: /scratch/hb-sceqtlgen/containers/limixDec22.simg
+limix_image_loc: /groups/umcg-franke-scrna/tmp04/software/limixDec22.simg
 # This folder will be bound to Singularty (needs to be highr up then every data item.
-top_dir: /scratch/hb-sceqtlgen/
+top_dir: /groups/umcg-franke-scrna/tmp04/
 # where the scripts are located, should be inside the container
 script_folder: /tools/WG3-pipeline-QTL/scripts/
 # where the limix QTL pipeline is located, should be outside the container
-limix_loc: /scratch/hb-sceqtlgen/Limix_QTL/
+limix_loc: /groups/umcg-franke-scrna/tmp04/software/Limix_QTL/
+# where the eigenmt script is located
+eigenmt_loc: 
 # genotype inputs
-genotype_loc: /groups/umcg-franke-scrna/tmp01/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/genotype_input/
+genotype_loc: /groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/genotype_input/
 genotype_prepend: EUR_imputed_hg38_varFiltered_chr
 genotype_append: .bgen
 # phenotype inputs
@@ -28,29 +30,28 @@ covariates_loc: /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/in
 covariates_prepend: 
 covariates_append: .qtlInput.Pcs.txt.gz
 # location of kinship file
-kinship_loc: /scratch/hb-sceqtlgen/oneK1K/input/sample.kinship
+kinship_loc: /groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/input/sample.kinship
 # location of the chunking file
-chunking_file_loc: /scratch/hb-sceqtlgen/oneK1K/eqtlgen_coeqtl_map/input/chunking.txt
+chunking_file_loc: /groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/input/ChunkingFile.txt
 # location of the limix annotation file
-limix_annotation_loc: /scratch/hb-sceqtlgen/oneK1K/eqtlgen_coeqtl_map/input/
+limix_annotation_loc: /groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/input/
 limix_annotation_prepend: LimixAnnotationFile
-limix_annotation_append: .tsv.gz
+limix_annotation_append: .txt
 # location of the sample mapping file
 smf_loc: /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/input/L1/combined/smf.txt
 # location of the variant-features to test for interactions
-variant_feature_confinement: 
+variant_feature_confinement_loc: 
+variant_feature_confinement_prepend: LimixAnnotationFile
+variant_feature_confinement_append: .txt
 
 #####################################
 ##       input files/folders       ###
 #####################################
 
-WG3_folder: /scratch/hb-sceqtlgen/oneK1K/ 
-out_folder: /scratch/hb-sceqtlgen/oneK1K/iQTL/output_Mono/ 
-cov_folder: /scratch/hb-sceqtlgen/oneK1K/ct_comp_gwas/ 
+out_folder: /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/output/L1/
 
 interaction_terms: 
-    - CD16_Mono_in_Mono
-    - CD14_Mono_in_Mono
+    - inflammation_final
 
 ######################################
 ######        Do not change      #####
@@ -62,14 +63,9 @@ hardyWeinbergCutoff: '0.0001'
 compressFiles: true
 
 celltypes:
-#    - L1/B ##done
-#    - L1/CD4_T
-#    - L1/CD8_T
-#    - L1/DC ##Done
-    - L1/Mono
-#    - L1/NK
-#    - L1/Eryth
-#    - L1/HSPC
-#    - L1/ILC
-#    - L1/Platelet
-#    - L1/Other_T
+    - B
+    - CD4T
+    - CD8T
+    - DC
+    - monocyte
+    - NK
