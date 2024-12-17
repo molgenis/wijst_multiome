@@ -40,9 +40,9 @@ limix_annotation_append: .txt
 # location of the sample mapping file
 smf_loc: /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/input/L1/combined/smf.txt
 # location of the variant-features to test for interactions
-variant_feature_confinement_loc: 
-variant_feature_confinement_prepend: LimixAnnotationFile
-variant_feature_confinement_append: .txt
+variant_feature_confinement_loc: /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/confinements/
+variant_feature_confinement_prepend: 
+variant_feature_confinement_append: _confinement.tsv.gz
 
 #####################################
 ##       input files/folders       ###

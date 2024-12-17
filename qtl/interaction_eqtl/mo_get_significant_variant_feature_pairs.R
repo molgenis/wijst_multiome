@@ -107,6 +107,22 @@ get_significant_pairs_per_celltype_merged_conditions <- function(qtl_output_loc,
 }
 
 
+write_confinements <- function(significant_variant_gene_list, confinements_loc, confinement_file_prepend='', confinement_file_append='_confinement.tsv.gz') {
+  # check all the cell types
+  for (cell_type in names(significant_variant_gene_list)) {
+    # paste together the file location
+    file_loc_out <- paste(confinements_loc, '/', confinement_file_prepend, cell_type, confinement_file_append, sep = '')
+    # check if we need to gzip
+    file_loc_string <- file_loc_out
+    # gz file ends with .gz
+    if (grepl('.gz$', file_loc_string)) {
+      file_loc_out <- gzfile(file_loc_string)
+    }
+    write.table(significant_variant_gene_list[[cell_type]], file_loc_out, row.names = F, col.names = F, sep = '\t', quote = F)
+  }
+}
+
+
 ####################
 # Settings        #
 ####################
@@ -123,3 +139,7 @@ eqtl_results_loc <- '/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consort
 # get the var-feature links for the eQTL cell types
 eqtl_var_feature_celltypes <- get_significant_pairs_per_celltype_merged_conditions(eqtl_results_loc)
 
+# get the location where to put the confinements
+confinement_eqt_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/confinements/'
+# write them
+write_confinements(eqtl_var_feature_celltypes, confinement_eqt_loc)
