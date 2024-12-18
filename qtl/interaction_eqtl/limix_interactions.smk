@@ -20,9 +20,9 @@ limix_path="singularity exec --bind "+includeDir+" "+limix_image_loc+" python "+
 ##QTL mapping variables.
 phenotypeFile = config['phenotype_loc']
 if config['phenotype_prepend'] is None:
-    (phenotypeFile + '%s' + config['phenotype_append']) % celltypes[0]    # use {ct} to indicate celltype
+    (phenotypeFile + '%s' + config['phenotype_append']) % celltypes    # use {ct} to indicate celltype
 else:
-    (phenotypeFile + config['phenotype_prepend'] + '%s' + config['phenotype_append']) % celltypes[0]    # use {ct} to indicate celltype
+    (phenotypeFile + config['phenotype_prepend'] + '%s' + config['phenotype_append']) % celltypes    # use {ct} to indicate celltype
 # genotypes as split by chromosome and in bgen format
 genotypeFile = config["genotype_loc"]
 if config['genotype_prepend'] is None:
@@ -32,11 +32,11 @@ else:
 # covariate files are per cell type
 covariateFile= config['covariates_loc']
 if config['covariates_prepend'] is None:
-    covariateFile = (covariateFile + '%s' + config['covariates_append']) % celltypes[0]
+    covariateFile = (covariateFile + '%s' + config['covariates_append']) % celltypes
 else:
-    covariateFile = (covariateFile + config['covariates_prepend'] + '%s' + config['covariates_append']) % celltypes[0]
+    covariateFile = (covariateFile + config['covariates_prepend'] + '%s' + config['covariates_append']) % celltypes
 # each cell type has its own output folder
-outputFolder=(config["out_folder"]+ '%s')  % celltypes[0]
+outputFolder=(config["out_folder"]+ '%s')  % celltypes
 kinshipFile= config["kinship_loc"]
 chunkFile = config['chunking_file_loc']
 # NOTE: this is currently not celltype specific
@@ -49,9 +49,9 @@ sampleMappingFile = config['smf_loc']
 # get variant-feature file for each cell type
 featureVariantFilterFile = config['variant_feature_confinement_loc']
 if config['variant_feature_confinement_prepend'] is None:
-   featureVariantFilterFile = (featureVariantFilterFile + '%s' + config['variant_feature_confinement_append']) % celltypes[0]
+   featureVariantFilterFile = (featureVariantFilterFile + '%s' + config['variant_feature_confinement_append']) % celltypes
 else:
-   featureVariantFilterFile = (featureVariantFilterFile + config['variant_feature_confinement_prepend'] + '%s' + config['variant_feature_confinement_append']) % celltypes[0]
+   featureVariantFilterFile = (featureVariantFilterFile + config['variant_feature_confinement_prepend'] + '%s' + config['variant_feature_confinement_append']) % celltypes
 
 # perform chunked analysis based on the chunks in the chunking file
 chunk_chrom, chunk_start, chunk_end=[], [], []
