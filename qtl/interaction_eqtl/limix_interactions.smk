@@ -32,10 +32,10 @@ phenotypeFile = Path(formatted_path)
 #     genotype_prepend = ''
 genotypeFile = config["genotype_loc"]
 if config['genotype_prepend'] is None:
-    formatted_path = ''.join([genotypeFile, '{chrom}', config['genotype_append']])  # using {chrom} if genotype is split by chromosome
+    formatted_path = ''.join([genotypeFile, '{chrom}'])  # using {chrom} if genotype is split by chromosome
 else:
-    formatted_path = ''.join([genotypeFile, config['genotype_prepend'], '{chrom}', config['genotype_append']])  # using {chrom} if genotype is split by chromosome
-genotypeFile = Path(formatted_path)
+    formatted_path = ''.join([genotypeFile, config['genotype_prepend'], '{chrom}'])  # using {chrom} if genotype is split by chromosome
+genotypeFile = formatted_path
 
 
 # covariates
