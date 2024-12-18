@@ -7,7 +7,7 @@ CHROM = ['1','2','3','4','5','6','7','8','9','10','11','12','13','14','15','16',
 configfile: "./mo_interaction_template.yaml"
 includeDir = config["top_dir"]
 celltypes=config["celltypes"]
-print(f"\n\nRunning pipeline for {celltypes[0]} cells\n")
+print(f"\n\nRunning pipeline for {celltypes} cells\n")
 scripts_folder = config['script_folder']
 wp3_image_loc = config['wp3_image_loc']
 limix_image_loc = config['limix_image_loc']
@@ -18,40 +18,46 @@ genotype_loc = config['genotype_loc']
 limix_path="singularity exec --bind "+includeDir+" "+limix_image_loc+" python "+limix_loc
 
 ##QTL mapping variables.
-phenotypeFile = config['phenotype_loc']
+# phenotype data
+phenotypeFile  = config['phenotype_loc']
 if config['phenotype_prepend'] is None:
-    (phenotypeFile + '%s' + config['phenotype_append']) % celltypes    # use {ct} to indicate celltype
+    formatted_path = f"{phenotypeFile}%s{config['phenotype_append']}" % celltypes
 else:
-    (phenotypeFile + config['phenotype_prepend'] + '%s' + config['phenotype_append']) % celltypes    # use {ct} to indicate celltype
-# genotypes as split by chromosome and in bgen format
-genotypeFile = config["genotype_loc"]
-if config['genotype_prepend'] is None:
-    genotypeFile + '{chrom}' + config['genotype_append'] # using {chrom} if genotype is splitted by chromosome
-else:
-    genotypeFile + config['genotype_prepend']  + '{chrom}' + config['genotype_append'] # using {chrom} if genotype is splitted by chromosome
-# covariate files are per cell type
-covariateFile= config['covariates_loc']
+    formatted_path = f"{phenotypeFile}{config['phenotype_prepend']}%s{config['phenotype_append']}" % celltypes
+phenotypeFile = Path(formatted_path)
+
+# genotype data
+genotype_prepend = config['genotype_prepend']
+if genotype_prepend is None:
+    genotype_prepend = ''
+
+# covariates
+covariateFile = config['covariates_loc']
 if config['covariates_prepend'] is None:
-    covariateFile = (covariateFile + '%s' + config['covariates_append']) % celltypes
+    formatted_path = f"{covariateFile}%s{config['covariates_append']}" % celltypes
 else:
-    covariateFile = (covariateFile + config['covariates_prepend'] + '%s' + config['covariates_append']) % celltypes
-# each cell type has its own output folder
-outputFolder=(config["out_folder"]+ '%s')  % celltypes
+    formatted_path = f"{covariateFile}{config['covariates_prepend']}%s{config['covariates_append']}" % celltypes
+covariateFile = Path(formatted_path)
+
+outputFolder=(config["out_folder"] + '%s')  % celltypes
 kinshipFile= config["kinship_loc"]
 chunkFile = config['chunking_file_loc']
 # NOTE: this is currently not celltype specific
 annoFile = config['limix_annotation_loc']
-if config['variant_feature_confinement_prepend'] is None:
-    annoFile = annoFile + config['limix_annotation_append']
+if config['limix_annotation_loc'] is None:
+    annoFile = Path(annoFile, config['limix_annotation_append'])
 else:
-    annoFile = annoFile + config['limix_annotation_prepend'] + config['limix_annotation_append']
+    annoFile = Path(annoFile, config['limix_annotation_prepend'] + config['limix_annotation_append'])
+
+# sample mapping file
 sampleMappingFile = config['smf_loc']
 # get variant-feature file for each cell type
 featureVariantFilterFile = config['variant_feature_confinement_loc']
 if config['variant_feature_confinement_prepend'] is None:
-   featureVariantFilterFile = (featureVariantFilterFile + '%s' + config['variant_feature_confinement_append']) % celltypes
+    formatted_path = f"{featureVariantFilterFile}%s{config['variant_feature_confinement_append']}" % celltypes
 else:
-   featureVariantFilterFile = (featureVariantFilterFile + config['variant_feature_confinement_prepend'] + '%s' + config['variant_feature_confinement_append']) % celltypes
+    formatted_path = f"{featureVariantFilterFile}{config['variant_feature_confinement_prepend']}%s{config['variant_feature_confinement_append']}" % celltypes
+featureVariantFilterFile = Path(formatted_path)
 
 # perform chunked analysis based on the chunks in the chunking file
 chunk_chrom, chunk_start, chunk_end=[], [], []
@@ -63,13 +69,12 @@ with open(chunkFile) as fp:
         chunk_end.append(re_match[3])
 
 # expand to get all chunks, which will have a .finished file when done
-qtlChunks=expand(outputFolder/"{iet}"/"qtl"/"{chrom}_{start}_{end}.finished", zip, chrom=chunk_chrom, start=chunk_start, end=chunk_end, allow_missing=True)
-
+qtlChunks=expand(Path(outputFolder, {iet}, "qtl", f"{chrom}_{start}_{end}.finished"), zip, chrom=chunk_chrom, start=chunk_start, end=chunk_end, allow_missing=True)
 
 rule all:
     input:
         expand(qtlChunks,iet=config["interaction_terms"]),
-        expand(outputFolder/"{iet}/iqtl_results_all.txt.gz", ct=celltypes, L2=config["interaction_terms"])
+        expand(outputFolder/"{iet}/iqtl_results_all.txt.gz", ct=celltypes, iet=config["interaction_terms"])
 
     output:
         touch(expand(outputFolder/"{iet}"/"done.txt", iet=config["interaction_terms"]))
@@ -90,7 +95,7 @@ rule run_qtl_mapping:
     priority:10
     params:
         od = str(outputFolder/"{iet}"/"qtl")+"/",
-        gen  = genotypeFile,
+        gen = lambda wildcards: Path(f"{config['genotype_loc']}{genotype_prepend}{wildcards.chrom}{config['genotype_append']}"),
         np = config["numberOfPermutations"],
         maf = config["minorAlleleFrequency"],
         hwe = config["hardyWeinbergCutoff"],
