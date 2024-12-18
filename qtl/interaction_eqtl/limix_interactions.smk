@@ -6,7 +6,7 @@ CHROM = ['1','2','3','4','5','6','7','8','9','10','11','12','13','14','15','16',
 # read configuration
 configfile: "./mo_interaction_template.yaml"
 includeDir = config["top_dir"]
-celltypes=config["celltypes"]
+celltypes=config["celltypes"][0]
 print(f"\n\nRunning pipeline for {celltypes} cells\n")
 scripts_folder = config['script_folder']
 wp3_image_loc = config['wp3_image_loc']
@@ -27,9 +27,16 @@ else:
 phenotypeFile = Path(formatted_path)
 
 # genotype data
-genotype_prepend = config['genotype_prepend']
-if genotype_prepend is None:
-    genotype_prepend = ''
+# genotype_prepend = config['genotype_prepend']
+# if genotype_prepend is None:
+#     genotype_prepend = ''
+genotypeFile = config["genotype_loc"]
+if config['genotype_prepend'] is None:
+    formatted_path = ''.join([genotypeFile, '{chrom}', config['genotype_append']])  # using {chrom} if genotype is split by chromosome
+else:
+    formatted_path = ''.join([genotypeFile, config['genotype_prepend'], '{chrom}', config['genotype_append']])  # using {chrom} if genotype is split by chromosome
+genotypeFile = Path(formatted_path)
+
 
 # covariates
 covariateFile = config['covariates_loc']
@@ -69,15 +76,15 @@ with open(chunkFile) as fp:
         chunk_end.append(re_match[3])
 
 # expand to get all chunks, which will have a .finished file when done
-qtlChunks=expand(Path(outputFolder, {iet}, "qtl", f"{chrom}_{start}_{end}.finished"), zip, chrom=chunk_chrom, start=chunk_start, end=chunk_end, allow_missing=True)
+qtlChunks=expand(Path(outputFolder, '{iet}', "qtl", "{chrom}_{start}_{end}.finished"), zip, chrom=chunk_chrom, start=chunk_start, end=chunk_end, allow_missing=True)
 
 rule all:
     input:
         expand(qtlChunks,iet=config["interaction_terms"]),
-        expand(outputFolder/"{iet}/iqtl_results_all.txt.gz", ct=celltypes, iet=config["interaction_terms"])
+        expand(Path(outputFolder,"{iet}","iqtl_results_all.txt.gz"), ct=celltypes, iet=config["interaction_terms"])
 
     output:
-        touch(expand(outputFolder/"{iet}"/"done.txt", iet=config["interaction_terms"]))
+        touch(expand(Path(outputFolder, "{iet}", "done.txt"), iet=config["interaction_terms"]))
 
 # run QTL for a chunk
 rule run_qtl_mapping:
@@ -91,11 +98,12 @@ rule run_qtl_mapping:
         #rf = config["randomeff_files"] if config["randomeff_files"]!='' else []
     output:
         #touch(outputFolder/"{ct}"/"qtl"/"{chrom}_{start}_{end}.finished")
-        touch(outputFolder/'{iet}/qtl/{chrom}_{start}_{end}.finished')
+        touch(Path(outputFolder, '{iet}', 'qtl', '{chrom}_{start}_{end}.finished'))
     priority:10
     params:
-        od = str(outputFolder/"{iet}"/"qtl")+"/",
-        gen = lambda wildcards: Path(f"{config['genotype_loc']}{genotype_prepend}{wildcards.chrom}{config['genotype_append']}"),
+        od = str(Path(outputFolder, "{iet}", "qtl"))+"/",
+        #gen = lambda wildcards: Path(f"{config['genotype_loc']}{genotype_prepend}{wildcards.chrom}{config['genotype_append']}"),
+        gen = genotypeFile,
         np = config["numberOfPermutations"],
         maf = config["minorAlleleFrequency"],
         hwe = config["hardyWeinbergCutoff"],
@@ -124,10 +132,10 @@ rule all_qtl:
     input:
         qtlChunks
     output:
-        outputFolder/"{iet}/iqtl_results_all.txt.gz"
+        Path(outputFolder, "{iet}", "iqtl_results_all.txt.gz")
     params:
-        idir = str(outputFolder/"{iet}"/"qtl")+"/",
-        odir = str(outputFolder/"{iet}")+"/"
+        idir = str(Path(outputFolder, "{iet}", "qtl"))+"/",
+        odir = str(Path(outputFolder, "{iet}"))+"/"
     shell:
         (limix_path + "post_processing/minimal_interaction_postprocess.py "
             " -id {params.idir} "
