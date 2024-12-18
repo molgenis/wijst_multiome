@@ -69,8 +69,8 @@ qtlChunks=expand(outputFolder/"{iet}"/"qtl"/"{chrom}_{start}_{end}.finished", zi
 rule all:
     input:
         expand(qtlChunks,iet=config["interaction_terms"]),
-        expand(outputFolder/"{ct}/{iet}/iqtl_results_all.txt.gz", ct=celltypes, L2=config["interaction_terms"])
-        
+        expand(outputFolder/"{iet}/iqtl_results_all.txt.gz", ct=celltypes, L2=config["interaction_terms"])
+
     output:
         touch(expand(outputFolder/"{iet}"/"done.txt", iet=config["interaction_terms"]))
 
@@ -119,10 +119,10 @@ rule all_qtl:
     input:
         qtlChunks
     output:
-        outputFolder/"{ct}/{iet}/iqtl_results_all.txt.gz"
+        outputFolder/"{iet}/iqtl_results_all.txt.gz"
     params:
-        idir = str(outputFolder/"{ct}/{iet}/qtl")+"/",
-        odir = str(outputFolder/"{ct}/{iet}")+"/"
+        idir = str(outputFolder/"{iet}"/"qtl")+"/",
+        odir = str(outputFolder/"{iet}")+"/"
     shell:
         (limix_path + "post_processing/minimal_interaction_postprocess.py "
             " -id {params.idir} "
