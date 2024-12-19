@@ -118,7 +118,9 @@ write_confinements <- function(significant_variant_gene_list, confinements_loc, 
     if (grepl('.gz$', file_loc_string)) {
       file_loc_out <- gzfile(file_loc_string)
     }
-    write.table(significant_variant_gene_list[[cell_type]], file_loc_out, row.names = F, col.names = F, sep = '\t', quote = F)
+    # set colnames
+    colnames(significant_variant_gene_list[[cell_type]]) <- c('snp_id', 'feature_id')
+    write.table(significant_variant_gene_list[[cell_type]], file_loc_out, row.names = F, col.names = T, sep = '\t', quote = F)
   }
 }
 

@@ -93,7 +93,7 @@ rule run_qtl_mapping:
         pf = phenotypeFile,
         smf = sampleMappingFile,
         cf = covariateFile,
-        kf = kinshipFile,
+        #kf = kinshipFile,
         fvf = featureVariantFilterFile
         #rf = config["randomeff_files"] if config["randomeff_files"]!='' else []
     output:
@@ -102,7 +102,7 @@ rule run_qtl_mapping:
     priority:10
     params:
         od = str(Path(outputFolder, "{iet}", "qtl"))+"/",
-        #gen = lambda wildcards: Path(f"{config['genotype_loc']}{genotype_prepend}{wildcards.chrom}{config['genotype_append']}"),
+        gen = lambda wildcards: Path(f"{config['genotype_loc']}{genotype_prepend}{wildcards.chrom}{config['genotype_append']}"),
         gen = genotypeFile,
         np = config["numberOfPermutations"],
         maf = config["minorAlleleFrequency"],
@@ -114,7 +114,7 @@ rule run_qtl_mapping:
             " -af {input.af} "
             " -cf {input.cf} "
             " -pf {input.pf} "
-            " -rf {input.kf} "
+            #" -rf {input.kf} "
             " -fvf {input.fvf} "
             " -smf {input.smf} "
             " -od {params.od}/ "
