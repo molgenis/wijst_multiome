@@ -50,34 +50,37 @@ create_mediation_table <- function(accessibility_table, expression_table, metada
   genotype <- genotypes$genotypes[metadata[['donor']], variant]
   # then to numeric
   genotype_numeric <- as(genotype, 'numeric')
-
+  
   # finally as vector
   genotype_vector <- as.vector(genotype_numeric[, 1])
   expression_vector <- as.vector(unlist(expression))
   accessibility_vector <- as.vector(unlist(accessibility))
-
+  
   # make into qtl table
   qtl_table <- data.frame('genotype' = genotype_vector, expression = expression_vector, accessibility = accessibility_vector)
   # get the complete cases
   qtl_complete_cases <- complete.cases(qtl_table)
   # merge complete qtl and metadata table
   mediation_table <- cbind(qtl_table[qtl_complete_cases, ], metadata[qtl_complete_cases, ])
-
+  
   return(mediation_table)
-
+  
 }
 
 
 perform_mediation_analysis <- function(mediation_table, formula_indirect1, formula_mediation, sims=1000) {
-  # set model
-  indirect_model1 <- NULL
-  indirect_model2 <- NULL
+  # set result
+  mediation_results <- NULL
   # build random
-  if (sum(grepl('\\|', as.character(formula_indirect1))) > 0) {
+  if (grepl('\\|', Reduce(paste, deparse(formula_indirect1)))) {
     ## First-part indirect effect model:
-    indirect_model1 <- do.call(what = 'glmer', list(formula = formula_indirect1, data = mediation_table, family = gaussian(link = "identity")))
+    indirect_model1 <- do.call(what = 'lmer', list(formula = formula_indirect1, data = mediation_table))
     ## Second-part direct + indirect effect model:
-    indirect_model2 <- do.call(what = 'glmer', list(formula = formula_mediation, data = mediation_table, family = gaussian(link = "identity")))
+    indirect_model2 <- do.call(what = 'lmer', list(formula = formula_mediation, data = mediation_table))
+    # warn about boostrap
+    warning(paste('cannot currently boostrap with random effects'))
+    ## Mediation analysis with 1000 simulations
+    mediation_results <- mediate(indirect_model1, indirect_model2, treat = 'genotype', mediator = 'accessibility', boot = F, sims = sims)
   }
   # or only linear
   else {
@@ -85,11 +88,9 @@ perform_mediation_analysis <- function(mediation_table, formula_indirect1, formu
     indirect_model1 <- do.call(what = 'glm', list(formula = formula_indirect1, data = mediation_table, family = gaussian(link = "identity")))
     ## Second-part direct + indirect effect model:
     indirect_model2 <- do.call(what = 'glm', list(formula = formula_mediation, data = mediation_table, family = gaussian(link = "identity")))
+    ## Mediation analysis with 1000 simulations
+    mediation_results <- mediate(indirect_model1, indirect_model2, treat = 'genotype', mediator = 'accessibility', boot = T, sims = sims)
   }
-
-  ## Mediation analysis with 1000 simulations
-  mediation_results <- mediate(indirect_model1, indirect_model2, treat = 'genotype', mediator = 'accessibility', boot = TRUE, sims = sims)
-
   return(mediation_results)
 }
 
@@ -98,16 +99,129 @@ mediate_all_effects <- function(accessibility, expression, metadata, genotypes, 
   # save result per set
   res_per_set <- apply(confinement, 1, function(x) {
     # get from the row
-    variant <- x[1]
-    region <- x[2]
-    gene <- x[3]
+    variant <- x[1][[1]]
+    region <- x[2][[1]]
+    gene <- x[3][[1]]
     # get the mediation table
     medation_table <- create_mediation_table(accessibility_table = accessibility, expression_table = expression, metadata = metadata, genotypes = genotypes, variant = variant, region = region, gene = gene)
     # do the mediation analysis
     med_result <- perform_mediation_analysis(mediation_table = medation_table, formula_indirect1 = form_indirect1, formula_mediation = form_indirect2)
+    # add extra information
+    med_result[['variant']] <- variant
+    med_result[['region']] <- region
+    med_result[['gene']] <- gene
     return(med_result)
   })
+  return(res_per_set)
 }
+
+
+medatiate_mer_to_table <- function(mediation_mer_object) {
+  # collect effects
+  coef_indirect <- mediation_mer_object$d1
+  coef_direct <- mediation_mer_object$z1
+  total_effect <- mediation_mer_object$tau.coef
+  prop_med <- mediation_mer_object$n1
+  # and p values
+  p_indirect <- mediation_mer_object$d1.p
+  p_direct <- mediation_mer_object$z1.p
+  p_total <- mediation_mer_object$tau.p
+  p_mediated <- mediation_mer_object$n1.p
+  
+  # get indirect formulas
+  formula_ind1 <- Reduce(paste, deparse(mediation_mer_object$model.m$formula))
+  formula_ind2 <- Reduce(paste, deparse(mediation_mer_object$model.y$formula))
+  # remove whitespace to make eventual tsv smaller
+  formula_ind1 <- gsub(' +', '', formula_ind1)
+  formula_ind2 <- gsub(' +', '', formula_ind2)
+  
+  # turn into a single-row table
+  row_mediation <- data.frame(
+    'variant' = c(mediation_mer_object[['variant']]), 
+    'accessibility' = c(mediation_mer_object[['region']]), 
+    'gene' = c(mediation_mer_object[['gene']]), 
+    'mediator' = c(mediation_mer_object$mediator), 
+    'p_mediated' = c(p_mediated), 
+    'prop_med' = c(prop_med), 
+    'p_total' = c(p_total), 
+    'total_effect' = c(total_effect), 
+    'p_direct' = c(p_direct), 
+    'coef_direct' = c(coef_direct), 
+    'p_indirect' = c(p_indirect), 
+    'coef_indirect' = c(coef_indirect), 
+    'form_indirect1' = c(formula_ind1), 
+    'form_indirect2' = c(formula_ind2)
+  )
+  return(row_mediation)
+}
+
+
+medatiate_to_table <- function(mediation_object) {
+  # collect effects
+  coef_indirect <- mediation_object$d1
+  coef_direct <- mediation_object$z1
+  total_effect <- mediation_object$tau.coef
+  prop_med <- mediation_object$n1
+  # and p values
+  p_indirect <- mediation_object$d1.p
+  p_direct <- mediation_object$z1.p
+  p_total <- mediation_object$tau.p
+  p_mediated <- mediation_object$n1.p
+  
+  # get indirect formulas
+  formula_ind1 <- Reduce(paste, deparse(summary(mediation_object$model.m)$call$formula))
+  formula_ind2 <- Reduce(paste, deparse(summary(mediation_object$model.y)$call$formula))
+  # remove whitespace to make eventual tsv smaller
+  formula_ind1 <- gsub(' +', '', formula_ind1)
+  formula_ind2 <- gsub(' +', '', formula_ind2)
+  
+  # turn into a single-row table
+  row_mediation <- data.frame(
+    'variant' = c(mediation_object[['variant']]), 
+    'accessibility' = c(mediation_object[['region']]), 
+    'gene' = c(mediation_object[['gene']]), 
+    'mediator' = c(mediation_object$mediator), 
+    'p_mediated' = c(p_mediated), 
+    'prop_med' = c(prop_med), 
+    'p_total' = c(p_total), 
+    'total_effect' = c(total_effect), 
+    'p_direct' = c(p_direct), 
+    'coef_direct' = c(coef_direct), 
+    'p_indirect' = c(p_indirect), 
+    'coef_indirect' = c(coef_indirect), 
+    'form_indirect1' = c(formula_ind1), 
+    'form_indirect2' = c(formula_ind2)
+  )
+  return(row_mediation)
+}
+
+
+mediation_to_tables <- function(mediation_results_list) {
+  # create a new list to store the rows of the converted objects
+  mediation_table_list <- list()
+  # check each mediation result
+  for (i in 1: length(mediation_results_list)) {
+    # get the mediation effect
+    med_effect <- mediation_results_list[[i]]
+
+    # init variable
+    row_mediation <- NULL
+    # depending on the class, we use a different function
+    if (attributes(med_effect)$class == 'mediate.mer') {
+      row_mediation <- medatiate_to_table(med_effect)
+    }
+    else if(attributes(med_effect)$class == 'mediate') {
+      row_mediation <- medatiate_mer_to_table(med_effect)
+    }
+    
+    # put into list
+    mediation_table_list[[i]] <- row_mediation
+  }
+  # make into one table
+  mediation_table <- do.call('rbind', mediation_table_list)
+  return(mediation_table)
+}
+
 
 filter_inputs <- function(inputs) {
   # load expression
@@ -132,24 +246,24 @@ filter_inputs <- function(inputs) {
   samples_accessibility <- intersect(colnames(accessibility), sample_to_donor[['sample']])
   # subset
   sample_to_donor <- sample_to_donor[sample_to_donor[['sample']] %in% samples_accessibility, ]
-
+  
   # subset genotypes
   genotypes$genotypes <- genotypes$genotypes[sample_to_donor[['donor']], ]
   genotypes$fam <-  genotypes$fam[rownames(genotypes$genotypes), ]
-
+  
   # filter expression
   expression <- expression[, .SD, .SDcols=c('feature', sample_to_donor[['sample']])]
   # filter accessibility
   accessibility <- accessibility[, .SD, .SDcols=c('feature', sample_to_donor[['sample']])]
   # and finally metadata
   metadata <- metadata[metadata[['sample']] %in% sample_to_donor[['sample']], ]
-
+  
   # put back into the list
   inputs[['expression']] <- expression
   inputs[['accessibility']] <- accessibility
   inputs[['genotypes']] <- genotypes_data
   inputs[['metadata']] <- metadata
-
+  
   return(inputs)
 }
 
@@ -161,39 +275,39 @@ load_inputs <- function(options) {
   expression <- cbind(data.frame('feature' = rownames(expression)), expression)
   # and turn into data.table
   expression <- data.table::data.table(expression)
-
+  
   # read the caqtl file
   accessibility <- read.table(options[['caqtl_file']], header = T, sep = '\t', check.names = F, row.names = 1)
   # set the feature name
   accessibility <- cbind(data.frame('feature' = rownames(accessibility)), accessibility)
   # and turn into data.table
   accessibility <- data.table::data.table(accessibility)
-
+  
   # read the confinement file
   confinement <- data.table::fread(options[['confinement_list']], header = F, sep = '\t', check.names = F)
 
   # subset the expression and accessibility
   accessibility <- accessibility[accessibility[['feature']] %in% confinement[[2]], ]
   expression <- expression[expression[['feature']] %in% confinement[[3]], ]
-
+  
   # read the bim
   variants_in_gt <- fread(paste(options[['genotype_file']], '.bim', sep = ''), header = F)[[2]]
-
+  
   # get overlapping variants
   overlapping_variants <- intersect(confinement[[1]], variants_in_gt)
   # read the genotypes, but only those in the file and in the confinement
   genotypes <- read.plink(
     bed = paste(options[['genotype_file']], '.bed', sep = ''),
     bim = paste(options[['genotype_file']], '.bim', sep = ''),
-    fam = paste(options[['genotype_file']], '.fam', sep = ''),
+    fam = paste(options[['genotype_file']], '.fam', sep = ''), 
     select.snps = overlapping_variants
   )
   # filter the confinement on the variants we have in the genotype data as well
   confinement <- confinement[confinement[[1]] %in% overlapping_variants, ]
-
+  
   # read the metadata
   metadata <- fread(options[['metadata']], header = T, sep  = '\t')
-
+  
   # get the fixed and random effects
   fixed_effects <- c()
   if (!is.null(options[['fixed_effects']])) {
@@ -205,20 +319,68 @@ load_inputs <- function(options) {
   }
   # create the formula
   #form_indirect1 <- get_formula('accessibility', c(fixed_effects, 'genotype'), random_effects)
-  form_indirect1 <- get_formula('accessibility', c('genotype'), c())
+  form_indirect1 <- get_formula('accessibility', c('genotype'), random_effects)
   form_indirect2 <- get_formula('expression', c('accessibility', fixed_effects, 'genotype'), random_effects)
   # return a list with each of the inputs
   inputs <- list(
-    'expression' = expression,
-    'accessibility' = accessibility,
-    'metadata' = metadata,
-    'confinement' = confinement,
-    'genotypes' = genotypes,
-    'form_indirect1' = form_indirect1,
-    'form_indirect2' = form_indirect2,
+    'expression' = expression, 
+    'accessibility' = accessibility, 
+    'metadata' = metadata, 
+    'confinement' = confinement, 
+    'genotypes' = genotypes, 
+    'form_indirect1' = form_indirect1, 
+    'form_indirect2' = form_indirect2, 
     'out' = options[['out']]
   )
   return(inputs)
+}
+
+
+run_full_analysis <- function(options, verbose=T) {
+  # get the inputs
+  if (verbose) {
+    message('loading inputs...')
+  }
+  inputs <- load_inputs(options)
+  # filter the inputs
+  if (verbose) {
+    message('filtering inputs...')
+  }
+  inputs <- filter_inputs(inputs)
+  # run each mediation
+  if (verbose) {
+    message('running mediation...')
+  }
+  mediation_results <- mediate_all_effects(
+    accessibility = inputs$accessibility, 
+    expression = inputs$expression, 
+    metadata = inputs$metadata, 
+    genotypes = inputs$genotypes, 
+    confinement = inputs$confinement, 
+    form_indirect1 = inputs$form_indirect1, 
+    form_indirect2 = inputs$form_indirect2)
+  # summarize results
+  if (verbose) {
+    message('summarizing results...')
+  }
+  mediation_table <- mediation_to_tables(mediation_results)
+  # write results
+  if (verbose) {
+    message('writing results...')
+  }
+  output_loc <- options[['out']]
+  # gz file ends with .gz
+  if (grepl('.gz$', output_loc)) {
+    # gzip if ends with .gz
+    output_loc <- gzfile(output_loc)
+  }
+  write.table(mediation_table, output_loc, sep = '\t', row.names = F, col.names = T, quote = F)
+  # also make a checksum
+  mdfiver::create_md5_for_file(options[['out']])
+  # say where done
+  if (verbose) {
+    message('done')
+  }
 }
 
 
@@ -230,14 +392,10 @@ do_debug <- function() {
   options_debug[['confinement_list']] <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/mediation/input/atac_to_expression/confinements/B.confinement.tsv.gz'
   options_debug[['metadata']] <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/mediation/input/atac_to_expression/metadata/B.metadata.tsv.gz'
   options_debug[['fixed_effects']] <- 'RNA_UT_PC1,RNA_UT_PC2,RNA_UT_PC3,RNA_UT_PC4,RNA_UT_PC5,RNA_UT_PC6,RNA_UT_PC7,RNA_UT_PC8,RNA_UT_PC9,RNA_UT_PC10'
-  #options_debug[['random_effects']] <- 'lane,donor
-  options_debug[['random_effects']] <- ''
-  options_debug[['out']] <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/mediation/output/atac_to_expression/'
-  # get the inputs
-  inputs <- load_inputs(options_debug)
-  # filter the inputs
-  inputs <- filter_inputs(inputs)
-  return(inputs)
+  options_debug[['random_effects']] <- 'donor'
+  #options_debug[['random_effects']] <- ''
+  options_debug[['out']] <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/mediation/output/atac_to_expression/UT/B.chr7.tsv.gz'
+  run_full_analysis(options_debug)
 }
 
 
@@ -250,11 +408,6 @@ options(future.globals.maxSize = 2000 * 1000 * 1024^2)
 
 # set seed
 set.seed(7777)
-
-# size of chunks to normalize
-chunk_size <- 5000000
-registerDoParallel(cores = 8)
-
 
 ####################
 # Main Code        #
@@ -283,3 +436,25 @@ option_list <- list(
 # initialize optparser
 opt_parser <- OptionParser(option_list=option_list)
 opt <- parse_args(opt_parser)
+
+# there are some things we cannot allow
+if (is.null(opt[['eqtl_file']])) {
+  stop('eQTL expression matrix file must be supplied')
+}
+if (is.null(opt[['caqtl_file']])) {
+  stop('caQTL expression matrix file must be supplied')
+}
+if (is.null(opt[['genotype_file']])) {
+  stop('genotype file must be supplied')
+}
+if (is.null(opt[['confinement_list']])) {
+  stop('confinement file must be supplied')
+}
+if (is.null(opt[['metadata']])) {
+  stop('metadata file must be supplied')
+}
+if (is.null(opt[['out']])) {
+  stop('output file must be supplied')
+}
+# do the pipeline
+run_full_analysis(opt)
