@@ -17,8 +17,8 @@ library(MEPS)
 library(bda)
 library(mediation)
 library(mdfiver)
-library(parallel)
-library(doParallel)
+# library(parallel)
+# library(doParallel)
 library(pbapply)
 
 ####################
