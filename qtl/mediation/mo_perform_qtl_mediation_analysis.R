@@ -16,6 +16,10 @@ library(lme4)
 library(MEPS)
 library(bda)
 library(mediation)
+library(mdfiver)
+library(parallel)
+library(doParallel)
+library(pbapply)
 
 ####################
 # Functions        #
@@ -95,9 +99,9 @@ perform_mediation_analysis <- function(mediation_table, formula_indirect1, formu
 }
 
 
-mediate_all_effects <- function(accessibility, expression, metadata, genotypes, confinement, form_indirect1, form_indirect2) {
+mediate_all_effects <- function(accessibility, expression, metadata, genotypes, confinement, form_indirect1, form_indirect2, cluster=NULL) {
   # save result per set
-  res_per_set <- apply(confinement, 1, function(x) {
+  res_per_set <- pbapply::pbapply(confinement, 1, function(x) {
     # get from the row
     variant <- x[1][[1]]
     region <- x[2][[1]]
@@ -111,7 +115,7 @@ mediate_all_effects <- function(accessibility, expression, metadata, genotypes, 
     med_result[['region']] <- region
     med_result[['gene']] <- gene
     return(med_result)
-  })
+  }, cl = cl)
   return(res_per_set)
 }
 
@@ -337,6 +341,9 @@ load_inputs <- function(options) {
 
 
 run_full_analysis <- function(options, verbose=T) {
+  # start multicore
+  cl <- makeCluster(options[['threads']])
+  registerDoParallel(cl)
   # get the inputs
   if (verbose) {
     message('loading inputs...')
@@ -358,7 +365,8 @@ run_full_analysis <- function(options, verbose=T) {
     genotypes = inputs$genotypes, 
     confinement = inputs$confinement, 
     form_indirect1 = inputs$form_indirect1, 
-    form_indirect2 = inputs$form_indirect2)
+    form_indirect2 = inputs$form_indirect2, 
+    cluster = cl)
   # summarize results
   if (verbose) {
     message('summarizing results...')
@@ -381,20 +389,22 @@ run_full_analysis <- function(options, verbose=T) {
   if (verbose) {
     message('done')
   }
+  return(0)
 }
 
 
 do_debug <- function() {
   options_debug <- list()
-  options_debug[['eqtl_file']] <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/sc-eqtlgen/input/L1/UT/B.qtlInput.txt.gz'
-  options_debug[['caqtl_file']] <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/L1/UT/B.qtlInput.txt.gz'
+  options_debug[['eqtl_file']] <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/sc-eqtlgen/input/L1/UT/monocyte.qtlInput.txt.gz'
+  options_debug[['caqtl_file']] <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/L1/UT/monocyte.qtlInput.txt.gz'
   options_debug[['genotype_file']] <- '/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/genotype_input/EUR_imputed_hg38_varFiltered_chr7'
-  options_debug[['confinement_list']] <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/mediation/input/atac_to_expression/confinements/B.confinement.tsv.gz'
-  options_debug[['metadata']] <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/mediation/input/atac_to_expression/metadata/B.metadata.tsv.gz'
+  options_debug[['confinement_list']] <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/mediation/input/atac_to_expression/confinements/monocyte.confinement.tsv.gz'
+  options_debug[['metadata']] <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/mediation/input/atac_to_expression/metadata/monocyte.metadata.tsv.gz'
   options_debug[['fixed_effects']] <- 'RNA_UT_PC1,RNA_UT_PC2,RNA_UT_PC3,RNA_UT_PC4,RNA_UT_PC5,RNA_UT_PC6,RNA_UT_PC7,RNA_UT_PC8,RNA_UT_PC9,RNA_UT_PC10'
   options_debug[['random_effects']] <- 'donor'
   #options_debug[['random_effects']] <- ''
-  options_debug[['out']] <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/mediation/output/atac_to_expression/UT/B.chr7.tsv.gz'
+  options_debug[['out']] <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/mediation/output/atac_to_expression/UT/monocyte.chr7.tsv.gz'
+  options_debug[['threads']] <- 4
   run_full_analysis(options_debug)
 }
 
@@ -430,7 +440,9 @@ option_list <- list(
   make_option(c("-r", "--random_effects"), type="character", default=NULL,
               help="comman separated list of random effects to correct for [default= %default]", metavar="character"),
   make_option(c("-o", "--out"), type="character", default=NULL,
-              help="output location of analysis [default= %default]", metavar="character")
+              help="output location of analysis [default= %default]", metavar="character"), 
+  make_option(c("-t", "--threads"), type="numeric", default=1,
+              help="number of threads to use [default= %default]", metavar="numeric")
 )
 
 # initialize optparser
@@ -456,5 +468,6 @@ if (is.null(opt[['metadata']])) {
 if (is.null(opt[['out']])) {
   stop('output file must be supplied')
 }
+
 # do the pipeline
 run_full_analysis(opt)

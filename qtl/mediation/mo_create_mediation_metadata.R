@@ -109,7 +109,7 @@ pcs_atac_24hca_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing
 metadata_per_celltype <- add_covariates_each_celltype(metadata_per_celltype, pcs_exp_joint_loc, covariates_prepend_to_add = 'RNA_J_')
 metadata_per_celltype <- add_covariates_each_celltype(metadata_per_celltype, pcs_atac_joint_loc, covariates_prepend_to_add = 'ATAC_J_')
 metadata_per_celltype <- add_covariates_each_celltype(metadata_per_celltype, pcs_exp_ut_loc, covariates_prepend_to_add = 'RNA_UT_')
-metadata_per_celltype <- add_covariates_each_celltype(metadata_per_celltype, pcs_exp_24hca_loc, covariates_prepend_to_add = 'RNA_24hCA_')
+metadata_per_celltype <- add_covariates_each_celltype(metadata_per_celltype, pcs_exp_24hca_loc, covariates_prepend_to_add = 'RNA_24hCA_', covariates_file_append = '.qtlInput.Pcs.txt')
 metadata_per_celltype <- add_covariates_each_celltype(metadata_per_celltype, pcs_atac_ut_loc, covariates_prepend_to_add = 'ATAC_UT_', covariates_file_append = '.qtlInput.Pcs.txt')
 metadata_per_celltype <- add_covariates_each_celltype(metadata_per_celltype, pcs_atac_24hca_loc, covariates_prepend_to_add = 'ATAC_24hCA_', covariates_file_append = '.qtlInput.Pcs.txt')
 
@@ -117,8 +117,8 @@ metadata_per_celltype <- add_covariates_each_celltype(metadata_per_celltype, pcs
 metadata_tables_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/mediation/input/atac_to_expression/metadata/'
 for (cell_type in names(metadata_per_celltype)) {
   write.table(
-    metadata_per_celltype[[cell_type]],
-    gzfile(paste(metadata_tables_loc, cell_type, '.metadata.tsv.gz', sep = '')),
+    metadata_per_celltype[[cell_type]], 
+    gzfile(paste(metadata_tables_loc, cell_type, '.metadata.tsv.gz', sep = '')), 
     row.names = F, col.names = T, sep = '\t'
   )
 }
