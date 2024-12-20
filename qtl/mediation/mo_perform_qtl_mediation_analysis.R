@@ -115,7 +115,7 @@ mediate_all_effects <- function(accessibility, expression, metadata, genotypes, 
     med_result[['region']] <- region
     med_result[['gene']] <- gene
     return(med_result)
-  }, cl = cl)
+  })
   return(res_per_set)
 }
 
@@ -342,8 +342,8 @@ load_inputs <- function(options) {
 
 run_full_analysis <- function(options, verbose=T) {
   # start multicore
-  cl <- makeCluster(options[['threads']])
-  registerDoParallel(cl)
+  # cl <- makeCluster(options[['threads']])
+  # registerDoParallel(cl)
   # get the inputs
   if (verbose) {
     message('loading inputs...')
@@ -366,7 +366,8 @@ run_full_analysis <- function(options, verbose=T) {
     confinement = inputs$confinement, 
     form_indirect1 = inputs$form_indirect1, 
     form_indirect2 = inputs$form_indirect2, 
-    cluster = cl)
+    # cluster = cl)
+    cluster = NULL)
   # summarize results
   if (verbose) {
     message('summarizing results...')
@@ -440,9 +441,9 @@ option_list <- list(
   make_option(c("-r", "--random_effects"), type="character", default=NULL,
               help="comman separated list of random effects to correct for [default= %default]", metavar="character"),
   make_option(c("-o", "--out"), type="character", default=NULL,
-              help="output location of analysis [default= %default]", metavar="character"), 
-  make_option(c("-t", "--threads"), type="numeric", default=1,
-              help="number of threads to use [default= %default]", metavar="numeric")
+              help="output location of analysis [default= %default]", metavar="character") 
+  # make_option(c("-t", "--threads"), type="numeric", default=1,
+  #             help="number of threads to use [default= %default]", metavar="numeric")
 )
 
 # initialize optparser
