@@ -91,12 +91,13 @@ do
 '> ${job_loc}
         # build the command
         run_command=${R_COMMAND}'
+        '${SCRIPT_LOC}'
         --eqtl_file '${exp_loc}'
         --caqtl_file '${acc_loc}'
         --genotype_file '${geno_loc}'
         --metadata '${mtdt_loc}'
         --fixed_effects '${FIXED_EFFECTS}'
-        --random_effects '${RANDOM_EFFECTS}' 
+        --random_effects '${RANDOM_EFFECTS}'
         --out '${out_loc}
 
         # add to the job
