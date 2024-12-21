@@ -240,7 +240,7 @@ filter_inputs <- function(inputs) {
   # get the table of sample to genotype
   sample_to_donor <- metadata[, c('sample', 'donor')]
   # get whom we have the genotypes for
-  samples_genotypes <- intersect(rownames(genotypes$genotypes), sample_to_donor[['donor']])
+  samples_genotypes <- intersect(rownames(genotypes_data$genotypes), sample_to_donor[['donor']])
   # subset
   sample_to_donor <- sample_to_donor[sample_to_donor[['donor']] %in% samples_genotypes, ]
   # get whom we have expression data for
@@ -253,8 +253,8 @@ filter_inputs <- function(inputs) {
   sample_to_donor <- sample_to_donor[sample_to_donor[['sample']] %in% samples_accessibility, ]
   
   # subset genotypes
-  genotypes$genotypes <- genotypes$genotypes[sample_to_donor[['donor']], ]
-  genotypes$fam <-  genotypes$fam[rownames(genotypes$genotypes), ]
+  genotypes_data$genotypes <- genotypes_data$genotypes[sample_to_donor[['donor']], ]
+  genotypes_data$fam <-  genotypes_data$fam[rownames(genotypes_data$genotypes), ]
   
   # filter expression
   expression <- expression[, .SD, .SDcols=c('feature', sample_to_donor[['sample']])]

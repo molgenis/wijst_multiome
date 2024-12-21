@@ -98,6 +98,7 @@ do
         --metadata '${mtdt_loc}'
         --fixed_effects '${FIXED_EFFECTS}'
         --random_effects '${RANDOM_EFFECTS}'
+        --confinement_list '${confine_loc}'
         --out '${out_loc}
 
         # add to the job
