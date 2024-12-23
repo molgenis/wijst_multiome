@@ -9,24 +9,40 @@
 # libraries        #
 ####################
 
-
+# for tables, much faster than data.frame and matrix
 library(data.table)
+# for plink file loading
 library(snpStats)
+# for regression models
 library(lme4)
+# mediation dependencies for bootstrap methods
 library(MEPS)
 library(bda)
 library(mediation)
+# for automatic md5 file creation
 library(mdfiver)
+# for multithreading
 # library(parallel)
 # library(doParallel)
+# show progress
 library(pbapply)
+# parse command line arguments
 library(optparse)
 
 ####################
 # Functions        #
 ####################
 
-
+#' Create a formula for mixed-effects models
+#'
+#' This function generates a formula for mixed-effects models based on the specified variable of interest, fixed effects, and random effects.
+#'
+#' @param var_of_interest A character string representing the dependent variable.
+#' @param fixed_effects A character vector of fixed effect variables.
+#' @param random_effects A character vector of random effect variables.
+#' @return A formula object for use in mixed-effects models.
+#' @examples
+#' get_formula("y", c("x1", "x2"), c("group"))
 get_formula <- function(var_of_interest, fixed_effects, random_effects) {
   # make the formula
   formula_string <- paste(var_of_interest, '~ 0 ', sep = ' ')
@@ -46,6 +62,20 @@ get_formula <- function(var_of_interest, fixed_effects, random_effects) {
 }
 
 
+#' Create a mediation table for QTL analysis
+#'
+#' This function generates a mediation table for quantitative trait loci (QTL) analysis by combining accessibility, expression, and genotype data with metadata.
+#'
+#' @param accessibility_table A data.table containing accessibility data.
+#' @param expression_table A data.table containing expression data.
+#' @param metadata A data.table containing metadata with sample information.
+#' @param genotypes A list containing genotype data.
+#' @param variant A character string representing the variant of interest.
+#' @param region A character string representing the region of interest.
+#' @param gene A character string representing the gene of interest.
+#' @return A data.frame containing the mediation table for QTL analysis.
+#' @examples
+#' create_mediation_table(accessibility_table, expression_table, metadata, genotypes, "rs12345", "chr1:1000-2000", "GENE1")
 create_mediation_table <- function(accessibility_table, expression_table, metadata, genotypes, variant, region, gene) {
   # extract the expression
   expression <- expression_table[expression_table$feature == gene, .SD, .SDcols = metadata[['sample']]]
@@ -69,10 +99,20 @@ create_mediation_table <- function(accessibility_table, expression_table, metada
   mediation_table <- cbind(qtl_table[qtl_complete_cases, ], metadata[qtl_complete_cases, ])
   
   return(mediation_table)
-  
 }
 
 
+#' Perform mediation analysis
+#'
+#' This function conducts a mediation analysis using either linear models or mixed-effects models, depending on the presence of random effects in the formula.
+#'
+#' @param mediation_table A data.frame containing the mediation data.
+#' @param formula_indirect1 A formula for the first part of the indirect effect model.
+#' @param formula_mediation A formula for the direct and indirect effect model.
+#' @param sims An integer specifying the number of simulations for the mediation analysis. Default is 1000.
+#' @return An object of class \code{mediate} containing the results of the mediation analysis.
+#' @examples
+#' perform_mediation_analysis(mediation_table, formula_indirect1, formula_mediation, sims = 1000)
 perform_mediation_analysis <- function(mediation_table, formula_indirect1, formula_mediation, sims=1000) {
   # set result
   mediation_results <- NULL
@@ -100,6 +140,21 @@ perform_mediation_analysis <- function(mediation_table, formula_indirect1, formu
 }
 
 
+#' Mediate all effects for a set of variants, regions, and genes
+#'
+#' This function performs mediation analysis for a set of variants, regions, and genes by combining accessibility, expression, and genotype data with metadata.
+#'
+#' @param accessibility A data.table containing accessibility data.
+#' @param expression A data.table containing expression data.
+#' @param metadata A data.table containing metadata with sample information.
+#' @param genotypes A list containing genotype data.
+#' @param confinement A data.table or matrix where each row specifies a variant, region, and gene.
+#' @param form_indirect1 A formula for the first part of the indirect effect model.
+#' @param form_indirect2 A formula for the direct and indirect effect model.
+#' @param cluster An optional parameter for parallel processing (default is NULL).
+#' @return A list of mediation analysis results for each set of variant, region, and gene.
+#' @examples
+#' mediate_all_effects(accessibility, expression, metadata, genotypes, confinement, form_indirect1, form_indirect2)
 mediate_all_effects <- function(accessibility, expression, metadata, genotypes, confinement, form_indirect1, form_indirect2, cluster=NULL) {
   # save result per set
   res_per_set <- pbapply::pbapply(confinement, 1, function(x) {
@@ -161,6 +216,14 @@ medatiate_mer_to_table <- function(mediation_mer_object) {
 }
 
 
+#' Convert mediation analysis results to a table
+#'
+#' This function converts the results of a mediation analysis into a single-row data.frame for easy export and further analysis.
+#'
+#' @param mediation_mer_object An object containing the results of the mediation analysis.
+#' @return A data.frame containing the mediation analysis results, including coefficients, p-values, and formulas.
+#' @examples
+#' medatiate_mer_to_table(mediation_mer_object)
 medatiate_to_table <- function(mediation_object) {
   # collect effects
   coef_indirect <- mediation_object$d1
@@ -201,6 +264,14 @@ medatiate_to_table <- function(mediation_object) {
 }
 
 
+#' Convert a list of mediation results to a single table
+#'
+#' This function processes a list of mediation analysis results and converts them into a single data.frame for easy export and further analysis.
+#'
+#' @param mediation_results_list A list of mediation analysis results.
+#' @return A data.frame containing the combined mediation analysis results.
+#' @examples
+#' mediation_to_tables(mediation_results_list)
 mediation_to_tables <- function(mediation_results_list) {
   # create a new list to store the rows of the converted objects
   mediation_table_list <- list()
@@ -228,6 +299,14 @@ mediation_to_tables <- function(mediation_results_list) {
 }
 
 
+#' Filter input data for mediation analysis
+#'
+#' This function filters the input data to ensure that only samples with complete data across expression, accessibility, and genotype datasets are retained.
+#'
+#' @param inputs A list containing the input data: expression, accessibility, metadata, and genotypes.
+#' @return A list with the filtered input data.
+#' @examples
+#' filtered_inputs <- filter_inputs(inputs)
 filter_inputs <- function(inputs) {
   # load expression
   expression <- inputs[['expression']]
@@ -273,6 +352,24 @@ filter_inputs <- function(inputs) {
 }
 
 
+#' Load and preprocess input data for mediation analysis
+#'
+#' This function reads and preprocesses the input data files required for mediation analysis, including expression, accessibility, metadata, and genotype data.
+#'
+#' @param options A list of options specifying the file paths and other parameters.
+#' @return A list containing the preprocessed input data.
+#' @examples
+#' options <- list(
+#'   eqtl_file = "path/to/eqtl_file.txt",
+#'   caqtl_file = "path/to/caqtl_file.txt",
+#'   confinement_list = "path/to/confinement_list.txt",
+#'   genotype_file = "path/to/genotype_file",
+#'   metadata = "path/to/metadata.txt",
+#'   fixed_effects = "effect1,effect2",
+#'   random_effects = "effect3,effect4",
+#'   out = "output_directory"
+#' )
+#' inputs <- load_inputs(options)
 load_inputs <- function(options) {
   # read the eqtl file
   expression <- read.table(options[['eqtl_file']], header = T, sep = '\t', check.names = F, row.names = 1)
@@ -341,6 +438,26 @@ load_inputs <- function(options) {
 }
 
 
+#' Run the full mediation analysis pipeline
+#'
+#' This function runs the entire mediation analysis pipeline, including loading inputs, filtering data, performing mediation analysis, summarizing results, and writing the output.
+#'
+#' @param options A list of options specifying the file paths and other parameters.
+#' @param verbose A logical value indicating whether to print progress messages. Default is TRUE.
+#' @return An integer value indicating the success of the function (0 for success).
+#' @examples
+#' options <- list(
+#'   eqtl_file = "path/to/eqtl_file.txt",
+#'   caqtl_file = "path/to/caqtl_file.txt",
+#'   confinement_list = "path/to/confinement_list.txt",
+#'   genotype_file = "path/to/genotype_file",
+#'   metadata = "path/to/metadata.txt",
+#'   fixed_effects = "effect1,effect2",
+#'   random_effects = "effect3,effect4",
+#'   out = "output_directory",
+#'   threads = 4
+#' )
+#' run_full_analysis(options, verbose = TRUE)
 run_full_analysis <- function(options, verbose=T) {
   # start multicore
   # cl <- makeCluster(options[['threads']])
@@ -395,6 +512,13 @@ run_full_analysis <- function(options, verbose=T) {
 }
 
 
+#' Run a debug version of the full mediation analysis pipeline
+#'
+#' This function sets up and runs a debug version of the full mediation analysis pipeline with predefined options.
+#'
+#' @return An integer value indicating the success of the function (0 for success).
+#' @examples
+#' do_debug()
 do_debug <- function() {
   options_debug <- list()
   options_debug[['eqtl_file']] <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/sc-eqtlgen/input/L1/UT/monocyte.qtlInput.txt.gz'
