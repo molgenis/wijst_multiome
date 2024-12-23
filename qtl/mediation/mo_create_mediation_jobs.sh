@@ -72,9 +72,9 @@ do
         geno_loc=${GENO_PREPEND}${chrom}
         out_loc=${OUT_PREPEND}${cell_type}'_chr'${chrom}${OUT_APPEND}
         job_loc=${JOB_PREPEND}${cell_type}'_chr'${chrom}${JOB_APPEND}
-        job_name=${JOB_PREPEND}${cell_type}'_chr'${chrom}
-        job_out=${job_name}'.out'
-        job_err=${job_name}'.err'
+        job_name=${cell_type}'_chr'${chrom}
+        job_out=${JOB_PREPEND}${job_name}'.out'
+        job_err=${JOB_PREPEND}${job_name}'.err'
         # echo the header
         echo '#!/bin/bash
 #SBATCH --job-name='${job_name}'

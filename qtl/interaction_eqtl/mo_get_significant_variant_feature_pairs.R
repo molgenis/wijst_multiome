@@ -145,3 +145,11 @@ eqtl_var_feature_celltypes <- get_significant_pairs_per_celltype_merged_conditio
 confinement_eqt_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/confinements/'
 # write them
 write_confinements(eqtl_var_feature_celltypes, confinement_eqt_loc)
+
+
+# get the var-feature links for caQTL cell types
+caqtl_results_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/output_to_sigs/L1/'
+caqtl_var_feature_celltypes <- get_significant_pairs_per_celltype_merged_conditions(caqtl_results_loc, qtl_prepend = '', qtl_append = '.tsv', significance_list=list())
+# write the confinements
+confinement_caqtl_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_caqtl/sc-eqtlgen/confinements/'
+write_confinements(caqtl_var_feature_celltypes, confinement_caqtl_loc)
