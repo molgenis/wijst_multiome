@@ -28,7 +28,8 @@ EXP_APPEND='.qtlInput.txt.gz'
 # accessibility file prepend before cell type
 ATAC_PREPEND='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/L1/UT/'
 # accessibility file append after cell type
-ATAC_APPEND='.qtlInput.txt.gz'
+#ATAC_APPEND='.qtlInput.txt.gz'
+ATAC_APPEND='.qtlInput.PcCorrectedResiduals.txt.gz'
 # confinement file prepend before cell type
 CONFINE_PREPEND='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/mediation/input/atac_to_expression/confinements/'
 # confinement file append after cell type
@@ -38,11 +39,13 @@ METADATA_PREPEND='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/
 # metadata file append after cell type
 METADATA_APPEND='.metadata.tsv.gz'
 # output file prepend before cell type
-OUT_PREPEND='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/mediation/output/atac_to_expression/UT/'
+#OUT_PREPEND='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/mediation/output/atac_to_expression/UT/'
+OUT_PREPEND='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/mediation/output/regressed_atac_to_expression/UT/'
 # output file append after cell type
 OUT_APPEND='.tsv.gz'
 # output file prepend before cell type
-JOB_PREPEND='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/mediation/jobs/atac_to_expression/UT/'
+#JOB_PREPEND='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/mediation/jobs/atac_to_expression/UT/'
+JOB_PREPEND='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/mediation/jobs/regressed_atac_to_expression/UT/'
 # output file append after cell type
 JOB_APPEND='_SBATCH.sh'
 
