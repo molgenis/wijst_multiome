@@ -393,6 +393,16 @@ filter_inputs <- function(inputs) {
   # and finally metadata
   metadata <- metadata[metadata[['sample']] %in% sample_to_donor[['sample']], ]
   
+  # do Yeo-Johnson transformation to get a gaussian distribution per feature, if requested
+  if (inputs[['caqtl_gausnorm']]) {
+    message('performing Yeo-Johnson transformation on accessibility data')
+    accessibility <- gausnorm_independent_variable_matrix(accessibility)
+  }
+  if (inputs[['eqtl_gausnorm']]) {
+    message('performing Yeo-Johnson transformation on expression data')
+    expression <- gausnorm_independent_variable_matrix(expression)
+  }
+
   # put back into the list
   inputs[['expression']] <- expression
   inputs[['accessibility']] <- accessibility
@@ -483,7 +493,9 @@ load_inputs <- function(options) {
     'genotypes' = genotypes, 
     'form_indirect1' = form_indirect1, 
     'form_indirect2' = form_indirect2, 
-    'out' = options[['out']]
+    'out' = options[['out']], 
+    'caqtl_gausnorm' = options[['caqtl_gausnorm']], 
+    'eqtl_gausnorm' = options[['eqtl_gausnorm']]
   )
   return(inputs)
 }
@@ -582,6 +594,8 @@ do_debug <- function() {
   #options_debug[['random_effects']] <- ''
   options_debug[['out']] <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/mediation/output/atac_to_expression/UT/monocyte.chr7.tsv.gz'
   options_debug[['threads']] <- 4
+  options_debug[['caqtl_gausnorm']] <- F
+  options_debug[['eqtl_gausnorm']] <- T
   run_full_analysis(options_debug)
 }
 
@@ -617,7 +631,11 @@ option_list <- list(
   make_option(c("-r", "--random_effects"), type="character", default=NULL,
               help="comman separated list of random effects to correct for [default= %default]", metavar="character"),
   make_option(c("-o", "--out"), type="character", default=NULL,
-              help="output location of analysis [default= %default]", metavar="character") 
+              help="output location of analysis [default= %default]", metavar="character"), 
+  make_option(c("-a", "--caqtl_gausnorm"), action="store_true", default=FALSE,
+              help="Apply the yeo-johnson transformation on aggregated accessibility before modelling [default: %default]"), 
+  make_option(c("-q", "--eqtl_gausnorm"), action="store_true", default=FALSE,
+              help="Apply the yeo-johnson transformation on aggregated expression before modelling [default: %default]")
   # make_option(c("-t", "--threads"), type="numeric", default=1,
   #             help="number of threads to use [default= %default]", metavar="numeric")
 )
