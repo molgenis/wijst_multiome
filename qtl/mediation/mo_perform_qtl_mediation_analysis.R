@@ -19,6 +19,8 @@ library(lme4)
 library(MEPS)
 library(bda)
 library(mediation)
+# transformation into gaussian normal distribution
+library(bestNormalize)
 # for automatic md5 file creation
 library(mdfiver)
 # for multithreading
@@ -296,6 +298,55 @@ mediation_to_tables <- function(mediation_results_list) {
   # make into one table
   mediation_table <- do.call('rbind', mediation_table_list)
   return(mediation_table)
+}
+
+
+#' Transform Independent Variable Matrix Using Yeo-Johnson Transformation
+#'
+#' This function applies the Yeo-Johnson transformation to the numeric columns of an independent variable matrix.
+#' The feature ID column is preserved and reattached to the transformed data.
+#'
+#' @param independent_variable_matrix A data.table containing the independent variables. The columns represent different donors.
+#' @param feature_id_column A character string specifying the column name that contains the feature IDs. Default is 'feature'.
+#'
+#' @return A data.table with the transformed numeric columns and the feature ID column reattached.
+#'
+#' @examples
+#' \dontrun{
+#' library(data.table)
+#' library(car)
+#' dt <- data.table(feature = c('A', 'B', 'C'), donor1 = c(1, 2, 3), donor2 = c(4, 5, 6))
+#' transformed_dt <- gausnorm_independent_variable_matrix(dt, 'feature')
+#' print(transformed_dt)
+#' }
+#'
+gausnorm_independent_variable_matrix <- function(independent_variable_matrix, feature_id_column='feature') {
+  # take the features
+  features <- independent_variable_matrix[[feature_id_column]]
+  # remove the feature ID
+  independent_variable_matrix[[feature_id_column]] <- NULL
+  # take the donor names, as they are the columns
+  colnames_original <- colnames(independent_variable_matrix)
+  # transpose the matrix, as we'll do this on a per-column basis
+  transformed_data <- as.data.table(
+    lapply(independent_variable_matrix, function(x) {
+      if (is.numeric(x)) {
+        yeojohnson(x)$x.t
+      }
+      else {
+        x
+      }
+    })
+  )
+  # add back the donor names
+  colnames(transformed_data) <- colnames_original
+  # make the features as a data.table as well
+  features_column <- data.table(x = features)
+  # with the right column name
+  colnames(features_column) <- feature_id_column
+  # and merge the feature column back onto the data
+  transformed_data <- cbind(features_column, transformed_data)
+  return(transformed_data)
 }
 
 
