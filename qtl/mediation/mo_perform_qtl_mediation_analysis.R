@@ -281,7 +281,7 @@ mediation_to_tables <- function(mediation_results_list) {
   for (i in 1: length(mediation_results_list)) {
     # get the mediation effect
     med_effect <- mediation_results_list[[i]]
-
+    
     # init variable
     row_mediation <- NULL
     # depending on the class, we use a different function
@@ -402,7 +402,7 @@ filter_inputs <- function(inputs) {
     message('performing Yeo-Johnson transformation on expression data')
     expression <- gausnorm_independent_variable_matrix(expression)
   }
-
+  
   # put back into the list
   inputs[['expression']] <- expression
   inputs[['accessibility']] <- accessibility
@@ -448,7 +448,7 @@ load_inputs <- function(options) {
   
   # read the confinement file
   confinement <- data.table::fread(options[['confinement_list']], header = F, sep = '\t', check.names = F)
-
+  
   # subset the expression and accessibility
   accessibility <- accessibility[accessibility[['feature']] %in% confinement[[2]], ]
   expression <- expression[expression[['feature']] %in% confinement[[3]], ]
@@ -592,7 +592,7 @@ do_debug <- function() {
   options_debug[['fixed_effects']] <- 'RNA_UT_PC1,RNA_UT_PC2,RNA_UT_PC3,RNA_UT_PC4,RNA_UT_PC5,RNA_UT_PC6,RNA_UT_PC7,RNA_UT_PC8,RNA_UT_PC9,RNA_UT_PC10'
   options_debug[['random_effects']] <- 'donor'
   #options_debug[['random_effects']] <- ''
-  options_debug[['out']] <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/mediation/output/atac_to_expression/UT/monocyte.chr7.tsv.gz'
+  options_debug[['out']] <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/mediation/output/atac_to_gaussed_expression/UT/monocyte.chr7.tsv.gz'
   options_debug[['threads']] <- 4
   options_debug[['caqtl_gausnorm']] <- F
   options_debug[['eqtl_gausnorm']] <- T
