@@ -51,7 +51,7 @@ Below we will outline the steps taken to process and analyse the data
 '*demultiplexing/mo_correlate_genotypes.R*'     correlate the Souporcell cluster genotypes to the genotypes generated for the individuals, to do sample assignment\
 '*demultiplexing/mo_plot_demultiplexing_assignments.Rmd*'   plot the demultiplexing assignments\
 '*demultiplexing/mo_sample_assignment.R*'   do sample assignment on the Seurat object, based on the correlated souporcell genotypes\
-'*demultiplexing/mo_get_rna_qced_barcodes.R*'   extract the valid barcodes in the Seurat object\
+'*demultiplexing/mo_get_rna_qced_barcodes.R*'   extract the valid barcodes in the Seurat object
 
 
 ### scanpy preprocess
@@ -114,6 +114,18 @@ Below we will outline the steps taken to process and analyse the data
 '*cpeaks_preprocess_samples/mo_multimodal_clustering.R*'    perform PCA, knn-clustering and 2d UMAP using both modalities separately, and together
 
 
+### ArchR ATAC data processing
+'*archr_preprocess_samples/build-arrowfiles.R*' create Arrow files to use in archR\
+'*archr_preprocess_samples/build-project.R*'  create ArchR project from Arrow chunk_files\
+'*archr_preprocess_samples/batch_correction.R*'  do batch correction over all lanes (unfortunately names 'sample' in ArchR)\
+'*archr_preprocess_samples/preprocess.R*'  perform preprocesing to remove low-quality nuclei and doublets\
+'*archr_preprocess_samples/iterative-LSI.R*'  perform dimension reduction and clustering\
+'*archr_preprocess_samples/iterative-LSI.R*'  perform dimension reduction and clustering\
+'*archr_preprocess_samples/addMetadata_subset_celltypes.R*' add celltype annotation from Seurat to ArchR project\
+'*archr_preprocess_samples/imputeCelltypes.R*' impute missing celltypes for nuclei, based on Seurat annotation clusters (majority vote)\
+'*archr_preprocess_samples/peakCalling.R*' perform peak calling based on celltypes assigned
+
+
 ### ATAC data versus other datasets
 '*atac_replication/mo_download_ihec.sh*'    download data from ihec to compare ATAC data from this dataset against other ones\
 '*atac_replication/mo_ihec_bigbed_to_bed.sh*'   convert bigbed files to bed files from ihec
@@ -128,10 +140,8 @@ Below we will outline the steps taken to process and analyse the data
 '*differential_accessibility/mo_differential_accessibility_limma_add_perm_fdr.R*'   add permutation-based FDR to the DAR identification step\
 '*differential_accessibility/mo_annotate_limma_dar_output.R*'   add closest gene annotation to DAR output\
 '*differential_accessibility/mo_analyse_dar_output.Rmd*'    analyse the DAR output from limma
-
 '*differential_accessibility/mo_compare_imputed_nonimputed.ipynb*'  compare the imputed vs the non-imputed count matrices\
 '*differential_accessibility/mo_check_pycistopic_imputations.R*'  compare the imputed vs the non-imputed count matrices
-
 '*differential_accessibility/mo_export_imputed_pycistopic_matrices.ipynb*'  perform imputation in pycistopic and extract the imputed count matrices\
 '*differential_accessibility/mo_extract_topic_memberships.ipynb*'  extract the topic membership of each cell from pycistopic and export that to a table\
 '*differential_accessibility/mo_differential_accessibility_topics.R*'  use limma to identify DARs across topics\
@@ -142,15 +152,20 @@ Below we will outline the steps taken to process and analyse the data
 
 
 ### CRE detection
-'*cre_detection/mo_cistarget.ipynb*'  run pycistarget and DEM to identify overrepresented motifs in the DARs
+'*cre_detection/mo_cistarget.ipynb*'  run pycistarget and DEM to identify overrepresented motifs in the DARs\
+'*cre_detection/mo_deconstruct_rna_objects.R*'  deconstruct Seurat objects to convert into scanpy objects\
+'*cre_detection/mo_parts_to_scanpy.py*'  use deconstructed Seurat objects and convert them into scanpy\
+'*cre_detection/scenicplus_config.yaml*'  config for running scenic+ pipeline after setting up all inputs
 
 
 ### eQTL mapping
-'*qtl/eqtl/LIMIX/mo_create_limix_qtl_input.R*'  create input for LIMIX eQTL mapping
+'*qtl/eqtl/LIMIX/mo_create_limix_qtl_input.R*'  create input for LIMIX eQTL mapping\
+'*qtl/eqtl/mo_create_n_cellss_expressed_tables.R*'  create table of number of non-zero nuclei per gene and donor
 
 
 ### caQTL mapping
-'*qtl/caqtl/mo_create_limix_chromatin_input.R*'     create input for LIMIX caQTL mapping
+'*qtl/caqtl/mo_create_limix_chromatin_input.R*'     create input for LIMIX caQTL mapping\
+'*qtl/caqtl/mo_create_n_cellss_accessible_tables.R*'  create table of number of non-zero nuclei per region and donor
 
 
 ### QTL results
@@ -162,6 +177,27 @@ Below we will outline the steps taken to process and analyse the data
 '*qtl/mo_get_finemapped_variants.R*'     extract finemapped and non-finemapped eQTLs from sc-eQTLgen to compare the variants
 
 
+### interaction-QTL mapping
+'*qtl/interaction_eqtl/mo_get_significant_variant_feature_pairs.R*'    get significant variant-feature pairs from the QTL mappings\
+'*qtl/interaction_eqtl/mo_create_limix_interaction_qtl_input.R*'    create interaction-eQTL input files\
+'*qtl/interaction_eqtl/limix_interactions.smk*'    LIMIX-QTL interaction snakemake file\
+'*qtl/interaction_eqtl/mo_interaction_template.yaml*'    LIMIX-QTL interaction yaml file for interaction-eQTLs\
+'*qtl/interaction_caqtl/mo_create_limix_chromatin_interaction_input.R*'    create interaction-caQTL input files\
+'*qtl/interaction_caqtl/mo_interaction_caqtls.yaml*'    LIMIX-QTL interaction yaml file for interaction-caQTLs
+
+
+### QTL mediation
+'*qtl/mediation/mo_create_mediation_metadata.R*'    create metadata for eQTL-by-caQTL mediation analyses\
+'*qtl/mediation/mo_perform_qtl_mediation_analysis.R*'    run eQTL-by-caQTL mediaton analysis script\
+'*qtl/mediation/mo_create_mediation_jobs.sh*'    create run eQTL-by-caQTL mediaton analysis jobs
+
+
+### QTL utility scripts
+'*qtl/mo_regress_qtlinputs.py*'    regress PCs out of QTL input files\
+'*qtl/mo_eigenmt_correct_limix_qtls.R*'    perform eigenMT MTC on QTL outputs
+
+
+
 ### cell type composition GWAS
 '*ctc_gwas/mo_ctc_gwas_wg2_step2.sh*'    for the cell type composition GWAS, perform step 2 of sc-eQTLgen WG2 to get consortium-compatible cell types\
 '*ctc_gwas/mo_ctc_gwas_wg2_step3.sh*'    for the cell type composition GWAS, perform step 3 of sc-eQTLgen WG2 to get consortium-compatible cell types\
@@ -171,7 +207,7 @@ Below we will outline the steps taken to process and analyse the data
 # scripts no longer used
 '*demultiplexing/mo_run_scrublet.py*'   python script to run Scrublet on a CellBender corrected 10x lane\
 '*demultiplexing/mo_test_scrublet.ipynb*'   jupyter notebook to test Scrublet on individual 10x lanes\
-'*differential_accessibility/mo_differential_accessibility_kimma_parameterised.R*'  check differential accessible regions using kimma on the stimulation status\
+'*differential_accessibility/mo_differential_accessibility_kimma_parameterised.R*'  check differential accessible regions using kimma on the stimulation status
 
 
 
