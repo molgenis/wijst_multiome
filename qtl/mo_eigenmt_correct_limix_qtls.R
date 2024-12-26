@@ -58,14 +58,22 @@ get_plink_genotypes_chromosome <- function(genotype_loc, chromosome, genotype_pr
 #' @examples
 #' corrected_chunks <- correct_all_chunks_chromosome(genotypes, var_locations, "path/to/chunks", "chunk_pattern")
 correct_all_chunks_chromosome <- function(genotypes_chromosome, var_locations_chromosome, chunks_loc, chunk_pattern, pvalue_column='p_value') {
+  # list all files
   chunk_files <- list.files(chunks_loc)
+  # filter by regular expression
   chunk_files <- chunk_files[grepl(chunk_pattern, chunk_files)]
+  # save in a list
   all_chunks <- list()
+  # check each file
   for (chunk in chunk_files) {
+    # load summary statistics
     summary_stats_h5 <- ReigenMT::limix_h5_to_sumstats_format(paste(chunks_loc, chunk, sep = '/'))
-    eigen_corrected_chunk <- eigenmt(summary_stats = summary_stats_h5, genotypes = genotypes_chromosome, genotype_to_position = var_locations_chromosome, variant_column_summary_stats = 'snp_id', feature_column_summary_stats = 'feature', var_explained_threshold = 0.975, pvalue_column = pvalue_column)
+    # perform eigenMT correction
+    eigen_corrected_chunk <- ReigenMT::eigenmt(summary_stats = summary_stats_h5, genotypes = genotypes_chromosome, genotype_to_position = var_locations_chromosome, variant_column_summary_stats = 'snp_id', feature_column_summary_stats = 'feature', var_explained_threshold = 0.975, pvalue_column = pvalue_column)
+    # put in the list
     all_chunks[[chunk]] <- eigen_corrected_chunk
   }
+  # merge the corrected chunks
   chunks_merged <- do.call('rbind', all_chunks)
   return(chunks_merged)
 }
@@ -85,12 +93,26 @@ correct_all_chunks_chromosome <- function(genotypes_chromosome, var_locations_ch
 #' @export
 #' @examples
 #' corrected_all <- correct_all_chunks_all_chromosomes("path/to/genotypes", "path/to/chunks")
-correct_all_chunks_all_chromosomes <- function(genotype_loc, chunks_loc, chromosomes=1:22, genotype_prepend='EUR_imputed_hg38_varFiltered_chr', genotype_append='', pvalue_column='p_value', qtl_results_prepend='qtl_results_') {
+correct_all_chunks_all_chromosomes <- function(genotype_loc, chunks_loc, chromosomes=1:22, genotype_prepend='EUR_imputed_hg38_varFiltered_chr', genotype_append='', pvalue_column='p_value', qtl_results_prepend='qtl_results_', verbose=T) {
   all_chrom_chunks <- list()
+  # check each chromosome passed
   for (chrom in chromosomes) {
+    if (verbose) {
+      message(paste('loading chromosome', chrom, 'genotype data\n'))
+    }
+    # lead the genotype data in plink format
     genotypes_chromosome <- get_plink_genotypes_chromosome(genotype_loc, chrom, genotype_prepend = genotype_prepend, genotype_append = genotype_append)
-    var_locations_chromosome <- ReigenMT::get_position_hashtab(genotypes_chromosome)
+    if (verbose) {
+      message(paste('loading chromosome', chrom, 'variant positions\n'))
+    }
+    # extract the locations of the variants from the genotype data
+    var_locations_chromosome <- get_position_hashtab(genotypes_chromosome)
+    # create the pattern for this chromosome, to list the h5 files
     h5_pattern_chromosome <- paste(qtl_results_prepend, chrom, '_\\d+_\\d+.h5', sep = '')
+    if (verbose) {
+      message(paste('processing chromosome', chrom, 'QTL chunks\n'))
+    }
+    # do eigenMT MTC for this chunk
     chunks_chromosome <- correct_all_chunks_chromosome(
       genotypes_chromosome = genotypes_chromosome,
       var_locations_chromosome = var_locations_chromosome,
@@ -98,8 +120,10 @@ correct_all_chunks_all_chromosomes <- function(genotype_loc, chunks_loc, chromos
       chunk_pattern = h5_pattern_chromosome,
       pvalue_column = pvalue_column
     )
+    # put in the list
     all_chrom_chunks[[chrom]] <- chunks_chromosome
   }
+  # merge the chunks
   all_chrom_chunks_merged <- do.call('rbind', all_chrom_chunks)
   return(all_chrom_chunks_merged)
 }
@@ -125,7 +149,9 @@ caqtl_interaction_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongo
 
 # check each cell type in the eQTLs
 eqtl_interactions_per_celltype <- list()
-for (ct in list.dirs(eqtl_interaction_loc, recursive = F)) {
+#for (ct in list.dirs(eqtl_interaction_loc, recursive = F, full.names = F)) {
+for (ct in c('CD8T')) {
+  print(ct)
   ct_res <- correct_all_chunks_all_chromosomes(
     genotype_loc = genotypes_loc,
     chunks_loc = paste(eqtl_interaction_loc, '/', ct, '/inflammation_final/qtl/', sep = ''),
