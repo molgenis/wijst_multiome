@@ -184,12 +184,47 @@ get_gene_and_lfc_limma <- function(limma.output.loc, p.val.column='p.bonferroni'
   return(de.output.significant)
 }
 
+#' get the LFC for each gene from an output file in bed format
+#' 
+#' @param mast.output.loc the location of the output file
+#' @param p.val.column the column in the file that has the P value to filtr on
+#' @param p.val.cutoff the p-value cutoff to use for filtering
+#' @returns the filtered table for that output file
+#' 
+get_gene_and_lfc_bed <- function(limma.output.loc, p.val.column='p.bonferroni', p.val.cutoff=0.05){
+  # read the output
+  de.output <- read.table(limma.output.loc, header = T, sep = '\t', stringsAsFactors = F, check.names = F, comment.char = '')
+  # subset to what is significant
+  de.output.significant <- de.output
+  if (!is.null(p.val.column) & !is.null(p.val.cutoff)) {
+    de.output.significant <- de.output[de.output[[p.val.column]] < p.val.cutoff, ]
+  }
+  return(de.output.significant)
+}
+
+#' get the LFC for each gene from an output file in bed format
+#' 
+#' @param mast.output.loc the location of the output file
+#' @param p.val.column the column in the file that has the P value to filtr on
+#' @param p.val.cutoff the p-value cutoff to use for filtering
+#' @returns the filtered table for that output file
+#' 
+get_gene_and_lfc_bed_headless <- function(limma.output.loc, p.val.column=NULL, p.val.cutoff=NULL){
+  # read the output
+  de.output <- read.table(limma.output.loc, header = F, sep = '\t', stringsAsFactors = F, check.names = F, comment.char = '')
+  # subset to what is significant
+  de.output.significant <- de.output
+  if (!is.null(p.val.column) & !is.null(p.val.cutoff)) {
+    de.output.significant <- de.output[de.output[[p.val.column]] < p.val.cutoff, ]
+  }
+  return(de.output.significant)
+}
 
 
 #' get the LFC for each gene from an output file created by a DE method
 #' 
 #' @param de.output.loc the location of the output file
-#' @param de_method the DE method used (mast_standalone, mast_seurat or limma)
+#' @param de_method the DE method used (mast_standalone, mast_seurat, bed or limma)
 #' @param p.val.column the column in the file that has the P value to filter on
 #' @param p.val.cutoff the p-value cutoff to use for filtering
 #' @returns the filtered table for that output file
@@ -199,6 +234,12 @@ get_de_output <- function(de.output.loc, de_method, p.val.column='bonferroni', p
   de.output <- NULL
   if (de_method == 'limma'){
     de.output <- get_gene_and_lfc_limma(de.output.loc, p.val.column = p.val.column, p.val.cutoff = p.val.cutoff)
+  }
+  else if (de_method == 'bed') {
+    de.output <- get_gene_and_lfc_bed(de.output.loc, p.val.column = p.val.column, p.val.cutoff = p.val.cutoff)
+  }
+  else if (de_method == 'bed_headless') {
+    de.output <- get_gene_and_lfc_bed_headless(de.output.loc, p.val.column = p.val.column, p.val.cutoff = p.val.cutoff)
   }
   else{
     print('de_method not valid, valid options are: limma')
@@ -315,8 +356,12 @@ plot_DE_sharing_per_celltype <- function(de_table_per_ct, feature_column='featur
   DE_genes_per_ct <- list()
   # get the DE genes for each cell type
   for(cell_type in names(de_table_per_ct)){
+    # grab entry
+    de_table <- de_table_per_ct[[cell_type]]
     # filter to only include the significant results
-    de_table <- de_table_per_ct[[cell_type]][de_table_per_ct[[cell_type]][[pval_column]] <= 0.05, ]
+    if (!is.null(pval_column) & !is.null(sig_pval)) {
+       de_table <- de_table[de_table[[pval_column]] < sig_pval, ]
+    }
     # filter for only the positive lfc if required
     if(only_positive){
       de_table <- de_table[de_table[[lfc_column]] < 0, ]
@@ -376,6 +421,59 @@ plot_DE_sharing_per_celltype <- function(de_table_per_ct, feature_column='featur
   #return(DE_genes_per_ct)
 }
 
+
+get_dars_vs_eregulon <- function(dars_per_topic, eregulons_table, dars_feature_column='feature', eregulon_feature_column='Region', dars_significance_column=NULL, dars_significance_cutoff=0.05) {
+  # make a table with all of the numbers
+  dars_vs_eregulons_numbers <- data.frame(matrix(, nrow = length(names(dars_per_topic)), ncol = 3))
+  colnames(dars_vs_eregulons_numbers) <- c('topic', 'n_dars', 'n_eregulons')
+  # check each topic
+  for (i in 1:length(names(dars_per_topic))) {
+    # get the topic
+    topic <- names(dars_per_topic)[i]
+    # extract the dars for that topic
+    topic_dars <- dars_per_topic[[topic]]
+    # subset to significance if requested
+    if (!is.null(dars_significance_column)) {
+      topic_dars <- topic_dars[topic_dars[[dars_significance_column]] < dars_significance_cutoff, ]
+    }
+    # get the number of dars
+    n_dars <- nrow(topic_dars)
+    # now check now many of those overlap with an eregulon
+    eregulons_topic <- eregulons_table[eregulons_table[[eregulon_feature_column]] %in% topic_dars[[dars_feature_column]], ]
+    # and the the number of eregulons
+    n_eregs <- nrow(eregulons_topic)
+    # now put all of that in the table
+    dars_vs_eregulons_numbers[i, ] <- c(topic, n_dars, n_eregs)
+  }
+  # make sure the columns are numeric
+  dars_vs_eregulons_numbers[['n_dars']] <- as.numeric(dars_vs_eregulons_numbers[['n_dars']])
+  dars_vs_eregulons_numbers[['n_eregulons']] <- as.numeric(dars_vs_eregulons_numbers[['n_eregulons']])
+  return(dars_vs_eregulons_numbers)
+}
+
+
+topic_memberships_to_table <- function(topic_membership_table, topic_regex='Topic\\d*') {
+  # get the columns in the table
+  all_columns <- colnames(topic_membership_table)
+  # get the topic ones
+  topic_columns <- all_columns[grepl(topic_regex, all_columns)]
+  # create a table with the numbers
+  n_per_topic <- data.frame(matrix(, nrow = length(topic_columns), ncol = 2))
+  # set column names
+  colnames(n_per_topic) <- c('topic', 'ncell')
+  # now check each topic
+  for (i in 1 : length(topic_columns)) {
+    # get the table
+    topic_true_false <- data.frame(table(topic_membership_table[[topic_columns[i]]]))
+    # get the number we care about
+    ncell <- topic_true_false[topic_true_false[['Var1']] == 'True', 'Freq']
+    # put that into the table
+    n_per_topic[i, ] <- c(topic_columns[i], ncell)
+  }
+  # make sure that is numeric
+  n_per_topic[['ncell']] <- as.numeric(n_per_topic[['ncell']])
+  return(n_per_topic)
+}
 
 ```
 
@@ -481,4 +579,159 @@ knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 # plot the sharing of region
 plot_DE_sharing_per_celltype(de_genes_limma_stim, feature_column = 'gene_id')
 
+```
+
+```{r plot_topic_sharing, include=TRUE, fig.width=10, fig.height=5}
+
+# location of the DARs
+dars_topics_mono_loc <- '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/differential_accessibility/limma_dream/output/topics20_otsu_imputed_confined_ncell5_001/monocyte/merged_regions/'
+dars_topics_mono <- get_de_genes_per_celltype(dars_topics_mono_loc, 'limma', pval_column='p.bonferroni', p_val_cutoff=0.05, pattern='*.nominal_significant.tsv.gz$')
+# remove the prepend
+names(dars_topics_mono) <- gsub('monocyte_', '', names(dars_topics_mono))
+# and plot the sharing
+plot_DE_sharing_per_celltype(dars_topics_mono, use_label_dict = F, use_color_dict = F)
+
+```
+
+```{r plot_topic_sharing_prev, include=TRUE, fig.width=10, fig.height=5}
+
+# location of the DARs
+dars_topics_mono_prev_loc <- '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/scenicplus_workdir/pycistopic/monocytes_all_cells/region_sets/model_20_topics/Topics_otsu/'
+dars_topics_mono_prev <- get_de_genes_per_celltype(dars_topics_mono_prev_loc, 'bed_headless', pval_column=NULL, p_val_cutoff=NULL, pattern='*.bed$')
+# keep joint topics
+dars_topics_mono_prev <- dars_topics_mono_prev[intersect(names(dars_topics_mono), names(dars_topics_mono_prev))]
+# rename feature by pasting together the columns
+for (topic in names(dars_topics_mono_prev)) {
+  # get table
+  topic_tbl <- dars_topics_mono_prev[[topic]]
+  # add new column
+  topic_tbl[['feature']] <- paste(topic_tbl[['V1']], topic_tbl[['V2']], topic_tbl[['V3']], sep = '-')
+  # put back into list
+  dars_topics_mono_prev[[topic]] <- topic_tbl
+}
+
+# and plot the sharing
+plot_DE_sharing_per_celltype(dars_topics_mono_prev, use_label_dict = F, use_color_dict = F, feature_column = 'feature', pval_column = NULL)
+
+```
+
+```{r plot_topic_sharing_prev_and_new, include=TRUE, fig.width=20, fig.height=10}
+
+# make a new list with both of the dar methods
+dars_topics_mono_both <- list()
+# loop through the first one
+for (topic in names(dars_topics_mono_prev)) {
+  # get table
+  topic_tbl <- dars_topics_mono_prev[[topic]]
+  # put in the new list
+  dars_topics_mono_both[[paste(topic, 'wilcoxon')]] <- topic_tbl
+}
+# now the new one
+for (topic in names(dars_topics_mono)) {
+  # get table
+  topic_tbl <- dars_topics_mono[[topic]]
+  # put in the new list
+  dars_topics_mono_both[[paste(topic, 'limma')]] <- topic_tbl
+}
+
+# and make the plot again
+plot_DE_sharing_per_celltype(dars_topics_mono_both, use_label_dict = F, use_color_dict = F, feature_column = 'feature', pval_column = NULL)
+
+```
+
+```{r plot_topic_sharing_prev_and_new_all, include=TRUE, fig.width=20, fig.height=10}
+
+# merge all the previous ones
+dars_topics_mono_prev_all <- do.call('rbind', dars_topics_mono_prev)
+# and all the new ones
+dars_topics_mono_new_all <- do.call('rbind', dars_topics_mono)
+# put into a list
+dars_topics_mono_new_vs_prev <- list('wilcoxon' = dars_topics_mono_prev_all, 'limma' = dars_topics_mono_new_all)
+
+# and make the plot
+plot_DE_sharing_per_celltype(dars_topics_mono_new_vs_prev, use_label_dict = F, use_color_dict = F, feature_column = 'feature', pval_column = NULL)
+
+```
+
+```{r plot_topic_sharing_prev_and_new_all, include=TRUE, fig.width=20, fig.height=10}
+
+# get eregulons of limma
+limma_eregulons_loc <- '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_limma_001/output/eRegulon_direct.tsv'
+limma_eregulons <- read.table(limma_eregulons_loc, header = T, sep = '\t')
+# set region as feature
+limma_eregulons[['feature']] <- gsub(':', '-', limma_eregulons[['Region']])
+# add these to the list
+dars_topics_mono_new_vs_prev[['limma_eregulons']] <- limma_eregulons
+# previous eregulons
+prev_eregulons_loc <- '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline/monocyte/eRegulon_direct_mono_20_topics.tsv'
+prev_eregulons <- read.table(prev_eregulons_loc, header = T, sep = '\t')
+prev_eregulons[['feature']] <- gsub(':', '-', prev_eregulons[['Region']])
+# subset the eregulons to ones we have DARs for
+prev_eregulons <- prev_eregulons[prev_eregulons[['feature']] %in% dars_topics_mono_prev_all[['feature']], ]
+dars_topics_mono_new_vs_prev[['prev_eregulons']] <- prev_eregulons
+
+# now the eregs of the 10k monos
+k10_regulons_loc <- '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/scenicplus_workdir/scenicplus_pipeline/monocytes/model_10k_mono_20_topics/eRegulon_direct.tsv'
+k10_eregulons <- read.table(k10_regulons_loc, header = T, sep = '\t')
+k10_eregulons[['feature']] <- gsub(':', '-', k10_eregulons[['Region']])
+# and the dars
+dars_topics_10k_loc <- '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/scenicplus_workdir/pycistopic/monocytes_10000_cells_20_topics/region_sets/Topics_otsu/'
+dars_topics_10k <- get_de_genes_per_celltype(dars_topics_10k_loc, 'bed_headless', pval_column=NULL, p_val_cutoff=NULL, pattern='*.bed$')
+# add feature
+for (topic_10k in names(dars_topics_10k)) {
+  # for each topic, add the feature
+  dars_topics_10k_topic <- dars_topics_10k[[topic_10k]]
+  dars_topics_10k_topic[['feature']] <- paste(dars_topics_10k_topic[['V1']], dars_topics_10k_topic[['V2']], dars_topics_10k_topic[['V3']], sep = '-')
+  dars_topics_10k[[topic_10k]] <- dars_topics_10k_topic
+}
+# and add those
+dars_topics_10k_all <- do.call('rbind', dars_topics_10k)
+# add column of feature
+dars_topics_10k_all[['feature']] <- paste(dars_topics_10k_all[['V1']], dars_topics_10k_all[['V2']], dars_topics_10k_all[['V3']], sep = '-')
+# add these
+dars_topics_mono_new_vs_prev[['10k_eregulons']] <- k10_eregulons
+dars_topics_mono_new_vs_prev[['10k_dars']] <- dars_topics_10k_all
+
+# finally plot the overlap
+plot_DE_sharing_per_celltype(dars_topics_mono_new_vs_prev, use_label_dict = F, use_color_dict = F, feature_column = 'feature', pval_column = NULL)
+```
+
+```{r plot_ndars_vs_nregulons, include=TRUE, fig.width=20, fig.height=10}
+
+# plot the number of DARs vs the number of eregulons in the wilcoxon analysis
+ggplot(data = get_dars_vs_eregulon(dars_topics_mono_prev, prev_eregulons, dars_feature_column = 'feature', eregulon_feature_column = 'feature'), mapping = aes(x = n_dars, y = n_eregulons, col = topic)) + geom_point() + xlim(c(0, 200000)) + ylim(c(0, 10000)) + xlab('number of DARs') + ylab('number of eRegulons') + theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + theme(legend.position = 'none') + ggtitle('number of DARs vs eRegulons with those DARs Wilcoxon')
+
+# plot the number of DARs vs the number of eregulons in the previous 10k cell wilcoxon analysis
+ggplot(data = get_dars_vs_eregulon(dars_topics_10k, k10_eregulons, dars_feature_column = 'feature', eregulon_feature_column = 'feature'), mapping = aes(x = n_dars, y = n_eregulons, col = topic)) + geom_point() + xlim(c(0, 80000)) + ylim(c(0, 15000)) + xlab('number of DARs') + ylab('number of eRegulons') + theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + theme(legend.position = 'none') + ggtitle('number of DARs vs eRegulons with those DARs 10k')
+
+# plot the number of DARs vs the number of eregulons in the limma analysis
+ggplot(data = get_dars_vs_eregulon(dars_topics_mono, limma_eregulons, dars_feature_column = 'feature', eregulon_feature_column = 'feature'), mapping = aes(x = n_dars, y = n_eregulons, col = topic)) + geom_point() + xlim(c(0, 12000)) + ylim(c(0, 7000)) + xlab('number of DARs') + ylab('number of eRegulons') + theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + theme(legend.position = 'none') + ggtitle('number of DARs vs eRegulons with those DARs limma')
+
+```
+
+```{r plot_ncells_vs_ndars, include=TRUE, fig.width=20, fig.height=10}
+
+# get the binarized topic annotation per cell
+topic_memberships_loc <- '/groups/umcg-franke-scrna/tmp01/projects/multiome/ongoing/differential_accessibility/topic_annotations/mo_topic_20_otsu.tsv'
+topic_memberships <- read.table(topic_memberships_loc, header = T, sep = '\t')
+# now check how many cells are 'True', so assigned to each topic
+ncell_topics <- topic_memberships_to_table(topic_memberships)
+
+# get the dars vs eregulons for the wilcoxon and limma
+dars_ereg_wilcoxon <- get_dars_vs_eregulon(dars_topics_mono_prev, prev_eregulons, dars_feature_column = 'feature', eregulon_feature_column = 'feature')
+dars_ereg_limma <- get_dars_vs_eregulon(dars_topics_mono, limma_eregulons, dars_feature_column = 'feature', eregulon_feature_column = 'feature')
+
+# join the the ncells
+dars_ereg_wilcoxon <- merge(dars_ereg_wilcoxon, ncell_topics, by = 'topic')
+dars_ereg_limma <- merge(dars_ereg_limma, ncell_topics, by = 'topic')
+
+# now also plot the ncells vs ndars
+ggplot(data = dars_ereg_wilcoxon, mapping = aes(x = ncell, y = n_dars, col = topic)) + geom_point() + xlim(c(0, 35000)) + ylim(c(0, 200000)) + xlab('number of cells') + ylab('number of DARs') + theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + theme(legend.position = 'none') + ggtitle('number of cells vs number of DARs Wilcoxon')
+# also for limma
+ggplot(data = dars_ereg_wilcoxon, mapping = aes(x = ncell, y = n_dars, col = topic)) + geom_point() + xlim(c(0, 35000)) + ylim(c(0, 12000)) + xlab('number of cells') + ylab('number of DARs') + theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + theme(legend.position = 'none') + ggtitle('number of cells vs number of DARs limma')
+
+# and for the eregulons
+ggplot(data = dars_ereg_wilcoxon, mapping = aes(x = ncell, y = n_eregulons, col = topic)) + geom_point() + xlim(c(0, 35000)) + ylim(c(0, 8000)) + xlab('number of cells') + ylab('number of eRegulons') + theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + theme(legend.position = 'none') + ggtitle('number of cells vs number of eRegulons Wilcoxon')
+# also for limma
+ggplot(data = dars_ereg_wilcoxon, mapping = aes(x = ncell, y = n_eregulons, col = topic)) + geom_point() + xlim(c(0, 35000)) + ylim(c(0, 8000)) + xlab('number of cells') + ylab('number of eRegulons') + theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + theme(legend.position = 'none') + ggtitle('number of cells vs number of eRegulons limma')
 ```
