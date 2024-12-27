@@ -114,10 +114,10 @@ correct_all_chunks_all_chromosomes <- function(genotype_loc, chunks_loc, chromos
     }
     # do eigenMT MTC for this chunk
     chunks_chromosome <- correct_all_chunks_chromosome(
-      genotypes_chromosome = genotypes_chromosome,
-      var_locations_chromosome = var_locations_chromosome,
-      chunks_loc = chunks_loc,
-      chunk_pattern = h5_pattern_chromosome,
+      genotypes_chromosome = genotypes_chromosome, 
+      var_locations_chromosome = var_locations_chromosome, 
+      chunks_loc = chunks_loc, 
+      chunk_pattern = h5_pattern_chromosome, 
       pvalue_column = pvalue_column
     )
     # put in the list
@@ -138,7 +138,7 @@ correct_all_chunks_all_chromosomes <- function(genotype_loc, chunks_loc, chromos
 # Main Code        #
 ####################
 
-# genotypes
+# genotypes 
 genotypes_loc <- '/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/genotype_input/'
 summary_stats_loc <- '/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/output/L1/'
 
@@ -149,17 +149,58 @@ caqtl_interaction_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongo
 
 # check each cell type in the eQTLs
 eqtl_interactions_per_celltype <- list()
-#for (ct in list.dirs(eqtl_interaction_loc, recursive = F, full.names = F)) {
-for (ct in c('CD8T')) {
+for (ct in list.dirs(eqtl_interaction_loc, recursive = F, full.names = F)) {
   print(ct)
   ct_res <- correct_all_chunks_all_chromosomes(
-    genotype_loc = genotypes_loc,
-    chunks_loc = paste(eqtl_interaction_loc, '/', ct, '/inflammation_final/qtl/', sep = ''),
-    chromosomes = 1:22,
-    genotype_prepend = 'EUR_imputed_hg38_varFiltered_chr',
-    genotype_append = '',
-    pvalue_column = 'p_value',
+    genotype_loc = genotypes_loc, 
+    chunks_loc = paste(eqtl_interaction_loc, '/', ct, '/inflammation_final/qtl/', sep = ''), 
+    chromosomes = 1:22, 
+    genotype_prepend = 'EUR_imputed_hg38_varFiltered_chr', 
+    genotype_append = '', 
+    pvalue_column = 'p_value', 
     qtl_results_prepend = 'iqtl_results_'
   )
+  # get the sum of tests
+  n_tests <- sum(ct_res[!duplicated(ct_res[['feature']]), 'n_tests_feature'])
+  # bonferroni
+  ct_res[['total_bf_eigen']] <- ct_res[['p_value']] * n_tests
+  # but of course no more than 1
+  ct_res[ct_res[['total_bf_eigen']] > 1, 'total_bf_eigen'] <- 1
+  # put in list
   eqtl_interactions_per_celltype[[ct]] <- ct_res
+  # put the output location together
+  out_loc = paste(eqtl_interaction_loc, '/', ct, '/inflammation_final/iqtl_results_all_eigenmt.tsv.gz', sep = '')
+  # zip it
+  out_loc <- gzfile(out_loc)
+  # write it as well
+  write.table(ct_res, out_loc, row.names = F, col.names = T, sep = '\t', quote = F)
+}
+
+# check each cell type in the eQTLs
+caqtl_interactions_per_celltype <- list()
+for (ct in list.dirs(caqtl_interaction_loc, recursive = F, full.names = F)) {
+  print(ct)
+  ct_res <- correct_all_chunks_all_chromosomes(
+    genotype_loc = genotypes_loc, 
+    chunks_loc = paste(caqtl_interaction_loc, '/', ct, '/inflammation_final/qtl/', sep = ''), 
+    chromosomes = 1:22, 
+    genotype_prepend = 'EUR_imputed_hg38_varFiltered_chr', 
+    genotype_append = '', 
+    pvalue_column = 'p_value', 
+    qtl_results_prepend = 'iqtl_results_'
+  )
+  # get the sum of tests
+  n_tests <- sum(ct_res[!duplicated(ct_res[['feature']]), 'n_tests_feature'])
+  # bonferroni
+  ct_res[['total_bf_eigen']] <- ct_res[['p_value']] * n_tests
+  # but of course no more than 1
+  ct_res[ct_res[['total_bf_eigen']] > 1, 'total_bf_eigen'] <- 1
+  # put in list
+  caqtl_interactions_per_celltype[[ct]] <- ct_res
+  # put the output location together
+  out_loc = paste(caqtl_interaction_loc, '/', ct, '/inflammation_final/iqtl_results_all_eigenmt.tsv.gz', sep = '')
+  # zip it
+  out_loc <- gzfile(out_loc)
+  # write it as well
+  write.table(ct_res, out_loc, row.names = F, col.names = T, sep = '\t', quote = F)
 }
