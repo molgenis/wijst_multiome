@@ -1,0 +1,928 @@
+---
+title: "mo_plot_interaction_vs_condition_qtls"
+author: "Roy Oelen"
+date: "2024-12-25"
+output: html_document
+---
+
+```{r header, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+#!/usr/bin/env Rscript
+############################################################################################################################
+# Authors: Roy Oelen
+# Name: mo_plot_interaction_vs_condition_qtls.Rmd
+# Function: plot the interaction QTL results vs the ones from the per-condition analyses
+############################################################################################################################
+```
+
+```{r libraries, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+####################
+# libraries        #
+####################
+
+library(data.table)
+library(ggplot2)
+library(cowplot)
+library(RColorBrewer)
+library(roycols)
+library(ggrastr)
+library(ggpubr)
+library(ReigenMT)
+
+
+```
+
+```{r functions, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+####################
+# Functions        #
+####################
+
+
+#' get a label dict that replaces the posix safe names into printable versions
+#' 
+#' @returns a label dict that replaces the posix safe names into printable versions
+#' label_dict_names <- get_label_dict()
+get_label_dict <- function() {
+  label_dict <- list()
+  label_dict[['CD4_T_cells']] <- 'CD4+ T cells'
+  label_dict[['CD8_T_cells']] <- 'CD8+ T cells'
+  label_dict[['CD4T']] <- 'CD4+ T'
+  label_dict[['CD8T']] <- 'CD8+ T'
+  label_dict[['CD4_T']] <- 'CD4+ T'
+  label_dict[['CD8_T']] <- 'CD8+ T'
+  label_dict[['Dendritic_cells']] <- 'Dendritic cells'
+  label_dict[['Endothelial_cells']] <- 'Endothelial cells'
+  label_dict[['Fibroblasts']] <- 'Fibroblasts'
+  label_dict[['Glia_cells']] <- 'Glia cells'
+  label_dict[['Mast_cells']] <- 'MAST cells'
+  label_dict[['Mature_absorptive_enterocytes']] <- 'Mature absorptive enterocytes'
+  label_dict[['Mature_secretory_enterocytes']] <- 'Mature secretory enterocytes'
+  label_dict[['Memory_B']] <- 'Memory B cells'
+  label_dict[['Monocytes']] <- 'Monocytes'
+  label_dict[['monocyte']] <- 'Monocyte'
+  label_dict[['Mono']] <- 'Monocyte'
+  label_dict[['Plasma_cells']] <- 'Plasma cells'
+  label_dict[['Stem_cells']] <- 'Stem cells'
+  label_dict[['Stromal_cells']] <- 'Stromal cells'
+  label_dict[['T_others']] <- 'other T cells'
+  label_dict[['Transit_amplifying_cells']] <- 'Transit amplifying cells'
+  label_dict[['AI']] <- 'Actively Inflamed'
+  label_dict[['NI']] <- 'Non-Inflamed'
+  return(label_dict)
+}
+
+
+rename_labels <- function(vector_to_rename) {
+  # get the labels that are present
+  label_renaming <- get_label_dict()
+  # now check which labels we are missing
+  missing_renames <- setdiff(unique(vector_to_rename), names(label_renaming))
+  # add those renames as not being renames
+  for (missing_rename in missing_renames) {
+    label_renaming[[missing_rename]] <- missing_rename
+  }
+  # now replace each value with the rename
+  renamed_vector <- as.vector(unlist(label_renaming[vector_to_rename]))
+  # and return that
+  return(renamed_vector)
+}
+
+
+remap_with_label_dict <- function(vector_of_names) {
+  # get the label dict
+  relabels <- get_label_dict()
+  # get the labels available for renaming
+  labels_available <- names(relabels)
+  # get the ones we cant remap
+  unmappable <- setdiff(unique(vector_of_names), labels_available)
+  # report on those
+  if (length(unmappable) > 0) {
+    print(paste('cannot remap the following names, they will be returned unchanged:', paste(unmappable, collapse = ',')))
+    # and put those in our remapping list as their originals
+    relabels[unmappable] <- unmappable
+  }
+  # now actually do the remapping
+  remapped <- as.vector(unlist(relabels[vector_of_names]))
+  return(remapped)
+}
+
+
+get_color_coding_dict <- function() {
+	# medhigh
+  color_coding_dict <- list()
+  color_coding_dict[["B"]] <- "#71BC4B"
+  #color_coding_dict[['CD4_T_cells']] <- '#7FC97F'
+  color_coding_dict[['CD4_T_cells']] <- '#153057'
+  color_coding_dict[['CD4T']] <- '#153057'
+	#color_coding_dict[['CD8_T_cells']] <- '#BEAED4'
+	color_coding_dict[['CD8_T_cells']] <- '#009DDB'
+	color_coding_dict[['CD8T']] <- '#009DDB'
+	#color_coding_dict[['Dendritic_cells']] <- '#FDC086'
+	color_coding_dict[['Dendritic_cells']] <- '#965EC8'
+	color_coding_dict[['DC']] <- '#965EC8'
+	color_coding_dict[['Endothelial_cells']] <- '#FFFFB3'
+	color_coding_dict[['Fibroblasts']] <- '#386CB0'
+	color_coding_dict[['Glia_cells']] <- '#F0027F'
+	color_coding_dict[['Mast_cells']] <- '#BF5B17'
+	color_coding_dict[['Mature_absorptive_enterocytes']] <- '#A6CEE3'
+	color_coding_dict[['Mature_secretory_enterocytes']] <- '#1B9E77'
+	color_coding_dict[['Memory_B']] <- '#D95F02'
+	color_coding_dict[['Microfold_cell']] <- '#BEAED4'
+	#color_coding_dict[['Monocytes']] <- '#7570B3'
+	color_coding_dict[['Monocyte']] <- '#EDBA1B'
+	color_coding_dict[['Naive_B_cells']] <- '#FDC086'
+	color_coding_dict[['NK']] <- '#E64B50'
+	#color_coding_dict[['Plasma_cells']] <- '#E7298A'
+	color_coding_dict[['Plasma_cells']] <- '#DB8E00'
+	color_coding_dict[['Stem_cells']] <- '#66A61E'
+	color_coding_dict[['Stromal_cells']] <- '#8DD3C7'
+	#color_coding_dict[['T_others']] <- '#A6761D'
+	color_coding_dict[['T_others']] <- '#FF63B6'
+	color_coding_dict[['Transit_amplifying_cells']] <- '#FF7F00'
+	color_coding_dict[['disconcordant']] <- 'gray'
+  #color_coding_dict[['CD4+ T cells']] <- '#7FC97F'
+  color_coding_dict[['CD4+ T cells']] <- '#153057'
+  color_coding_dict[['CD4+ T']] <- '#153057'
+	#color_coding_dict[['CD8+ T cells']] <- '#BEAED4'
+	color_coding_dict[['CD8+ T cells']] <- '#009DDB'
+	color_coding_dict[['CD8+ T']] <- '#009DDB'
+	#color_coding_dict[['Dendritic cells']] <- '#FDC086'
+	color_coding_dict[['Dendritic cells']] <- '#965EC8'
+	color_coding_dict[['Endothelial cells']] <- '#FFFFB3'
+	color_coding_dict[['Endothelial\ncells']] <- '#FFFFB3'
+	color_coding_dict[['Fibroblasts']] <- '#386CB0'
+	color_coding_dict[['Glia cells']] <- '#F0027F'
+	color_coding_dict[['MAST cells']] <- '#BF5B17'
+	color_coding_dict[['Mature absorptive enterocytes']] <- '#A6CEE3'
+	color_coding_dict[['Mature\nabsorptive\nenterocytes']] <- '#A6CEE3'
+	color_coding_dict[['Mature secretory enterocytes']] <- '#1B9E77'
+	color_coding_dict[['Mature secretory\nenterocytes']] <- '#1B9E77'
+	color_coding_dict[['Memory B cells']] <- '#D95F02'
+	#color_coding_dict[['Monocytes']] <- '#7570B3'
+	color_coding_dict[['Microfold cells']] <- '#BEAED4'
+	color_coding_dict[['Monocytes']] <- '#EDBA1B'
+	color_coding_dict[['Naive B cells']] <- '#FDC086'
+	#color_coding_dict[['Plasma cells']] <- '#E7298A'
+	color_coding_dict[['Plasma cells']] <- '#DB8E00'
+	color_coding_dict[['Stem cells']] <- '#66A61E'
+	color_coding_dict[['Stromal cells']] <- '#8DD3C7'
+	#color_coding_dict[['other T cells']] <- '#A6761D'
+	color_coding_dict[['other T cells']] <- '#FF63B6'
+	color_coding_dict[['Transit amplifying cells']] <- '#FF7F00'
+	color_coding_dict[['Transit\namplifying cells']] <- '#FF7F00'
+	color_coding_dict[['disconcordant']] <- 'gray'
+	# up and down regulation will be added to, we need a whitening percentage
+	pct_whitening <- 40
+	# then we will check each cell type
+	for (cell_type in names(color_coding_dict)) {
+	  # the up color is the same as the regular one
+	  color_coding_dict[[paste(cell_type, 'up')]] <- color_coding_dict[[cell_type]]
+	  # but the down one will have a more faded colour
+	  color_coding_dict[[paste(cell_type, 'down')]] <- colorRampPalette(c(color_coding_dict[[cell_type]], "white"))(100)[pct_whitening]
+	}
+	# general
+	color_coding_dict[['AI']] <- 'darkblue'
+	color_coding_dict[['NI']] <- 'darkred'
+	color_coding_dict[['Actively Inflamed']] <- 'darkblue'
+	color_coding_dict[['Non-Inflamed']] <- 'darkred'
+	return(color_coding_dict)
+}
+
+
+split_string_with_max_length <- function(string, max_length=15) {
+  # split the string on the space first
+  words <- strsplit(string, ' ')[[1]]
+  # and initial pasted string
+  final_string <- ''
+  # and the temporary string
+  tmp_string <- ''
+  # check each word
+  for (word in words) {
+    # get the lenght of the temporary string
+    tmp_len <- nchar(tmp_string)
+    # get the length of the word
+    word_len <- nchar(word)
+    # length of the final string
+    final_len <- nchar(final_string)
+    # check if adding the next word would make us go over the limit
+    if ((tmp_len + word_len) > max_length) {
+      if (final_len > 0) {
+        # add the temporary word to the final string if it was not empty
+        final_string <- paste(final_string, '\n', tmp_string, sep = '')
+      }
+      else{
+        # if there was not final string yet, it will just become that temporary string
+        final_string <- tmp_string
+      }
+      # reset the temporary string
+      tmp_string <- word
+    }
+    else{
+      # otherwise add it to the temporary string
+      if (tmp_len > 0) {
+        tmp_string <- paste(tmp_string, word)
+      }
+      # or set if the temporary string was empty
+      else{
+        tmp_string <- word
+      }
+    }
+  }
+  # add last word
+  if (nchar(paste(final_string, tmp_string)) > max_length) {
+    if (nchar(final_string) == 0) {
+      final_string <- tmp_string
+    }
+    else if (nchar(tmp_string > 0)) {
+      final_string <- paste(final_string, '\n', tmp_string, sep = '')
+    }
+    else{
+      # nothing the final string is as it is
+    }
+  }
+  else {
+    if (nchar(final_string) == 0) {
+      final_string <- tmp_string
+    }
+    else if(nchar(tmp_string) == 0){
+      # nothing, the final string is as is
+    }
+    else{
+      final_string <- paste(final_string, ' ', tmp_string, sep = '')
+    }
+  }
+  # add the last word
+  return(final_string)
+}
+
+
+split_strings_with_max_length <- function(strings, max_length=15) {
+  strings_split <- sapply(strings, FUN = function(x){
+    split_string_with_max_length(x, max_length)
+  })
+  strings_split <- as.vector(strings_split)
+  return(strings_split)
+}
+
+#' get the QTLs per cell type from QTL output
+#' 
+#' @param qtl_output_loc base location of the QTL output per cell type
+#' @param output_file which output file to read for the results
+#' @param gene_column which column to use as the gene identifier
+#' @param significance_column significance column to filter by
+#' @param significance_cutoff significance value to filter by, if NULL, no filtering takes place
+#' @param verbose print progress updates
+#' @returns a list of celltypes as keys, and the QTL output for each cell type
+#' 
+get_qtls_per_celltype_limix <- function(qtl_output_loc, output_file='qtl_results_all.txt.gz', gene_column='feature_id', significance_column='feature_q_value', significance_cutoff=NULL, verbose=T) {
+  # get the folders in the directory, which should be the cell types
+  cell_types <- list.dirs(qtl_output_loc, full.names = F, recursive = F)
+  # we will store the results in a list for now
+  qtls_per_celltype <- list()
+  # check each cell type
+  for (cell_type in cell_types) {
+    # paste together the full path
+    full_cell_type_path <- paste(qtl_output_loc, '/', cell_type, '/', output_file, sep = '')
+    # log if requested
+    if (verbose) {
+      print(paste('reading', full_cell_type_path))
+    }
+    # read the file
+    cell_type_output <- read.table(full_cell_type_path, sep = '\t', header = T)
+    # filter the results on significance
+    if (!is.null(significance_column) & !is.null(significance_cutoff)) {
+      # print progress if requested
+      if (verbose) {
+        print(paste('variant+phenotype before filtering', nrow(cell_type_output)))
+      }
+      # filter
+      cell_type_output <- cell_type_output[
+        !is.na(cell_type_output[[significance_column]]) &
+          cell_type_output[[significance_column]] < significance_cutoff, 
+      ]
+      if (verbose) {
+        print(paste('variant+phenotype after filtering', nrow(cell_type_output)))
+      }
+    }
+    # put in the list
+    qtls_per_celltype[[cell_type]] <- cell_type_output
+  }
+  return(qtls_per_celltype)
+}
+
+
+
+#' get the number eGenes per cell type from QTL output
+#' 
+#' @param qtl_output_loc base location of the QTL output per cell type
+#' @param output_file which output file to read for the results
+#' @param gene_column which column to use as the gene identifier
+#' @returns a dataframe with the cell type in the 'cell_type' column, and the number of eGenes in the 'nr' column
+#' 
+get_egene_numbers_per_celltype_limix <- function(qtl_output_loc, output_file='qtl_results_all.txt.gz', gene_column='feature_id', significance_column='feature_q_value', significance_cutoff=0.05, verbose=T) {
+  # get the folders in the directory, which should be the cell types
+  cell_types <- list.dirs(qtl_output_loc, full.names = F, recursive = F)
+  # we will store the results in a list for now
+  numbers_per_celltype <- list()
+  # check each cell type
+  for (cell_type in cell_types) {
+    # paste together the full path
+    full_cell_type_path <- paste(qtl_output_loc, '/', cell_type, '/', output_file, sep = '')
+    # log if requested
+    if (verbose) {
+      print(paste('reading', full_cell_type_path))
+    }
+    # read the file
+    cell_type_output <- read.table(full_cell_type_path, sep = '\t', header = T)
+    # filter the results on significance
+    if (!is.null(significance_column)) {
+      # print progress if requested
+      if (verbose) {
+        print(paste('variant+phenotype before filtering', nrow(cell_type_output)))
+      }
+      # filter
+      cell_type_output <- cell_type_output[
+        !is.na(cell_type_output[[significance_column]]) &
+          cell_type_output[[significance_column]] < significance_cutoff, 
+      ]
+      if (verbose) {
+        print(paste('variant+phenotype after filtering', nrow(cell_type_output)))
+      }
+    }
+    # get the unique genes in this file
+    unique_genes <- unique(cell_type_output[[gene_column]])
+    # get how many these are
+    nr_genes <- length(unique_genes)
+    # add to the list
+    numbers_per_celltype[[cell_type]] <- nr_genes
+  }
+  # turn into a dataframe
+  numbers_per_celltype_df <- data.frame(cell_type = names(numbers_per_celltype), nr = as.vector(unlist(numbers_per_celltype)))
+  return(numbers_per_celltype_df)
+}
+
+
+#' plot in a barplot the number of DE genes per cell type
+#' 
+#' @param egene_numbers the table containing the number of eenes per cell type
+#' @param celltype_column which column of the supplied table has the celltype name
+#' @param number_column which column of the supplied table has the number of DE genes
+#' @param pointless draw the ticks on the bottom of the plot?
+#' @param legendless draw the legend?
+#' @param ylim the range for the y-axis
+#' @param paper_style use the paper style with more whitespace
+#' @param angle_labels angle the x labels 90 degrees?
+#' @param use_distinct_colours use the distinct colour palette instead of ggplot defaults (optional, default T)
+#' @param use_sampling randomly sample colours from the distinct colour palette (optional, default F)
+#' @param color_indices supply specific indices relating to colours to use from the distinct colour palette. Use 'get_available_colours_grid' to get the colours and their indices (optional, unused by default)
+#' @param use_label_dict change names to a more pleasing format
+#' @param make_labels_multiline make labels multiline if they are long
+#' @param x_order to order the values on the x axis
+#' @returns a barplot with the number of eGenes per cell type
+#' 
+egene_numbers_to_plot <- function(egene_numbers, celltype_column='cell_type', number_column='nr', pointless=F, legendless=F, ylim=NULL, paper_style=T, angle_labels=T, use_distinct_colours=T, use_sampling=F, color_indices=NULL, use_color_dict=F, use_label_dict=T, split_long_labels_to_lines=T, x_order=NULL) {
+  # remap names if requested
+  if (use_label_dict) {
+    egene_numbers[[celltype_column]] <- remap_with_label_dict(egene_numbers[[celltype_column]])
+  }
+  # make them multiline
+  if (split_long_labels_to_lines) {
+    egene_numbers[[celltype_column]] <- split_strings_with_max_length(egene_numbers[[celltype_column]])
+  }
+  # order the x axis if requested
+  if (!is.null(x_order)) {
+    egene_numbers[[celltype_column]] <- factor(egene_numbers[[celltype_column]], levels = x_order)
+  }
+  # start plot
+  p <- ggplot(mapping = aes(x = egene_numbers[[celltype_column]], y = egene_numbers[[number_column]], fill = egene_numbers[[celltype_column]])) +
+    geom_bar(stat='identity') + xlab(celltype_column) + ylab(number_column)
+  # options
+  if (use_distinct_colours) {
+    # get the unique possible assigments
+    possible_assignments <- unique(egene_numbers[[celltype_column]])
+    # put into a list
+    colour_mapping <- roycols::get_color_list(possible_assignments)
+    # add to plot
+    p <- p + scale_fill_manual(values = colour_mapping)
+  }
+  if (use_color_dict) {
+    # get the color coding dict
+    colour_mapping <- get_color_coding_dict()
+    # also rename here then
+    if (split_long_labels_to_lines) {
+      names(colour_mapping) <- split_strings_with_max_length(names(colour_mapping))
+    }
+    # add to plot
+    p <- p + scale_fill_manual(values = colour_mapping)
+  }
+  if(!is.null(ylim)){
+    p <- p + ylim(ylim)
+  }
+  if(pointless){
+    p <- p + theme(axis.text.x=element_blank(), 
+                   axis.ticks = element_blank())
+  }
+  if(legendless){
+    p <- p + theme(legend.position = 'none')
+  }
+  if (paper_style) {
+    p <- p + theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+  }
+  if (angle_labels) {
+    p <- p + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+  }
+  return(p)
+}
+
+
+#' get overlap of two gene sets
+#' 
+#' @param egenes_per_group_1 list with per category a vector of genes
+#' @param egenes_per_group_2 list with per category a vector of genes
+#' @param cat_1_name what to name the first group [optional]
+#' @param cat_2_name what to name the second group [optional]
+#' @returns a dataframe with for each category, the overlap between the two groups
+#' 
+get_egene_overlap <- function(egenes_per_group_1, egenes_per_group_2, cat_1_name='group1', cat_2_name='group2') {
+  # get the outer join of the groups
+  groups <- unique(c(names(egenes_per_group_1), names(egenes_per_group_2)))
+  # get a df per group first, to merge later
+  df_per_group <- list()
+  # check each group
+  for (group in groups) {
+    # init values
+    genes_group1 <- c()
+    genes_group2 <- c()
+    # check each group
+    if (group %in% names(egenes_per_group_1)) {
+      genes_group1 <- egenes_per_group_1[[group]]
+    }
+    if (group %in% names(egenes_per_group_2)) {
+      genes_group2 <- egenes_per_group_2[[group]]
+    }
+    # now check each number
+    nr_shared <- length(intersect(genes_group1, genes_group2))
+    nr_cat1_only <- length(setdiff(genes_group1, genes_group2))
+    nr_cat2_only <- length(setdiff(genes_group2, genes_group1))
+    # put in a dataframe
+    df_group <- data.frame(
+      group = rep(group, times = 3),
+      category = c(cat_1_name, cat_2_name, 'shared'),
+      number = c(nr_cat1_only, nr_cat2_only, nr_shared)
+    )
+    # put into list
+    df_per_group[[group]] <- df_group
+  }
+  # merge into dataframe
+  df_all <- do.call('rbind', df_per_group)
+  return(df_all)
+}
+
+#' plot the overlap in egenes of two methods
+#' 
+#' @param egene_overlap_numbers the numbers of each overlap, per celltype and category
+#' @param celltype_column the column denoting the cell type
+#' @param number_column the column that contains the number to plot
+#' @param category_column the column that contains the category to plot
+#' @param pointless remove points from the plot
+#' @param legendless remove legend from the plot
+#' @param ylim the y limits to use, NULL means a autofit is used
+#' @param paper_style clean up background
+#' @param angle_labels angle x labels 90 degrees
+#' @param use_distinct_colours use the distinct colour palette instead of ggplot defaults (optional, default T)
+#' @param use_sampling randomly sample colours from the distinct colour palette (optional, default F)
+#' @param color_indices supply specific indices relating to colours to use from the distinct colour palette. Use 'get_available_colours_grid' to get the colours and their indices (optional, unused by default)
+#' @param use_label_dict rename cell types names to something more pleasing
+#' @param split_long_labels_to_lines make labels multiline if they are long
+#' @returns the plot with per cell type the overlap between the two categories
+egene_overlap_to_plot <- function(egene_overlap_numbers, celltype_column='group', number_column='number', category_column='category', pointless=F, legendless=F, ylim=NULL, paper_style=T, angle_labels=T, use_distinct_colours=T, use_sampling=F, color_indices=NULL, use_label_dict=T, split_long_labels_to_lines=T) {
+  # remap names if requested
+  if (use_label_dict) {
+    egene_overlap_numbers[[celltype_column]] <- remap_with_label_dict(egene_overlap_numbers[[celltype_column]])
+  }
+  # make them multiline
+  if (split_long_labels_to_lines) {
+    egene_overlap_numbers[[celltype_column]] <- split_strings_with_max_length(egene_overlap_numbers[[celltype_column]])
+  }
+  # start the plot
+  p <- ggplot(mapping = aes(x = egene_overlap_numbers[[celltype_column]], y = egene_overlap_numbers[[number_column]], fill = egene_overlap_numbers[[category_column]])) +
+    geom_bar(position = 'stack', stat = 'identity') + 
+    xlab(celltype_column) + ylab(number_column) +
+    labs(fill = category_column) 
+  # options
+  if (use_distinct_colours) {
+    # get the unique possible assigments
+    possible_assignments <- unique(egene_overlap_numbers[[category_column]])
+    # get an equal amount of colours
+    possible_colours <- NULL
+    if(length(possible_assignments) > 74) {
+      possible_colours <- sample_tons_of_colors(length(possible_assignments), use_sampling = use_sampling, color_indices = color_indices)
+    }
+    else {
+      possible_colours <- sample_many_colours(length(possible_assignments), use_sampling = use_sampling, color_indices = color_indices)
+    }
+    # put into a list
+    colour_mapping <- as.list(possible_colours)
+    names(colour_mapping) <- possible_assignments
+    # add to plot
+    p <- p + scale_fill_manual(values = colour_mapping)
+  }
+  # options
+  if(!is.null(ylim)){
+    p <- p + ylim(ylim)
+  }
+  if(pointless){
+    p <- p + theme(axis.text.x=element_blank(), 
+                   axis.ticks = element_blank())
+  }
+  if(legendless){
+    p <- p + theme(legend.position = 'none')
+  }
+  if (paper_style) {
+    p <- p + theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+  }
+  if (angle_labels) {
+    p <- p + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+  }
+  return(p)
+}
+
+
+get_ndonors_celltype <- function(covariates_folder, min_cell=10, ncell_column='CellCount', covariates_append='.covariates.txt') {
+  # we will store per cell type
+  ndonors_celltype <- list()
+  # list the files
+  covar_files <- list.files(covariates_folder, pattern = paste('*', covariates_append, sep = ''))
+  # check each file
+  for (covar_file in covar_files) {
+    # get the full location
+    covar_full <- paste(covariates_folder, covar_file, sep = '')
+    # read the covariates
+    covars <- read.table(covar_full, header = T, sep = '\t', comment.char = '', check.names = F)
+    # get the cell counts
+    cell_counts <- covars[[ncell_column]]
+    # count how many have more than the given number
+    ndonors <- sum(cell_counts >= min_cell)
+    # extract the cell type
+    cell_type <- gsub(covariates_append, '', covar_file)
+    # put the numbers in there
+    ndonors_celltype[[cell_type]] <- data.frame(cell_type = c(cell_type), number = c(ndonors))
+  }
+  # merge all
+  ndonors_celltype_merged <- do.call('rbind', ndonors_celltype)
+  return(ndonors_celltype_merged)
+}
+
+get_ncells_celltype <- function(covariates_folder, min_cell=0, ncell_column='CellCount', covariates_append='.covariates.txt.gz', qtlinput_append='.qtlInput.txt.gz', covariates_sample_column='Donor_Pool') {
+  # we will store per cell type
+  ndonors_celltype <- list()
+  # list the files
+  covar_files <- list.files(covariates_folder, pattern = paste('*', covariates_append, sep = ''))
+  # check each file
+  for (covar_file in covar_files) {
+    # get the celltype from the filename
+    celltype <- gsub(covariates_append, '', covar_file)
+    # read the expression file as well
+    expression_file_loc <- paste(covariates_folder, '/', celltype, qtlinput_append, sep = '')
+    # but only the first row
+    expression_file <- read.table(expression_file_loc, header = T, sep = '\t', row.names = 1, nrows = 1, comment.char = '', check.names = F)
+    print(head(expression_file))
+    # get the samples that are there
+    expression_samples <- colnames(expression_file)
+    # get the full location
+    covar_full <- paste(covariates_folder, covar_file, sep = '')
+    # read the covariates
+    covars <- read.table(covar_full, header = T, sep = '\t', comment.char = '', check.names = F)
+    # keep only the entries that we included for the QTL mapping
+    covars <- covars[covars[[covariates_sample_column]] %in% expression_samples, ]
+    # get the cell counts
+    cell_counts <- covars[[ncell_column]]
+    # count how many have more than the given number
+    ncells <- sum(cell_counts[cell_counts >= min_cell])
+    # extract the cell type
+    cell_type <- gsub(covariates_append, '', covar_file)
+    # put the numbers in there
+    ndonors_celltype[[cell_type]] <- data.frame(cell_type = c(cell_type), number = c(ncells))
+  }
+  # merge all
+  ndonors_celltype_merged <- do.call('rbind', ndonors_celltype)
+  return(ndonors_celltype_merged)
+}
+
+
+get_ngenes_celltype <- function(feature_object) {
+  # we'll store per cell type
+  ngenes_celltype <- list()
+  # check each cell type
+  for (cell_type in names(feature_object$features)) {
+    # get the expression of that celltype
+    expression_celltype <- feature_object$features[[cell_type]]
+    # get the rowsums that are more than zero
+    n_genes <- nrow(expression_celltype)
+    # add that information
+    ngenes_celltype[[cell_type]] <- data.frame(cell_type = c(cell_type), number = n_genes)
+  }
+  # merge all
+  ngenes_celltype_merged <- do.call('rbind', ngenes_celltype)
+  return(ngenes_celltype_merged)
+}
+
+#' plot in a scatterplot the number of cells vs the number of DE genes for each cell type
+#' 
+#' @param de_numbers the table containing the number of DE genes per cell type
+#' @param cell_numbers the table containing the number of cells per cell type
+#' @param de_numbers_celltype_column which column of the supplied DE number table table has the celltype name
+#' @param cell_numbers_celltype_column which column of the supplied cell numbers table has the celltype name
+#' @param de_numbers_numbers_column which column of the supplied DE numbers table has the number of DE genes
+#' @param cell_numbers_numbers_column which column of the supplied cell numbers table has the number of cells
+#' @param pointless draw the ticks on the bottom of the plot?
+#' @param legendless draw the legend?
+#' @param ylim the range for the y-axis
+#' @param xlim the range for the x-axis
+#' @param paper_style use the paper style with more whitespace
+#' @param angle_labels angle the x labels 90 degrees?
+#' @returns a barplot with the number of DE genes per cell type
+#' 
+plot_de_number_vs_celltype_totals <- function(de_numbers, cell_numbers, de_numbers_celltype_column='celltype', cell_numbers_celltype_column='celltype', de_numbers_numbers_column='number', cell_numbers_numbers_column='number', pointless=F, legendless=F, ylim=NULL, xlim=NULL, paper_style=T) {
+  # subset the DE numbers to what we care about
+  de_numbers <- de_numbers[, c(de_numbers_celltype_column, de_numbers_numbers_column)]
+  # and harmonize the column names
+  colnames(de_numbers) <- c('celltype', 'de_number')
+  # subset the cell numbers to what we care about
+  cell_numbers <- cell_numbers[, c(cell_numbers_celltype_column, cell_numbers_numbers_column)]
+  # and harmonize column names
+  colnames(cell_numbers) <- c('celltype', 'cell_number')
+  # now merge
+  numbers_both <- merge(cell_numbers, de_numbers, by = 'celltype')
+  # finally make the plot
+  p <- ggplot(data = numbers_both, mapping = aes(x = cell_number, y = de_number, colour = celltype)) + geom_point()
+  # options
+  if(!is.null(ylim)){
+    p <- p + ylim(ylim)
+  }
+  if(!is.null(xlim)){
+    p <- p + xlim(xlim)
+  }
+  if(pointless){
+    p <- p + theme(axis.text.x=element_blank(), 
+                   axis.ticks = element_blank())
+  }
+  if(legendless){
+    p <- p + theme(legend.position = 'none')
+  }
+  if (paper_style) {
+    p <- p + theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+  }
+  return(p)
+}
+
+create_confusion_matrix <- function(assignment_table, truth_column, prediction_column, truth_column_label=NULL, prediction_column_label=NULL, angle_labels=T){
+  confusion_table <- create_confusion_table(assignment_table, truth_column, prediction_column)
+  # round the frequency off to a sensible cutoff
+  confusion_table$freq <- round(confusion_table$freq, digits=2)
+  # turn into plot
+  p <- ggplot(data=confusion_table, aes(x=truth, y=prediction, fill=freq)) + geom_tile() + scale_fill_gradient(low='red', high='blue') + geom_text(aes(label=freq))
+  # some options
+  if(!is.null(truth_column_label)){
+    p <- p + xlab(truth_column_label)
+  }
+  if(!is.null(prediction_column_label)){
+    p <- p + ylab(prediction_column_label)
+  }
+  if (angle_labels) {
+    p <- p + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+  }
+  return(p)
+}
+
+
+read_all_h5s_celltype <- function(chunks_loc, chromosomes=1:22, qtl_results_prepend='qtl_results_', verbose=T) {
+  all_chroms_chunks <- list()
+  # check each chromosome passed
+  for (chrom in chromosomes) {
+    # create the pattern for this chromosome, to list the h5 files
+    h5_pattern_chromosome <- paste(qtl_results_prepend, chrom, '_\\d+_\\d+.h5', sep = '')
+    if (verbose) {
+      message(paste('processing chromosome', chrom, 'QTL chunks\n'))
+    }
+    # list all files
+    chunk_files <- list.files(chunks_loc)
+    # filter by regular expression
+    chunk_files <- chunk_files[grepl(h5_pattern_chromosome, chunk_files)]
+    # save in a list
+    all_chunks <- list()
+    # check each file
+    for (chunk in chunk_files) {
+      # load summary statistics
+      summary_stats_h5 <- ReigenMT::limix_h5_to_sumstats_format(paste(chunks_loc, chunk, sep = '/'))
+      # add to list
+      all_chunks[[chunk]] <- summary_stats_h5
+    }
+    # merge chunks for chromosome
+    if (verbose) {
+      message(paste('merging chunks for chromosome', chrom, '\n'))
+    }
+    all_chunks_chrom <- do.call('rbind', all_chunks)
+    # put that in the list
+    all_chroms_chunks[[chrom]] <- all_chunks_chrom
+  }
+  # merge all chromosomes
+  if (verbose) {
+    message(paste('merging chunks all chromosomes', '\n'))
+  }
+  all_chroms <- do.call('rbind', all_chroms_chunks)
+  return(all_chroms)
+}
+
+read_all_h5s_all_celltypes <- function(celltypes_dir, qtl_midpend='/inflammation_final/qtl/', chromosomes=1:22, qtl_results_prepend='qtl_results_', verbose=T) {
+  # check each cell type in the eQTLs
+  qtl_interactions_per_celltype <- list()
+  # each folder is a cell type
+  for (ct in list.dirs(celltypes_dir, recursive = F, full.names = F)) {
+    # get location of chunks
+    chunks_loc = paste(celltypes_dir, '/', ct, '/', qtl_midpend, '/', sep = '')
+    # read full content
+    results_ct <- read_all_h5s_celltype(chunks_loc, chromosomes=chromosomes, qtl_results_prepend=qtl_results_prepend, verbose=verbose)
+    # put these into the list
+    qtl_interactions_per_celltype[[ct]] <- results_ct
+  }
+  return(qtl_interactions_per_celltype)
+}
+
+
+limix_output_per_celltype_to_concordance <- function(limix_table_list1, limix_table_list2, 
+                                                     feature_id_column1='feature_id', 
+                                                     feature_id_column2='feature_id', 
+                                                     snp_id_column1='snp_id', 
+                                                     snp_id_column2='snp_id', 
+                                                     effect_size_column1='beta', 
+                                                     effect_size_column2='beta', 
+                                                     assessed_allele_column1='assessed_allele', 
+                                                     assessed_allele_column2='assessed_allele', 
+                                                     significance_column1='empirical_feature_p_value', 
+                                                     significance_column2='empirical_feature_p_value', 
+                                                     significance_cutoff1=0.05, 
+                                                     significance_cutoff2=0.05) {
+  # check the celltypes we have in both
+  celltypes_both <- intersect(names(limix_table_list1), names(limix_table_list2))
+  # we'll store each merged one as well
+  merged_tables <- list()
+  # check each cell type
+  for (celltype in celltypes_both) {
+    # add assessed allele if we don't have it
+    if (!(assessed_allele_column1 %in% limix_table_list1[[celltype]])) {
+      limix_table_list1[[celltype]][[assessed_allele_column1]] <- NA
+    }
+    # read from the first table
+    table1 <- limix_table_list1[[celltype]][, c(feature_id_column1, snp_id_column1, effect_size_column1, assessed_allele_column1, significance_column1)]
+    # set the column names expected
+    colnames(table1) <- c('feature', 'variant', 'd1_z', 'd1_a0', 'd1_significance')
+    # set significance
+    table1[['d1_significant']] <- table1[['d1_significance']] < significance_cutoff1
+    # and merge the variant and feature
+    table1[['var_feature']] <- paste(table1[['variant']], table1[['feature']], sep = '>')
+    # same for table 2
+    if (!(assessed_allele_column2 %in% limix_table_list2[[celltype]])) {
+      limix_table_list2[[celltype]][[assessed_allele_column2]] <- NA
+    }
+    table2 <- limix_table_list2[[celltype]][, c(feature_id_column2, snp_id_column2, effect_size_column2, assessed_allele_column2, significance_column2)]
+    colnames(table2) <- c('feature', 'variant', 'd2_z', 'd2_a0', 'd2_significance')
+    table2[['d2_significant']] <- table2[['d2_significance']] < significance_cutoff2
+    table2[['var_feature']] <- paste(table2[['variant']], table2[['feature']], sep = '>')
+    # merge these
+    table_both <- merge(table1[, c('var_feature', 'd1_z', 'd1_a0', 'd1_significant')], 
+                        table2[, c('var_feature', 'd2_z', 'd2_a0', 'd2_significant')], 
+                        by = 'var_feature')
+    # put in the list
+    merged_tables[[celltype]] <- table_both
+  }
+  return(merged_tables)
+}
+
+
+plot_concordance_merged_table <- function(d1_d2_merged, xlab='Z-score d1', ylab='Z-score d2', main='Concordance of eQTL effects between d2 and d1') {
+  # add corrected z score
+  d1_d2_merged[['d2_z_signed']] <- d1_d2_merged[['d2_z']]
+  d1_d2_merged[d1_d2_merged[['d2_a0']] != d1_d2_merged[['d1_a0']], 'd2_z_signed'] <- -1 * d1_d2_merged[d1_d2_merged[['d2_a0']] != d1_d2_merged[['d1_a0']], 'd2_z']
+
+  # get the minimal significant z for d2
+  min_sig_z_d2 <- min(abs(d1_d2_merged[d1_d2_merged[['d2_significant']] == T, 'd2_z_signed']))
+  min_sig_z_d1 <- min(abs(d1_d2_merged[d1_d2_merged[['d1_significant']] == T, 'd1_z']))
+  # and the max z
+  max_sig_z_d2 <- max(abs(d1_d2_merged[d1_d2_merged[['d2_significant']] == T, 'd2_z_signed']))
+  max_sig_z_d1 <- max(abs(d1_d2_merged[d1_d2_merged[['d1_significant']] == T, 'd1_z']))
+
+  # calculate concordance
+  n_significant_both <- sum(d1_d2_merged[['d2_significant']] == T & d1_d2_merged[['d1_significant']] == T)
+  n_significant_directed_both <- sum(d1_d2_merged[['d2_significant']] == T & d1_d2_merged[['d1_significant']] == T &
+                                     sign(d1_d2_merged[['d2_z_signed']]) == sign(d1_d2_merged[['d1_z']]))
+  concordance <- round(n_significant_directed_both / n_significant_both, digits = 3)
+
+  
+  # start making the plot
+  plot(x = d1_d2_merged[['d1_z']], y = d1_d2_merged[['d2_z_signed']], 
+    ylim = c(max_sig_z_d2 * -1, max_sig_z_d2),
+    xlim = c(max_sig_z_d1 * -1, max_sig_z_d1),
+    xlab = xlab,
+    ylab = ylab,
+    pch = 16,
+    cex = 0.5,
+    main = main
+  )
+  # the top to bottom rectangle of non-significant effects
+  rect(xleft = -1 * min_sig_z_d1, xright = min_sig_z_d1, ybottom = -1 * max_sig_z_d2, ytop = max_sig_z_d2, border = NA, col = rgb(red = 1, green = 1, blue = 1, alpha = 0.5))
+  # the left to right rectangle of non-significant effects
+  rect(xleft = -1 * max_sig_z_d1, xright = max_sig_z_d1, ybottom = -1 * min_sig_z_d2, ytop = min_sig_z_d2, border = NA, col = rgb(red = 1, green = 1, blue = 1, alpha = 0.5))
+  # bottom left concordant
+  rect(xleft = -1 * max_sig_z_d1, xright = -1 *min_sig_z_d1, ybottom = -1 * max_sig_z_d2, ytop = -1 * min_sig_z_d2, border = NA, col = rgb(red = 0, green = .45, blue = .7, alpha = 0.5))
+  # bottom right disconcordant
+  rect(xleft = min_sig_z_d1, xright = max_sig_z_d1, ybottom = -1 * max_sig_z_d2, ytop = -1 * min_sig_z_d2, border = NA, col = rgb(red = .8, green = .4, blue = 0, alpha = 0.5))
+  # top left disconcordant
+  rect(xleft = -1 * max_sig_z_d1, xright = -1 *min_sig_z_d1, ybottom = min_sig_z_d2, ytop = max_sig_z_d2, border = NA, col = rgb(red = .8, green = .4, blue = 0, alpha = 0.5))
+  # top right disconcordant
+  rect(xleft = min_sig_z_d1, xright = max_sig_z_d1, ybottom = max_sig_z_d2, ytop = min_sig_z_d2, border = NA, col = rgb(red = 0, green = .45, blue = .7, alpha = 0.5))
+  # box to put concordance label in
+  #rect(xleft = max_sig_z_d1 * 0.60, max_sig_z_d1 * 0.9, ybottom = max_sig_z_d2 * -0.8, ytop = max_sig_z_d2 * -0.70, col = 'white')
+  # add concordance label
+  text(x = max_sig_z_d1 * 0.75 , y = max_sig_z_d2 * -0.75, labels = c(paste('concordance', concordance, sep = ':\n')))
+  # add the annotation of what if concordant and disconcordant
+  text(x = max_sig_z_d1 * 0.75 , y = max_sig_z_d2 * 0.75, labels = c('concordant'), col = rgb(red = 0, green = .45, blue = .7))
+  text(x = max_sig_z_d1 * - 0.75 , y = max_sig_z_d2 * 0.75, labels = c('disconcordant'), col = rgb(red = .8, green = .4, blue = 0))
+  # add dashed lines
+  lines(c(max_sig_z_d1 * -1, max_sig_z_d1), c(min_sig_z_d2 * -1, min_sig_z_d2 * -1), type = "l", lty = 2)
+  lines(c(max_sig_z_d1 * -1, max_sig_z_d1), c(min_sig_z_d2, min_sig_z_d2), type = "l", lty = 2)
+  lines(c(min_sig_z_d1 * -1, min_sig_z_d1 * -1), c(max_sig_z_d2 * -1, max_sig_z_d2), type = "l", lty = 2)
+  lines(c(min_sig_z_d1, min_sig_z_d1), c(max_sig_z_d2 * -1, max_sig_z_d2), type = "l", lty = 2)
+
+}
+
+
+```
+
+```{r path_setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+####################
+# Main Code        #
+####################
+
+# location of eQTL
+eqtl_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/output/L1/UT/'
+# location of caQTL output
+caqtl_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/output_cis_50kb_updated_features/L1/UT/'
+# location of the interaction-eQTLs
+ieqtl_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/output/L1/'
+# location of the interaction-caQTLs
+icaqtl_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/interaction_caqtl/sc-eqtlgen/output/L1/'
+
+```
+
+```{r get_capeak_numbers, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# get the number of ca peaks
+caqtl_peak_numbers <- get_egene_numbers_per_celltype_limix(caqtl_output_loc, output_file = 'qtl_results_all_qval_allchroms_fdr01_significant.txt.gz')
+
+```
+
+```{r get_egene_numbers, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# get the number of ca peaks
+eqtl_gene_numbers <- get_egene_numbers_per_celltype_limix(eqtl_output_loc, output_file = 'qtl_results_all_qval_allchroms_fdr01_significant.txt.gz')
+
+```
+
+```{r get_icapeak_numbers, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# get the number of ca peaks
+icaqtl_peak_numbers <- get_egene_numbers_per_celltype_limix(icaqtl_output_loc, output_file = 'inflammation_final/iqtl_results_all_eigenmt.tsv.gz', significance_column = 'total_bf_eigen', gene_column = 'feature')
+
+```
+
+```{r get_iepeak_numbers, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# get the number of ca peaks
+ieqtl_gene_numbers <- get_egene_numbers_per_celltype_limix(ieqtl_output_loc, output_file = 'inflammation_final/iqtl_results_all_eigenmt.tsv.gz', significance_column = 'total_bf_eigen', gene_column = 'feature')
+
+```
+
+```{r get_iepeak_results, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# get the number of ca peaks
+ieqtl_gene_results <- read_all_h5s_all_celltypes('/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/output/L1/', qtl_results_prepend='qtl_results_snp_')
+# get the UT eQTLs
+ut_eqtl_gene_results <- get_qtls_per_celltype_limix(eqtl_output_loc, output_file='qtl_results_all_nominally_significant.txt.gz', significance_column = 'empirical_feature_p_value', significance_cutoff=NULL)
+# and the 24hCA
+eqtl_24hca_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/output/L1/24hCA/'
+ca24h_eqtl_gene_results <- get_qtls_per_celltype_limix(eqtl_24hca_output_loc)
+
+
+```
