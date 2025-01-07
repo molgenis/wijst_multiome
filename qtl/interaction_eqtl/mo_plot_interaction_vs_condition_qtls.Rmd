@@ -399,7 +399,7 @@ egene_numbers_to_plot <- function(egene_numbers, celltype_column='cell_type', nu
   }
   # start plot
   p <- ggplot(mapping = aes(x = egene_numbers[[celltype_column]], y = egene_numbers[[number_column]], fill = egene_numbers[[celltype_column]])) +
-    geom_bar(stat='identity') + xlab(celltype_column) + ylab(number_column)
+    geom_bar(stat='identity') + xlab(celltype_column) + ylab(number_column) + labs(fill = celltype_column)
   # options
   if (use_distinct_colours) {
     # get the unique possible assigments
@@ -647,7 +647,7 @@ get_ngenes_celltype <- function(feature_object) {
 #' @param angle_labels angle the x labels 90 degrees?
 #' @returns a barplot with the number of DE genes per cell type
 #' 
-plot_de_number_vs_celltype_totals <- function(de_numbers, cell_numbers, de_numbers_celltype_column='celltype', cell_numbers_celltype_column='celltype', de_numbers_numbers_column='number', cell_numbers_numbers_column='number', pointless=F, legendless=F, ylim=NULL, xlim=NULL, paper_style=T) {
+plot_de_number_vs_celltype_totals <- function(de_numbers, cell_numbers, de_numbers_celltype_column='celltype', cell_numbers_celltype_column='celltype', de_numbers_numbers_column='number', cell_numbers_numbers_column='number', pointless=F, legendless=F, ylim=NULL, xlim=NULL, paper_style=T, use_colour_coding_dict=F) {
   # subset the DE numbers to what we care about
   de_numbers <- de_numbers[, c(de_numbers_celltype_column, de_numbers_numbers_column)]
   # and harmonize the column names
@@ -779,6 +779,9 @@ limix_output_per_celltype_to_concordance <- function(limix_table_list1, limix_ta
     }
     # read from the first table
     table1 <- limix_table_list1[[celltype]][, c(feature_id_column1, snp_id_column1, effect_size_column1, assessed_allele_column1, significance_column1)]
+    print('bliep')
+    print(table1)
+    print('bloep')
     # set the column names expected
     colnames(table1) <- c('feature', 'variant', 'd1_z', 'd1_a0', 'd1_significance')
     # set significance
@@ -790,6 +793,9 @@ limix_output_per_celltype_to_concordance <- function(limix_table_list1, limix_ta
       limix_table_list2[[celltype]][[assessed_allele_column2]] <- NA
     }
     table2 <- limix_table_list2[[celltype]][, c(feature_id_column2, snp_id_column2, effect_size_column2, assessed_allele_column2, significance_column2)]
+    print('bliep')
+    print(table2)
+    print('bloep')
     colnames(table2) <- c('feature', 'variant', 'd2_z', 'd2_a0', 'd2_significance')
     table2[['d2_significant']] <- table2[['d2_significance']] < significance_cutoff2
     table2[['var_feature']] <- paste(table2[['variant']], table2[['feature']], sep = '>')
@@ -871,13 +877,13 @@ knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 ####################
 
 # location of eQTL
-eqtl_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/output/L1/UT/'
+eqtl_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/output/L1/UT/'
 # location of caQTL output
-caqtl_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/output_cis_50kb_updated_features/L1/UT/'
+caqtl_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/output_cis_50kb_updated_features/L1/UT/'
 # location of the interaction-eQTLs
-ieqtl_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/output/L1/'
+ieqtl_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/output/L1/'
 # location of the interaction-caQTLs
-icaqtl_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/interaction_caqtl/sc-eqtlgen/output/L1/'
+icaqtl_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_caqtl/sc-eqtlgen/output/L1/'
 
 ```
 
@@ -913,16 +919,23 @@ ieqtl_gene_numbers <- get_egene_numbers_per_celltype_limix(ieqtl_output_loc, out
 
 ```
 
+```{r number_plots, include=TRUE, fig.width=9, fig.heigh=6}
+# interaction-caQTLs
+egene_numbers_to_plot(icaqtl_peak_numbers, use_color_dict=T, legendless = T) + xlab('Cell type') + ylab('Number of interaction-ePeaks') + ggtitle('Number of interaction-ePeaks per cell type')
+# interaction-eQTLs
+egene_numbers_to_plot(ieqtl_gene_numbers, use_color_dict=T, legendless = T) + xlab('Cell type') + ylab('Number of interaction-eGenes') + ggtitle('Number of interaction-eGenes per cell type')
+```
+
 ```{r get_iepeak_results, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # get the number of ca peaks
-ieqtl_gene_results <- read_all_h5s_all_celltypes('/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/output/L1/', qtl_results_prepend='qtl_results_snp_')
+ieqtl_gene_results <- read_all_h5s_all_celltypes('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/output/L1/', qtl_results_prepend='qtl_results_snp_')
 # get the UT eQTLs
 ut_eqtl_gene_results <- get_qtls_per_celltype_limix(eqtl_output_loc, output_file='qtl_results_all_nominally_significant.txt.gz', significance_column = 'empirical_feature_p_value', significance_cutoff=NULL)
 # and the 24hCA
-eqtl_24hca_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/output/L1/24hCA/'
+eqtl_24hca_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/output/L1/24hCA/'
 ca24h_eqtl_gene_results <- get_qtls_per_celltype_limix(eqtl_24hca_output_loc)
 
-
 ```
+
