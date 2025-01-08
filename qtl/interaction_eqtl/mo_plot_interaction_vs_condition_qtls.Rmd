@@ -31,7 +31,8 @@ library(roycols)
 library(ggrastr)
 library(ggpubr)
 library(ReigenMT)
-
+library(snpStats)
+library(UpSetR)
 
 ```
 
@@ -287,33 +288,37 @@ get_qtls_per_celltype_limix <- function(qtl_output_loc, output_file='qtl_results
   for (cell_type in cell_types) {
     # paste together the full path
     full_cell_type_path <- paste(qtl_output_loc, '/', cell_type, '/', output_file, sep = '')
-    # log if requested
-    if (verbose) {
-      print(paste('reading', full_cell_type_path))
-    }
-    # read the file
-    cell_type_output <- read.table(full_cell_type_path, sep = '\t', header = T)
-    # filter the results on significance
-    if (!is.null(significance_column) & !is.null(significance_cutoff)) {
-      # print progress if requested
+    if (file.exists(full_cell_type_path)) {
+      # log if requested
       if (verbose) {
-        print(paste('variant+phenotype before filtering', nrow(cell_type_output)))
+        print(paste('reading', full_cell_type_path))
       }
-      # filter
-      cell_type_output <- cell_type_output[
-        !is.na(cell_type_output[[significance_column]]) &
-          cell_type_output[[significance_column]] < significance_cutoff, 
-      ]
-      if (verbose) {
-        print(paste('variant+phenotype after filtering', nrow(cell_type_output)))
+      # read the file
+      cell_type_output <- read.table(full_cell_type_path, sep = '\t', header = T)
+      # filter the results on significance
+      if (!is.null(significance_column) & !is.null(significance_cutoff)) {
+        # print progress if requested
+        if (verbose) {
+          print(paste('variant+phenotype before filtering', nrow(cell_type_output)))
+        }
+        # filter
+        cell_type_output <- cell_type_output[
+          !is.na(cell_type_output[[significance_column]]) &
+            cell_type_output[[significance_column]] < significance_cutoff, 
+        ]
+        if (verbose) {
+          print(paste('variant+phenotype after filtering', nrow(cell_type_output)))
+        }
       }
+      # put in the list
+      qtls_per_celltype[[cell_type]] <- cell_type_output
     }
-    # put in the list
-    qtls_per_celltype[[cell_type]] <- cell_type_output
+    else {
+      warning(paste('folder is present, but no output file at', full_cell_type_path))
+    }
   }
   return(qtls_per_celltype)
 }
-
 
 
 #' get the number eGenes per cell type from QTL output
@@ -336,34 +341,62 @@ get_egene_numbers_per_celltype_limix <- function(qtl_output_loc, output_file='qt
     if (verbose) {
       print(paste('reading', full_cell_type_path))
     }
-    # read the file
-    cell_type_output <- read.table(full_cell_type_path, sep = '\t', header = T)
-    # filter the results on significance
-    if (!is.null(significance_column)) {
-      # print progress if requested
-      if (verbose) {
-        print(paste('variant+phenotype before filtering', nrow(cell_type_output)))
+    if (file.exists(full_cell_type_path)) {
+      # read the file
+      cell_type_output <- read.table(full_cell_type_path, sep = '\t', header = T)
+      # filter the results on significance
+      if (!is.null(significance_column)) {
+        # print progress if requested
+        if (verbose) {
+          print(paste('variant+phenotype before filtering', nrow(cell_type_output)))
+        }
+        # filter
+        cell_type_output <- cell_type_output[
+          !is.na(cell_type_output[[significance_column]]) &
+            cell_type_output[[significance_column]] < significance_cutoff, 
+        ]
+        if (verbose) {
+          print(paste('variant+phenotype after filtering', nrow(cell_type_output)))
+        }
       }
-      # filter
-      cell_type_output <- cell_type_output[
-        !is.na(cell_type_output[[significance_column]]) &
-          cell_type_output[[significance_column]] < significance_cutoff, 
-      ]
-      if (verbose) {
-        print(paste('variant+phenotype after filtering', nrow(cell_type_output)))
-      }
+      # get the unique genes in this file
+      unique_genes <- unique(cell_type_output[[gene_column]])
+      # get how many these are
+      nr_genes <- length(unique_genes)
+      # add to the list
+      numbers_per_celltype[[cell_type]] <- nr_genes
     }
-    # get the unique genes in this file
-    unique_genes <- unique(cell_type_output[[gene_column]])
-    # get how many these are
-    nr_genes <- length(unique_genes)
-    # add to the list
-    numbers_per_celltype[[cell_type]] <- nr_genes
+    else {
+      warning(paste('folder is present, but no output file at', full_cell_type_path))
+    }
   }
   # turn into a dataframe
   numbers_per_celltype_df <- data.frame(cell_type = names(numbers_per_celltype), nr = as.vector(unlist(numbers_per_celltype)))
   return(numbers_per_celltype_df)
 }
+
+
+#' get the QTLs per cell type from QTL output
+#' 
+#' @param qtl_output_loc base location of the QTL output per cell type
+#' @param output_file which output file to read for the results
+#' @param gene_column which column to use as the gene identifier
+#' @param significance_column significance column to filter by
+#' @param significance_cutoff significance value to filter by, if NULL, no filtering takes place
+#' @param verbose print progress updates
+#' @returns a list of celltypes as keys, and the QTL output for each cell type
+#' 
+get_qtls_per_celltype_emp <- function(qtl_output_loc, output_file='eQTLsFDR-ProbeLevel.txt.gz', gene_column='HGNCName', significance_column='FDR', significance_cutoff=NULL, verbose=T) {
+  qtls_per_celltype <- get_qtls_per_celltype_limix(
+    qtl_output_loc, 
+    output_file = output_file, 
+    gene_column = gene_column, 
+    significance_column = significance_column, 
+    significance_cutoff = significance_cutoff, 
+    verbose = verbose)
+  return(qtls_per_celltype)
+}
+
 
 
 #' plot in a barplot the number of DE genes per cell type
@@ -754,6 +787,50 @@ read_all_h5s_all_celltypes <- function(celltypes_dir, qtl_midpend='/inflammation
 }
 
 
+add_chrom_and_position <- function(qtl_output, genotype_positions, variant_column_qtls='SNPName', variant_column_genotypes='snp.name', chrom_column_genotypes='chromosome', position_column_genotypes='position', ref_column_genotypes='allele.2', alt_column_genotypes='allele.1', new_prepend='b38_', new_append='') {
+  # check what we can map
+  qtl_output_mappable <- qtl_output[qtl_output[[variant_column_qtls]] %in% genotype_positions[[variant_column_genotypes]], ]
+  # and what is unmappable
+  qtl_output_unmappable <- qtl_output[!(qtl_output[[variant_column_qtls]] %in% genotype_positions[[variant_column_genotypes]]), ]
+  # get the positions of the variants in the mapping
+  var_indices <- match(qtl_output_mappable[[variant_column_qtls]], genotype_positions[[variant_column_genotypes]])
+  # now get the data
+  added_data <- genotype_positions[var_indices, c(chrom_column_genotypes, position_column_genotypes, ref_column_genotypes, alt_column_genotypes)]
+  # rename the columns
+  colnames(added_data) <- paste(new_prepend, colnames(added_data), new_append, sep = '')
+  # merge onto data
+  qtl_output_mappable <- cbind(qtl_output_mappable, added_data)
+  # add empty data for the unmappable
+  qtl_output_unmappable_dummies <- data.frame(matrix(, nrow = nrow(qtl_output_unmappable), ncol = ncol(added_data)))
+  colnames(qtl_output_unmappable_dummies) <- colnames(added_data)
+  qtl_output_unmappable <- cbind(qtl_output_unmappable, qtl_output_unmappable_dummies)
+  # add all together again
+  qtl_output <- rbind(qtl_output_mappable, qtl_output_unmappable)
+  return(qtl_output)
+}
+
+
+add_chrom_and_position_list <- function(qtl_output_list, genotype_positions, variant_column_qtls='SNPName', variant_column_genotypes='snp.name', chrom_column_genotypes='chromosome', position_column_genotypes='position', ref_column_genotypes='allele.2', alt_column_genotypes='allele.1', new_prepend='b38_', new_append='') {
+  # do each element in the list
+  for (element_name in names(qtl_output_list)) {
+    if (!is.null(qtl_output_list[[element_name]]) & nrow(qtl_output_list[[element_name]]) > 0) {
+      qtl_output_list[[element_name]] <- add_chrom_and_position(
+      qtl_output_list[[element_name]], 
+      genotype_positions, 
+      variant_column_qtls = variant_column_qtls, 
+      variant_column_genotypes = variant_column_genotypes, 
+      chrom_column_genotypes =chrom_column_genotypes, 
+      position_column_genotypes = position_column_genotypes, 
+      ref_column_genotypes = ref_column_genotypes, 
+      alt_column_genotypes = alt_column_genotypes, 
+      new_prepend = new_prepend, 
+      new_append = new_append)
+    }
+  }
+  return(qtl_output_list)
+}
+
+
 limix_output_per_celltype_to_concordance <- function(limix_table_list1, limix_table_list2, 
                                                      feature_id_column1='feature_id', 
                                                      feature_id_column2='feature_id', 
@@ -939,3 +1016,133 @@ ca24h_eqtl_gene_results <- get_qtls_per_celltype_limix(eqtl_24hca_output_loc)
 
 ```
 
+```{r g1000_ref, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# read the 1000G reference genotype file
+g1000_ref_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/hg38/ref_panel_QC/30x-GRCh38-EUR'
+g1000_ref <- read.plink(
+    bed = paste(g1000_ref_loc, '.bed', sep = ''),
+    bim = paste(g1000_ref_loc, '.bim', sep = ''),
+    fam = paste(g1000_ref_loc, '.fam', sep = '')
+)
+# we will need this to match the variants, as the Oelen2022 data is hg19, and the multiome is b38
+
+```
+
+```{r get_oelen2022_results, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# get the number of ca genes
+stim_eqtl_vs24hca_gene_results <- get_qtls_per_celltype_emp('/groups/umcg-franke-scrna/tmp04/releases/wijst-2020-hg19/v1/QTL_mapping/eQTL/sct_mqc_demux_lores_20201106_eqtlgenlead_anycondsig/results/UT_vs_24hCA/')
+# for 3h as well
+stim_eqtl_vs3hca_gene_results <- get_qtls_per_celltype_emp('/groups/umcg-franke-scrna/tmp04/releases/wijst-2020-hg19/v1/QTL_mapping/eQTL/sct_mqc_demux_lores_20201106_eqtlgenlead_anycondsig/results/UT_vs_3hCA/')
+
+# get the number of pa genes
+stim_eqtl_vs24hpa_gene_results <- get_qtls_per_celltype_emp('/groups/umcg-franke-scrna/tmp04/releases/wijst-2020-hg19/v1/QTL_mapping/eQTL/sct_mqc_demux_lores_20201106_eqtlgenlead_anycondsig/results/UT_vs_24hPA/')
+# for 3h as well
+stim_eqtl_vs3hpa_gene_results <- get_qtls_per_celltype_emp('/groups/umcg-franke-scrna/tmp04/releases/wijst-2020-hg19/v1/QTL_mapping/eQTL/sct_mqc_demux_lores_20201106_eqtlgenlead_anycondsig/results/UT_vs_3hPA/')
+
+# get the number of pa genes
+stim_eqtl_vs24hmtb_gene_results <- get_qtls_per_celltype_emp('/groups/umcg-franke-scrna/tmp04/releases/wijst-2020-hg19/v1/QTL_mapping/eQTL/sct_mqc_demux_lores_20201106_eqtlgenlead_anycondsig/results/UT_vs_24hMTB/')
+# for 3h as well
+stim_eqtl_vs3hmtb_gene_results <- get_qtls_per_celltype_emp('/groups/umcg-franke-scrna/tmp04/releases/wijst-2020-hg19/v1/QTL_mapping/eQTL/sct_mqc_demux_lores_20201106_eqtlgenlead_anycondsig/results/UT_vs_3hMTB/')
+
+# clean up the names
+names(stim_eqtl_vs24hca_gene_results) <- gsub('_expression$', '', names(stim_eqtl_vs24hca_gene_results))
+names(stim_eqtl_vs3hca_gene_results) <- gsub('_expression$', '', names(stim_eqtl_vs3hca_gene_results))
+names(stim_eqtl_vs24hpa_gene_results) <- gsub('_expression$', '', names(stim_eqtl_vs24hpa_gene_results))
+names(stim_eqtl_vs3hpa_gene_results) <- gsub('_expression$', '', names(stim_eqtl_vs3hpa_gene_results))
+names(stim_eqtl_vs24hmtb_gene_results) <- gsub('_expression$', '', names(stim_eqtl_vs24hmtb_gene_results))
+names(stim_eqtl_vs3hmtb_gene_results) <- gsub('_expression$', '', names(stim_eqtl_vs3hmtb_gene_results))
+
+# add the b38 positions
+stim_eqtl_vs24hca_gene_results <- add_chrom_and_position_list(stim_eqtl_vs24hca_gene_results, g1000_ref$map)
+stim_eqtl_vs3hca_gene_results <- add_chrom_and_position_list(stim_eqtl_vs3hca_gene_results, g1000_ref$map)
+stim_eqtl_vs24hpa_gene_results <- add_chrom_and_position_list(stim_eqtl_vs24hpa_gene_results, g1000_ref$map)
+stim_eqtl_vs3hpa_gene_results <- add_chrom_and_position_list(stim_eqtl_vs3hpa_gene_results, g1000_ref$map)
+stim_eqtl_vs24hmtb_gene_results <- add_chrom_and_position_list(stim_eqtl_vs24hmtb_gene_results, g1000_ref$map)
+stim_eqtl_vs3hmtb_gene_results <- add_chrom_and_position_list(stim_eqtl_vs3hmtb_gene_results, g1000_ref$map)
+
+# filter to significant
+
+```
+
+```{r get_oelen2022_results, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+
+ieqtl_iegene_results <- get_qtls_per_celltype_limix(ieqtl_output_loc, output_file = 'inflammation_final/iqtl_results_all_eigenmt.tsv.gz', significance_column = 'total_bf_eigen', gene_column = 'feature')
+
+```
+
+```{r get_oelen2022_overlap_mono, include=TRUE, fig.width=9, fig.height=9}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# make into upset for monocytes
+UpSetR::upset(fromList(
+  list(
+  'NC2022_24hCA' = stim_eqtl_vs24hca_gene_results[['monocyte']][stim_eqtl_vs24hca_gene_results[['monocyte']][['FDR']] < 0.05, 'HGNCName'], 
+  'NC2022_3hCA' = stim_eqtl_vs3hca_gene_results[['monocyte']][stim_eqtl_vs3hca_gene_results[['monocyte']][['FDR']] < 0.05, 'HGNCName'], 
+  'NC2022_24hPA' = stim_eqtl_vs24hpa_gene_results[['monocyte']][stim_eqtl_vs24hpa_gene_results[['monocyte']][['FDR']] < 0.05, 'HGNCName'], 
+  'NC2022_3hPA' = stim_eqtl_vs3hpa_gene_results[['monocyte']][stim_eqtl_vs3hpa_gene_results[['monocyte']][['FDR']] < 0.05, 'HGNCName'], 
+  'NC2022_24hMTB' = stim_eqtl_vs24hmtb_gene_results[['monocyte']][stim_eqtl_vs24hmtb_gene_results[['monocyte']][['FDR']] < 0.05, 'HGNCName'], 
+  'NC2022_3hMTB' = stim_eqtl_vs3hmtb_gene_results[['monocyte']][stim_eqtl_vs3hmtb_gene_results[['monocyte']][['FDR']] < 0.05, 'HGNCName'], 
+  'multiome' = ieqtl_iegene_results[['monocyte']][ieqtl_iegene_results[['monocyte']][['total_bf_eigen']] < 0.05, 'feature']
+  )
+), nsets = 7, order.by = 'freq') 
+  grid.text("ieQTL and reQTL overlaps in Monocytes", x = 0.65, y = 0.95, gp = gpar(fontsize = 20))
+
+
+# same, but merging all the conditions of NC2022
+UpSetR::upset(fromList(
+  list(
+  'NC2022' = c(
+    stim_eqtl_vs24hca_gene_results[['monocyte']][stim_eqtl_vs24hca_gene_results[['monocyte']][['FDR']] < 0.05, 'HGNCName'], 
+    stim_eqtl_vs3hca_gene_results[['monocyte']][stim_eqtl_vs3hca_gene_results[['monocyte']][['FDR']] < 0.05, 'HGNCName'], 
+    stim_eqtl_vs24hpa_gene_results[['monocyte']][stim_eqtl_vs24hpa_gene_results[['monocyte']][['FDR']] < 0.05, 'HGNCName'], 
+    stim_eqtl_vs3hpa_gene_results[['monocyte']][stim_eqtl_vs3hpa_gene_results[['monocyte']][['FDR']] < 0.05, 'HGNCName'], 
+    stim_eqtl_vs24hmtb_gene_results[['monocyte']][stim_eqtl_vs24hmtb_gene_results[['monocyte']][['FDR']] < 0.05, 'HGNCName'], 
+    stim_eqtl_vs3hmtb_gene_results[['monocyte']][stim_eqtl_vs3hmtb_gene_results[['monocyte']][['FDR']] < 0.05, 'HGNCName']
+    ), 
+  'multiome' = ieqtl_iegene_results[['monocyte']][ieqtl_iegene_results[['monocyte']][['total_bf_eigen']] < 0.05, 'feature']
+  )
+), nsets = 2, order.by = 'freq')
+  grid.text("ieQTL and reQTL overlaps in Monocytes", x = 0.65, y = 0.95, gp = gpar(fontsize = 20))
+
+```
+
+```{r get_oelen2022_overlap_cd4t, include=TRUE, fig.width=9, fig.height=9}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# make into upset for monocytes
+UpSetR::upset(fromList(
+  list(
+  'NC2022_24hCA' = stim_eqtl_vs24hca_gene_results[['CD4T']][stim_eqtl_vs24hca_gene_results[['CD4T']][['FDR']] < 0.05, 'HGNCName'], 
+  'NC2022_3hCA' = stim_eqtl_vs3hca_gene_results[['CD4T']][stim_eqtl_vs3hca_gene_results[['CD4T']][['FDR']] < 0.05, 'HGNCName'], 
+  'NC2022_24hPA' = stim_eqtl_vs24hpa_gene_results[['CD4T']][stim_eqtl_vs24hpa_gene_results[['CD4T']][['FDR']] < 0.05, 'HGNCName'], 
+  'NC2022_3hPA' = stim_eqtl_vs3hpa_gene_results[['CD4T']][stim_eqtl_vs3hpa_gene_results[['CD4T']][['FDR']] < 0.05, 'HGNCName'], 
+  'NC2022_24hMTB' = stim_eqtl_vs24hmtb_gene_results[['CD4T']][stim_eqtl_vs24hmtb_gene_results[['CD4T']][['FDR']] < 0.05, 'HGNCName'], 
+  'NC2022_3hMTB' = stim_eqtl_vs3hmtb_gene_results[['CD4T']][stim_eqtl_vs3hmtb_gene_results[['CD4T']][['FDR']] < 0.05, 'HGNCName'], 
+  'multiome' = ieqtl_iegene_results[['CD4T']][ieqtl_iegene_results[['CD4T']][['total_bf_eigen']] < 0.05, 'feature']
+  )
+), nsets = 7, order.by = 'freq')
+  grid.text("ieQTL and reQTL overlaps in CD4+ T cells", x = 0.65, y = 0.95, gp = gpar(fontsize = 20))
+
+# same, but merging all the conditions of NC2022
+UpSetR::upset(fromList(
+  list(
+  'NC2022' = c(
+    stim_eqtl_vs24hca_gene_results[['CD4T']][stim_eqtl_vs24hca_gene_results[['CD4T']][['FDR']] < 0.05, 'HGNCName'], 
+    stim_eqtl_vs3hca_gene_results[['CD4T']][stim_eqtl_vs3hca_gene_results[['CD4T']][['FDR']] < 0.05, 'HGNCName'], 
+    stim_eqtl_vs24hpa_gene_results[['CD4T']][stim_eqtl_vs24hpa_gene_results[['CD4T']][['FDR']] < 0.05, 'HGNCName'], 
+    stim_eqtl_vs3hpa_gene_results[['CD4T']][stim_eqtl_vs3hpa_gene_results[['CD4T']][['FDR']] < 0.05, 'HGNCName'], 
+    stim_eqtl_vs24hmtb_gene_results[['CD4T']][stim_eqtl_vs24hmtb_gene_results[['CD4T']][['FDR']] < 0.05, 'HGNCName'], 
+    stim_eqtl_vs3hmtb_gene_results[['CD4T']][stim_eqtl_vs3hmtb_gene_results[['CD4T']][['FDR']] < 0.05, 'HGNCName']
+    ), 
+  'multiome' = ieqtl_iegene_results[['CD4T']][ieqtl_iegene_results[['CD4T']][['total_bf_eigen']] < 0.05, 'feature']
+  )
+), nsets = 2, order.by = 'freq')
+  grid.text("ieQTL and reQTL overlaps in CD4+ T cells", x = 0.65, y = 0.95, gp = gpar(fontsize = 20))
+
+```
