@@ -19,8 +19,8 @@ Demuxlet v2
 
 Below we will outline the steps taken to process and analyse the data
 
-### alignment to reference genome
 
+### alignment to reference genome
 '*alignment/mo_create_cellranger_jobs_batch1.sh*'   create SLURM jobs to align the RNA-seq data to the b38 human reference\
 '*alignment/mo_create_multiome_csvs_batch1.sh*'     create SLURM jobs to do a joint align of the RNA-seq and ATAC-seq data to the b38 human reference\
 '*alignment/mo_create_cellranger_arc_jobs_batch1.sh*'   create SLURM jobs to align the RNA+ATAC data to the b38 human reference\
@@ -29,7 +29,6 @@ Below we will outline the steps taken to process and analyse the data
 
 
 ### genotypeing
-
 '*genotyping/mo_collect_previously_genotyped_individuals.R*'    collect data on which individuals were previously genotyped\
 '*genotyping/mo_get_previous_genotypes.R*'  create list of previously genotyped individuals, create sample sheets, create age/sex metadata file\
 '*genotyping/mo_preprocess_previous_genotypes.sh*'  subset previously genotyped individuals genotype data, and convert to format for imputation\
@@ -37,6 +36,7 @@ Below we will outline the steps taken to process and analyse the data
 '*genotyping/mo_create_batch2_psam.R*'  create psam file required for imputation, for the second batch of individuals\
 '*genotyping/PreImputation_ugli.yaml*'  the imputation config used for imputing the previously genotyped UGLI individuals\
 '*genotyping/PreImputation_mo_batch2.yaml*'     the imputation config used for imputing the second batch of new individuals
+
 
 ### ambient RNA correction
 '*ambient_rna_correction/mo_cellbend_rna.sh*' create sbatch jobs to do ambient RNA correction using CellBender on the RNA data
@@ -165,7 +165,8 @@ Below we will outline the steps taken to process and analyse the data
 
 ### caQTL mapping
 '*qtl/caqtl/mo_create_limix_chromatin_input.R*'     create input for LIMIX caQTL mapping\
-'*qtl/caqtl/mo_create_n_cellss_accessible_tables.R*'  create table of number of non-zero nuclei per region and donor
+'*qtl/caqtl/mo_create_n_cellss_accessible_tables.R*'  create table of number of non-zero nuclei per region and donor\
+'*qtl/caqtl/mo_create_caqtl_feature_filters.R*'   create lists of features to test for caQTL mapping
 
 
 ### QTL results
@@ -195,7 +196,6 @@ Below we will outline the steps taken to process and analyse the data
 ### QTL utility scripts
 '*qtl/mo_regress_qtlinputs.py*'    regress PCs out of QTL input files\
 '*qtl/mo_eigenmt_correct_limix_qtls.R*'    perform eigenMT MTC on QTL outputs
-
 
 
 ### cell type composition GWAS
