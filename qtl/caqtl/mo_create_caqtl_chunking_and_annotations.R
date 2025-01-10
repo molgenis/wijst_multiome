@@ -35,12 +35,13 @@ library(mdfiver)
 #' @param filter_value Numeric. Minimum value for filtering the data. Default is 0.001.
 #' @param feature_column Character. Column name to extract unique features. Default is 'name'.
 #' @param strip_chr Character. What to strip from the beginning of the chromosome name column. Default is 'chr'.
+#' @param features_per_chunk Numeric. The number of features each chunk should contain. Default is 1.
 #' @return Integer. Returns 0 upon successful completion.
 #' @examples
 #' \dontrun{
 #' peak_files_to_annotation_and_chunks("path/to/peak_input", "path/to/chunkfile.txt.gz", "path/to/annotations.tsv.gz")
 #' }
-peak_files_to_annotation_and_chunks <- function(peak_input_dir, output_file_chunking, output_file_annotatations, cell_types=c('B', 'CD4T', 'CD8T', 'DC', 'monocyte', 'NK'), conditions=c('UT', '24hCA'), file_prepend='mo_peaks_lane1to80_', file_append='.bed', filter_column='pct_exp', filter_value=0.001, feature_column='name', strip_chr='chr') {
+peak_files_to_annotation_and_chunks <- function(peak_input_dir, output_file_chunking, output_file_annotatations, cell_types=c('B', 'CD4T', 'CD8T', 'DC', 'monocyte', 'NK'), conditions=c('UT', '24hCA'), file_prepend='mo_peaks_lane1to80_', file_append='.bed', filter_column='pct_exp', filter_value=0.001, feature_column='name', strip_chr='chr', features_per_chunk=1) {
   # we'll store all results
   results_list <- list()
   # check cell type
@@ -75,7 +76,39 @@ peak_files_to_annotation_and_chunks <- function(peak_input_dir, output_file_chun
   }
   
   # create chunking file
-  chunking_file <- data.frame(x = paste(results_all[['#chrom']], ':', results_all[['start']], '-', results_all[['end']], sep = ''))
+  chunking_file <- NULL
+  if (features_per_chunk == 1) {
+    chunking_file <- data.frame(x = paste(results_all[['#chrom']], ':', results_all[['start']], '-', results_all[['end']], sep = ''))
+  }
+  else {
+    # create a data.table per chromosome
+    chunking_table_per_chrom <- list()
+    # check each chromosome
+    for (chrom in unique(results_all[['#chrom']])) {
+      # subset to that chromosome
+      results_chrom <- results_all[results_all[['#chrom']] == chrom, ]
+      # get the number of features for that chromosome
+      n_features_chrom <- nrow(results_chrom)
+      # get the starting chunks
+      starts_i <- seq(from = 1, to = n_features_chrom, by = features_per_chunk)
+      # and the ending chunks
+      ends_i <- seq(from = features_per_chunk, to = n_features_chrom, by = features_per_chunk)
+      # now get the positions
+      starts <- results_chrom[['start']][starts_i]
+      ends <- results_chrom[['end']][ends_i]
+      # if the start and end are not of the same length, that means the last chunk will be a bit smaller, it will be the end of the last feature
+      if (length(starts) > length(ends)) {
+        # so extract that one
+        ends <- c(ends, results_chrom[['end']][n_features_chrom])
+      }
+      # now put those back into the chunking file
+      chunking_table_per_chrom[[chrom]] <- data.table('#chrom' = rep(chrom, length(starts)), 'start' = starts, 'end' = ends)
+    }
+    # merge all
+    chunkin_table_all <- do.call('rbind', chunking_table_per_chrom)
+    # and make the one we care about
+    chunking_file <- data.frame(x = paste(chunkin_table_all[['#chrom']], ':', chunkin_table_all[['start']], '-', chunkin_table_all[['end']], sep = ''))
+  }
   # gz file ends with .gz
   output_file_chunking_gz <- output_file_chunking
   if (grepl('.gz$', output_file_chunking)) {
@@ -124,5 +157,6 @@ chunking_file_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/
 peak_files_to_annotation_and_chunks(
   peak_pct_dir, 
   chunking_file_loc, 
-  annotation_file_loc
+  annotation_file_loc, 
+  features_per_chunk=100
 )
