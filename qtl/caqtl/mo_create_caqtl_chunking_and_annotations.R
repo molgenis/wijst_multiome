@@ -34,12 +34,13 @@ library(mdfiver)
 #' @param filter_column Character. Column name to apply the filter on. Default is 'pct_exp'.
 #' @param filter_value Numeric. Minimum value for filtering the data. Default is 0.001.
 #' @param feature_column Character. Column name to extract unique features. Default is 'name'.
+#' @param strip_chr Character. What to strip from the beginning of the chromosome name column. Default is 'chr'.
 #' @return Integer. Returns 0 upon successful completion.
 #' @examples
 #' \dontrun{
 #' peak_files_to_annotation_and_chunks("path/to/peak_input", "path/to/chunkfile.txt.gz", "path/to/annotations.tsv.gz")
 #' }
-peak_files_to_annotation_and_chunks <- function(peak_input_dir, output_file_chunking, output_file_annotatations, cell_types=c('B', 'CD4T', 'CD8T', 'DC', 'monocyte', 'NK'), conditions=c('UT', '24hCA'), file_prepend='mo_peaks_lane1to80_', file_append='.bed', filter_column='pct_exp', filter_value=0.001, feature_column='name') {
+peak_files_to_annotation_and_chunks <- function(peak_input_dir, output_file_chunking, output_file_annotatations, cell_types=c('B', 'CD4T', 'CD8T', 'DC', 'monocyte', 'NK'), conditions=c('UT', '24hCA'), file_prepend='mo_peaks_lane1to80_', file_append='.bed', filter_column='pct_exp', filter_value=0.001, feature_column='name', strip_chr='chr') {
   # we'll store all results
   results_list <- list()
   # check cell type
@@ -68,6 +69,10 @@ peak_files_to_annotation_and_chunks <- function(peak_input_dir, output_file_chun
   results_all <- unique(results_all[, c('#chrom','start', 'end', 'name')])
   # just to be save, order them
   results_all <- results_all[order(results_all[['#chrom']], results_all[['start']], results_all[['end']]), ]
+  # remove the chr if requested
+  if (!is.na(strip_chr)) {
+    results_all[['#chrom']] <- gsub(paste('^', strip_chr, sep = ''), '', results_all[['#chrom']])
+  }
   
   # create chunking file
   chunking_file <- data.frame(x = paste(results_all[['#chrom']], ':', results_all[['start']], '-', results_all[['end']], sep = ''))
@@ -77,7 +82,7 @@ peak_files_to_annotation_and_chunks <- function(peak_input_dir, output_file_chun
     output_file_chunking_gz <- gzfile(output_file_chunking)
   }
   # write
-  write.table(chunking_file, output_file_chunking, row.names = F, col.names = F, quote = F)
+  write.table(chunking_file, output_file_chunking_gz, row.names = F, col.names = F, quote = F)
   # and make an md5
   mdfiver::create_md5_for_file(output_file_chunking)
   
@@ -101,6 +106,9 @@ peak_files_to_annotation_and_chunks <- function(peak_input_dir, output_file_chun
 ####################
 # Settings        #
 ####################
+
+# set so that positions are not converted to scientific notations
+options(scipen=999)
 
 
 ####################

@@ -28,15 +28,15 @@ covariates_loc: /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/in
 covariates_prepend:
 covariates_append: .qtlInput.Pcs.txt.gz
 # feature filters
-feature_filter_loc: /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/caqtl/confinements/pc01/
+feature_filter_loc: /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/confinements/pc01/
 feature_filter_prepend: test_features_
 feature_filter_append: .txt.gz
 # location of kinship file
 kinship_loc: /groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/input/sample.kinship
 # location of the chunking file
-chunking_file_loc: /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/ChunkingFile_new.txt
+chunking_file_loc: /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/chunking_files/pct01/ChunkingFile.txt.gz
 # location of the limix annotation file
-limix_annotation_loc: /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/LimixAnnotationFile.txt
+limix_annotation_loc: /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/annotations/pct01/LimixAnnotationFile.tsv.gz
 # location of the sample mapping file
 smf_loc: /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_caqtl/sc-eqtlgen/input/L1/smf.txt
 
