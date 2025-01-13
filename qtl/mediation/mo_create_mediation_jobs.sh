@@ -40,12 +40,12 @@ METADATA_PREPEND='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/
 METADATA_APPEND='.metadata.tsv.gz'
 # output file prepend before cell type
 #OUT_PREPEND='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/mediation/output/atac_to_expression/UT/'
-OUT_PREPEND='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/mediation/output/regressed_atac_to_gausnormed_expression/UT/'
+OUT_PREPEND='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/mediation/output/regressed_gausnormed_atac_to_gausnormed_expression/UT/'
 # output file append after cell type
 OUT_APPEND='.tsv.gz'
 # output file prepend before cell type
 #JOB_PREPEND='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/mediation/jobs/atac_to_expression/UT/'
-JOB_PREPEND='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/mediation/jobs/regressed_atac_to_gausnormed_expression/UT/'
+JOB_PREPEND='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/mediation/jobs/regressed_gausnormed_atac_to_gausnormed_expression/UT/'
 # output file append after cell type
 JOB_APPEND='_SBATCH.sh'
 
@@ -103,7 +103,8 @@ do
         --random_effects '${RANDOM_EFFECTS}'
         --confinement_list '${confine_loc}'
         --out '${out_loc}'
-        --eqtl_gausnorm'
+        --eqtl_gausnorm
+        --caqtl_gausnorm'
 
         # add to the job
         echo ${run_command} >> ${job_loc}
