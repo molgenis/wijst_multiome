@@ -359,4 +359,19 @@ p_abundance_lowres_lanesample_absolute + ggtitle('Number of cells per sample') +
 ```{r cell_numbers_ut, include=TRUE, fig.width=10, fig.height=10}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
+# subset to UT
+cell_level_metadata_ut <- cell_level_metadata[!is.na(cell_level_metadata[['condition_final']]) & cell_level_metadata[['condition_final']] == 'UT', ]
+# numbers per sample and lane
+celltypes_sample_numbers <- get_celltype_numbers(cell_level_metadata_ut[!is.na(cell_level_metadata_ut[['lane_sample']]), ], sample_column = 'lane_sample', cell_type_column = 'predicted.mo_10x_cell_type.lowerres')
+
+# make plots
+p_abundance_lowres_lanesample_ut <- plot_celltype_abundance(celltypes_sample_numbers[!is.na(celltypes_sample_numbers[['predicted.mo_10x_cell_type.lowerres']]),], sample_column = 'lane_sample', cell_type_column = 'predicted.mo_10x_cell_type.lowerres', number_column = 'proportion', pointless = T, angle_x_labels = F, legendless = T)
+p_abundance_lowres_lanesample_absolute_ut <- plot_celltype_abundance(celltypes_sample_numbers[!is.na(celltypes_sample_numbers[['predicted.mo_10x_cell_type.lowerres']]),], sample_column = 'lane_sample', cell_type_column = 'predicted.mo_10x_cell_type.lowerres', number_column = 'number', pointless = T, angle_x_labels = F, legendless = T)
+
+# show the plots
+p_abundance_lowres_lanesample_ut + ggtitle('Proportion of cells per sample') + xlab('Sample') + ylab('Proportion of Cells')
+p_abundance_lowres_lanesample_absolute_ut + ggtitle('Number of cells per sample') + xlab('Sample') + ylab('Total Number of Cells')
+
 ```
+
+
