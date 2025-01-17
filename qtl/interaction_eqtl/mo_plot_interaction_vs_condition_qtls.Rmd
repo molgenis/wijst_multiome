@@ -33,6 +33,7 @@ library(ggpubr)
 library(ReigenMT)
 library(snpStats)
 library(UpSetR)
+library(grid)
 
 ```
 
@@ -831,6 +832,8 @@ add_chrom_and_position_list <- function(qtl_output_list, genotype_positions, var
 }
 
 
+add_eigens <- 
+
 limix_output_per_celltype_to_concordance <- function(limix_table_list1, limix_table_list2, 
                                                      feature_id_column1='feature_id', 
                                                      feature_id_column2='feature_id', 
@@ -944,6 +947,234 @@ plot_concordance_merged_table <- function(d1_d2_merged, xlab='Z-score d1', ylab=
 }
 
 
+#' get the QTLs per cell type from QTL output
+#' 
+#' @param qtl_output_loc base location of the QTL output per cell type
+#' @param output_file which output file to read for the results
+#' @param eigen_file which output file to read for the eigenmt results
+#' @param significance_column significance column to filter by
+#' @param significance_cutoff significance value to filter by, if NULL, no filtering takes place
+#' @param verbose print progress updates
+#' @returns a list of celltypes as keys, and the QTL output for each cell type
+#' 
+get_qtls_per_celltype_limix_with_eigens <- function(qtl_output_loc, output_file='iqtl_results_all.txt.gz', eigen_file='iqtl_results_all_eigenmt.tsv.gz', significance_column='feature_q_value', significance_cutoff=NULL, verbose=T) {
+  # get the folders in the directory, which should be the cell types
+  cell_types <- list.dirs(qtl_output_loc, full.names = F, recursive = F)
+  # we will store the results in a list for now
+  qtls_per_celltype <- list()
+  # check each cell type
+  for (cell_type in cell_types) {
+    # paste together the full path
+    full_cell_type_path <- paste(qtl_output_loc, '/', cell_type, '/', output_file, sep = '')
+    # the eigen file as well
+    full_cell_type_eigen_path <- paste(qtl_output_loc, '/', cell_type, '/', eigen_file, sep = '')
+    # check if file exists
+    if (file.exists(full_cell_type_path) & file.exists(full_cell_type_eigen_path)) {
+      # log if requested
+      if (verbose) {
+        print(paste('reading', full_cell_type_path))
+      }
+      # read the file
+      cell_type_output <- read.table(full_cell_type_path, sep = '\t', header = T)
+      # and the eigen file
+      cell_type_output_eigen <- read.table(full_cell_type_eigen_path, sep = '\t', header = T)
+      # filter the results on significance
+      if (!is.null(significance_column) & !is.null(significance_cutoff)) {
+        # print progress if requested
+        if (verbose) {
+          print(paste('variant+phenotype before filtering', nrow(cell_type_output)))
+        }
+        # filter
+        cell_type_output <- cell_type_output[
+          !is.na(cell_type_output[[significance_column]]) &
+            cell_type_output[[significance_column]] < significance_cutoff, 
+        ]
+        if (verbose) {
+          print(paste('variant+phenotype after filtering', nrow(cell_type_output)))
+        }
+      }
+      # add the eigen data
+      cell_type_output <- cbind(cell_type_output, cell_type_output_eigen[match(paste(cell_type_output[['snp_id']], cell_type_output[['feature_id']]), paste(cell_type_output_eigen[['snp_id']], cell_type_output_eigen[['feature']])), c('n_tests_feature','feature_bf_eigen','total_bf_eigen')])
+      # put in the list
+      qtls_per_celltype[[cell_type]] <- cell_type_output
+    }
+    else {
+      warning(paste('folder is present, but no output file at', full_cell_type_path))
+    }
+  }
+  return(qtls_per_celltype)
+}
+
+
+#' Get Replication Statistics
+#'
+#' This function calculates replication statistics for a list of outputs from different studies.
+#'
+#' @param list_of_outputs A list of data frames, each containing the results of a study.
+#' @param snp_chrom_column The name of the column containing SNP chromosome information. Default is 'chrom'.
+#' @param snp_pos_column The name of the column containing SNP position information. Default is 'pos'.
+#' @param feature_column The name of the column containing feature information. Default is 'feature'.
+#' @param nominal_p_column The name of the column containing nominal p-values. Default is 'p'.
+#' @param emperical_p_column The name of the column containing empirical p-values. Default is 'fdr'.
+#' @param effect_allele_column The name of the column containing effect allele information. Default is 'effect'.
+#' @param effect_size_column The name of the column containing effect size information. Default is 'size'.
+#' @param nominal_p_cutoff The cutoff for nominal p-values to consider a variant significant. Default is 0.05.
+#' @param emperical_p_cutoff The cutoff for empirical p-values to consider a variant significant. Default is 0.05.
+#'
+#' @return A data frame containing replication statistics.
+#'
+#' @examples
+#' # Example usage:
+#' list_of_outputs <- list(
+#'   study1 = data.frame(chrom = c(1, 1), pos = c(100, 200), feature = c('gene1', 'gene2'), p = c(0.01, 0.02), fdr = c(0.01, 0.02), effect = c('A', 'T'), size = c(0.5, 0.6)),
+#'   study2 = data.frame(chrom = c(1, 1), pos = c(100, 200), feature = c('gene1', 'gene2'), p = c(0.03, 0.04), fdr = c(0.03, 0.04), effect = c('A', 'T'), size = c(0.7, 0.8))
+#' )
+#' get_replication_stats(list_of_outputs)
+get_replication_stats <- function(list_of_outputs, snp_chrom_column='chrom', snp_pos_column='pos', feature_column='feature', nominal_p_column='p', emperical_p_column='fdr', effect_allele_column='effect', effect_size_column='size', nominal_p_cutoff=0.05, emperical_p_cutoff=0.05) {
+  # initialize an empty matrix
+  replication_stats <- matrix(NA, nrow = length(names(list_of_outputs))*2, ncol = 6)
+  # set column names
+  colnames(replication_stats) <- c('replicating', 'replicate_in', 'replicating_n_emperical', 'tested_fraction', 'nominal_correlation', 'empirical_concordance')
+  # make into a dataframe
+  replication_stats <- data.frame(replication_stats)
+  # set the column types
+  replication_stats[[1]] <- as.character(replication_stats[[1]])
+  replication_stats[[2]] <- as.character(replication_stats[[2]])
+  replication_stats[[3]] <- as.numeric(replication_stats[[3]])
+  replication_stats[[4]] <- as.numeric(replication_stats[[4]])
+  replication_stats[[5]] <- as.numeric(replication_stats[[5]])
+  replication_stats[[6]] <- as.numeric(replication_stats[[6]])
+  # keep an index
+  i <- 1
+  # check each set in the replication stats
+  for (rep_name_1 in names(list_of_outputs)) {
+    # extract the data
+    data_to_rep <- list_of_outputs[[rep_name_1]]
+    # get the number of effects
+    name_1_n_effects <- nrow(data_to_rep)
+    #  get the significant variant_feature combinations in the first set
+    data_to_rep_sig <- data_to_rep[data_to_rep[[emperical_p_column]] < emperical_p_cutoff, ]
+    # add chromosome position and feature
+    data_to_rep_sig[['chrom_pos_feature']] <- paste(data_to_rep_sig[[snp_chrom_column]], data_to_rep_sig[[snp_pos_column]], data_to_rep_sig[[feature_column]], sep = '_')
+    # check each other set
+    for (rep_name_2 in names(list_of_outputs)) {
+      # set the first condition
+      replication_stats[i, 'replicating'] <- rep_name_1
+      # and second one
+      replication_stats[i, 'replicate_in'] <- rep_name_2
+      # and how many significant ones there are
+      replication_stats[i, 'replicating_n_emperical'] <- nrow(data_to_rep_sig)
+      # initialize the other values
+      tested_fraction <- NA
+      nominal_correlation <- NA
+      empirical_concordance <- NA
+      # if they are the same the solution is very simple
+      if (rep_name_1 == rep_name_2) {
+        tested_fraction <- 1
+        nominal_correlation <- 1
+        empirical_concordance <- 1
+      }
+      else {
+        # grab the second set
+        data_replicating_in <- list_of_outputs[[rep_name_2]]
+        # add chromosome position and feature
+        data_replicating_in[['chrom_pos_feature']] <- paste(data_replicating_in[[snp_chrom_column]], data_replicating_in[[snp_pos_column]], data_replicating_in[[feature_column]], sep = '_')
+        # get the significant var-features that are tested
+        data_replicating_in_tested_overlap <- intersect(data_replicating_in[['chrom_pos_feature']], data_to_rep_sig[['chrom_pos_feature']])
+        # calculate the onerlapping ratio
+        tested_fraction <- length(data_replicating_in_tested_overlap) / nrow(data_to_rep_sig)
+        # get the significant variant_feature combinations in the second set
+        data_replicating_in_sig <- data_replicating_in[data_replicating_in[[nominal_p_column]] < nominal_p_cutoff, ]
+        # merge the tables
+        data_both <- merge(data_to_rep_sig[, c('chrom_pos_feature', effect_allele_column, effect_size_column)], data_replicating_in_sig[, c('chrom_pos_feature', effect_allele_column, effect_size_column)], by = 'chrom_pos_feature')
+        # flip direction of effect size y, when allele y differs from allele x
+        data_both[data_both[[paste(effect_allele_column, 'x', sep = '.')]] != data_both[[paste(effect_allele_column, 'y', sep = '.')]], paste(effect_size_column, 'y', sep = '.')] <- -1 * data_both[data_both[[paste(effect_allele_column, 'x', sep = '.')]] != data_both[[paste(effect_allele_column, 'y', sep = '.')]], paste(effect_size_column, 'y', sep = '.')]
+        # calculate the correlation
+        nominal_correlation <- cor(x = data_both[[paste(effect_size_column, 'x', sep = '.')]], y= data_both[[paste(effect_size_column, 'y', sep = '.')]], method = 'spearman')
+        # now subset to what was fully significant in both, by now filtering down to fdr significance for the second set as well
+        data_both <- data_both[data_both[['chrom_pos_feature']] %in% data_replicating_in[data_replicating_in[[emperical_p_column]] < emperical_p_cutoff, 'chrom_pos_feature'], ]
+        # and checking the concordance by seeing if the sign matches
+        empirical_concordance <- sum(sign(data_both[[paste(effect_size_column, 'x', sep = '.')]]) == sign(data_both[[paste(effect_size_column, 'y', sep = '.')]])) / nrow(data_both)
+      }
+      # set the values in the dataframe
+      replication_stats[i, 'tested_fraction'] <- tested_fraction
+      replication_stats[i, 'nominal_correlation'] <- nominal_correlation
+      replication_stats[i, 'empirical_concordance'] <- empirical_concordance
+      # increase the index
+      i <- i + 1
+    }
+  }
+  return(replication_stats)
+}
+
+
+#' Plot Replication Statistics
+#'
+#' This function creates a heatmap plot of replication statistics.
+#'
+#' @param replication_stats_table A data frame containing replication statistics.
+#' @param n_column The name of the column containing the number of empirical replications. Default is 'replicating_n_emperical'.
+#' @param colour_column The name of the column used for coloring the tiles. Default is 'empirical_concordance'.
+#' @param text_columns A named list of columns to include in the text labels, with their corresponding labels. Default is list('tested_fraction'='testfr', 'nominal_correlation'='cor', 'empirical_concordance'='con').
+#' @param x_column The name of the column to use for the x-axis. Default is 'replicating'.
+#' @param y_column The name of the column to use for the y-axis. Default is 'replicate_in'.
+#' @param round_digits The number of digits to round the text values to. Default is 3.
+#' @param angle_labels Logical, whether to angle the x-axis labels. Default is FALSE.
+#' @param legendless Logical, whether to remove the legend. Default is FALSE.
+#' @param paper_style Logical, whether to apply a paper-style theme to the plot. Default is TRUE.
+#'
+#' @return A ggplot object representing the heatmap.
+#'
+#' @examples
+#' # Example usage:
+#' replication_stats_table <- data.frame(
+#'   replicating = c('study1', 'study2'),
+#'   replicate_in = c('study2', 'study1'),
+#'   replicating_n_emperical = c(10, 15),
+#'   tested_fraction = c(0.8, 0.7),
+#'   nominal_correlation = c(0.9, 0.85),
+#'   empirical_concordance = c(0.95, 0.9)
+#' )
+#' plot_replication_stats(replication_stats_table)
+plot_replication_stats <- function(replication_stats_table, n_column='replicating_n_emperical', colour_column='empirical_concordance', text_columns=list('tested_fraction'='testfr', 'nominal_correlation'='cor', 'empirical_concordance'='con'), x_column='replicating', y_column='replicate_in', round_digits=3, angle_labels=F, legendless=F, paper_style=T) {
+  # add a text column
+  replication_stats_table[['text']] <- ''
+  # check each column we have for the text
+  for (text_column_name in names(text_columns)) {
+    # get the value
+    text_column_values <- replication_stats_table[[text_column_name]]
+    # round it down
+    text_column_values <- round(text_column_values, digits = round_digits)
+    # get the label as specified
+    text_column_label <- text_columns[[text_column_name]]
+    # add to the text
+    replication_stats_table[['text']] <- paste(replication_stats_table[['text']], text_column_label, ':', text_column_values, '\n', sep = '')
+  }
+  # add the n to the replicating label
+  replication_stats_table[['replicating']] <- paste(replication_stats_table[['replicating']], '\n(', replication_stats_table[[n_column]], ')', sep = '')
+  # set the text colour
+  replication_stats_table[['q1']] <- 'bigger'
+  replication_stats_table[replication_stats_table[[colour_column]] < quantile(replication_stats_table[[colour_column]], 0.25), 'q1'] <- 'smaller'
+  # turn into plot
+  p <- ggplot(data=replication_stats_table, aes(x=replicating, y=!!sym(y_column), fill=!!sym(colour_column))) + 
+    geom_tile() + 
+    scale_fill_gradient(low='blue', high='red') + 
+    geom_text(aes(label=text, color=q1)) +
+    scale_colour_manual(values = list('bigger' = 'black', 'smaller' = 'white'))
+  # some options
+  if (angle_labels) {
+    p <- p + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+  }
+  if(legendless){
+    p <- p + theme(legend.position = 'none')
+  }
+  if(paper_style){
+    p <- p + theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+  }
+  return(p)
+}
+
+
 ```
 
 ```{r path_setup, include=FALSE}
@@ -954,13 +1185,13 @@ knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 ####################
 
 # location of eQTL
-eqtl_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/output/L1/UT/'
+eqtl_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/output/L1/UT/'
 # location of caQTL output
-caqtl_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/output_cis_50kb_updated_features/L1/UT/'
+caqtl_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/output_cis_50kb_updated_features/L1/UT/'
 # location of the interaction-eQTLs
-ieqtl_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/output/L1/'
+ieqtl_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/output/L1/'
 # location of the interaction-caQTLs
-icaqtl_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_caqtl/sc-eqtlgen/output/L1/'
+icaqtl_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/interaction_caqtl/sc-eqtlgen/output/L1/'
 
 ```
 
@@ -1007,11 +1238,11 @@ egene_numbers_to_plot(ieqtl_gene_numbers, use_color_dict=T, legendless = T) + xl
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # get the number of ca peaks
-ieqtl_gene_results <- read_all_h5s_all_celltypes('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/output/L1/', qtl_results_prepend='qtl_results_snp_')
+ieqtl_gene_results <- read_all_h5s_all_celltypes('/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/output/L1/', qtl_results_prepend='qtl_results_snp_')
 # get the UT eQTLs
 ut_eqtl_gene_results <- get_qtls_per_celltype_limix(eqtl_output_loc, output_file='qtl_results_all_nominally_significant.txt.gz', significance_column = 'empirical_feature_p_value', significance_cutoff=NULL)
 # and the 24hCA
-eqtl_24hca_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/output/L1/24hCA/'
+eqtl_24hca_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/output/L1/24hCA/'
 ca24h_eqtl_gene_results <- get_qtls_per_celltype_limix(eqtl_24hca_output_loc)
 
 ```
@@ -1020,7 +1251,7 @@ ca24h_eqtl_gene_results <- get_qtls_per_celltype_limix(eqtl_24hca_output_loc)
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # read the 1000G reference genotype file
-g1000_ref_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/hg38/ref_panel_QC/30x-GRCh38-EUR'
+g1000_ref_loc <- '/groups/umcg-franke-scrna/tmp02/external_datasets/hg38/ref_panel_QC/30x-GRCh38-EUR'
 g1000_ref <- read.plink(
     bed = paste(g1000_ref_loc, '.bed', sep = ''),
     bim = paste(g1000_ref_loc, '.bim', sep = ''),
@@ -1034,19 +1265,19 @@ g1000_ref <- read.plink(
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # get the number of ca genes
-stim_eqtl_vs24hca_gene_results <- get_qtls_per_celltype_emp('/groups/umcg-franke-scrna/tmp04/releases/wijst-2020-hg19/v1/QTL_mapping/eQTL/sct_mqc_demux_lores_20201106_eqtlgenlead_anycondsig/results/UT_vs_24hCA/')
+stim_eqtl_vs24hca_gene_results <- get_qtls_per_celltype_emp('/groups/umcg-franke-scrna/tmp02/releases/wijst-2020-hg19/v1/QTL_mapping/eQTL/sct_mqc_demux_lores_20201106_eqtlgenlead_anycondsig/results/UT_vs_24hCA/')
 # for 3h as well
-stim_eqtl_vs3hca_gene_results <- get_qtls_per_celltype_emp('/groups/umcg-franke-scrna/tmp04/releases/wijst-2020-hg19/v1/QTL_mapping/eQTL/sct_mqc_demux_lores_20201106_eqtlgenlead_anycondsig/results/UT_vs_3hCA/')
+stim_eqtl_vs3hca_gene_results <- get_qtls_per_celltype_emp('/groups/umcg-franke-scrna/tmp02/releases/wijst-2020-hg19/v1/QTL_mapping/eQTL/sct_mqc_demux_lores_20201106_eqtlgenlead_anycondsig/results/UT_vs_3hCA/')
 
 # get the number of pa genes
-stim_eqtl_vs24hpa_gene_results <- get_qtls_per_celltype_emp('/groups/umcg-franke-scrna/tmp04/releases/wijst-2020-hg19/v1/QTL_mapping/eQTL/sct_mqc_demux_lores_20201106_eqtlgenlead_anycondsig/results/UT_vs_24hPA/')
+stim_eqtl_vs24hpa_gene_results <- get_qtls_per_celltype_emp('/groups/umcg-franke-scrna/tmp02/releases/wijst-2020-hg19/v1/QTL_mapping/eQTL/sct_mqc_demux_lores_20201106_eqtlgenlead_anycondsig/results/UT_vs_24hPA/')
 # for 3h as well
-stim_eqtl_vs3hpa_gene_results <- get_qtls_per_celltype_emp('/groups/umcg-franke-scrna/tmp04/releases/wijst-2020-hg19/v1/QTL_mapping/eQTL/sct_mqc_demux_lores_20201106_eqtlgenlead_anycondsig/results/UT_vs_3hPA/')
+stim_eqtl_vs3hpa_gene_results <- get_qtls_per_celltype_emp('/groups/umcg-franke-scrna/tmp02/releases/wijst-2020-hg19/v1/QTL_mapping/eQTL/sct_mqc_demux_lores_20201106_eqtlgenlead_anycondsig/results/UT_vs_3hPA/')
 
 # get the number of pa genes
-stim_eqtl_vs24hmtb_gene_results <- get_qtls_per_celltype_emp('/groups/umcg-franke-scrna/tmp04/releases/wijst-2020-hg19/v1/QTL_mapping/eQTL/sct_mqc_demux_lores_20201106_eqtlgenlead_anycondsig/results/UT_vs_24hMTB/')
+stim_eqtl_vs24hmtb_gene_results <- get_qtls_per_celltype_emp('/groups/umcg-franke-scrna/tmp02/releases/wijst-2020-hg19/v1/QTL_mapping/eQTL/sct_mqc_demux_lores_20201106_eqtlgenlead_anycondsig/results/UT_vs_24hMTB/')
 # for 3h as well
-stim_eqtl_vs3hmtb_gene_results <- get_qtls_per_celltype_emp('/groups/umcg-franke-scrna/tmp04/releases/wijst-2020-hg19/v1/QTL_mapping/eQTL/sct_mqc_demux_lores_20201106_eqtlgenlead_anycondsig/results/UT_vs_3hMTB/')
+stim_eqtl_vs3hmtb_gene_results <- get_qtls_per_celltype_emp('/groups/umcg-franke-scrna/tmp02/releases/wijst-2020-hg19/v1/QTL_mapping/eQTL/sct_mqc_demux_lores_20201106_eqtlgenlead_anycondsig/results/UT_vs_3hMTB/')
 
 # clean up the names
 names(stim_eqtl_vs24hca_gene_results) <- gsub('_expression$', '', names(stim_eqtl_vs24hca_gene_results))
@@ -1146,3 +1377,39 @@ UpSetR::upset(fromList(
   grid.text("ieQTL and reQTL overlaps in CD4+ T cells", x = 0.65, y = 0.95, gp = gpar(fontsize = 20))
 
 ```
+
+```{r harmonize_qtl_results, include=TRUE, fig.width=9, fig.height=9}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# reread the ieqtls
+ieqtl_gene_results <- get_qtls_per_celltype_limix_with_eigens(qtl_output_loc = '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/output/L1/', output_file = 'inflammation_final/iqtl_results_all.txt.gz', eigen_file = 'inflammation_final/iqtl_results_all_eigenmt.tsv.gz', significance_column=NULL)
+
+
+# make new list
+mono_nc2022_qtls <- list(
+  'nc2022_3hCA'= data.frame('chrom' = stim_eqtl_vs3hca_gene_results[['monocyte']][['b38_chromosome']], 'pos' = stim_eqtl_vs3hca_gene_results[['monocyte']][['b38_position']], 'feature' = stim_eqtl_vs3hca_gene_results[['monocyte']][['HGNCName']], 'p' = stim_eqtl_vs3hca_gene_results[['monocyte']][['PValue']], 'fdr' = stim_eqtl_vs3hca_gene_results[['monocyte']][['FDR']], 'effect' = stim_eqtl_vs3hca_gene_results[['monocyte']][['AlleleAssessed']], 'size' = stim_eqtl_vs3hca_gene_results[['monocyte']][['OverallZScore']]), 
+  'nc2022_24hCA'= data.frame('chrom' = stim_eqtl_vs24hca_gene_results[['monocyte']][['b38_chromosome']], 'pos' = stim_eqtl_vs24hca_gene_results[['monocyte']][['b38_position']], 'feature' = stim_eqtl_vs24hca_gene_results[['monocyte']][['HGNCName']], 'p' = stim_eqtl_vs24hca_gene_results[['monocyte']][['PValue']], 'fdr' = stim_eqtl_vs24hca_gene_results[['monocyte']][['FDR']], 'effect' = stim_eqtl_vs24hca_gene_results[['monocyte']][['AlleleAssessed']], 'size' = stim_eqtl_vs24hca_gene_results[['monocyte']][['OverallZScore']]), 
+  'nc2022_3hPA'= data.frame('chrom' = stim_eqtl_vs3hpa_gene_results[['monocyte']][['b38_chromosome']], 'pos' = stim_eqtl_vs3hpa_gene_results[['monocyte']][['b38_position']], 'feature' = stim_eqtl_vs3hpa_gene_results[['monocyte']][['HGNCName']], 'p' = stim_eqtl_vs3hpa_gene_results[['monocyte']][['PValue']], 'fdr' = stim_eqtl_vs3hpa_gene_results[['monocyte']][['FDR']], 'effect' = stim_eqtl_vs3hpa_gene_results[['monocyte']][['AlleleAssessed']], 'size' = stim_eqtl_vs3hpa_gene_results[['monocyte']][['OverallZScore']]), 
+  'nc2022_24hPA'= data.frame('chrom' = stim_eqtl_vs24hpa_gene_results[['monocyte']][['b38_chromosome']], 'pos' = stim_eqtl_vs24hpa_gene_results[['monocyte']][['b38_position']], 'feature' = stim_eqtl_vs24hpa_gene_results[['monocyte']][['HGNCName']], 'p' = stim_eqtl_vs24hpa_gene_results[['monocyte']][['PValue']], 'fdr' = stim_eqtl_vs24hpa_gene_results[['monocyte']][['FDR']], 'effect' = stim_eqtl_vs24hpa_gene_results[['monocyte']][['AlleleAssessed']], 'size' = stim_eqtl_vs24hpa_gene_results[['monocyte']][['OverallZScore']]), 
+  'nc2022_3hMTB'= data.frame('chrom' = stim_eqtl_vs3hmtb_gene_results[['monocyte']][['b38_chromosome']], 'pos' = stim_eqtl_vs3hmtb_gene_results[['monocyte']][['b38_position']], 'feature' = stim_eqtl_vs3hmtb_gene_results[['monocyte']][['HGNCName']], 'p' = stim_eqtl_vs3hmtb_gene_results[['monocyte']][['PValue']], 'fdr' = stim_eqtl_vs3hmtb_gene_results[['monocyte']][['FDR']], 'effect' = stim_eqtl_vs3hmtb_gene_results[['monocyte']][['AlleleAssessed']], 'size' = stim_eqtl_vs3hmtb_gene_results[['monocyte']][['OverallZScore']]), 
+  'nc2022_24hMTB'= data.frame('chrom' = stim_eqtl_vs24hmtb_gene_results[['monocyte']][['b38_chromosome']], 'pos' = stim_eqtl_vs24hmtb_gene_results[['monocyte']][['b38_position']], 'feature' = stim_eqtl_vs24hmtb_gene_results[['monocyte']][['HGNCName']], 'p' = stim_eqtl_vs24hmtb_gene_results[['monocyte']][['PValue']], 'fdr' = stim_eqtl_vs24hmtb_gene_results[['monocyte']][['FDR']], 'effect' = stim_eqtl_vs24hmtb_gene_results[['monocyte']][['AlleleAssessed']], 'size' = stim_eqtl_vs24hmtb_gene_results[['monocyte']][['OverallZScore']]), 
+  'multiome' = data.frame('chrom' = ieqtl_gene_results[['monocyte']][['snp_chromosome']], 'pos' = ieqtl_gene_results[['monocyte']][['snp_position']], 'feature' = ieqtl_gene_results[['monocyte']][['feature_id']], 'p' = ieqtl_gene_results[['monocyte']][['p_value']], 'fdr' = ieqtl_gene_results[['monocyte']][['total_bf_eigen']], 'effect' = ieqtl_gene_results[['monocyte']][['assessed_allele']], 'size' = ieqtl_gene_results[['monocyte']][['beta']])
+)
+
+```
+
+```{r plot_reqtl_replication, include=TRUE, fig.width=9, fig.height=9}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# get the replication rates
+mono_nc2022_reqtl_replication_rates <- get_replication_stats(mono_nc2022_qtls)
+# and plot
+mono_nc2022_reqtl_replication_plot <- plot_replication_stats(mono_nc2022_reqtl_replication_rates, legendless = T) +
+  xlab('Replicating') +
+  ylab('Replicate in') +
+  ggtitle('ieQTL and reQTL monocyte replication stats')
+# show the plot
+mono_nc2022_reqtl_replication_plot
+
+```
+
