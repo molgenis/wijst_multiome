@@ -28,6 +28,9 @@ library(Seurat)
 library(Signac)
 library(GenomicRanges)
 library(EnsDb.Hsapiens.v86)
+library(rtracklayer)
+
+
 ```
 
 ```{r functions, include=FALSE}
@@ -80,7 +83,47 @@ multimodal_append <- '_1_80_20240521.rds'
 fragments_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/rounded_fragments/'
 atac_fragments_append='_rounded_fragments.tsv.gz'
 
+# location of the variant bed
+variant_bedgraph_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/coeqtl/annotations/example_coeqtls.bedgraph'
+# where to place the bigwig
+variant_bigwig_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/coeqtl/annotations/example_coeqtls.bw'
+
 ```
+
+```{r read_variants, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# read the variants
+variants <- rtracklayer::import(variant_bedgraph_loc, format = "bedGraph")
+variants$score <- 1
+# unlist if is a grangeslist
+if (is(variants, "GRangesList")) {
+    variants <- unlist(variants)
+}
+# read the sequences index file
+chrom_indices_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/refdata-cellranger-arc-GRCh38-2020-A-2.0.0/fasta/genome.fa.fai'
+chrom_indices <- read.table(chrom_indices_loc, header = F, sep = '\t')
+# define Seqinfo
+seqinfo <- Seqinfo(
+    seqnames = chrom_indices$V1,
+    seqlengths = as.integer(chrom_indices$V2),
+    isCircular = rep(FALSE, length(chrom_indices$V1)),
+    genome = "hg38"
+)
+# seqinfo <- Seqinfo(
+#     seqnames = c('chr6'),
+#     seqlengths = as.integer(c(170805979)),
+#     isCircular = c(F),
+#     genome = "hg38"
+# )
+seqinfo(variants) <- seqinfo_variants
+# Export to BigWig this is giving errors, do a manual run instead
+#export(variants, variant_bigwig_loc, format = "bigWig")
+# /groups/umcg-franke-scrna/tmp04/software/ucsc/bedGraphToBigWig example_coeqtls.bedgraph /groups/umcg-franke-scrna/tmp04/external_datasets/refdata-cellranger-arc-GRCh38-2020-A-2.0.0/fasta/genome.fa.fai example_coeqtls.bw
+variants <- rtracklayer::import(variant_bigwig_loc, format = "bigWig")
+
+```
+
 
 ```{r read_cd4t, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
@@ -150,15 +193,10 @@ cd4t@assays$peaks@fragments <- fragment_list_cd4t
 ```{r plot_cd4t, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
-# make granges
-gr_chr6_166974465_166975092 <- GRanges(
-    seqnames = Rle(c("chr6"), c(6)),
-    ranges = IRanges(c(166974465), c(166975092), names = c('chr6-166974465-166975092')))
-
-# plot the region specifically
-CoveragePlot(object = atac_small, region = c("chr6-166974465-166975092"), ranges = gr_chr6_166974465_166975092)
 # make coverage plot
 DefaultAssay(cd4t) <- 'peaks'
-CoveragePlot(cd4t, 'RNASET2')
+cd4t_coverage <- CoveragePlot(cd4t, 'RNASET2')
+# make the variant plot
+cd4t_variants <- BigwigTrack(variants, variant_bigwig_loc)
 ```
 
