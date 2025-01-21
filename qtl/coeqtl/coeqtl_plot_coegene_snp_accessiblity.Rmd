@@ -1,0 +1,164 @@
+---
+title: "coeqtl_plot_coegene_snp_accessiblity"
+author: "Roy Oelen"
+date: "2025-01-20"
+output: html_document
+---
+
+
+```{r header, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+#!/usr/bin/env Rscript
+############################################################################################################################
+# Authors: Roy Oelen
+# Name: coeqtl_plot_coegene_snp_accessiblity.Rmd
+# Function: plot the chromatin accessibility for specific co-eQTL gene variants
+############################################################################################################################
+```
+
+```{r libraries, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+####################
+# libraries        #
+####################
+
+library(Seurat)
+library(Signac)
+library(GenomicRanges)
+library(EnsDb.Hsapiens.v86)
+```
+
+```{r functions, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+####################
+# Functions        #
+####################
+
+```
+
+```{r settings, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+####################
+# Settings         #
+####################
+
+# set seed
+set.seed(1337)
+
+# set annotations
+annotations <- GetGRangesFromEnsDb(ensdb = EnsDb.Hsapiens.v86)
+seqlevelsStyle(annotations) <- 'UCSC'
+genome(annotations) <- "hg38"
+
+
+
+```
+
+```{r main, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+####################
+# Main code        #
+####################
+
+# location of the Signac objects
+signac_objects_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/'
+# prepend
+signac_prepend <- 'mo_cpeaks_filtered_'
+# append of each file
+signac_append <- '_UT_wstatus_1_80_20240709.rds'
+
+# location of multimodal objects
+multimodal_objects_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/seurat_preprocess_samples/objects/'
+# prepend
+multimodal_prepend <- 'mo_multimodal_'
+# append of each file
+multimodal_append <- '_1_80_20240521.rds'
+
+# location of fragments
+fragments_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/rounded_fragments/'
+atac_fragments_append='_rounded_fragments.tsv.gz'
+
+```
+
+```{r read_cd4t, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# get location
+cd4t_loc <- paste(signac_objects_loc, signac_prepend, 'cd4t', signac_append, sep = '')
+cd4t_loc <- paste(multimodal_objects_loc, multimodal_prepend, 'cd4t', multimodal_append, sep = '')
+# read the object
+cd4t <- readRDS(cd4t_loc)
+```
+
+```{r annotate_cd4t, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# add annotations
+grange.counts.cd4t <- StringToGRanges(rownames(cd4t), sep = c(":", "-"))
+grange.use.cd4t <- seqnames(grange.counts) %in% standardChromosomes(grange.counts.cd4t)
+cd4t <- cd4t[as.vector(grange.use.cd4t), ]
+Annotation(cd4t) <- annotations
+
+```
+
+```{r annotate_cd4t, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# add annotations
+grange.counts.cd4t <- StringToGRanges(rownames(cd4t), sep = c(":", "-"))
+grange.use.cd4t <- seqnames(grange.counts) %in% standardChromosomes(grange.counts.cd4t)
+cd4t <- cd4t[as.vector(grange.use.cd4t), ]
+Annotation(cd4t) <- annotations
+
+```
+
+```{r fragments_cd4t, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# sort the data by the cell barcode, this will also sort by lane
+cd4t <- cd4t[, order(colnames(cd4t))]
+# now we'll keep track of the fragments
+fragment_list_cd4t <- list()
+# we'll check each lane
+for (lane in unique(cd4t@meta.data[['lane']])) {
+  # extract the metadata for those barcodes
+  cd4t_lane_metadata <- cd4t@meta.data[cd4t@meta.data[['lane']] == lane, ]
+  # paste the path to the fragments
+  cd4t_lane_fragments_loc <- paste(fragments_loc, '/', lane, atac_fragments_append, sep = '')
+  # get the cells
+  cd4t_lane_cells <- cd4t_lane_metadata[['barcode_1']]
+  # with the names being the original barcodes in the object
+  names(cd4t_lane_cells) <- rownames(cd4t_lane_metadata)
+  # make the fragments obejct
+  cd4t_lane_fragments <- CreateFragmentObject(
+       path = cd4t_lane_fragments_loc,
+       cells = cd4t_lane_cells,
+       validate.fragments = FALSE
+  )
+  # put into the list
+  fragment_list_cd4t[[lane]] <- cd4t_lane_fragments
+}
+# make vector
+#fragment_vector_cd4t <- as.vector(unlist(fragment_list_cd4t))
+# and add to the object
+cd4t@assays$peaks@fragments <- fragment_list_cd4t
+
+```
+
+```{r plot_cd4t, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# make granges
+gr_chr6_166974465_166975092 <- GRanges(
+    seqnames = Rle(c("chr6"), c(6)),
+    ranges = IRanges(c(166974465), c(166975092), names = c('chr6-166974465-166975092')))
+
+# plot the region specifically
+CoveragePlot(object = atac_small, region = c("chr6-166974465-166975092"), ranges = gr_chr6_166974465_166975092)
+# make coverage plot
+DefaultAssay(cd4t) <- 'peaks'
+CoveragePlot(cd4t, 'RNASET2')
+```
+
