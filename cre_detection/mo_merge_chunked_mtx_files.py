@@ -7,7 +7,7 @@ example usage:
 
 python mo_merge_chunked_mtx_files.py \
     --mtx_folder /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/pycistopic/deconstruced_atac_objects/merged_major_celltypes/ \
-    --mtx_regex 'matrix_chunk_\\d+.mtx' \
+    --mtx_regex 'matrix_chunk_\\d+.mtx.gz' \
     --npz_out /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/pycistopic/deconstruced_atac_objects/merged_major_celltypes/matrix_merged.npz
 
 """
@@ -21,7 +21,6 @@ from scipy.io import mmread, mmwrite
 from scipy.sparse import vstack, save_npz, load_npz
 import re
 import argparse
-import scanpy as sc
 
 #############
 # functions #
@@ -46,8 +45,8 @@ def combine_mtx_files(mtx_file_list, npz_output_file):
     # read each file
     for file in mtx_file_list:
         # read and convert to csc
-        #matrix = mmread(file).X.tocsc()
-        matrix = sc.read_mtx(file).X.tocsc()
+        matrix = mmread(file).tocsc()
+        #matrix = sc.read_mtx(file).X.tocsc()
         # set to be the matrix if no matrix was set yet
         if combined_matrix is None:
             combined_matrix = matrix
