@@ -26,7 +26,7 @@ export_atac_counts_object <- function(signac_object, out_folder) {
   features_gz <- gzfile(paste(out_folder, 'features.tsv.gz', sep = ''))
   write.table(data.frame(x = rownames(signac_object@assays$peaks@counts)), features_gz, row.names = F, col.names = F, quote = F)
   mdfiver::create_md5_for_file(paste(out_folder, 'features.tsv.gz', sep = ''))
-   # barcodes
+  # barcodes
   barcodes_gz <- gzfile(paste(out_folder, 'barcodes.tsv.gz', sep = ''))
   write.table(data.frame(x = colnames(signac_object@assays$peaks@counts)), barcodes_gz, row.names = F, col.names = F, quote = F)
   mdfiver::create_md5_for_file(paste(out_folder, 'barcodes.tsv.gz', sep = ''))
@@ -93,6 +93,7 @@ atac_full_columns <- NULL
 atac_full_features <- NULL
 # check each cell type again
 for (cell_type in c('b', 'cd4t', 'cd8t', 'dc', 'nk', 'monocyte')) {
+  print(paste('reading', cell_type))
   # read accessibility
   accessibility <- spam::read.MM(paste(deconstructed_folders_loc, '/', cell_type, '/matrix.mtx', sep = ''))
   # read cells
@@ -115,7 +116,8 @@ for (cell_type in c('b', 'cd4t', 'cd8t', 'dc', 'nk', 'monocyte')) {
     # make those as empty entries
     entries_missing_accessibility <- spam::spam(0, nrow = length(features_missing_accessibility), ncol = ncol(accessibility))
     # add those to the matrix
-    accessibility <- rbind(accessibility, entries_missing_accessibility)
+    #accessibility <- rbind(accessibility, entries_missing_accessibility)
+    accessibility <- t(cbind(t(accessibility), t(entries_missing_accessibility)))
     # update the feature names
     features_names <- c(features_names, features_missing_accessibility)
     
@@ -124,7 +126,8 @@ for (cell_type in c('b', 'cd4t', 'cd8t', 'dc', 'nk', 'monocyte')) {
     # make those as empty entries
     entries_missing_full <- spam::spam(0, nrow = length(features_missing_full), ncol = ncol(atac_full_matrix))
     # add those to the matrix
-    atac_full_matrix <- rbind(atac_full_matrix, entries_missing_full)
+    #atac_full_matrix <- rbind(atac_full_matrix, entries_missing_full)
+    atac_full_matrix <- t(cbind(t(atac_full_matrix), t(entries_missing_full)))
     # update the feature names
     atac_full_features <- c(atac_full_features, features_missing_full)
     
@@ -165,11 +168,9 @@ merged_metadata_loc <- paste(merged_out_folder, '/metadata.tsv.gz', sep = '')
 # write the results
 write.table(data.frame(x = atac_full_features), gzfile(merged_features_loc), row.names = F, col.names = F, quote = F)
 write.table(data.frame(x = atac_full_columns), gzfile(merged_barcodes_loc), row.names = F, col.names = F, quote = F)
-#spam::write.spam(atac_full_matrix, merged_mtx_loc)
-saveRDS(atac_full_matrix, merged_rds_loc)
 write.table(metadata_all, gzfile(merged_metadata_loc), row.names = F, col.names = T, quote = F, sep = '\t')
+saveRDS(atac_full_matrix, merged_rds_loc)
 # generate checksums
-#mdfiver::create_md5_for_file(merged_mtx_loc)
 mdfiver::create_md5_for_file(merged_rds_loc)
 mdfiver::create_md5_for_file(merged_barcodes_loc)
 mdfiver::create_md5_for_file(merged_features_loc)
