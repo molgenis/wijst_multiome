@@ -21,13 +21,15 @@ from scipy.io import mmread, mmwrite
 from scipy.sparse import vstack, save_npz, load_npz
 import re
 import argparse
+import pickle
+
 
 #############
 # functions #
 #############
 
 
-def combine_mtx_files(mtx_file_list, npz_output_file):
+def combine_mtx_files(mtx_file_list):
     """
     Combine multiple .mtx files into a single sparse matrix and save as a .npz file.
 
@@ -85,6 +87,18 @@ filtered_files.sort()
 # add the path
 filtered_files = [os.path.join(args.mtx_folder, f) for f in filtered_files]
 # do the conversion
-combined_matrix = combine_mtx_files(filtered_files, args.npz_out)
+combined_matrix = combine_mtx_files(filtered_files)
 # save the result
-save_npz(npz_output_file, combined_matrix)
+
+# write this to a file
+if npz_output_file.endswith('.npz'):
+    # to npz
+    save_npz(npz_output_file, combined_matrix)
+elif npz_output_file.endswith('.pickle'):
+    # or as pickle
+    with open(npz_output_file, 'wb') as handle:
+        pickle.dump(combined_matrix, handle, protocol=pickle.HIGHEST_PROTOCOL)
+else:
+    # default to npz
+    print(''.join(['not recognizing output format, saving as npz']))
+    save_npz(npz_output_file, combined_matrix)
