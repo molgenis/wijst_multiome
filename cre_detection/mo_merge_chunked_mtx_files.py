@@ -33,10 +33,9 @@ def combine_mtx_files(mtx_file_list, npz_output_file):
 
     Args:
         mtx_file_list (list of str): List of paths to the .mtx files to be combined.
-        npz_output_file (str): Path to the output .npz file.
 
     Returns:
-        0 upon success
+        npz matrix
     """
     
     # initialize the matrix
@@ -54,9 +53,8 @@ def combine_mtx_files(mtx_file_list, npz_output_file):
         # otherwise, vstack onto the existing matrix
         else:
             combined_matrix = vstack([combined_matrix, matrix])
-    # write the result
-    save_npz(npz_output_file, combined_matrix)
-    return 0
+    # return the result
+    return combined_matrix
 
 
 
@@ -87,4 +85,6 @@ filtered_files.sort()
 # add the path
 filtered_files = [os.path.join(args.mtx_folder, f) for f in filtered_files]
 # do the conversion
-combine_mtx_files(filtered_files, args.npz_out)
+combined_matrix = combine_mtx_files(filtered_files, args.npz_out)
+# save the result
+save_npz(npz_output_file, combined_matrix)
