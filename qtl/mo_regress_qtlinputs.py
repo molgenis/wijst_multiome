@@ -124,13 +124,6 @@ input_pcs_matched = input_pcs.loc[samples_both, ]
 model = LinearRegression()
 # Create a new dataframe to store the residuals
 input_data_matched_residuals = pd.DataFrame(index=input_data_matched.index, columns=input_data_matched.columns)
-# method to do a single gene
-def regress_out_pc(gene):
-    y = input_data_matched.loc[gene].values
-    X = input_pcs_matched.values
-    model.fit(X, y)
-    residuals = y - model.predict(X)
-    return gene, residuals
 
 # do this concurrently
 with concurrent.futures.ThreadPoolExecutor() as executor:

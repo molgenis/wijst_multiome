@@ -32,7 +32,7 @@ covariates_append: .qtlInput.Pcs.txt.gz
 # location of kinship file
 kinship_loc: /groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/input/sample.kinship
 # location of the chunking file
-chunking_file_loc: /groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/input/ChunkingFile.txt
+chunking_file_loc: /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/ChunkingFile_new.txt
 # location of the limix annotation file
 limix_annotation_loc: /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/
 limix_annotation_prepend: LimixAnnotationFile
