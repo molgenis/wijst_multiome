@@ -7,7 +7,7 @@ example usage:
 
 python mo_merge_chunked_mtx_files.py \
     --mtx_folder /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/pycistopic/deconstruced_atac_objects/merged_major_celltypes/ \
-    --mtx_regex 'matrix_chunk_\\d+.mtx.gz' \
+    --mtx_regex 'matrix_chunk_\d+.mtx.gz' \
     --npz_out /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/pycistopic/deconstruced_atac_objects/merged_major_celltypes/matrix_merged.npz
 
 """
@@ -44,6 +44,7 @@ def combine_mtx_files(mtx_file_list, npz_output_file):
     
     # read each file
     for file in mtx_file_list:
+        print(' '.join(['reading file', str(file)]))
         # read and convert to csc
         matrix = mmread(file).tocsc()
         #matrix = sc.read_mtx(file).X.tocsc()
@@ -81,5 +82,9 @@ files = os.listdir(args.mtx_folder)
 pattern = re.compile(f'{args.mtx_regex}')
 # filter by pattern
 filtered_files = [f for f in files if os.path.isfile(os.path.join(args.mtx_folder, f)) and pattern.match(f)]
+# order the files
+filtered_files.sort()
+# add the path
+filtered_files = [os.path.join(args.mtx_folder, f) for f in filtered_files]
 # do the conversion
-combine_mtx_files(files, args.npz_out)
+combine_mtx_files(filtered_files, args.npz_out)
