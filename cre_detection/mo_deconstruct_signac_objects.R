@@ -120,7 +120,7 @@ for (cell_type in c('b', 'cd4t', 'cd8t', 'dc', 'nk', 'monocyte')) {
     features_names <- c(features_names, features_missing_accessibility)
     
     # get features missing in existing matrix
-    features_missing_full <- setdiff(all_features, rownames(atac_full_matrix))
+    features_missing_full <- setdiff(all_features, atac_full_features)
     # make those as empty entries
     entries_missing_full <- spam::spam(0, nrow = length(features_missing_full), ncol = ncol(atac_full_matrix))
     # add those to the matrix

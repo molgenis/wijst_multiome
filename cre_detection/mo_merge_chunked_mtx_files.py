@@ -8,7 +8,7 @@ example usage:
 python mo_merge_chunked_mtx_files.py \
     --mtx_folder /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/pycistopic/deconstruced_atac_objects/merged_major_celltypes/ \
     --mtx_regex 'matrix_chunk_\d+.mtx.gz' \
-    --npz_out /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/pycistopic/deconstruced_atac_objects/merged_major_celltypes/matrix_merged.npz
+    --npz_out /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/pycistopic/deconstruced_atac_objects/merged_major_celltypes/matrix_merged.mtx.gz
 
 """
 
@@ -22,6 +22,7 @@ from scipy.sparse import vstack, save_npz, load_npz
 import re
 import argparse
 import pickle
+import gzip
 
 
 #############
@@ -88,7 +89,6 @@ filtered_files.sort()
 filtered_files = [os.path.join(args.mtx_folder, f) for f in filtered_files]
 # do the conversion
 combined_matrix = combine_mtx_files(filtered_files)
-# save the result
 
 # write this to a file
 if npz_output_file.endswith('.npz'):
@@ -98,6 +98,10 @@ elif npz_output_file.endswith('.pickle'):
     # or as pickle
     with open(npz_output_file, 'wb') as handle:
         pickle.dump(combined_matrix, handle, protocol=pickle.HIGHEST_PROTOCOL)
+elif npz_output_file.endswith('.mtx.gz'):
+    # or mtx.gz
+    with gzip.open(npz_output_file, 'wb') as f:
+        mmwrite(f, combined_matrix)
 else:
     # default to npz
     print(''.join(['not recognizing output format, saving as npz']))
