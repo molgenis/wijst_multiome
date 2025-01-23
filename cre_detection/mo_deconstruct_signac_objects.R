@@ -176,10 +176,15 @@ mdfiver::create_md5_for_file(merged_barcodes_loc)
 mdfiver::create_md5_for_file(merged_features_loc)
 mdfiver::create_md5_for_file(merged_metadata_loc)
 
+
+# reload matrix
+atac_full_matrix <- readRDS(merged_rds_loc)
 # do a chunked save of the matrix
 chunk_row_size <- 100000
 # get how many chunks we need
 chunks_needed <- ceiling(nrow(atac_full_matrix) / chunk_row_size)
+# set 32 bit structure for conversion
+options(spam.force64 = FALSE)
 # check each chunk
 for (chunk in 1 : chunks_needed) {
   # start of the chunk

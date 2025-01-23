@@ -90,6 +90,9 @@ filtered_files = [os.path.join(args.mtx_folder, f) for f in filtered_files]
 # do the conversion
 combined_matrix = combine_mtx_files(filtered_files)
 
+# this is where we will output:
+npz_output_file = args.npz_out
+
 # write this to a file
 if npz_output_file.endswith('.npz'):
     # to npz
