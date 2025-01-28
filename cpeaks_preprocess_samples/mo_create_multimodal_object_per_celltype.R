@@ -304,12 +304,12 @@ set.seed(7777)
 ####################
 
 # location of the condition assignment
-condition_assignment_loc <- '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/metadata/mo_monocyte_based_condition_numbers.tsv'
+condition_assignment_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/metadata/mo_monocyte_based_condition_numbers.tsv'
 # read the conditions
 condition_assignments <- read.table(condition_assignment_loc, header = T, sep = '\t')
 
 # location of the cell type objects
-cell_type_objects_loc <- '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_percelltypemajor_1_80.rds'
+cell_type_objects_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_percelltypemajor_1_80.rds'
 
 # read the object
 cell_type_objects <- readRDS(cell_type_objects_loc)
@@ -319,7 +319,7 @@ for(cell_type in names(cell_type_objects)) {
   cell_type_objects[[cell_type]] <- read_barcode_and_lane(cell_type_objects[[cell_type]])
 }
 # get the assignment matrices
-correlation_mapping_per_barcode_all <- read.table('/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/demultiplexing/souporcell/assignments/mo_souporcell_gex_corrected_sample_matched_vs_all.tsv', header = T, sep = '\t')
+correlation_mapping_per_barcode_all <- read.table('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/demultiplexing/souporcell/assignments/mo_souporcell_gex_corrected_sample_matched_vs_all.tsv', header = T, sep = '\t')
 # set barcodes and remove data we already have
 rownames(correlation_mapping_per_barcode_all) <- correlation_mapping_per_barcode_all[['barcode_lane']]
 correlation_mapping_per_barcode_all[, c('lane', 'barcode_lane', 'barcode', 'barcode_original')] <- NULL
@@ -348,8 +348,8 @@ for (cell_type in names(cell_type_objects)) {
 }
 
 # locations of objects
-objects_loc <- '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/seurat_preprocess_samples/objects/'
-mo_object_loc <- paste(objects_loc, 'mo_all_20240517_seuratv5_annotated.rds', sep = '')
+objects_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/seurat_preprocess_samples/objects/'
+mo_object_loc <- paste(objects_loc, 'mo_all_20240517_seuratv5_annotated_agesexcovid.rds', sep = '')
 # read the Seurat object
 seurat_object <- readRDS(mo_object_loc)
 # get the lane remapping
@@ -427,3 +427,39 @@ b_multimodal <- merge_atac_and_rna(
 )
 saveRDS(b_multimodal, '/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/seurat_preprocess_samples/objects/mo_multimodal_b_1_80_20240521.rds')
 rm(b_multimodal)
+
+# multimodal plasmablast
+pb_rna <- seurat_object[, !is.na(seurat_object@meta.data$celltype_imputed_lowerres) & seurat_object@meta.data$celltype_imputed_lowerres == 'plasmablast']
+pb_atac <- cell_type_objects[['plasmablast']]
+#rm(seurat_object)
+#rm(cell_type_objects)
+pb_multimodal <- merge_atac_and_rna(
+  rna_object = pb_rna,
+  atac_object = pb_atac
+)
+saveRDS(pb_multimodal, '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/seurat_preprocess_samples/objects/mo_multimodal_plasmablast_1_80_20240521.rds')
+rm(pb_multimodal)
+
+# multimodal HPSC
+hpsc_rna <- seurat_object[, !is.na(seurat_object@meta.data$celltype_imputed_lowerres) & seurat_object@meta.data$celltype_imputed_lowerres == 'hemapoietic_stem']
+hpsc_atac <- cell_type_objects[['hemapoietic_stem']]
+#rm(seurat_object)
+#rm(cell_type_objects)
+hpsc_multimodal <- merge_atac_and_rna(
+  rna_object = hpsc_rna,
+  atac_object = hpsc_atac
+)
+saveRDS(hpsc_multimodal, '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/seurat_preprocess_samples/objects/mo_multimodal_hemapoetic_stem_1_80_20240521.rds')
+rm(hpsc_multimodal)
+
+# multimodal other T
+to_rna <- seurat_object[, !is.na(seurat_object@meta.data$celltype_imputed_lowerres) & seurat_object@meta.data$celltype_imputed_lowerres == 'T_other']
+to_atac <- cell_type_objects[['T_other']]
+#rm(seurat_object)
+#rm(cell_type_objects)
+to_multimodal <- merge_atac_and_rna(
+  rna_object = to_rna,
+  atac_object = to_atac
+)
+saveRDS(to_multimodal, '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/seurat_preprocess_samples/objects/mo_multimodal_t_other_1_80_20240521.rds')
+rm(to_multimodal)
