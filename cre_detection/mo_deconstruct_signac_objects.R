@@ -159,7 +159,7 @@ metadata_all <- do.call('rbind', metadata_all_list)
 metadata_all <- metadata_all[match(atac_full_columns, metadata_all[['bc']]), ]
 
 # setup paths to output
-merged_out_folder <- paste(deconstructed_folders_loc, '/', 'merged_major_celltypes/', sep = '')
+merged_out_folder <- paste(deconstructed_folders_loc, '/', 'merged_major_and_minor_celltypes/', sep = '')
 dir.create(merged_out_folder)
 merged_mtx_loc <- paste(merged_out_folder, '/matrix.mtx', sep = '')
 merged_rds_loc <- paste(merged_out_folder, '/matrix.rds', sep = '')
