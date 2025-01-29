@@ -440,17 +440,17 @@ pb_multimodal <- merge_atac_and_rna(
 saveRDS(pb_multimodal, '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/seurat_preprocess_samples/objects/mo_multimodal_plasmablast_1_80_20240521.rds')
 rm(pb_multimodal)
 
-# multimodal HPSC
-hpsc_rna <- seurat_object[, !is.na(seurat_object@meta.data$celltype_imputed_lowerres) & seurat_object@meta.data$celltype_imputed_lowerres == 'hemapoietic_stem']
-hpsc_atac <- cell_type_objects[['hemapoietic_stem']]
-#rm(seurat_object)
-#rm(cell_type_objects)
-hpsc_multimodal <- merge_atac_and_rna(
-  rna_object = hpsc_rna,
-  atac_object = hpsc_atac
-)
-saveRDS(hpsc_multimodal, '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/seurat_preprocess_samples/objects/mo_multimodal_hemapoetic_stem_1_80_20240521.rds')
-rm(hpsc_multimodal)
+# # multimodal HPSC
+# hpsc_rna <- seurat_object[, !is.na(seurat_object@meta.data$celltype_imputed_lowerres) & seurat_object@meta.data$celltype_imputed_lowerres == 'hemapoietic_stem']
+# hpsc_atac <- cell_type_objects[['hemapoietic_stem']]
+# #rm(seurat_object)
+# #rm(cell_type_objects)
+# hpsc_multimodal <- merge_atac_and_rna(
+#   rna_object = hpsc_rna,
+#   atac_object = hpsc_atac
+# )
+# saveRDS(hpsc_multimodal, '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/seurat_preprocess_samples/objects/mo_multimodal_hemapoetic_stem_1_80_20240521.rds')
+# rm(hpsc_multimodal)
 
 # multimodal other T
 to_rna <- seurat_object[, !is.na(seurat_object@meta.data$celltype_imputed_lowerres) & seurat_object@meta.data$celltype_imputed_lowerres == 'T_other']

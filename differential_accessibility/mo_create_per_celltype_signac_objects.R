@@ -432,3 +432,61 @@ process_and_write_subset(
   recode_id = T
 )
 rm(mo_dc)
+
+# and finally plasmablast
+mo_all <- readRDS(mo_all_loc)
+mo_plasmablast <- mo_all[['plasmablast']]
+rm(mo_all)
+mo_plasmablast@meta.data[['cell_type']] <- 'plasmablast'
+process_and_write_subset(
+  mo_plasmablast,
+  correlations_confined = correlations_confined,
+  correlations_unconfined = correlations_unconfined,
+  condition_assignments=condition_assignments, 
+  age_sex_assigments=age_sex_assigments, 
+  realid_assignments=realid_assignments,  
+  longcovid_assignments=longcovid_assignments,
+  output_loc='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_plasmablast_wstatus_1_80_20240709.rds'
+)
+process_and_write_subset(
+  mo_plasmablast,
+  correlations_confined = correlations_confined,
+  correlations_unconfined = correlations_unconfined,
+  condition_assignments=condition_assignments, 
+  age_sex_assigments=age_sex_assigments, 
+  realid_assignments=realid_assignments,  
+  longcovid_assignments=longcovid_assignments,
+  output_loc='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_plasmablast_UT_wstatus_1_80_20240709.rds',
+  only_covid = T, 
+  recode_id = T
+)
+rm(mo_plasmablast)
+
+# and finally other T cells
+mo_all <- readRDS(mo_all_loc)
+mo_t_other <- mo_all[['T_other']]
+#rm(mo_all)
+mo_t_other@meta.data[['cell_type']] <- 'T_other'
+process_and_write_subset(
+  mo_t_other,
+  correlations_confined = correlations_confined,
+  correlations_unconfined = correlations_unconfined,
+  condition_assignments=condition_assignments, 
+  age_sex_assigments=age_sex_assigments, 
+  realid_assignments=realid_assignments,  
+  longcovid_assignments=longcovid_assignments,
+  output_loc='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_t_other_wstatus_1_80_20240709.rds'
+)
+process_and_write_subset(
+  mo_t_other,
+  correlations_confined = correlations_confined,
+  correlations_unconfined = correlations_unconfined,
+  condition_assignments=condition_assignments, 
+  age_sex_assigments=age_sex_assigments, 
+  realid_assignments=realid_assignments,  
+  longcovid_assignments=longcovid_assignments,
+  output_loc='/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cpeaks_peak_calling/signac/rounded/mo_cpeaks_filtered_t_other_UT_wstatus_1_80_20240709.rds',
+  only_covid = T, 
+  recode_id = T
+)
+rm(mo_t_other)

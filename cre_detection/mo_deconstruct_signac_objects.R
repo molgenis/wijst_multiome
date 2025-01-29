@@ -70,7 +70,8 @@ signac_prepend <- 'mo_cpeaks_filtered_'
 signac_append <- '_wstatus_1_80_20240709.rds'
 
 # check each cell type
-for (cell_type in c('b', 'cd4t', 'cd8t', 'dc', 'nk', 'monocyte')) {
+#for (cell_type in c('b', 'cd4t', 'cd8t', 'dc', 'nk', 'monocyte', 'plasmablast', 't_other')) {
+for (cell_type in c('plasmablast', 't_other')) {
   # full location to the object
   signac_full_loc <- paste(signac_objects_loc, '/', signac_prepend, cell_type, signac_append, sep = '')
   signac_object <- readRDS(signac_full_loc)
@@ -92,7 +93,7 @@ atac_full_matrix <- NULL
 atac_full_columns <- NULL
 atac_full_features <- NULL
 # check each cell type again
-for (cell_type in c('b', 'cd4t', 'cd8t', 'dc', 'nk', 'monocyte')) {
+for (cell_type in c('b', 'cd4t', 'cd8t', 'dc', 'nk', 'monocyte', 'plasmablast', 't_other')) {
   print(paste('reading', cell_type))
   # read accessibility
   accessibility <- spam::read.MM(paste(deconstructed_folders_loc, '/', cell_type, '/matrix.mtx', sep = ''))
