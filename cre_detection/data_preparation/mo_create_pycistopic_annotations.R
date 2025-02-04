@@ -24,7 +24,7 @@ cpeaks_anno_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/cPeaks/cPe
 cpeaks_anno <- read.table(cpeaks_anno_loc, header = T, sep = ' ')
 
 # select the regions we included
-features_file_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/pycistopic/deconstruced_atac_objects/merged_major_celltypes/features.tsv.gz'
+features_file_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/pycistopic/deconstruced_atac_objects/merged_major_and_minor_celltypes/features.tsv.gz'
 # read the features
 features <- read.table(features_file_loc, header = F)$V1
 
@@ -59,7 +59,7 @@ region_to_gene[['query_region']] <- NULL
 regions_anno_full <- cbind(cpeaks_anno, region_to_gene)
 
 # put the result somewhere
-regions_anno_full_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/pycistopic/deconstruced_atac_objects/merged_major_celltypes/region_annotations.tsv.gz'
+regions_anno_full_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/pycistopic/deconstruced_atac_objects/merged_major_and_minor_celltypes/region_annotations.tsv.gz'
 write.table(regions_anno_full, gzfile(regions_anno_full_loc), row.names = F, col.names = T, sep = '\t', quote = F)
 # checksum as well
 mdfiver::create_md5_for_file(regions_anno_full_loc)
