@@ -145,7 +145,7 @@ genotypes_loc <- '/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium
 eqtl_interaction_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/output/L1/'
 eqtl_interaction_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/output/nominal_condition/L1/'
 # location of the caQTL interactions
-caqtl_interaction_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_caqtl/sc-eqtlgen/output/L1/'
+caqtl_interaction_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_caqtl/sc-eqtlgen/output/nominal_condition/L1/'
 
 # check each cell type in the eQTLs
 eqtl_interactions_per_celltype <- list()
@@ -178,7 +178,9 @@ for (ct in list.dirs(eqtl_interaction_loc, recursive = F, full.names = F)) {
 
 # check each cell type in the eQTLs
 caqtl_interactions_per_celltype <- list()
-for (ct in list.dirs(caqtl_interaction_loc, recursive = F, full.names = F)) {
+#for (ct in list.dirs(caqtl_interaction_loc, recursive = F, full.names = F)) {
+for (ct in c('B')) {
+
   print(ct)
   ct_res <- correct_all_chunks_all_chromosomes(
     genotype_loc = genotypes_loc, 
