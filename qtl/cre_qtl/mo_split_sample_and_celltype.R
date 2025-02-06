@@ -173,7 +173,7 @@ deconstruct_seurat_object <- function(seurat_object, regions, genes, output_dir,
   expression_data <- expression_data[genes_have, ]
   chromatin_data <- chromatin_data[regions_have, ]
   # check each sample
-  samples_present <- metadata[[seurat_assignment_column]]
+  samples_present <- unique(metadata[[seurat_assignment_column]])
   # and remove entries where we have no data
   samples_present <- samples_present[!is.na(samples_present)]
   # check each sample
