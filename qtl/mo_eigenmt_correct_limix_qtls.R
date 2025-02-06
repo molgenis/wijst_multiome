@@ -179,8 +179,8 @@ for (ct in list.dirs(eqtl_interaction_loc, recursive = F, full.names = F)) {
 # check each cell type in the eQTLs
 caqtl_interactions_per_celltype <- list()
 #for (ct in list.dirs(caqtl_interaction_loc, recursive = F, full.names = F)) {
-for (ct in c('B')) {
-
+#for (ct in c('B')) {
+for (ct in c('CD4T', 'CD8T', 'DC', 'monocyte', 'NK')) {
   print(ct)
   ct_res <- correct_all_chunks_all_chromosomes(
     genotype_loc = genotypes_loc, 
