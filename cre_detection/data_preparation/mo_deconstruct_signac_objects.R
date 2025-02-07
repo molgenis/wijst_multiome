@@ -70,8 +70,7 @@ signac_prepend <- 'mo_cpeaks_filtered_'
 signac_append <- '_wstatus_1_80_20240709.rds'
 
 # check each cell type
-#for (cell_type in c('b', 'cd4t', 'cd8t', 'dc', 'nk', 'monocyte', 'plasmablast', 't_other')) {
-for (cell_type in c('plasmablast', 't_other')) {
+for (cell_type in c('b', 'cd4t', 'cd8t', 'dc', 'nk', 'monocyte', 'plasmablast', 't_other')) {
   # full location to the object
   signac_full_loc <- paste(signac_objects_loc, '/', signac_prepend, cell_type, signac_append, sep = '')
   signac_object <- readRDS(signac_full_loc)
@@ -147,7 +146,7 @@ for (cell_type in c('b', 'cd4t', 'cd8t', 'dc', 'nk', 'monocyte', 'plasmablast', 
 
 # check each cell type for metadata
 metadata_all_list <- list()
-for (cell_type in c('b', 'cd4t', 'cd8t', 'dc', 'nk', 'monocyte')) {
+for (cell_type in c('b', 'cd4t', 'cd8t', 'dc', 'nk', 'monocyte', 'plasmablast', 't_other')) {
   # read the metadata
   metadata_ct <- read.table(paste(deconstructed_folders_loc, '/', cell_type, '/metadata.tsv.gz', sep = ''), header = T, sep = '\t')
   # put in list
