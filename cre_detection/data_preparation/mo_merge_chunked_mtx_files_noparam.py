@@ -58,7 +58,7 @@ def combine_mtx_files(mtx_file_list):
 # argument setup #
 ##################
 
-args_mtx_folder = '/'
+args_mtx_folder = './'
 args_mtx_regex = 'matrix_chunk_\d+\.mtx.gz'
 args_npz_out = 'matrix_merged.mtx'
 
@@ -93,6 +93,10 @@ elif npz_output_file.endswith('.pickle'):
 elif npz_output_file.endswith('.mtx.gz'):
     # or mtx.gz
     with gzip.open(npz_output_file, 'wb') as f:
+        mmwrite(f, combined_matrix)
+elif npz_output_file.endswith('.mtx'):
+    # no zip
+    with open(npz_output_file, 'wb') as f:
         mmwrite(f, combined_matrix)
 else:
     # default to npz

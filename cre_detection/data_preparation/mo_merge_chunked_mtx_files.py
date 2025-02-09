@@ -105,6 +105,10 @@ elif npz_output_file.endswith('.mtx.gz'):
     # or mtx.gz
     with gzip.open(npz_output_file, 'wb') as f:
         mmwrite(f, combined_matrix)
+elif npz_output_file.endswith('.mtx'):
+    # no zip
+    with open(npz_output_file, 'wb') as f:
+        mmwrite(f, combined_matrix)
 else:
     # default to npz
     print(''.join(['not recognizing output format, saving as npz']))
