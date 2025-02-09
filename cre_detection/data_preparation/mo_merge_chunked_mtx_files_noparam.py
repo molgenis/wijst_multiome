@@ -60,7 +60,7 @@ def combine_mtx_files(mtx_file_list):
 
 args_mtx_folder = './'
 args_mtx_regex = 'matrix_chunk_\d+\.mtx.gz'
-args_npz_out = 'matrix_merged.mtx'
+args_npz_out = './matrix_merged.mtx'
 
 #############
 # Main code #
