@@ -331,7 +331,10 @@ if (!chromatin_assay %in% names(seurat_object@assays)) {
 if (!cell_type_column %in% colnames(seurat_object@meta.data)) {
   stop(paste0('cell type column \'', cell_type_column, '\', not present in Seurat object'))
 }
-# check if there is a comma
+
+# create a sample mapping file
+sample_mapping <- NULL
+# check if there is a comma in the assignment parameter
 if (grepl(',', seurat_assignment_column)) {
   # if there is, we split by that comma
   seurat_assignment_columns <- strsplit(seurat_assignment_column, ',')[[1]]
@@ -350,14 +353,20 @@ if (grepl(',', seurat_assignment_column)) {
     }
     # set that new column as the new assignment column
     seurat_assignment_column <- 'aggregate_columns'
+    # now make a sample mapping table uisng that aggregated column, and the columns used to construct it
+    sample_mapping <- unique(seurat_object@meta.data[, c('aggregate_columns', seurat_assignment_columns)])
+    colnames(sample_mapping)[1] <- 'sample'
   }
 } else {
   # if there is no comma, we use the column as-is
   if (!seurat_assignment_column %in% colnames(seurat_object@meta.data)) {
     stop(paste0('sample assignment column \'', seurat_assignment_column, '\', not present in Seurat object'))
+  } else {
+    # if we are okay, we create a sample mapping where the assignment column is the same across the two columns
+    sample_mapping <- data.frame(x = unique(seurat_object@meta.data[[seurat_assignment_column]]), y = unique(seurat_object@meta.data[[seurat_assignment_column]]))
+    colnames(sample_mapping) <- c('sample', seurat_assignment_column)
   }
 }
-
 
 # check if we have the cell type requested
 if (!(cell_type %in% seurat_object@meta.data[[cell_type_column]])) {
@@ -367,9 +376,24 @@ if (!(cell_type %in% seurat_object@meta.data[[cell_type_column]])) {
 # first step, subset the data to this cell type
 seurat_object <- seurat_object[, !is.na(seurat_object@meta.data[[cell_type_column]]) & seurat_object@meta.data[[cell_type_column]] == cell_type]
 
+# get the number of cells for each sample
+ncells <- data.frame(table(seurat_object@meta.data[[seurat_assignment_column]]))
+# rename the column names
+colnames(ncells) <- c('sample', 'ncell')
+# order samples in the same order as the sample mapping file, also implicitly filtering what we don't have for this cell type
+sample_mapping <- sample_mapping[match(ncells[['sample']], sample_mapping[['sample']]), ]
+
 # set with the cell type as output folder
 output_folder_full <- paste0(output_folder, '/', cell_type, '/')
 dir.create(output_folder_full, recursive = T)
+
+# write the ncell and sample mapping tables
+ncell_output_loc <- paste0(output_folder_full, '/ncells.tsv.gz')
+write.table(ncells, gzfile(ncell_output_loc), row.names = F, sep = '\t', quote = F, col.names = T)
+mdfiver::create_md5_for_file(ncell_output_loc)
+sample_mapping_output_loc <- paste0(output_folder_full, '/sample_mapping.tsv.gz')
+write.table(sample_mapping, gzfile(sample_mapping_output_loc), row.names = F, sep = '\t', quote = F, col.names = T)
+mdfiver::create_md5_for_file(sample_mapping_output_loc)
 
 # start the procedure
 deconstruct_seurat_object(
