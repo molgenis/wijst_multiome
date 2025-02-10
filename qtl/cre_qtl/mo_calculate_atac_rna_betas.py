@@ -47,6 +47,7 @@ import torch.optim as optim
 import statsmodels.api as sm
 # multithreading on CPU instead
 from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor
 # the CRE confinement can be loaded using pandas
 import pandas as pd
 # files might be zipped
@@ -278,22 +279,23 @@ def binomial_regression_gpu(binary_array_2d, normal_array_2d, epochs=100):
     epochs (int): The number of epochs for training the logistic regression model. Default is 100.
 
     Returns:
-    dict: A dictionary containing two keys:
+    dict: A dictionary containing three keys:
           - 'p': A 1D CuPy array of p-values for each row.
           - 'beta': A 1D CuPy array of beta coefficients for each row.
+          - 'std_err': A 1D CuPy array of standard errors for each row.
 
     Example:
     >>> binary_array_2d = cp.array([[0, 1, 0], [1, 0, 1]])
     >>> normal_array_2d = cp.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
     >>> results = binomial_regression_gpu(binary_array_2d, normal_array_2d)
-    >>> print(results['beta'], results['p'])
-    [0.5, 0.7] [0.045, 0.032]
+    >>> print(results['beta'], results['p'], results['std_err'])
+    [0.5, 0.7] [0.045, 0.032] [0.1, 0.15]
 
     Notes:
     - This function uses PyTorch to perform logistic regression on each row of the input arrays.
     - The logistic regression model is trained using binary cross-entropy loss and the Adam optimizer.
-    - The beta coefficients are extracted from the trained model, and p-values are computed using statsmodels.
-    - If a singular matrix error occurs during the fitting process, the p-value is set to NaN.
+    - The beta coefficients are extracted from the trained model, and p-values and standard errors are computed using statsmodels.
+    - If a singular matrix error occurs during the fitting process, the p-value and standard error are set to NaN.
     """
     # create custom class of regression model that uses GPU
     class LogisticRegressionModel(nn.Module):
@@ -305,9 +307,10 @@ def binomial_regression_gpu(binary_array_2d, normal_array_2d, epochs=100):
         def forward(self, x):
             return torch.sigmoid(self.linear(x))
     
-    # Initialize the arrays of p values and betas
+    # Initialize the arrays of p values, betas, and standard errors
     betas = cp.zeros(normal_array_2d.shape[0])
-    p_values = cp.zeros(normal_array_2d.shape[0])
+    p_values = cp.ones(normal_array_2d.shape[0])
+    std_errs = cp.zeros(normal_array_2d.shape[0])
     # do each row
     for i in range(normal_array_2d.shape[0]):
         # create GPU logistic regression model
@@ -338,7 +341,7 @@ def binomial_regression_gpu(binary_array_2d, normal_array_2d, epochs=100):
         # put into list
         betas[i] = beta
         
-        # Compute p-values using statsmodels
+        # Compute p-values and standard errors using statsmodels
         try:
             # constant term for intercept
             X_sm = sm.add_constant(normal_array_2d[i].get())
@@ -348,15 +351,19 @@ def binomial_regression_gpu(binary_array_2d, normal_array_2d, epochs=100):
             result = logit_model.fit(disp=0)
             # extract p-value for the predictor
             p_value = result.pvalues[1]
+            # extract standard error for the predictor
+            std_err = result.bse[1]
         except np.linalg.LinAlgError:
-            # set p-value to NaN if Singular matrix error occurs and we don't have a good fit
+            # set p-value and standard error to NaN if Singular matrix error occurs and we don't have a good fit
             p_value = np.nan
+            std_err = np.nan
 
-        # add p value in list
+        # add p value and standard error in list
         p_values[i] = p_value
+        std_errs[i] = std_err
     
-    # Put results in a dictionary and return those
-    results = {'p': p_values, 'beta': betas}
+    # put results in a dictionary and return those
+    results = {'p': p_values, 'beta': betas, 'std_err': std_errs}
     return results
 
 
@@ -369,21 +376,20 @@ def binomial_regression_single_row_cpu(X_row, y_row):
     y_row (array-like): A 1D array of binary response variables for a single observation.
 
     Returns:
-    tuple: A tuple containing the beta coefficient and the p-value for the predictor variable.
-           If a singular matrix error occurs, both values are set to NaN.
+    tuple: A tuple containing the beta coefficient, the p-value, and the standard error for the predictor variable.
+           If a singular matrix error occurs, all values are set to NaN.
 
     Example:
     >>> X_row = [1.0, 2.0, 3.0]
     >>> y_row = [0, 1, 0]
-    >>> beta, p_value = binomial_regression_single_row_cpu(X_row, y_row)
-    >>> print(beta, p_value)
-    0.5 0.045
+    >>> beta, p_value, std_err = binomial_regression_single_row_cpu(X_row, y_row)
+    >>> print(beta, p_value, std_err)
+    0.5 0.045 0.1
 
     Notes:
     - This function uses statsmodels to perform logistic regression.
     - A constant term is added to the predictor variables to account for the intercept.
-    - If a singular matrix error occurs during the fitting process, both the beta coefficient
-      and the p-value are set to NaN.
+    - If a singular matrix error occurs during the fitting process, all values are set to NaN.
     """
     # do binomial regression for a single row
     try:
@@ -397,11 +403,14 @@ def binomial_regression_single_row_cpu(X_row, y_row):
         beta = result.params[1]
         # get the p-value
         p_value = result.pvalues[1]
+        # get the standard error
+        std_err = result.bse[1]
     except np.linalg.LinAlgError:
-        # set both beta and p to NAN if we encounter an error
+        # set both beta, p, and std_err to NAN if we encounter an error
         beta = np.nan
         p_value = np.nan
-    return beta, p_value
+        std_err = np.nan
+    return beta, p_value, std_err
 
 
 def binomial_regression_cpu(binary_array_2d, normal_array_2d):
@@ -413,44 +422,47 @@ def binomial_regression_cpu(binary_array_2d, normal_array_2d):
     normal_array_2d (array-like): A 2D array of predictor variables.
 
     Returns:
-    dict: A dictionary containing two keys:
+    dict: A dictionary containing three keys:
           - 'p': A 1D array of p-values for each row.
           - 'beta': A 1D array of beta coefficients for each row.
+          - 'std_err': A 1D array of standard errors for each row.
 
     Example:
     >>> binary_array_2d = np.array([[0, 1, 0], [1, 0, 1]])
     >>> normal_array_2d = np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
     >>> results = binomial_regression_cpu(binary_array_2d, normal_array_2d)
-    >>> print(results['beta'], results['p'])
-    [0.5, 0.7] [0.045, 0.032]
+    >>> print(results['beta'], results['p'], results['std_err'])
+    [0.5, 0.7] [0.045, 0.032] [0.1, 0.15]
 
     Notes:
     - This function uses ThreadPoolExecutor for multithreading to perform regression on each row concurrently.
     - The helper function `binomial_regression_single_row_cpu` is used to perform regression on a single row.
     - The results are stored in arrays and returned as a dictionary.
     """
-    # initialize the arrays of p values and betas, given the shape of the input
+    # initialize the arrays of p values, betas, and standard errors, given the shape of the input
     betas = np.zeros(normal_array_2d.shape[0])
-    p_values = np.zeros(normal_array_2d.shape[0])
-    
+    p_values = np.ones(normal_array_2d.shape[0])
+    std_errs = np.zeros(normal_array_2d.shape[0])
+
     # use ThreadPoolExecutor for multithreading
     with ThreadPoolExecutor() as executor:
         # store results in list
         futures = []
-        # check each row in the first array (both arrays are the saem size)
+        # check each row in the first array (both arrays are the same size)
         for i in range(normal_array_2d.shape[0]):
             # do the row
-            futures.append(executor.submit(binomial_regression_single_row_cpu, normal_array_2d[i], binary_array_2d[i]))
+            futures.append(executor.submit(binomial_regression_single_row_cpu, normal_array_2d[i].flatten(), binary_array_2d[i].flatten()))
         # go through all results
         for i, future in enumerate(futures):
-            # grab the beta and p from the result of the thread
-            beta, p_value = future.result()
+            # grab the beta, p-value, and standard error from the result of the thread
+            beta, p_value, std_err = future.result()
             # put into the list
             betas[i] = beta
             p_values[i] = p_value
+            std_errs[i] = std_err
     
     # put all results in a dictionary and return those
-    results = {'p': p_values, 'beta': betas}
+    results = {'p': p_values, 'beta': betas, 'std_err': std_errs}
     return results
 
 
@@ -482,7 +494,54 @@ def binomial_regression(binary_array_2d, normal_array_2d):
     if use_gpu:
         return binomial_regression_gpu(binary_array_2d, normal_array_2d)
     else:
-        return binomial_regression_cpu(binary_array_2d, normal_array_2d)
+        return binomial_regression_cpu(np.array(binary_array_2d), normal_array_2d)
+
+
+def binomial_regression_chunked_sparse(binary_sparse_matrix, normal_array_2d, chunk_size=1000):
+    """
+    Perform binomial regression on sparse 2D arrays in chunks.
+
+    Parameters:
+    binary_sparse_matrix (csr_matrix): A sparse matrix of binary response variables.
+    normal_array_2d (array-like): A 2D array of predictor variables.
+    chunk_size (int): The number of rows to process in each chunk.
+
+    Returns:
+    dict: A dictionary containing three keys:
+          - 'p': A 1D array of p-values for each row.
+          - 'beta': A 1D array of beta coefficients for each row.
+          - 'std_err': A 1D array of standard errors for each row.
+    """
+    # grab the number of rows
+    num_rows = binary_sparse_matrix.shape[0]
+    betas = np.zeros(num_rows)
+    p_values = np.ones(num_rows)
+    std_errs = np.zeros(num_rows)
+    
+    for start in range(0, num_rows, chunk_size):
+        end = min(start + chunk_size, num_rows)
+        chunk_binary_sparse = binary_sparse_matrix[start:end]
+        chunk_normal = normal_array_2d[start:end]
+        
+        # Convert the sparse chunk to dense format
+        chunk_binary_dense = chunk_binary_sparse.todense()
+        
+        # Perform binomial regression on the chunk
+        chunk_results = binomial_regression(chunk_binary_dense, chunk_normal)
+        
+        # Store the results
+        if use_gpu:
+            # we need to use .get for cupy arrays
+            betas[start:end] = chunk_results['beta'].get()
+            p_values[start:end] = chunk_results['p'].get()
+            std_errs[start:end] = chunk_results['std_err'].get()
+        else:
+            betas[start:end] = chunk_results['beta']
+            p_values[start:end] = chunk_results['p']
+            std_errs[start:end] = chunk_results['std_err']
+    
+    results = {'p': p_values, 'beta': betas, 'std_err': std_errs}
+    return results
 
 
 ###################
@@ -497,6 +556,8 @@ parser.add_argument('-o', '--output_folder', type = str, help = 'location of the
 parser.add_argument('-g', '--use_gpu', action = 'store_true', help = 'use GPU acceleration')
 parser.add_argument('-i', '--check_order_intersect', action = 'store_true', help = 'check the barcodes to intersect and order barcodes')
 parser.add_argument('-c', '--cre_loc', type = str, help = 'location of the CRE confinement file (string)')
+parser.add_argument('-n', '--nrow_chunk', type = int, help = 'number of rows per chunk, zero means no chunking (integer)', default = 0)
+parser.add_argument('-s', '--sample_name', type = str, help = 'sample name to add to all output tables, leave parameter out for no header (string)', default = None)
 args = parser.parse_args()
 
 # whether we use GPU or not
@@ -511,6 +572,10 @@ atac_data_loc = args.chromatin_folder
 cre_loc = args.cre_loc
 # location where to place the outputs
 output_folder = args.output_folder
+# how many rows per chunk
+row_chunk_size = args.nrow_chunk
+# the name of the sample to put as header
+sample_name = args.sample_name
 
 # location of the RNA matrix
 rna_matrix_loc = ''.join([rna_data_loc, '/matrix.mtx.gz'])
@@ -526,6 +591,8 @@ atac_features_loc = ''.join([atac_data_loc, '/features.tsv.gz'])
 # specifically the betas and p values
 output_beta_loc = ''.join([output_folder, '/beta.txt.gz'])
 output_p_loc = ''.join([output_folder, '/p.txt.gz'])
+output_se_loc = ''.join([output_folder, '/se.txt.gz'])
+
 
 #################
 # load all data #
@@ -620,28 +687,49 @@ subset_genes = rna_matrix[list(valid_indices_genes), :] if valid_indices_genes e
 rna_normal = yeo_johnson_normalization_and_scale(subset_genes)
 
 # do the regression
-regression_results = binomial_regression(subset_regions.todense(), rna_normal)
+regression_results = None
+# if the chunk size is bigger than zero, we do chunking
+if row_chunk_size > 0:
+    regression_results = binomial_regression_chunked_sparse(subset_regions, rna_normal, chunk_size = row_chunk_size)
+# otherwise we do everything all in once
+else:
+    regression_results = binomial_regression(subset_regions.todense(), rna_normal)
 
 # add the results back in the order of the confinement file
 ordered_ps = [None] * len(regions)
 ordered_betas = [None] * len(regions)
+ordered_ses = [None] * len(regions)
+
 # Place the results back in the original order
 for i in range(0, len(original_positions), 1):
     # get the resulting p
     p = regression_results['p'][i]
     # and beta
     beta = regression_results['beta'][i]
+    # and se
+    std_err = regression_results['std_err'][i]
     # get position in original list
     i_original = original_positions[i]
     # put in the lists at those positions
     ordered_ps[i_original] = p
     ordered_betas[i_original] = beta
+    ordered_ses[i_original] = std_err
 
 # write the lists to gzipped text files
 with gzip.open(output_p_loc, 'wt') as f:
+    if sample_name is not None:
+        f.write(f"{sample_name}\n")
     for item in ordered_ps:
         f.write(f"{item}\n")
 
 with gzip.open(output_beta_loc, 'wt') as f:
+    if sample_name is not None:
+        f.write(f"{sample_name}\n")
     for item in ordered_betas:
+        f.write(f"{item}\n")
+
+with gzip.open(output_se_loc, 'wt') as f:
+    if sample_name is not None:
+        f.write(f"{sample_name}\n")
+    for item in ordered_ses:
         f.write(f"{item}\n")
