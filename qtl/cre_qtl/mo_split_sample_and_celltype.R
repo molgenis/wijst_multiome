@@ -4,13 +4,13 @@
 # Name: mo_split_sample_and_celltype.R
 # Function: take a multimodal Seurat object and split it per donor into matrices for the RNA and accessibility
 # Example
-# Rscript mo_split_sample_and_celltype.R \
-#   --cell_type DC \
+# Rscript /groups/umcg-franke-scrna/tmp04/users/umcg-roelen/singularity/rstudio-server/simulated_home/mo_split_sample_and_celltype.R \
+#   --cell_type monocyte \
 #   --cell_type_column celltype_imputed_lowerres \
-#   --seurat_object_path /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/seurat_preprocess_samples/objects/mo_multimodal_dc_1_80_20240521.rds \
-#   --cre_pairs_loc /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/coeqtl/trial_run/cre_lists/monocyte_eregulon_pairs.tsv.gz \
+#   --seurat_object_path /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/seurat_preprocess_samples/objects/mo_multimodal_monocyte_1_80_20240521.rds \
+#   --cre_pairs_loc /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/coeqtl/trial_run/cre_lists/mono_cre_scenic_and_pseudo.tsv.gz \
 #   --seurat_assignment_column sample_final,lane \
-#   --output_folder /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/coeqtl/trial_run/matrices/ \
+#   --output_folder /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/cre_eqtl/pseudobulk_replication/matrices/ \
 #   --no_binarize_atac \
 #   --quietly
 ############################################################################################################################
