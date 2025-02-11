@@ -28,6 +28,7 @@ CORES='2'
 MEMORY_GB='16'
 TMP_SIZE='512MB'
 SCRIPT_LOC='/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/coeqtl/trial_run/scripts/mo_calculate_atac_rna_betas.py'
+PYTHON_BIN='~/miniconda3/envs/gpu_env/bin/python'
 
 # list all files in directory
 dirlist=(${PER_SAMPLE_MATRICES}*)
@@ -73,8 +74,9 @@ for dir_full in ${dirlist[*]}
 '> ${output_job_full}
                 # do the prerequisites
                 echo 'mkdir -p '${output_loc_full}'/' >> ${output_job_full}
+                echo 'conda activate gpu_env' >> ${output_job_full}
                 # also add the actual work
-                echo ${SCRIPT_LOC}' \
+                echo ${PYTHON_BIN}' '${SCRIPT_LOC}' \
     --expression_folder '${expression_folder_loc}' \
     --chromatin_folder '${accessibility_folder_loc}' \
     --output_folder '${output_loc_full}' \
