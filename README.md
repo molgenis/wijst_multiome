@@ -152,10 +152,19 @@ Below we will outline the steps taken to process and analyse the data
 
 
 ### CRE detection
-'*cre_detection/mo_cistarget.ipynb*'  run pycistarget and DEM to identify overrepresented motifs in the DARs\
-'*cre_detection/mo_deconstruct_rna_objects.R*'  deconstruct Seurat objects to convert into scanpy objects\
-'*cre_detection/mo_parts_to_scanpy.py*'  use deconstructed Seurat objects and convert them into scanpy\
-'*cre_detection/scenicplus_config.yaml*'  config for running scenic+ pipeline after setting up all inputs
+'*cre_detection/data_preparation/mo_deconstruct_signac_objects.R'* deconstruct the Signac objects into matrix/features/barcodes, to merge for pycistopic
+'*cre_detection/data_preparation/mo_deconstruct_rna_objects.R'* deconstruct the Seurat objects into matrix/features/barcodes, to use in the SCENIC+ step
+'*cre_detection/data_preparation/mo_get_outer_join_filtered_chromatin_regions.R'* get all the regions that are represented in .1% cells in any cell type
+'*cre_detection/data_preparation/mo_create_pycistopic_annotations.R'* create annotations for regions to use in pycistopic
+'*cre_detection/data_preparation/mo_merge_chunked_mtx_files.py'* merge chunked mtx files into one file
+
+'*cre_detection//pycistopic/mo_create_pycistopic_object.ipynb'* create pycistopic object
+'*cre_detection//pycistopic/mo_pycistopic_model_topics.ipynb'* perform topic modelling
+
+'*cre_detection/pycistarget/mo_cistarget.ipynb*'  run pycistarget and DEM to identify overrepresented motifs in the DARs\
+
+'*cre_detection/scenicplus/mo_parts_to_scanpy.py*'  use deconstructed Seurat objects and convert them into scanpy\
+'*cre_detection/scenicplus/scenicplus_config.yaml*'  config for running scenic+ pipeline after setting up all inputs
 
 
 ### eQTL mapping
