@@ -6,12 +6,14 @@ authors: Roy Oelen
 example usage:
 
 python mo_calculate_atac_rna_betas.py \
-    --expression_folder /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/coeqtl/trial_run/matrices/DC/MO100_230202_lane6/ \
-    --chromatin_folder /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/coeqtl/trial_run/matrices/DC/MO100_230202_lane6/ \
+    --expression_folder /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/coeqtl/trial_run/matrices/DC/MO100_230202_lane6/RNA/ \
+    --chromatin_folder /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/coeqtl/trial_run/matrices/DC/MO100_230202_lane6/peaks/ \
     --output_folder /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/coeqtl/trial_run/betas_ps/DC/MO100_230202_lane6/ \
-    --use_gpu True \
-    --check_order_intersect False \
-    --cre_loc /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/coeqtl/trial_run/cre_lists/monocyte_eregulon_pairs.tsv.gz
+    --use_gpu \
+    --check_order_intersect \
+    --cre_loc /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/coeqtl/trial_run/cre_lists/monocyte_eregulon_pairs.tsv.gz \
+    --n_perm 10 \
+    --seeds_file_loc /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/coeqtl/trial_run/betas_ps/DC/MO100_230202_lane6/to_use_seeds.txt.gz
 
 """
 
@@ -57,6 +59,10 @@ import os
 import sys
 # finally, also parse the arguments
 import argparse
+# for permutations
+import random
+# for warning
+import warnings
 
 
 #############
@@ -544,6 +550,43 @@ def binomial_regression_chunked_sparse(binary_sparse_matrix, normal_array_2d, ch
     return results
 
 
+def shuffle_csr_columns(matrix, seed=None):
+    """
+    Shuffle the columns of a CSR (Compressed Sparse Row) matrix.
+
+    Parameters:
+    matrix (csr_matrix): The input CSR matrix whose columns need to be shuffled.
+    seed (int, optional): The seed for the random number generator. Default is None.
+
+    Returns:
+    csr_matrix: A new CSR matrix with shuffled columns.
+
+    Example:
+    >>> from scipy.sparse import csr_matrix
+    >>> import numpy as np
+    >>> matrix = csr_matrix(np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]]))
+    >>> shuffled_matrix = shuffle_csr_columns(matrix, seed=42)
+    >>> print(shuffled_matrix.toarray())
+    [[3 1 2]
+     [6 4 5]
+     [9 7 8]]
+    """
+    # get columns
+    num_cols = matrix.shape[1]
+    # get shuffled indices
+    if use_gpu:
+        # with a seed
+        if seed is not None:
+            cp.random.seed(seed)
+        shuffled_indices = cp.random.permutation(num_cols)
+    else:
+        if seed is not None:
+            np.random.seed(seed)
+        shuffled_indices = np.random.permutation(num_cols)
+    # shuffle based on the indices
+    shuffled_matrix = matrix[:, shuffled_indices]
+    return shuffled_matrix
+
 ###################
 # parse arguments #
 ###################
@@ -558,6 +601,8 @@ parser.add_argument('-i', '--check_order_intersect', action = 'store_true', help
 parser.add_argument('-c', '--cre_loc', type = str, help = 'location of the CRE confinement file (string)')
 parser.add_argument('-n', '--nrow_chunk', type = int, help = 'number of rows per chunk, zero means no chunking (integer)', default = 0)
 parser.add_argument('-s', '--sample_name', type = str, help = 'sample name to add to all output tables, leave parameter out for no header (string)', default = None)
+parser.add_argument('-p', '--n_perm', type = int, help = 'number of permutations to perform (integer)', default = 0)
+parser.add_argument('-d', '--seeds_file_loc', type = str, help = 'list of permutation seeds to use (string)', default = None)
 args = parser.parse_args()
 
 # whether we use GPU or not
@@ -576,6 +621,10 @@ output_folder = args.output_folder
 row_chunk_size = args.nrow_chunk
 # the name of the sample to put as header
 sample_name = args.sample_name
+# get the number of permutations
+n_perm = args.n_perm
+# get the seeds file
+seeds_file_loc = args.seeds_file_loc
 
 # location of the RNA matrix
 rna_matrix_loc = ''.join([rna_data_loc, '/matrix.mtx.gz'])
@@ -733,3 +782,103 @@ with gzip.open(output_se_loc, 'wt') as f:
         f.write(f"{sample_name}\n")
     for item in ordered_ses:
         f.write(f"{item}\n")
+
+####################
+# permutation runs #
+####################
+
+# now do permutations
+if n_perm > 0:
+    # set up the seeds
+    seeds = []
+    # get from file if a file was supplied
+    if seeds_file_loc is not None:
+        # open seeds file
+        with gzip.open(seeds_file_loc, 'r') as file:
+            for i, line in enumerate(file):
+                seeds.append(int(line.strip()))
+    # check how many seeds we have
+    if len(seeds) < n_perm:
+        # warn we are adding seeds if some were supplied
+        if seeds_file_loc is not None:
+            warnings.warn(' '.join([str(n_perm), 'requested, but only', str(len(seeds)), 'seeds supplied, will add more seeds\n'])) 
+        # get as many seeds as there are permutations
+        for i in range(len(seeds), n_perm):
+            # create a seed from zero to max
+            seeds.append(random.randint(0, 2**32 - 1))
+    elif len(seeds) > n_perm:
+        # warn there are too many seeds
+        warnings.warn(' '.join([str(n_perm), 'permutations requested, but', str(len(seeds)), 'seeds supplied, will only use first', str(n_perm), 'seeds\n'])) 
+        seeds = seeds[0 : (n_perm -1)]
+
+    # put results in a list
+    permuted_results = []
+    # do each seed
+    for seed in seeds:
+        # get a permuted ATAC matrix
+        permuted_subset_regions = shuffle_csr_columns(subset_regions, seed)
+        # and do the actual analysis now
+        regression_results_permuted = None
+        # if the chunk size is bigger than zero, we do chunking
+        if row_chunk_size > 0:
+            regression_results_permuted = binomial_regression_chunked_sparse(permuted_subset_regions, rna_normal, chunk_size = row_chunk_size)
+        # otherwise we do everything all in once
+        else:
+            regression_results_permuted = binomial_regression(permuted_subset_regions.todense(), rna_normal)
+        # put in list
+        permuted_results.append(regression_results_permuted)
+
+    # now get the p, se and beta for each permutation
+    perm_stats = []
+    for perm_result in permuted_results:
+        # add the results back in the order of the confinement file
+        perm_ordered_ps = [None] * len(regions)
+        perm_ordered_betas = [None] * len(regions)
+        perm_ordered_ses = [None] * len(regions)
+    
+        # Place the results back in the original order
+        for i in range(0, len(original_positions), 1):
+            # get the resulting p
+            perm_p = perm_result['p'][i]
+            # and beta
+            perm_beta = perm_result['beta'][i]
+            # and se
+            perm_std_err = perm_result['std_err'][i]
+            # get position in original list
+            i_original = original_positions[i]
+            # put in the lists at those positions
+            perm_ordered_ps[i_original] = perm_p
+            perm_ordered_betas[i_original] = perm_beta
+            perm_ordered_ses[i_original] = perm_std_err
+        # add these to the perm stats
+        perm_stats.append({'p' : perm_ordered_ps, 'beta' : perm_ordered_betas, 'std_err' : perm_ordered_ses})
+
+    # open the file handle to the seeds file
+    output_seeds_loc = ''.join([output_folder, '/used_seeds.txt.gz'])
+    with gzip.open(output_seeds_loc, 'wt') as sf:
+        # write each seed and its results
+        for i in range(0, len(seeds)):
+            # write the seed
+            sf.write(f"{str(seeds[i])}\n")
+            # now get the path to the permuted outputs
+            perm_beta_loc = ''.join([output_folder, '/perm_', str(i), '_beta.txt.gz'])
+            perm_p_loc = ''.join([output_folder, '/perm_', str(i), '_p.txt.gz'])
+            perm_se_loc = ''.join([output_folder, '/perm_', str(i), '_se.txt.gz'])
+            # write those permuted results
+            with gzip.open(perm_p_loc, 'wt') as f:
+                if sample_name is not None:
+                    f.write(f"{sample_name}\n")
+                for item in perm_stats[i]['p']:
+                    f.write(f"{item}\n")
+    
+            with gzip.open(perm_beta_loc, 'wt') as f:
+                if sample_name is not None:
+                    f.write(f"{sample_name}\n")
+                for item in perm_stats[i]['beta']:
+                    f.write(f"{item}\n")
+    
+            with gzip.open(perm_se_loc, 'wt') as f:
+                if sample_name is not None:
+                    f.write(f"{sample_name}\n")
+                for item in perm_stats[i]['std_err']:
+                    f.write(f"{item}\n")
