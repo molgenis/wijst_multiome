@@ -7,9 +7,9 @@
 #Example
 # ./mo_create_beta_calculation_jobs.sh \
 #  /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/cre_eqtl/pseudobulk_replication/matrices/monocyte/ \
-#  /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/cre_eqtl/pseudobulk_replication/betas_ps/monocyte/ \
+#  /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/cre_eqtl/pseudobulk_replication/betas_ps_wperm/monocyte/ \
 #  /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/coeqtl/trial_run/cre_lists/mono_cre_scenic_and_pseudo.tsv.gz \
-#  /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/cre_eqtl/pseudobulk_replication/jobs/monocyte/ \
+#  /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/cre_eqtl/pseudobulk_replication/jobs_wperm/monocyte/ \
 #  RNA \
 #  peaks
 ###################################################################
@@ -29,6 +29,8 @@ MEMORY_GB='16'
 TMP_SIZE='512MB'
 SCRIPT_LOC='/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/coeqtl/trial_run/scripts/mo_calculate_atac_rna_betas.py'
 PYTHON_BIN='~/miniconda3/envs/gpu_env/bin/python'
+N_PERM='10'
+SEEDS_LOC='/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/cre_eqtl/pseudobulk_replication/seeds/seeds.txt.gz'
 
 # list all files in directory
 dirlist=(${PER_SAMPLE_MATRICES}*)
@@ -81,6 +83,8 @@ for dir_full in ${dirlist[*]}
     --chromatin_folder '${accessibility_folder_loc}' \
     --output_folder '${output_loc_full}' \
     --use_gpu \
+    --n_perm '${N_PERM}' \
+    ----seeds_file_loc '${SEEDS_LOC}' \
     --cre_loc '${CRE_LOC}'
 '>> ${output_job_full}
             fi
