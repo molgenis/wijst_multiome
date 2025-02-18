@@ -21,6 +21,7 @@ CRE_LOC=$3
 JOB_OUT_LOC=$4
 EXPRESSION_ASSAY=$5
 ACCESSIBILITY_ASSAY=$6
+N_PERM=$7
 
 # some defaults
 RUNTIME='05:59:59'
@@ -29,8 +30,13 @@ MEMORY_GB='16'
 TMP_SIZE='512MB'
 SCRIPT_LOC='/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/coeqtl/trial_run/scripts/mo_calculate_atac_rna_betas.py'
 PYTHON_BIN='~/miniconda3/envs/gpu_env/bin/python'
-N_PERM='10'
 SEEDS_LOC='/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/cre_eqtl/pseudobulk_replication/seeds/seeds.txt.gz'
+
+# default permutations is 10
+if [ -z "${7}" ];
+    then
+    N_PERM='10'
+fi
 
 # list all files in directory
 dirlist=(${PER_SAMPLE_MATRICES}*)
