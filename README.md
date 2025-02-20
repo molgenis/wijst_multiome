@@ -158,8 +158,9 @@ Below we will outline the steps taken to process and analyse the data
 '*cre_detection/data_preparation/mo_create_pycistopic_annotations.R'* create annotations for regions to use in pycistopic
 '*cre_detection/data_preparation/mo_merge_chunked_mtx_files.py'* merge chunked mtx files into one file
 
-'*cre_detection//pycistopic/mo_create_pycistopic_object.ipynb'* create pycistopic object
-'*cre_detection//pycistopic/mo_pycistopic_model_topics.ipynb'* perform topic modelling
+'*cre_detection/pycistopic/mo_create_pycistopic_object.ipynb'* create pycistopic object
+'*cre_detection/pycistopic/mo_pycistopic_model_topics.ipynb'* perform topic modelling
+'*cre_detection/pycistopic/mo_pycistopic_binarize_topics.ipynb'* binarize topics
 
 '*cre_detection/pycistarget/mo_cistarget.ipynb*'  run pycistarget and DEM to identify overrepresented motifs in the DARs\
 
