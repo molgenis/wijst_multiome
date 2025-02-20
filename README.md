@@ -8,10 +8,12 @@ Here we will list the software used to generate the data
 
 Cellranger 7.1.0\
 Cellranger-arc 2.0.0\
-R 4.3.1\
+R 4.4.2\
 plink2-20230707\
 CellBender v3\
-Seurat 4.9.9.9059\
+Seurat 5.2.1\
+Signac 1.14.0\
+ArchR 1.0.3\
 Souporcell v2\
 Demuxlet v2
 
