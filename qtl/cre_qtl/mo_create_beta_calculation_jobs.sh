@@ -90,7 +90,7 @@ for dir_full in ${dirlist[*]}
     --output_folder '${output_loc_full}' \
     --use_gpu \
     --n_perm '${N_PERM}' \
-    ----seeds_file_loc '${SEEDS_LOC}' \
+    --seeds_file_loc '${SEEDS_LOC}' \
     --cre_loc '${CRE_LOC}'
 '>> ${output_job_full}
             fi
