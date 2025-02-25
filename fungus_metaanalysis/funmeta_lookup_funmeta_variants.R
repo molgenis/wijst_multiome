@@ -12,11 +12,25 @@
 library(data.table)
 library(qvalue)
 
+
 ####################
 # Functions        #
 ####################
 
-
+#' Add Q-Values to QTL Table
+#'
+#' This function adds q-values to a QTL table based on the specified p-value column. It ensures that only the first entry for each feature is considered.
+#'
+#' @param qtl_table Data table. The QTL table containing p-values and feature IDs.
+#' @param p_value_column Character. The name of the column containing p-values. Default is `'empirical_feature_p_value'`.
+#' @param feature_id_column Character. The name of the column containing feature IDs. Default is `'feature_id'`.
+#'
+#' @return Data table. A new table with feature IDs and their corresponding q-values.
+#'
+#' @examples
+#' qtl_table <- data.table(feature_id = c('gene1', 'gene2', 'gene1', 'gene3'),
+#'                         empirical_feature_p_value = c(0.01, 0.02, 0.03, 0.04))
+#' add_qvalue(qtl_table)
 add_qvalue <- function(qtl_table, p_value_column='empirical_feature_p_value', feature_id_column='feature_id') {
   # sort by significance
   qtl_table <- qtl_table[order(qtl_table[[p_value_column]]), ]
@@ -35,6 +49,30 @@ add_qvalue <- function(qtl_table, p_value_column='empirical_feature_p_value', fe
 }
 
 
+#' Get QTLs from Files
+#'
+#' This function reads QTL files from a specified location, filters them based on given variants, and optionally adds q-values. It returns a combined data table of QTLs for all cell types.
+#'
+#' @param qtls_loc Character. The location of the QTL files.
+#' @param variants Character vector. The variants to filter the QTLs by.
+#' @param qtl_prepend Character. The prefix for QTL file names. Default is `''`.
+#' @param qtl_append Character. The suffix for QTL file names. Default is `'.tsv.gz'`.
+#' @param variant_column Character. The name of the column containing variant IDs. Default is `'snp_id'`.
+#' @param add_qvalue Logical. Whether to add q-values to the QTLs. Default is `TRUE`.
+#' @param p_value_column Character. The name of the column containing p-values. Default is `'empirical_feature_p_value'`.
+#' @param feature_id_column Character. The name of the column containing feature IDs. Default is `'feature_id'`.
+#' @param alpha_param_clean Logical. Whether to clean entries based on alpha parameters. Default is `TRUE`.
+#' @param alpha_param_column Character. The name of the column containing alpha parameters. Default is `'alpha_param'`.
+#' @param use_snp_pos_as_name Logical. Whether to use SNP positions as variant names. Default is `FALSE`.
+#' @param snp_chrom_column Character. The name of the column containing SNP chromosome information. Default is `'snp_chromosome'`.
+#' @param snp_pos_column Character. The name of the column containing SNP position information. Default is `'snp_position'`.
+#'
+#' @return Data table. A combined table of QTLs for all cell types, with optional q-values added.
+#'
+#' @examples
+#' qtls_loc <- "path/to/qtls"
+#' variants <- c("rs123", "rs456")
+#' get_qtls_from_files(qtls_loc, variants)
 get_qtls_from_files <- function(qtls_loc, variants, qtl_prepend='', qtl_append='.tsv.gz', variant_column='snp_id', add_qvalue=T, p_value_column='empirical_feature_p_value', feature_id_column='feature_id', alpha_param_clean=T, alpha_param_column='alpha_param', use_snp_pos_as_name=F, snp_chrom_column='snp_chromosome', snp_pos_column='snp_position') {
   # we'll store a results per cell type
   qtls_celltype <- list()
@@ -81,6 +119,27 @@ get_qtls_from_files <- function(qtls_loc, variants, qtl_prepend='', qtl_append='
 }
 
 
+#' Get QTLs from Foldered Files
+#'
+#' This function reads QTL files from specified folders, filters them based on given variants and significance filters, and returns a combined data table of QTLs for all cell types.
+#'
+#' @param qtls_loc Character. The location of the QTL folders.
+#' @param variants Character vector. The variants to filter the QTLs by.
+#' @param qtl_file_prepend Character. The prefix for QTL file names. Default is `'qtl_results_all_qval_'`.
+#' @param qtl_file_append Character. The suffix for QTL file names. Default is `'.txt.gz'`.
+#' @param variant_column Character. The name of the column containing variant IDs. Default is `'snp_id'`.
+#' @param significance_filters List. A list of significance filters to apply. Default is `list('p_value' = 0.05)`.
+#' @param use_snp_pos_as_name Logical. Whether to use SNP positions as variant names. Default is `FALSE`.
+#' @param snp_chrom_column Character. The name of the column containing SNP chromosome information. Default is `'snp_chromosome'`.
+#' @param snp_pos_column Character. The name of the column containing SNP position information. Default is `'snp_position'`.
+#' @param folder_include Character vector. A vector of folder names to include. Default is `NULL`.
+#'
+#' @return Data table. A combined table of QTLs for all cell types, with optional significance filtering applied.
+#'
+#' @examples
+#' qtls_loc <- "path/to/qtls"
+#' variants <- c("rs123", "rs456")
+#' get_qtls_foldered(qtls_loc, variants)
 get_qtls_foldered <- function(qtls_loc, variants, qtl_file_prepend='qtl_results_all_qval_', qtl_file_append='.txt.gz', variant_column='snp_id', significance_filters=list('p_value' = 0.05), use_snp_pos_as_name=F, snp_chrom_column='snp_chromosome', snp_pos_column='snp_position', folder_include=NULL) {
   # list the folders in this directory
   qtl_folders <- list.dirs(qtls_loc, recursive = F, full.names = F)
@@ -132,6 +191,33 @@ get_qtls_foldered <- function(qtls_loc, variants, qtl_file_prepend='qtl_results_
 }
 
 
+#' Get QTLs from Foldered Files (Full)
+#'
+#' This function reads QTL files from specified folders, filters them based on given variants and significance filters, optionally adds q-values, and returns a combined data table of QTLs for all cell types.
+#'
+#' @param qtls_loc Character. The location of the QTL folders.
+#' @param variants Character vector. The variants to filter the QTLs by.
+#' @param qtl_file Character. The name of the QTL file. Default is `'qtl_results_all.txt.gz'`.
+#' @param variant_column Character. The name of the column containing variant IDs. Default is `'snp_id'`.
+#' @param add_qvalue Logical. Whether to add q-values to the QTLs. Default is `TRUE`.
+#' @param p_value_column Character. The name of the column containing p-values. Default is `'empirical_feature_p_value'`.
+#' @param feature_id_column Character. The name of the column containing feature IDs. Default is `'feature_id'`.
+#' @param alpha_param_clean Logical. Whether to clean entries based on alpha parameters. Default is `TRUE`.
+#' @param alpha_param_column Character. The name of the column containing alpha parameters. Default is `'alpha_param'`.
+#' @param significance_filters List. A list of significance filters to apply. Default is `list('p_value' = 0.05)`.
+#' @param use_snp_pos_as_name Logical. Whether to use SNP positions as variant names. Default is `FALSE`.
+#' @param snp_chrom_column Character. The name of the column containing SNP chromosome information. Default is `'snp_chromosome'`.
+#' @param snp_pos_column Character. The name of the column containing SNP position information. Default is `'snp_position'`.
+#' @param folder_include Character vector. A vector of folder names to include. Default is `NULL`.
+#' @param sep Character. The field separator character. Default is `'\t'`.
+#' @param verbose Logical. Whether to print messages during processing. Default is `FALSE`.
+#'
+#' @return Data table. A combined table of QTLs for all cell types, with optional q-values and significance filtering applied.
+#'
+#' @examples
+#' qtls_loc <- "path/to/qtls"
+#' variants <- c("rs123", "rs456")
+#' get_qtls_foldered_full(qtls_loc, variants)
 get_qtls_foldered_full <- function(qtls_loc, variants, qtl_file='qtl_results_all.txt.gz', variant_column='snp_id', add_qvalue=T, p_value_column='empirical_feature_p_value', feature_id_column='feature_id', alpha_param_clean=T, alpha_param_column='alpha_param', significance_filters=list('p_value' = 0.05), use_snp_pos_as_name=F, snp_chrom_column='snp_chromosome', snp_pos_column='snp_position', folder_include=NULL, sep = '\t', verbose=F) {
   # list the folders in this directory
   qtl_folders <- list.dirs(qtls_loc, recursive = F, full.names = F)
@@ -205,6 +291,8 @@ variant3_ld_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/fu
 sceqtlgen_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/funmeta/sceqtlgen_eqtls.tsv.gz'
 # multiomics eQTL output loc
 multiome_eqtl_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/funmeta/multiome_eqtls.tsv.gz'
+# multiomics caQTL output loc
+multiome_caqtl_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/funmeta/multiome_caqtls.tsv.gz'
 
 # here are the sc-eQTLgen results
 sceqtlgen_overlap_loc <- '/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/Meta/Out_202406/'
@@ -300,12 +388,12 @@ mdfiver::create_md5_for_file(multiome_eqtl_output_loc)
 # get the caQTLs in multiome
 multiome_caqtls_24hca <- get_qtls_foldered_full(multiome_caqtl_24hca_loc, unique(c(variant1_ld[['coordinate']], variant2_ld[['coordinate']], variant3_ld[['coordinate']])), use_snp_pos_as_name = T, sep = ',', verbose = T)
 # keep a subset of columns
-multiome_caqtls_24hca <- multiome_caqtls_24hca[, ..qtl_columns_to_keep_mo]
+multiome_caqtls_24hca <- multiome_caqtls_24hca[, ..qtl_columns_to_deep]
 # add stimulation condition
 multiome_caqtls_24hca <- cbind(data.table('condition' = rep('24hCA', times = nrow(multiome_caqtls_24hca))), multiome_caqtls_24hca)
 # repeat for UT
-multiome_caqtls_ut <- get_qtls_foldered_full(multiome_caqtl_ut_loc, unique(c(variant1_ld[['coordinate']], variant2_ld[['coordinate']], variant3_ld[['coordinate']])), use_snp_pos_as_name = T)
-multiome_caqtls_ut <- multiome_caqtls_ut[, ..qtl_columns_to_keep_mo]
+multiome_caqtls_ut <- get_qtls_foldered_full(multiome_caqtl_ut_loc, unique(c(variant1_ld[['coordinate']], variant2_ld[['coordinate']], variant3_ld[['coordinate']])), use_snp_pos_as_name = T, sep = ',', verbose = T)
+multiome_caqtls_ut <- multiome_caqtls_ut[, ..qtl_columns_to_deep]
 multiome_caqtls_ut <- cbind(data.table('condition' = rep('UT', times = nrow(multiome_caqtls_ut))), multiome_caqtls_ut)
 # combine the conditions
 multiome_caqtls <- rbind(multiome_caqtls_ut, multiome_caqtls_24hca)
@@ -313,4 +401,8 @@ multiome_caqtls <- rbind(multiome_caqtls_ut, multiome_caqtls_24hca)
 variants_multiome_caqtls <- merge(x = variants_all, y = multiome_caqtls, by.x = 'coordinate', by.y = 'snp_id', all = T)
 # keep only significant ones, in this case removing LD variants with no match in the eQTL data
 variants_multiome_caqtls <- variants_multiome_caqtls[!is.na(variants_multiome_caqtls[['p_value']]) & variants_multiome_caqtls[['p_value']] < 0.05, ]
+# and write the result
+write.table(variants_multiome_eqtls, gzfile(multiome_caqtl_output_loc), row.names = F, col.names = T, sep = '\t')
+# create the checksum
+mdfiver::create_md5_for_file(multiome_caqtl_output_loc)
 
