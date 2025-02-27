@@ -11,6 +11,8 @@
 
 library(data.table)
 library(qvalue)
+library(GenomicRanges)
+library(stringr)
 
 
 ####################
@@ -278,6 +280,50 @@ get_qtls_foldered_full <- function(qtls_loc, variants, qtl_file='qtl_results_all
 }
 
 
+check_overlaps_beds <- function(beds_loc, variants, bed_prepend='mo_peaks_lane1to80_wrna_', bed_append='.bed', conditions=c('UT', '24hCA'), variant_chromosome_field='chromosome', variant_start_field='start', variant_stop_field='stop') {
+  # store the results in a list
+  overlaps_per_bed <- list()
+  # convert the variants to genomic ranges
+  variants_ranges <- GenomicRanges::makeGRangesFromDataFrame(variants_all, 
+                                          ignore.strand = T, 
+                                          seqnames.field = c(variant_chromosome_field), 
+                                          start.field = variant_start_field, 
+                                          end.field = variant_stop_field, 
+                                          seqinfo = NULL)
+  # check each condition
+  for (condition in conditions) {
+    # paste together the path
+    ranges_condition_pattern <- paste('^', bed_prepend, condition, '_.*', bed_append, sep = '')
+    # get each file
+    files_condition <- list.files(beds_loc, pattern = ranges_condition_pattern, full.names = F, recursive = F, include.dirs = F)
+    # now check each file
+    for (cell_type_file in files_condition) {
+      # read the file
+      cell_type_contents <- read.table(paste(beds_loc, cell_type_file, sep = '/'), header = T, sep = '\t', comment.char = '', check.names = F)
+      # turn it into a genomic ranges object
+      cell_type_ranges <- GenomicRanges::makeGRangesFromDataFrame(df = cell_type_contents, ignore.strand = T, seqnames.field = c('#chrom'), start.field = 'start', end.field = 'end', seqinfo = NULL)
+      # get the overlap between the two
+      cell_type_overlaps <- GenomicRanges::findOverlaps(variants_ranges, cell_type_ranges, ignore.strand = T)
+      cell_type_overlaps <- data.frame(cell_type_overlaps)
+      # extract the cell type
+      cell_type <- gsub(paste0('^', bed_prepend, condition, '_'), '', cell_type_file)
+      cell_type <- gsub(paste0(bed_append, '$'), '', cell_type)
+      # combine the results
+      all_overlap <- do.call('cbind', list(
+        variants[cell_type_overlaps[['queryHits']], ],
+        data.table('cell_type' = rep(cell_type, times = nrow(cell_type_overlaps)), 'condition' = rep(condition, times = nrow(cell_type_overlaps))), 
+        cell_type_contents[cell_type_overlaps[['subjectHits']], ]
+      ))
+      # put in the list
+      overlaps_per_bed[[paste(condition, cell_type, sep = '_')]] <- all_overlap
+    }
+  }
+  # combine everything
+  all_combined <- do.call('rbind', overlaps_per_bed)
+  return(all_combined)
+}
+
+
 ####################
 # Main Code        #
 ####################
@@ -293,6 +339,8 @@ sceqtlgen_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoi
 multiome_eqtl_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/funmeta/multiome_eqtls.tsv.gz'
 # multiomics caQTL output loc
 multiome_caqtl_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/funmeta/multiome_caqtls.tsv.gz'
+# overlapping regions loc
+multiome_peak_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/funmeta/multiome_peaks.tsv.gz'
 
 # here are the sc-eQTLgen results
 sceqtlgen_overlap_loc <- '/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/Meta/Out_202406/'
@@ -304,6 +352,9 @@ multiome_eqtl_24hca_loc <- '/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-
 # and here are the multiome caQTLs
 multiome_caqtl_ut_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/combined_output_50kb/L1/UT/'
 multiome_caqtl_24hca_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/combined_output_50kb/L1/24hCA/'
+
+# here are our bed files
+peak_beds_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/signac_peaks/output/'
 
 
 # with a cutoff of 0.8
@@ -406,3 +457,17 @@ write.table(variants_multiome_eqtls, gzfile(multiome_caqtl_output_loc), row.name
 # create the checksum
 mdfiver::create_md5_for_file(multiome_caqtl_output_loc)
 
+# add the position columns
+variants_positions <- data.frame('chromosome' = rep(NA, times = nrow(variants_all)), 'start' = rep(NA, times = nrow(variants_all)), 'stop' = rep(NA, times = nrow(variants_all)))
+variants_positions[c('chromosome', 'start')] <- str_split_fixed(variants_all$coordinate, ':', 2)
+variants_positions[['stop']] <- variants_positions[['start']]
+variants_positions[['chrom_string']] <- paste0('chr', variants_positions[['chromosome']])
+variants_all <- cbind(variants_all, data.table(variants_positions))
+# get the overlaps
+variant_overlaps <- check_overlaps_beds(peak_beds_loc, variants_all, variant_chromosome_field = 'chrom_string')
+# rename the columns somewhat
+colnames(variant_overlaps) <- c('original_snp', 'proxy_snp', 'coordinate', 'alleles', 'distance', 'R2', 'cor_alleles', 'chromosome', 'start', 'stop', 'chrom_string', 'cell_type', 'condition', 'peak_chrom', 'peak_start', 'peak_end', 'peak_name', 'log10reads', 'avg_open', 'ncell', 'frac_wread')
+# and write the result
+write.table(variant_overlaps, gzfile(multiome_peak_output_loc), row.names = F, col.names = T, sep = '\t')
+# create the checksum
+mdfiver::create_md5_for_file(multiome_peak_output_loc)
