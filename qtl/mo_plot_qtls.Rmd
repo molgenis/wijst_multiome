@@ -434,8 +434,8 @@ eqtl_caqtl_coloc_signals[['z_score_diff']] <- abs(eqtl_caqtl_coloc_signals[['z_s
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # plot the eQTL and caQTL that are opposite direction
-p_eqtl_opposite <- plot_qtls('ARL17B', '17:45614972:T:C', feature_table = eqtl_files_per_cond$UT$monocyte, genotypes = genotypes, sample_mapping = eqtl_smf, better_colors = T, legendless = T) + ggtitle('rs2668709 affecting ALR17B expression\ninmonocytes') + xlab('genotype') + ylab('ALR17B expression')
-p_caqtl_opposite <- plot_qtls('chr17-45585724-45587049', '17:45614972:T:C', feature_table = caqtl_files_per_cond$UT$monocyte, genotypes = genotypes, sample_mapping = eqtl_smf, better_colors = T, legendless = T) + ggtitle('rs2668709 affecting chr17-45585724-45587049 accessibility\ninmonocytes') + xlab('genotype') + ylab('chr17-45585724-45587049 accessibility')
+p_eqtl_opposite <- plot_qtls('ARL17B', '17:45614972:T:C', feature_table = eqtl_files_per_cond$UT$monocyte, genotypes = genotypes, sample_mapping = eqtl_smf, better_colors = T, legendless = T) + ggtitle('rs2668709 affecting ALR17B expression\nin monocytes') + xlab('genotype') + ylab('ALR17B expression')
+p_caqtl_opposite <- plot_qtls('chr17-45585724-45587049', '17:45614972:T:C', feature_table = caqtl_files_per_cond$UT$monocyte, genotypes = genotypes, sample_mapping = eqtl_smf, better_colors = T, legendless = T) + ggtitle('rs2668709 affecting chr17-45585724-45587049\naccessibility in monocytes') + xlab('genotype') + ylab('chr17-45585724-45587049 accessibility')
 
 # plot them together
 plot_grid(
@@ -444,8 +444,8 @@ plot_grid(
 )
 
 # plot the eQTL and caQTL that are in the same direction
-p_eqtl_same <- plot_qtls('AL139042.1', 'rs9353559', feature_table = eqtl_files_per_cond$UT$monocyte, genotypes = genotypes, sample_mapping = eqtl_smf, better_colors = T, legendless = T) + ggtitle('rs9353559 affecting AL139042.1 expression\ninmonocytes') + xlab('genotype') + ylab('AL139042.1 expression')
-p_caqtl_same <- plot_qtls('chr6-88442655-88443459', '6:88449573:C:G', feature_table = caqtl_files_per_cond$UT$monocyte, genotypes = genotypes, sample_mapping = eqtl_smf, better_colors = T, legendless = T) + ggtitle('rs9353559 affecting chr6-88442655-88443459 accessibility\ninmonocytes') + xlab('genotype') + ylab('chr6-88442655-88443459 accessibility')
+p_eqtl_same <- plot_qtls('AL139042.1', '6:88449573:C:G', feature_table = eqtl_files_per_cond$UT$monocyte, genotypes = genotypes, sample_mapping = eqtl_smf, better_colors = T, legendless = T) + ggtitle('rs9353559 affecting AL139042.1 expression\nin monocytes') + xlab('genotype') + ylab('AL139042.1 expression')
+p_caqtl_same <- plot_qtls('chr6-88442655-88443459', '6:88449573:C:G', feature_table = caqtl_files_per_cond$UT$monocyte, genotypes = genotypes, sample_mapping = eqtl_smf, better_colors = T, legendless = T) + ggtitle('rs9353559 affecting chr6-88442655-88443459\naccessibility in monocytes') + xlab('genotype') + ylab('chr6-88442655-88443459 accessibility')
 
 # plot them together
 plot_grid(
@@ -465,9 +465,11 @@ ggsave('~/plots/mo_p_caqtl_same.pdf', p_caqtl_same, width = 5, height = 5)
 ```{r interaction_plots, include=TRUE, fig.height=5, fig.width=10}
 
 # plot the opposite effect as a scatterplot
-p_scatter_qtl_opposite <- plot_interactions('chr17-45585724-45587049', 'ARL17B', '17:45614972:T:C', caqtl_files_per_cond$UT$monocyte, eqtl_files_per_cond$UT$monocyte, genotypes, caqtl_smf, eqtl_smf, better_colors = T) + ggtitle('chr17-45585724-45587049 accessibility\nvs ALR17B expression in monocytes\nper rs2668709 genotype') + xlab('chr17-45585724-45587049 accessibility') + ylab('ALR17B expression')
+p_scatter_qtl_opposite <- plot_interactions('chr17-45585724-45587049', 'ARL17B', '17:45614972:T:C', caqtl_files_per_cond$UT$monocyte, eqtl_files_per_cond$UT$monocyte, genotypes, caqtl_smf, eqtl_smf, better_colors = T) + ggtitle('chr17-45585724-45587049 accessibility\nvs ALR17B expression in monocytes\nper rs2668709 genotype') + xlab('chr17-45585724-45587049 accessibility') + ylab('ALR17B expression') +
+  guides(color = guide_legend('genotype'))
 # plot the same direction effect as a scatterplot
-p_scatter_qtl_same <- plot_interactions('chr6-88442655-88443459', 'AL139042.1', '6:88449573:C:G', caqtl_files_per_cond$UT$monocyte, eqtl_files_per_cond$UT$monocyte, genotypes, caqtl_smf, eqtl_smf, better_colors = T) + ggtitle('chr6-88442655-88443459 accessibility\nvs AL139042.1 expression in monocytes\nper rs9353559 genotype') + xlab('chr6-88442655-88443459 accessibility') + ylab('AL139042.1 expression')
+p_scatter_qtl_same <- plot_interactions('chr6-88442655-88443459', 'AL139042.1', '6:88449573:C:G', caqtl_files_per_cond$UT$monocyte, eqtl_files_per_cond$UT$monocyte, genotypes, caqtl_smf, eqtl_smf, better_colors = T) + ggtitle('chr6-88442655-88443459 accessibility\nvs AL139042.1 expression in monocytes\nper rs9353559 genotype') + xlab('chr6-88442655-88443459 accessibility') + ylab('AL139042.1 expression') +
+  guides(color = guide_legend('genotype'))
 
 # plot them together
 plot_grid(
