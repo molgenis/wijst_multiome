@@ -506,6 +506,100 @@ plot_sharing_per_celltype <- function(table_per_ct, feature_column='feature', pv
 }
 
 
+#' Get List Overlaps
+#'
+#' This function calculates the overlaps and differences between two lists.
+#'
+#' @param list1 A named list.
+#' @param list2 A named list.
+#' @param list_name A character string for the name of the list column in the output data frame. Default is 'list_name'.
+#' @param list1_name A character string for the name of the first list column in the output data frame. Default is 'list1'.
+#' @param list2_name A character string for the name of the second list column in the output data frame. Default is 'list2'.
+#'
+#' @return A data frame with the number of overlaps and differences for each name in the lists.
+#' @export
+#'
+#' @examples
+#' list1 <- list(a = 1:5, b = 6:10)
+#' list2 <- list(a = 3:7, c = 8:12)
+#' get_list_overlaps(list1, list2)
+get_list_overlaps <- function(list1, list2, list_name='list_name', list1_name='list1', list2_name='list2') {
+  # get the names present in any of the two lists
+  names_either <- unique(c(names(list1), names(list2)))
+  # create a matrix that has the number of overlaps and number of diffs
+  nr_df <- data.frame(matrix(, nrow = length(names_either), ncol = 4, dimnames = list(names_either, c(list_name, 'in_both', paste0('only_', list1_name), paste0('only_', list2_name)))))
+  # check each of the names
+  for (name_in_list in names_either) {
+    # set the values to defaults
+    n_overlap <- 0
+    n_only_list1 <- 0
+    n_only_list2 <- 0
+    # if the name is in both lists
+    if (name_in_list %in% names(list1) & name_in_list %in% names(list2)) {
+      # check how many overlap
+      n_overlap <- length(
+        intersect(list1[[name_in_list]], list2[[name_in_list]])
+      )
+      # now many are only in list 1
+      n_only_list1 <- length(
+        setdiff(list1[[name_in_list]], list2[[name_in_list]])
+      )
+      # and how many are only in list 2
+      n_only_list2 <- length(
+        setdiff(list2[[name_in_list]], list1[[name_in_list]])
+      )
+    }
+    # if it is only in list 1
+    else if (name_in_list %in% names(list1) & !(name_in_list %in% names(list2))) {
+      n_only_list1 <- length(list1[[name_in_list]])
+    }
+    # if it is only in list 2
+    else if (!(name_in_list %in% names(list1)) & name_in_list %in% names(list2)) {
+      n_only_list2 <- length(list2[[name_in_list]])
+    }
+    # fill the table
+    nr_df[name_in_list, list_name] <- name_in_list
+    nr_df[name_in_list, 'in_both'] <- n_overlap
+    nr_df[name_in_list, paste0('only_', list1_name)] <- n_only_list1
+    nr_df[name_in_list, paste0('only_', list2_name)] <- n_only_list2
+  }
+  return(nr_df)
+}
+
+
+#' Convert Wide Table to Long Table
+#'
+#' This function converts a wide-format table to a long-format table.
+#'
+#' @param wide_table A data frame in wide format.
+#' @param metadata_columns A character vector of column names to be treated as metadata. Default is 'cell_type'.
+#'
+#' @return A data frame in long format with metadata columns, category, and value.
+#' @export
+#'
+#' @examples
+#' wide_table <- data.frame(cell_type = c('A', 'B'), gene1 = c(1, 2), gene2 = c(3, 4))
+#' wide_to_long_table(wide_table)
+wide_to_long_table <- function(wide_table, metadata_columns=c('cell_type')) {
+  # we will create the table per gene
+  table_per_value <- list()
+  # get the values
+  value_columns <- setdiff(colnames(wide_table), metadata_columns)
+  # check each gene
+  for (value_column in value_columns) {
+    # extract metadata
+    table_value <- wide_table[, metadata_columns, drop = F]
+    # set the gene
+    table_value[['category']] <- value_column
+    # set the expression
+    table_value[['value']] <- wide_table[[value_column]]
+    # add to list
+    table_per_value[[value_column]] <- table_value
+  }
+  # merge all the table
+  table_all_values <- do.call("rbind", table_per_value)
+  return(table_all_values)
+}
 
 ```
 
@@ -581,5 +675,64 @@ for (ct in names(cre_outputs)) {
 # and plot that
 plot_sharing_per_celltype(table_per_ct = overlap_per_celltype, feature_column = 'cre', pval_column = NULL, use_color_dict = T)
 grid.text('Region-gene combinations with \neQTL/caQTL variant overlap', x = 0.65, y = 0.90, gp = gpar(fontsize = 20))
+
+```
+
+```{r get_replications, include=F}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# turn both of the lists of matrices into flat cre lists
+qtl_pairs <- list()
+for (cell_type in names(overlap_per_celltype)) {
+  qtl_pairs[[cell_type]] <- overlap_per_celltype[[cell_type]][['cre']]
+}
+cre_pairs <- list()
+for (cell_type in names(cre_outputs)) {
+  cre_pairs[[cell_type]] <- cre_outputs[[cell_type]][!is.na(cre_outputs[[cell_type]][['meta_q']]) & cre_outputs[[cell_type]][['meta_q']] < 0.05, 'cre']
+}
+
+# get the list overlaps
+ct_overlaps <- get_list_overlaps(qtl_pairs, cre_pairs, list_name = 'cell_type', list1_name = 'qtl', list2_name = 'cre')
+
+```
+
+```{r plot_replications, include=T, fig.width=10, fig.height=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# turn into a long table instead
+ct_overlaps_wide <- wide_to_long_table(ct_overlaps)
+# make the names safe
+ct_overlaps_wide[['cell_type']] <- rename_labels(ct_overlaps_wide[['cell_type']])
+# rename the categories
+ct_overlaps_wide[['category']] <- list('only_qtl' = 'only QTL', 'only_cre' = 'only CRE', 'in_both' = 'both')[ct_overlaps_wide[['category']]]
+# add a category of the celltype and category
+ct_overlaps_wide[['cell_type_category']] <- paste(ct_overlaps_wide[['cell_type']], ct_overlaps_wide[['category']])
+# order the data by the category by making it into a factor
+ct_overlaps_wide[['category']] <- factor(ct_overlaps_wide[['category']], levels = c('only CRE', 'only QTL', 'both'))
+# and then ordering
+ct_overlaps_wide <- ct_overlaps_wide[order(ct_overlaps_wide[['cell_type']], ct_overlaps_wide[['category']]), ]
+# and then make this order the order of the value we plot
+ct_overlaps_wide[['cell_type_category']] <- factor(ct_overlaps_wide[['cell_type_category']], levels = ct_overlaps_wide[['cell_type_category']])
+# make a colour list
+ct_overlaps_colour_list <- list()
+# check each of the cell types
+for (cell_type in unique(ct_overlaps_wide[['cell_type']])) {
+  # make the colours
+  pct_whitening <- 40
+  ct_overlaps_colour_list[[paste(cell_type, 'both')]] <- get_color_coding_dict()[[cell_type]]
+  ct_overlaps_colour_list[[paste(cell_type, 'only QTL')]] <- colorRampPalette(c(get_color_coding_dict()[[cell_type]], "white"))(100)[pct_whitening]
+  ct_overlaps_colour_list[[paste(cell_type, 'only CRE')]] <- colorRampPalette(c(get_color_coding_dict()[[cell_type]], "black"))(100)[pct_whitening]
+}
+# make into a plot
+p_overlaps <- ggplot(data = ct_overlaps_wide, mapping = aes(x = cell_type, y = value, fill = cell_type_category)) + 
+  geom_bar(position = 'stack', stat = 'identity') + 
+  xlab('Cell type') + 
+  ylab('Number of region-gene pairs') +
+  scale_fill_manual(values = ct_overlaps_colour_list) +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+  ggtitle('Number of overlapping region-gene pairs') + 
+  guides(fill=guide_legend(title = 'Cell type and significant'))
+# show the plot
+p_overlaps
 
 ```
