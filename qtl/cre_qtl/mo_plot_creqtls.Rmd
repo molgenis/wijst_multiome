@@ -72,7 +72,17 @@ get_label_dict <- function() {
   return(label_dict)
 }
 
-
+#' Rename Labels in a Vector
+#'
+#' This function renames the labels in a given vector based on a predefined dictionary of label renamings.
+#'
+#' @param vector_to_rename A vector containing the labels to be renamed.
+#' @return A vector with the renamed labels.
+#' @examples
+#' # Example usage:
+#' vector_to_rename <- c("label1", "label2", "label3")
+#' renamed_vector <- rename_labels(vector_to_rename)
+#' print(renamed_vector)
 rename_labels <- function(vector_to_rename) {
   # get the labels that are present
   label_renaming <- get_label_dict()
@@ -89,6 +99,17 @@ rename_labels <- function(vector_to_rename) {
 }
 
 
+#' Remap Names Using a Label Dictionary
+#'
+#' This function remaps the names in a given vector based on a predefined dictionary of label renamings. If any names cannot be remapped, they are returned unchanged.
+#'
+#' @param vector_of_names A vector containing the names to be remapped.
+#' @return A vector with the remapped names.
+#' @examples
+#' # Example usage:
+#' vector_of_names <- c("name1", "name2", "name3")
+#' remapped_vector <- remap_with_label_dict(vector_of_names)
+#' print(remapped_vector)
 remap_with_label_dict <- function(vector_of_names) {
   # get the label dict
   relabels <- get_label_dict()
@@ -108,6 +129,15 @@ remap_with_label_dict <- function(vector_of_names) {
 }
 
 
+#' Get Color Coding Dictionary
+#'
+#' This function returns a dictionary of color codes for various cell types and conditions. It includes both the original colors and faded colors for down-regulated conditions.
+#'
+#' @return A list where the names are cell types or conditions and the values are their corresponding color codes.
+#' @examples
+#' # Example usage:
+#' color_coding_dict <- get_color_coding_dict()
+#' print(color_coding_dict)
 get_color_coding_dict <- function() {
 	# medhigh
   color_coding_dict <- list()
@@ -190,6 +220,18 @@ get_color_coding_dict <- function() {
 }
 
 
+#' Split String with Maximum Length
+#'
+#' This function splits a string into multiple lines, ensuring that each line does not exceed a specified maximum length.
+#'
+#' @param string A character string to be split.
+#' @param max_length An integer specifying the maximum length of each line. Default is 15.
+#' @return A character string with the input string split into multiple lines.
+#' @examples
+#' # Example usage:
+#' long_string <- "This is a long string that needs to be split into multiple lines."
+#' split_string <- split_string_with_max_length(long_string, max_length = 15)
+#' cat(split_string)
 split_string_with_max_length <- function(string, max_length=15) {
   # split the string on the space first
   words <- strsplit(string, ' ')[[1]]
@@ -257,6 +299,18 @@ split_string_with_max_length <- function(string, max_length=15) {
 }
 
 
+#' Split Multiple Strings with Maximum Length
+#'
+#' This function splits multiple strings into lines, ensuring that each line does not exceed a specified maximum length.
+#'
+#' @param strings A vector of character strings to be split.
+#' @param max_length An integer specifying the maximum length of each line. Default is 15.
+#' @return A vector of character strings with the input strings split into multiple lines.
+#' @examples
+#' # Example usage:
+#' strings <- c("This is a long string that needs to be split.", "Another long string.")
+#' split_strings <- split_strings_with_max_length(strings, max_length = 15)
+#' print(split_strings)
 split_strings_with_max_length <- function(strings, max_length=15) {
   strings_split <- sapply(strings, FUN = function(x){
     split_string_with_max_length(x, max_length)
@@ -266,6 +320,20 @@ split_strings_with_max_length <- function(strings, max_length=15) {
 }
 
 
+#' Get CRE Tables from Folders
+#'
+#' This function retrieves tables from specified folders within a CRE directory, optionally filtering folders by a regex pattern. Each table is read and a column indicating the cell type (folder name) is added.
+#'
+#' @param cre_folder A character string specifying the path to the CRE directory.
+#' @param cre_file_name A character string specifying the name of the file to be read from each folder.
+#' @param cre_folder_regex An optional character string specifying a regex pattern to filter folders. Default is NULL.
+#' @return A list of data frames, each corresponding to a cell type (folder name) with the added cell type column.
+#' @examples
+#' # Example usage:
+#' cre_folder <- "path/to/cre_folder"
+#' cre_file_name <- "data.txt"
+#' cre_tables <- get_cre_tables_folders(cre_folder, cre_file_name, cre_folder_regex = "pattern")
+#' print(cre_tables)
 get_cre_tables_folders <- function(cre_folder, cre_file_name, cre_folder_regex=NULL) {
   # list all the directories in the CRE folder
   cre_folders <- list.dirs(cre_folder, full.names = F, recursive = F)
@@ -329,14 +397,37 @@ get_color_list <- function(vector_of_names, use_sampling=F, color_indices=NULL) 
 }
 
 
-
-
+#' Plot Sharing of DE Genes per Cell Type
+#'
+#' This function plots the sharing of differentially expressed (DE) genes across cell types using an UpSet plot. It allows filtering by significance, log fold change, and the use of custom label and color dictionaries.
+#'
+#' @param table_per_ct A list of data frames, each containing DE genes for a cell type.
+#' @param feature_column A character string specifying the column name for features (genes). Default is 'feature'.
+#' @param pval_column A character string specifying the column name for p-values. Default is 'p.bonferroni'.
+#' @param sig_pval A numeric value specifying the significance threshold for p-values. Default is 0.05.
+#' @param only_positive A logical value indicating whether to include only positive log fold changes. Default is FALSE.
+#' @param only_negative A logical value indicating whether to include only negative log fold changes. Default is FALSE.
+#' @param lfc_column A character string specifying the column name for log fold changes. Default is 'metafc'.
+#' @param use_label_dict A logical value indicating whether to use a custom label dictionary for renaming cell types. Default is TRUE.
+#' @param use_color_dict A logical value indicating whether to use a custom color dictionary for cell types. Default is TRUE.
+#' @return An UpSet plot showing the sharing of DE genes across cell types.
+#' @examples
+#' # Example usage:
+#' table_per_ct <- list(
+#'   cell_type1 = data.frame(feature = c("gene1", "gene2"), p.bonferroni = c(0.01, 0.04), metafc = c(1.5, -1.2)),
+#'   cell_type2 = data.frame(feature = c("gene3", "gene4"), p.bonferroni = c(0.02, 0.03), metafc = c(-1.3, 1.4))
+#' )
+#' plot_sharing_per_celltype(table_per_ct)
 plot_sharing_per_celltype <- function(table_per_ct, feature_column='feature', pval_column='p.bonferroni', sig_pval=0.05, only_positive=F, only_negative=F, lfc_column='metafc', use_label_dict=T, use_color_dict=T){
   DE_genes_per_ct <- list()
   # get the DE genes for each cell type
   for(cell_type in names(table_per_ct)){
+    # we'll get the specific table
+    de_table <- table_per_ct[[cell_type]]
     # filter to only include the significant results
-    de_table <- table_per_ct[[cell_type]][table_per_ct[[cell_type]][[pval_column]] <= 0.05, ]
+    if (!is.null(pval_column) & !is.null(sig_pval)) {
+      de_table <- de_table[de_table[[pval_column]] <= sig_pval, ]
+    }
     # filter for only the positive lfc if required
     if(only_positive){
       de_table <- de_table[de_table[[lfc_column]] < 0, ]
@@ -418,7 +509,6 @@ plot_sharing_per_celltype <- function(table_per_ct, feature_column='feature', pv
 
 ```
 
-
 ```{r path_setup, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
@@ -461,5 +551,35 @@ grid.text('Significant CREs', x = 0.65, y = 0.95, gp = gpar(fontsize = 20))
 ```
 
 ```{r get_cre_inputs, include=T, fig.width=10, fig.height=5}
+
+# location of the overlapping region-gene combination
+qtl_overlap_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/caQTL_eQTL_overlap_for_CRE/unique_peak_gene_pairs_matched_snp_ct.tsv'
+# load that data
+qtl_overlap <- read.table(qtl_overlap_loc, header = T, sep = '\t')
+# create a list for each cell type
+overlap_per_celltype <- list()
+# and subset to add to the list
+for (cell_type in unique(qtl_overlap[['ct.x']])) {
+  overlap_per_celltype[[cell_type]] <- qtl_overlap[qtl_overlap[['ct.x']] == cell_type, ]
+}
+
+```
+
+```{r get_overlap_outputs, include=T, fig.width=10, fig.height=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# plot overlap of the CRE regions
+plot_sharing_per_celltype(table_per_ct = overlap_per_celltype, feature_column = 'feature_id.x', pval_column = NULL, use_color_dict = T)
+grid.text('Regions with overlapping eQTL/caQTL variant', x = 0.65, y = 0.95, gp = gpar(fontsize = 20))
+# plot overlap of the CRE genes
+plot_sharing_per_celltype(table_per_ct = overlap_per_celltype, feature_column = 'feature_id.y', pval_column = NULL, use_color_dict = T)
+grid.text('Genes with overlapping eQTL/caQTL variant', x = 0.65, y = 0.95, gp = gpar(fontsize = 20))
+# add the combination of region-gene
+for (ct in names(cre_outputs)) {
+  overlap_per_celltype[[ct]][['cre']] <- paste(overlap_per_celltype[[ct]][['feature_id.x']], overlap_per_celltype[[ct]][['feature_id.y']], sep = ' + ')
+}
+# and plot that
+plot_sharing_per_celltype(table_per_ct = overlap_per_celltype, feature_column = 'cre', pval_column = NULL, use_color_dict = T)
+grid.text('Region-gene combinations with \neQTL/caQTL variant overlap', x = 0.65, y = 0.90, gp = gpar(fontsize = 20))
 
 ```
