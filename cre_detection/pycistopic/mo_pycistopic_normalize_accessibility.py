@@ -1,7 +1,7 @@
 """
-mo_pycistopic_impute_accessibility.py
+mo_pycistopic_normalize_accessibility.py
 
-This script is used to impute the accessibility
+This script is used to normalize the accessibility
 
 authors: Roy Oelen, Martijn van der Werf
 
@@ -78,46 +78,52 @@ def create_md5_file(input_file):
 # read the pycistopic object #
 ##############################
 
-# location to store the object
-pycistopic_object_wimputations_loc = '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/pycistopic/objects/merged_major_and_minor_celltypes_120topics_imputed.pkl'
+# load the object from disk
 pycistopic_object_wimputations_jl_loc = '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/pycistopic/objects/merged_major_and_minor_celltypes_120topics_imputed.joblib'
-
-# save the object
-#with open(pycistopic_object_wimputations_loc, 'wb') as f:
-#   pickle.dump(imputed_acc_obj, f)
-joblib.dump(imputed_acc_obj, pycistopic_object_wimputations_jl_loc)
-
-# make a checksum
-#create_md5_file(pycistopic_object_wimputations_loc)
-create_md5_file(pycistopic_object_wimputations_jl_loc)
-
-
-######################
-# perform imputation #
-######################
-
-# impute regions
-imputed_acc_obj = impute_accessibility(
-    cistopic_obj,
-    selected_cells=None,
-    selected_regions=None,
-    scale_factor=10**6
-)
+imputed_acc_obj = joblib.load(pycistopic_object_wimputations_jl_loc)
 
 
 ###########################
-# save imputation results #
+# normalize accessibility #
 ###########################
+
+# normalize object
+normalized_imputed_acc_obj = normalize_scores(imputed_acc_obj, scale_factor=10**4)
+
+
+###################
+# clear up memory #
+###################
+
+del imputed_acc_obj
+
+
+##############################
+# save normalization results #
+##############################
 
 # location to store the object
-pycistopic_object_wimputations_loc = '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/pycistopic/objects/merged_major_and_minor_celltypes_120topics_imputed.pkl'
-pycistopic_object_wimputations_jl_loc = '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/pycistopic/objects/merged_major_and_minor_celltypes_120topics_imputed_jl.pkl'
+pycistopic_object_wimpnorm_loc = '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/pycistopic/objects/merged_major_and_minor_celltypes_120topics_impnorm.joblib'
 
 # save the object
-# with open(pycistopic_object_wimputations_loc, 'wb') as f:
-#    pickle.dump(imputed_acc_obj, f)
-
+joblib.dump(normalized_imputed_acc_obj, pycistopic_object_wimpnorm_loc)
 
 # make a checksum
-# create_md5_file(pycistopic_object_wimputations_loc)
-create_md5_file(pycistopic_object_wimputations_jl_loc)
+create_md5_file(pycistopic_object_wimpnorm_loc)
+
+
+#########################################
+# get differentially accessible regions #
+#########################################
+
+# calculate variable regions
+variable_regions = find_highly_variable_features(
+    normalized_imputed_acc_obj,
+    min_disp = 0.05,
+    min_mean = 0.0125,
+    max_mean = 3,
+    max_disp = np.inf,
+    n_bins=20,
+    n_top_features=None,
+    plot=True
+)
