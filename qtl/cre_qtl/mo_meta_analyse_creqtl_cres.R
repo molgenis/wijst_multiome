@@ -72,7 +72,7 @@ convert_z_score <- function(z, one.sided=NULL) {
 #' meta_analyse(betas, beta_ses, weights)
 meta_analyse <- function(betas, beta_ses, weights) {
   # calculate variance from standard errors
-  variance = beta_ses^2
+  variance <- beta_ses^2
   # get beta divided by variance
   effect_size_divided_by_variance = betas / variance
   # do for each row, so each region-gene pair
@@ -170,8 +170,8 @@ if (meta_analyse_sample_duplicates & deduplicate_sample_duplicates) {
 }
 
 # read the input files
-beta <- read.delim(beta_loc)
-beta_se <- read.delim(se_loc)
+beta <- read.delim(beta_loc, na.strings = c('NA', 'NaN', 'nan', 'None'))
+beta_se <- read.delim(se_loc, na.strings = c('NA', 'NaN', 'nan', 'None'))
 smf <- read.delim(smf_loc)
 nCells <- read.delim(ncell_loc)
 
@@ -190,7 +190,15 @@ beta <- beta[, c(stat_columns, all_samples)]
 beta_se <- beta_se[, c(stat_columns, all_samples)]
 smf <- smf[match(all_samples, smf[[sample_column]]), ]
 nCells <- nCells[match(all_samples, nCells[['sample']]), ]
-
+# get the the completely NA rows
+comp_na_beta <- ncol(beta) == apply(beta, 1, function(x){sum(is.na(x))})
+comp_na_beta_se<- ncol(beta_se) == apply(beta_se, 1, function(x){sum(is.na(x))})
+# and remove these
+beta <- beta[!(comp_na_beta | comp_na_beta_se), ]
+beta_se <- beta_se[!(comp_na_beta | comp_na_beta_se), ]
+# make sure all columns are numeric
+#beta[, 3:ncol(beta)] <- lapply(beta[, 3:ncol(beta)], as.numeric)
+#beta_se[, 3:ncol(beta_se)] <- lapply(beta_se[, 3:ncol(beta_se)], as.numeric)
 # keep track of the duplicate sample problem
 dupsample_solve <- 'none'
 
