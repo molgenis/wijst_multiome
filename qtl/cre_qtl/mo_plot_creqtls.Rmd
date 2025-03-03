@@ -736,3 +736,100 @@ p_overlaps <- ggplot(data = ct_overlaps_wide, mapping = aes(x = cell_type, y = v
 p_overlaps
 
 ```
+
+```{r compare_scenic, include=T, fig.width=10, fig.height=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# the location of the annotated scenic output
+scenic_annotated_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_limma_001/output/eRegulon_direct_overlaps.tsv.gz'
+# read the scenic data
+scenic_annotated <- read.table(scenic_annotated_loc, header = T, sep = '\t')
+# make the region the same format
+scenic_annotated[['Region']] <- gsub(':', '-', scenic_annotated[['Region']])
+# and the CRE in the same format
+scenic_annotated[['cre']] <- paste(scenic_annotated[['Region']], scenic_annotated[['Gene']], sep  = ' + ')
+# now make a dummy list with this set of scenic CREs
+scenic_pairs <- list()
+for (cell_type in names(cre_pairs)) {
+  scenic_pairs[[cell_type]] <- scenic_annotated[['cre']]
+}
+# get the list overlaps
+scenic_cre_overlaps <- get_list_overlaps(scenic_pairs, cre_pairs, list_name = 'cell_type', list1_name = 'scenic', list2_name = 'naive_cre')
+scenic_qtl_overlaps <- get_list_overlaps(scenic_pairs, qtl_pairs, list_name = 'cell_type', list1_name = 'scenic', list2_name = 'qtl')
+
+```
+
+```{r plot_replication_scenic, include=T, fig.width=10, fig.height=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# turn into a long table instead
+scenic_cre_overlaps_wide <- wide_to_long_table(scenic_cre_overlaps)
+# make the names safe
+scenic_cre_overlaps_wide[['cell_type']] <- rename_labels(scenic_cre_overlaps_wide[['cell_type']])
+# rename the categories
+scenic_cre_overlaps_wide[['category']] <- list('only_qtl' = 'only QTL', 'only_naive_cre' = 'only naive CRE', 'in_both' = 'both', 'only_scenic' = 'only SCENIC+')[scenic_cre_overlaps_wide[['category']]]
+# add a category of the celltype and category
+scenic_cre_overlaps_wide[['cell_type_category']] <- paste(scenic_cre_overlaps_wide[['cell_type']], scenic_cre_overlaps_wide[['category']])
+# order the data by the category by making it into a factor
+scenic_cre_overlaps_wide[['category']] <- factor(scenic_cre_overlaps_wide[['category']], levels = c('only naive CRE', 'only QTL', 'only SCENIC+', 'both'))
+# and then ordering
+scenic_cre_overlaps_wide <- scenic_cre_overlaps_wide[order(scenic_cre_overlaps_wide[['cell_type']], scenic_cre_overlaps_wide[['category']]), ]
+# and then make this order the order of the value we plot
+scenic_cre_overlaps_wide[['cell_type_category']] <- factor(scenic_cre_overlaps_wide[['cell_type_category']], levels = scenic_cre_overlaps_wide[['cell_type_category']])
+# make a colour list
+scenic_cre_overlaps_colour_list <- list()
+# check each of the cell types
+for (cell_type in unique(scenic_cre_overlaps_wide[['cell_type']])) {
+  # make the colours
+  pct_whitening <- 40
+  scenic_cre_overlaps_colour_list[[paste(cell_type, 'both')]] <- get_color_coding_dict()[[cell_type]]
+  scenic_cre_overlaps_colour_list[[paste(cell_type, 'only SCENIC+')]]  <- colorRampPalette(c(get_color_coding_dict()[[cell_type]], "white"))(100)[pct_whitening]
+  scenic_cre_overlaps_colour_list[[paste(cell_type, 'only QTL')]] <- colorRampPalette(c(get_color_coding_dict()[[cell_type]], "black"))(100)[pct_whitening]
+  scenic_cre_overlaps_colour_list[[paste(cell_type, 'only naive CRE')]] <- colorRampPalette(c(get_color_coding_dict()[[cell_type]], "black"))(100)[pct_whitening]
+}
+# make into a plot
+p_scenic_cre_overlaps <- ggplot(data = scenic_cre_overlaps_wide, mapping = aes(x = cell_type, y = value, fill = cell_type_category)) + 
+  geom_bar(position = 'stack', stat = 'identity') + 
+  xlab('Cell type') + 
+  ylab('Number of region-gene pairs') +
+  scale_fill_manual(values = scenic_cre_overlaps_colour_list) +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+  ggtitle('Number of overlapping region-gene pairs') + 
+  guides(fill=guide_legend(title = 'Cell type and significant'))
+# show the plot
+p_scenic_cre_overlaps
+
+# turn into a long table instead
+scenic_qtl_overlaps_wide <- wide_to_long_table(scenic_qtl_overlaps)
+# make the names safe
+scenic_qtl_overlaps_wide[['cell_type']] <- rename_labels(scenic_qtl_overlaps_wide[['cell_type']])
+# rename the categories
+scenic_qtl_overlaps_wide[['category']] <- list('only_qtl' = 'only QTL', 'only_naive_cre' = 'only naive CRE', 'in_both' = 'both', 'only_scenic' = 'only SCENIC+')[scenic_qtl_overlaps_wide[['category']]]
+# add a category of the celltype and category
+scenic_qtl_overlaps_wide[['cell_type_category']] <- paste(scenic_qtl_overlaps_wide[['cell_type']], scenic_qtl_overlaps_wide[['category']])
+# order the data by the category by making it into a factor
+scenic_qtl_overlaps_wide[['category']] <- factor(scenic_qtl_overlaps_wide[['category']], levels = c('only naive CRE', 'only QTL', 'only SCENIC+', 'both'))
+# and then ordering
+scenic_qtl_overlaps_wide <- scenic_qtl_overlaps_wide[order(scenic_qtl_overlaps_wide[['cell_type']], scenic_qtl_overlaps_wide[['category']]), ]
+# and then make this order the order of the value we plot
+scenic_qtl_overlaps_wide[['cell_type_category']] <- factor(scenic_qtl_overlaps_wide[['cell_type_category']], levels = scenic_qtl_overlaps_wide[['cell_type_category']])
+# make into a plot
+p_scenic_qtl_overlaps <- ggplot(data = scenic_qtl_overlaps_wide, mapping = aes(x = cell_type, y = value, fill = cell_type_category)) + 
+  geom_bar(position = 'stack', stat = 'identity') + 
+  xlab('Cell type') + 
+  ylab('Number of region-gene pairs') +
+  scale_fill_manual(values = scenic_cre_overlaps_colour_list) +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+  ggtitle('Number of overlapping region-gene pairs') + 
+  guides(fill=guide_legend(title = 'Cell type and significant'))
+# show the plot
+p_scenic_qtl_overlaps
+
+```
+
+```{r plot_replication_scenic, include=T, fig.width=10, fig.height=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# 
+
+```
