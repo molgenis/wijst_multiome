@@ -1,0 +1,465 @@
+---
+title: "mo_plot_creqtls"
+author: "Roy Oelen"
+date: "2025-03-03"
+output: html_document
+---
+
+```{r header, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+#!/usr/bin/env Rscript
+############################################################################################################################
+# Authors: Roy Oelen
+# Name: mo_plot_creqtls.Rmd
+# Function: plot CREs identified with the CRE-QTL-esque method
+############################################################################################################################
+```
+
+```{r libraries, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+####################
+# libraries        #
+####################
+
+library(ggplot2)
+library(cowplot)
+library(RColorBrewer)
+library(roycols)
+library(UpSetR)
+library(grid)
+
+```
+
+```{r functions, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+####################
+# Functions        #
+####################
+
+
+#' get a label dict that replaces the posix safe names into printable versions
+#' 
+#' @returns a label dict that replaces the posix safe names into printable versions
+#' label_dict_names <- get_label_dict()
+get_label_dict <- function() {
+  label_dict <- list()
+  label_dict[['CD4_T_cells']] <- 'CD4+ T cells'
+  label_dict[['CD8_T_cells']] <- 'CD8+ T cells'
+  label_dict[['CD4T']] <- 'CD4+ T'
+  label_dict[['CD8T']] <- 'CD8+ T'
+  label_dict[['CD4_T']] <- 'CD4+ T'
+  label_dict[['CD8_T']] <- 'CD8+ T'
+  label_dict[['Dendritic_cells']] <- 'Dendritic cells'
+  label_dict[['Endothelial_cells']] <- 'Endothelial cells'
+  label_dict[['Fibroblasts']] <- 'Fibroblasts'
+  label_dict[['Glia_cells']] <- 'Glia cells'
+  label_dict[['Mast_cells']] <- 'MAST cells'
+  label_dict[['Mature_absorptive_enterocytes']] <- 'Mature absorptive enterocytes'
+  label_dict[['Mature_secretory_enterocytes']] <- 'Mature secretory enterocytes'
+  label_dict[['Memory_B']] <- 'Memory B cells'
+  label_dict[['Monocytes']] <- 'Monocytes'
+  label_dict[['monocyte']] <- 'Monocyte'
+  label_dict[['Mono']] <- 'Monocyte'
+  label_dict[['Plasma_cells']] <- 'Plasma cells'
+  label_dict[['Stem_cells']] <- 'Stem cells'
+  label_dict[['Stromal_cells']] <- 'Stromal cells'
+  label_dict[['T_others']] <- 'other T cells'
+  label_dict[['Transit_amplifying_cells']] <- 'Transit amplifying cells'
+  label_dict[['AI']] <- 'Actively Inflamed'
+  label_dict[['NI']] <- 'Non-Inflamed'
+  return(label_dict)
+}
+
+
+rename_labels <- function(vector_to_rename) {
+  # get the labels that are present
+  label_renaming <- get_label_dict()
+  # now check which labels we are missing
+  missing_renames <- setdiff(unique(vector_to_rename), names(label_renaming))
+  # add those renames as not being renames
+  for (missing_rename in missing_renames) {
+    label_renaming[[missing_rename]] <- missing_rename
+  }
+  # now replace each value with the rename
+  renamed_vector <- as.vector(unlist(label_renaming[vector_to_rename]))
+  # and return that
+  return(renamed_vector)
+}
+
+
+remap_with_label_dict <- function(vector_of_names) {
+  # get the label dict
+  relabels <- get_label_dict()
+  # get the labels available for renaming
+  labels_available <- names(relabels)
+  # get the ones we cant remap
+  unmappable <- setdiff(unique(vector_of_names), labels_available)
+  # report on those
+  if (length(unmappable) > 0) {
+    print(paste('cannot remap the following names, they will be returned unchanged:', paste(unmappable, collapse = ',')))
+    # and put those in our remapping list as their originals
+    relabels[unmappable] <- unmappable
+  }
+  # now actually do the remapping
+  remapped <- as.vector(unlist(relabels[vector_of_names]))
+  return(remapped)
+}
+
+
+get_color_coding_dict <- function() {
+	# medhigh
+  color_coding_dict <- list()
+  color_coding_dict[["B"]] <- "#71BC4B"
+  #color_coding_dict[['CD4_T_cells']] <- '#7FC97F'
+  color_coding_dict[['CD4_T_cells']] <- '#153057'
+  color_coding_dict[['CD4T']] <- '#153057'
+	#color_coding_dict[['CD8_T_cells']] <- '#BEAED4'
+	color_coding_dict[['CD8_T_cells']] <- '#009DDB'
+	color_coding_dict[['CD8T']] <- '#009DDB'
+	#color_coding_dict[['Dendritic_cells']] <- '#FDC086'
+	color_coding_dict[['Dendritic_cells']] <- '#965EC8'
+	color_coding_dict[['DC']] <- '#965EC8'
+	color_coding_dict[['Endothelial_cells']] <- '#FFFFB3'
+	color_coding_dict[['Fibroblasts']] <- '#386CB0'
+	color_coding_dict[['Glia_cells']] <- '#F0027F'
+	color_coding_dict[['Mast_cells']] <- '#BF5B17'
+	color_coding_dict[['Mature_absorptive_enterocytes']] <- '#A6CEE3'
+	color_coding_dict[['Mature_secretory_enterocytes']] <- '#1B9E77'
+	color_coding_dict[['Memory_B']] <- '#D95F02'
+	color_coding_dict[['Microfold_cell']] <- '#BEAED4'
+	#color_coding_dict[['Monocytes']] <- '#7570B3'
+	color_coding_dict[['Monocyte']] <- '#EDBA1B'
+	color_coding_dict[['Naive_B_cells']] <- '#FDC086'
+	color_coding_dict[['NK']] <- '#E64B50'
+	#color_coding_dict[['Plasma_cells']] <- '#E7298A'
+	color_coding_dict[['Plasma_cells']] <- '#DB8E00'
+	color_coding_dict[['Stem_cells']] <- '#66A61E'
+	color_coding_dict[['Stromal_cells']] <- '#8DD3C7'
+	#color_coding_dict[['T_others']] <- '#A6761D'
+	color_coding_dict[['T_others']] <- '#FF63B6'
+	color_coding_dict[['Transit_amplifying_cells']] <- '#FF7F00'
+	color_coding_dict[['disconcordant']] <- 'gray'
+  #color_coding_dict[['CD4+ T cells']] <- '#7FC97F'
+  color_coding_dict[['CD4+ T cells']] <- '#153057'
+  color_coding_dict[['CD4+ T']] <- '#153057'
+	#color_coding_dict[['CD8+ T cells']] <- '#BEAED4'
+	color_coding_dict[['CD8+ T cells']] <- '#009DDB'
+	color_coding_dict[['CD8+ T']] <- '#009DDB'
+	#color_coding_dict[['Dendritic cells']] <- '#FDC086'
+	color_coding_dict[['Dendritic cells']] <- '#965EC8'
+	color_coding_dict[['Endothelial cells']] <- '#FFFFB3'
+	color_coding_dict[['Endothelial\ncells']] <- '#FFFFB3'
+	color_coding_dict[['Fibroblasts']] <- '#386CB0'
+	color_coding_dict[['Glia cells']] <- '#F0027F'
+	color_coding_dict[['MAST cells']] <- '#BF5B17'
+	color_coding_dict[['Mature absorptive enterocytes']] <- '#A6CEE3'
+	color_coding_dict[['Mature\nabsorptive\nenterocytes']] <- '#A6CEE3'
+	color_coding_dict[['Mature secretory enterocytes']] <- '#1B9E77'
+	color_coding_dict[['Mature secretory\nenterocytes']] <- '#1B9E77'
+	color_coding_dict[['Memory B cells']] <- '#D95F02'
+	#color_coding_dict[['Monocytes']] <- '#7570B3'
+	color_coding_dict[['Microfold cells']] <- '#BEAED4'
+	color_coding_dict[['Monocytes']] <- '#EDBA1B'
+	color_coding_dict[['Naive B cells']] <- '#FDC086'
+	#color_coding_dict[['Plasma cells']] <- '#E7298A'
+	color_coding_dict[['Plasma cells']] <- '#DB8E00'
+	color_coding_dict[['Stem cells']] <- '#66A61E'
+	color_coding_dict[['Stromal cells']] <- '#8DD3C7'
+	#color_coding_dict[['other T cells']] <- '#A6761D'
+	color_coding_dict[['other T cells']] <- '#FF63B6'
+	color_coding_dict[['Transit amplifying cells']] <- '#FF7F00'
+	color_coding_dict[['Transit\namplifying cells']] <- '#FF7F00'
+	color_coding_dict[['disconcordant']] <- 'gray'
+	# up and down regulation will be added to, we need a whitening percentage
+	pct_whitening <- 40
+	# then we will check each cell type
+	for (cell_type in names(color_coding_dict)) {
+	  # the up color is the same as the regular one
+	  color_coding_dict[[paste(cell_type, 'up')]] <- color_coding_dict[[cell_type]]
+	  # but the down one will have a more faded colour
+	  color_coding_dict[[paste(cell_type, 'down')]] <- colorRampPalette(c(color_coding_dict[[cell_type]], "white"))(100)[pct_whitening]
+	}
+	# general
+	color_coding_dict[['AI']] <- 'darkblue'
+	color_coding_dict[['NI']] <- 'darkred'
+	color_coding_dict[['Actively Inflamed']] <- 'darkblue'
+	color_coding_dict[['Non-Inflamed']] <- 'darkred'
+	return(color_coding_dict)
+}
+
+
+split_string_with_max_length <- function(string, max_length=15) {
+  # split the string on the space first
+  words <- strsplit(string, ' ')[[1]]
+  # and initial pasted string
+  final_string <- ''
+  # and the temporary string
+  tmp_string <- ''
+  # check each word
+  for (word in words) {
+    # get the lenght of the temporary string
+    tmp_len <- nchar(tmp_string)
+    # get the length of the word
+    word_len <- nchar(word)
+    # length of the final string
+    final_len <- nchar(final_string)
+    # check if adding the next word would make us go over the limit
+    if ((tmp_len + word_len) > max_length) {
+      if (final_len > 0) {
+        # add the temporary word to the final string if it was not empty
+        final_string <- paste(final_string, '\n', tmp_string, sep = '')
+      }
+      else{
+        # if there was not final string yet, it will just become that temporary string
+        final_string <- tmp_string
+      }
+      # reset the temporary string
+      tmp_string <- word
+    }
+    else{
+      # otherwise add it to the temporary string
+      if (tmp_len > 0) {
+        tmp_string <- paste(tmp_string, word)
+      }
+      # or set if the temporary string was empty
+      else{
+        tmp_string <- word
+      }
+    }
+  }
+  # add last word
+  if (nchar(paste(final_string, tmp_string)) > max_length) {
+    if (nchar(final_string) == 0) {
+      final_string <- tmp_string
+    }
+    else if (nchar(tmp_string > 0)) {
+      final_string <- paste(final_string, '\n', tmp_string, sep = '')
+    }
+    else{
+      # nothing the final string is as it is
+    }
+  }
+  else {
+    if (nchar(final_string) == 0) {
+      final_string <- tmp_string
+    }
+    else if(nchar(tmp_string) == 0){
+      # nothing, the final string is as is
+    }
+    else{
+      final_string <- paste(final_string, ' ', tmp_string, sep = '')
+    }
+  }
+  # add the last word
+  return(final_string)
+}
+
+
+split_strings_with_max_length <- function(strings, max_length=15) {
+  strings_split <- sapply(strings, FUN = function(x){
+    split_string_with_max_length(x, max_length)
+  })
+  strings_split <- as.vector(strings_split)
+  return(strings_split)
+}
+
+
+get_cre_tables_folders <- function(cre_folder, cre_file_name, cre_folder_regex=NULL) {
+  # list all the directories in the CRE folder
+  cre_folders <- list.dirs(cre_folder, full.names = F, recursive = F)
+  # subset if there is a pattern
+  if (!is.null(cre_folder_regex)) {
+    cre_folders <- cre_folders[grep(cre_folder_regex, cre_folders)]
+  }
+  # save each table in a list
+  cre_folder_per_celltype <- list()
+  # check each folder
+  for (cre_subfolder in cre_folders) {
+    # paste together the file
+    cre_file_loc <- paste(cre_folder, cre_subfolder, cre_file_name, sep = '/')
+    # check if this file exists
+    if (file.exists(cre_file_loc)) {
+      # read the file
+      cre_file <- read.table(cre_file_loc, header = T, sep = '\t')
+      # add celltype as column
+      cre_file <- cbind(data.frame('cell_type' = rep(cre_subfolder, times = nrow(cre_file))), cre_file)
+      # put in the list
+      cre_folder_per_celltype[[cre_subfolder]] <- cre_file
+    }
+  }
+  return(cre_folder_per_celltype)
+}
+
+
+#' Get Color List
+#'
+#' This function generates a list of colors corresponding to a given vector of names. It ensures each unique name is assigned a unique color.
+#'
+#' @param vector_of_names A character vector containing the names for which colors are to be generated.
+#' @param use_sampling A logical value indicating whether to use sampling when generating colors (default is FALSE).
+#' @param color_indices An optional vector of color indices to use for sampling.
+#'
+#' @return A named list of colors, where each name in the input vector is assigned a unique color.
+#'
+#' @examples
+#' \dontrun{
+#' color_list <- get_color_list(c("apple", "banana", "cherry"))
+#' }
+#'
+get_color_list <- function(vector_of_names, use_sampling=F, color_indices=NULL) {
+  # get the unique entries
+  vector_unique <- unique(vector_of_names)
+  # remove any NA
+  vector_unique <- vector_unique[!is.na(vector_unique)]
+  # get some colors
+  colors_to_use <- NULL
+  if (length(vector_unique) > 74) {
+    colors_to_use <- roycols::sample_tons_of_colors(length(vector_unique), use_sampling = use_sampling, color_indices = color_indices)
+  }
+  else{
+    colors_to_use <- roycols::sample_many_colours(length(vector_unique), use_sampling = use_sampling, color_indices = color_indices)
+  }
+  # turn into a list
+  colors_to_use_list <- as.list(colors_to_use)
+  # and add the names
+  names(colors_to_use_list) <- vector_unique
+  return(colors_to_use_list)
+}
+
+
+
+
+plot_sharing_per_celltype <- function(table_per_ct, feature_column='feature', pval_column='p.bonferroni', sig_pval=0.05, only_positive=F, only_negative=F, lfc_column='metafc', use_label_dict=T, use_color_dict=T){
+  DE_genes_per_ct <- list()
+  # get the DE genes for each cell type
+  for(cell_type in names(table_per_ct)){
+    # filter to only include the significant results
+    de_table <- table_per_ct[[cell_type]][table_per_ct[[cell_type]][[pval_column]] <= 0.05, ]
+    # filter for only the positive lfc if required
+    if(only_positive){
+      de_table <- de_table[de_table[[lfc_column]] < 0, ]
+    }
+    # filter for only the positive lfc if required
+    if(only_negative){
+      de_table <- de_table[de_table[[lfc_column]] > 0, ]
+    }
+    # we just care about the gene names
+    sig_genes <- NULL
+    if (is.null(feature_column)) {
+      sig_genes <- rownames(mast)
+    }
+    else {
+      sig_genes <- de_table[[feature_column]]
+    }
+    # store these for the cell type
+    DE_genes_per_ct[[cell_type]] <- sig_genes
+  }
+  if(use_label_dict){
+    names(DE_genes_per_ct) <- rename_labels(names(DE_genes_per_ct))
+  }
+  # get the total overlap
+  total_overlap <- fromList(DE_genes_per_ct)
+  # set queries and colours
+  queries <- list()
+  sets.bar.color <- 'black'
+  if(use_color_dict){
+    # create df to store the number of each set, so we know how to order
+    nrs_df <- NULL
+    # get the cell types we have
+    cell_types <- names(DE_genes_per_ct)
+    # get colour codes for the cell types
+    cell_type_colours <- get_color_coding_dict()
+    # also get colours for the cell types we don't have colours for
+    cell_type_colours_missing <- get_color_list(setdiff(cell_types, names(cell_type_colours)))
+    # and merge them
+    cell_type_colours <- c(cell_type_colours, cell_type_colours_missing)
+    # add the colors for the cell types
+    i <- 1
+    for(cell_type in cell_types){
+      # check if there is a singleton for this cell type, so this celltype is 1, but the total of the row is also 1
+      n_singletons <- nrow(total_overlap[total_overlap[[cell_type]] == 1 & rowSums(total_overlap) == 1, ])
+      # if we have singletons, colour it
+      if (n_singletons > 0) {
+        # add for the singles in the intersection sizes
+        ct_list <- list(
+          query = intersects,
+          params = list(cell_type),
+          color = cell_type_colours[[cell_type]],
+          active = T)
+        queries[[i]] <- ct_list
+        i <- i + 1
+      }
+      # add for the DF to order the set sizes
+      numbers_row <- data.frame(ct=c(cell_type), nr=c(length(DE_genes_per_ct[[cell_type]])), stringsAsFactors = F)
+      if(is.null(nrs_df)){
+        nrs_df <- numbers_row
+      }
+      else{
+        nrs_df <- rbind(nrs_df, numbers_row)
+      }
+    }
+    # get the order of the sets
+    ordered_cts <- nrs_df[order(nrs_df$nr, decreasing = T), 'ct']
+    # add the colors for the sets
+    sets.bar.color <- unlist(cell_type_colours[ordered_cts])
+    # make the plot
+    upset(total_overlap, order.by = 'freq', nsets = length(DE_genes_per_ct), queries = queries, sets.bar.color=sets.bar.color)
+  }
+  else {
+    upset(total_overlap, order.by = 'freq', nsets = length(DE_genes_per_ct))
+  }
+  
+  #return(DE_genes_per_ct)
+}
+
+
+
+```
+
+
+```{r path_setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+####################
+# Main Code        #
+####################
+
+# location of the CRE folders
+cre_folders_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/cre_eqtl/eqtl_caqtl_overlap/betas_ps/'
+# name of the file
+cre_file_name <- 'meta_result.tsv.gz'
+
+```
+
+```{r get_cre_outputs, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# get the output folders
+cre_outputs <- get_cre_tables_folders(cre_folders_loc, cre_file_name)
+
+```
+
+```{r get_plot_outputs, include=T, fig.width=10, fig.height=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# plot overlap of the CRE regions
+plot_sharing_per_celltype(table_per_ct = cre_outputs, feature_column = 'region', pval_column = 'meta_q', use_color_dict = T)
+grid.text('Significant regions with a CRE', x = 0.65, y = 0.95, gp = gpar(fontsize = 20))
+# plot overlap of the CRE genes
+plot_sharing_per_celltype(table_per_ct = cre_outputs, feature_column = 'gene', pval_column = 'meta_q', use_color_dict = T)
+grid.text('Significant genes with a CRE', x = 0.65, y = 0.95, gp = gpar(fontsize = 20))
+# add the combination of region-gene
+for (ct in names(cre_outputs)) {
+  cre_outputs[[ct]][['cre']] <- paste(cre_outputs[[ct]][['region']], cre_outputs[[ct]][['gene']], sep = ' + ')
+}
+# and plot that
+plot_sharing_per_celltype(table_per_ct = cre_outputs, feature_column = 'cre', pval_column = 'meta_q', use_color_dict = T)
+grid.text('Significant CREs', x = 0.65, y = 0.95, gp = gpar(fontsize = 20))
+
+```
+
+```{r get_cre_inputs, include=T, fig.width=10, fig.height=5}
+
+```

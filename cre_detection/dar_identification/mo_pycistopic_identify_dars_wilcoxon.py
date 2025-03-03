@@ -74,40 +74,40 @@ def create_md5_file(input_file):
         return 1
 
 
-##############################
-# read the pycistopic object #
-##############################
+##########################################
+# read the non-imputed pycistopic object #
+##########################################
+
+# location to store the object
+pycistopic_object_loc = '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/pycistopic/objects/merged_major_and_minor_celltypes_120topics.pkl'
+# use symlinks due to path size limitations
+pycistopic_object_loc = './120'
+
+# save the object
+with open(pycistopic_object_loc, 'rb') as f:
+   cistopic_obj = pickle.load(f)
+
+
+######################################
+# read the imputed pycistopic object #
+######################################
 
 # load the object from disk
 pycistopic_object_wimputations_jl_loc = '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/pycistopic/objects/merged_major_and_minor_celltypes_120topics_imputed.joblib'
 imputed_acc_obj = joblib.load(pycistopic_object_wimputations_jl_loc)
 
 
-###########################
-# normalize accessibility #
-###########################
+##################################################
+# run DAR identification using wilcoxon-rank-sum #
+##################################################
 
-# normalize object
-normalized_imputed_acc_obj = normalize_scores(imputed_acc_obj, scale_factor=10**4)
-
-
-###################
-# clear up memory #
-###################
-
-del imputed_acc_obj
-
-
-##############################
-# save normalization results #
-##############################
-
-# location to store the object
-pycistopic_object_wimpnorm_loc = '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/pycistopic/objects/merged_major_and_minor_celltypes_120topics_impnorm.joblib'
-
-# save the object
-joblib.dump(normalized_imputed_acc_obj, pycistopic_object_wimpnorm_loc)
-
-# make a checksum
-create_md5_file(pycistopic_object_wimpnorm_loc)
-
+# Run DAR analysis
+markers_dict= find_diff_features(
+    cistopic_obj,
+    imputed_acc_obj,
+    adjpval_thr=0.05,
+    log2fc_thr=np.log2(1.5),
+    n_cpu=4,
+    _temp_dir=os.environ["TMPDIR"],
+    split_pattern = '_'
+)
