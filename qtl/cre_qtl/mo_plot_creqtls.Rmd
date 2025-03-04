@@ -1076,7 +1076,7 @@ mdfiver::create_md5_for_file(qtl_overlap_annotated_loc)
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # sort the qtl overlaps by the absolute Z score for eQTLs
-qtl_overlap_wvariant_eqtl_top_effects <- qtl_overlap_wvariant[order(abs(qtl_overlap_wvariant[['zscore_eqtl']]), decreasing = T), ]
+qtl_overlap_wvariant_eqtl_top_effects <- qtl_overlap_wvariant[order(abs(qtl_overlap_wvariant[['zscore_eqtl']]), abs(qtl_overlap_wvariant[['zscore_caqtl']]), decreasing = T), ]
 # and grab only the first combination
 qtl_overlap_wvariant_eqtl_top_effects <- qtl_overlap_wvariant_eqtl_top_effects[!duplicated(paste(qtl_overlap_wvariant_eqtl_top_effects[['celltype']], 
                                                                                                 qtl_overlap_wvariant_eqtl_top_effects[['region']], 
@@ -1091,7 +1091,7 @@ eqtl_contingency
 fisher.test(eqtl_contingency)
 
 # sort the qtl overlaps by the absolute Z score for caQTLs
-qtl_overlap_wvariant_caqtl_top_effects <- qtl_overlap_wvariant[order(abs(qtl_overlap_wvariant[['zscore_caqtl']]), decreasing = T), ]
+qtl_overlap_wvariant_caqtl_top_effects <- qtl_overlap_wvariant[order(abs(qtl_overlap_wvariant[['zscore_caqtl']]), abs(qtl_overlap_wvariant[['zscore_eqtl']]), decreasing = T), ]
 # and grab only the first combination
 qtl_overlap_wvariant_caqtl_top_effects <- qtl_overlap_wvariant_caqtl_top_effects[!duplicated(paste(qtl_overlap_wvariant_caqtl_top_effects[['celltype']], 
                                                                                                 qtl_overlap_wvariant_caqtl_top_effects[['region']], 
@@ -1111,7 +1111,7 @@ fisher.test(caqtl_contingency)
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # sort the qtl overlaps by the absolute Z score for eQTLs
-qtl_overlap_wvariant_eqtl_top_effects_nogene <- qtl_overlap_wvariant[order(abs(qtl_overlap_wvariant[['zscore_eqtl']]), decreasing = T), ]
+qtl_overlap_wvariant_eqtl_top_effects_nogene <- qtl_overlap_wvariant[order(abs(qtl_overlap_wvariant[['zscore_eqtl']]), abs(qtl_overlap_wvariant[['zscore_caqtl']]), decreasing = T), ]
 # and grab only the first combination
 qtl_overlap_wvariant_eqtl_top_effects_nogene <- qtl_overlap_wvariant_eqtl_top_effects_nogene[!duplicated(paste(qtl_overlap_wvariant_eqtl_top_effects_nogene[['celltype']], 
                                                                                                 qtl_overlap_wvariant_eqtl_top_effects_nogene[['region']], 
@@ -1125,7 +1125,7 @@ eqtl_contingency_nogene
 fisher.test(eqtl_contingency_nogene)
 
 # sort the qtl overlaps by the absolute Z score for caQTLs
-qtl_overlap_wvariant_caqtl_top_effects_nogene <- qtl_overlap_wvariant[order(abs(qtl_overlap_wvariant[['zscore_caqtl']]), decreasing = T), ]
+qtl_overlap_wvariant_caqtl_top_effects_nogene <- qtl_overlap_wvariant[order(abs(qtl_overlap_wvariant[['zscore_caqtl']]), abs(qtl_overlap_wvariant[['zscore_eqtl']]), decreasing = T), ]
 # and grab only the first combination
 qtl_overlap_wvariant_caqtl_top_effects_nogene <- qtl_overlap_wvariant_caqtl_top_effects[!duplicated(paste(qtl_overlap_wvariant_caqtl_top_effects_nogene[['celltype']], 
                                                                                                 qtl_overlap_wvariant_caqtl_top_effects_nogene[['region']], 
@@ -1144,7 +1144,7 @@ fisher.test(caqtl_contingency_nogene)
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # sort the qtl overlaps by the absolute Z score for eQTLs
-qtl_overlap_wvariant_eqtl_top_effects_noregion <- qtl_overlap_wvariant[order(abs(qtl_overlap_wvariant[['zscore_eqtl']]), decreasing = T), ]
+qtl_overlap_wvariant_eqtl_top_effects_noregion <- qtl_overlap_wvariant[order(abs(qtl_overlap_wvariant[['zscore_eqtl']]), abs(qtl_overlap_wvariant[['zscore_caqtl']]), decreasing = T), ]
 # and grab only the first combination
 qtl_overlap_wvariant_eqtl_top_effects_noregion <- qtl_overlap_wvariant_eqtl_top_effects_noregion[!duplicated(paste(qtl_overlap_wvariant_eqtl_top_effects_noregion[['celltype']], 
                                                                                                 qtl_overlap_wvariant_eqtl_top_effects_noregion[['gene']], 
@@ -1158,7 +1158,7 @@ eqtl_contingency_noregion
 fisher.test(eqtl_contingency_noregion)
 
 # sort the qtl overlaps by the absolute Z score for caQTLs
-qtl_overlap_wvariant_caqtl_top_effects_noregion <- qtl_overlap_wvariant[order(abs(qtl_overlap_wvariant[['zscore_caqtl']]), decreasing = T), ]
+qtl_overlap_wvariant_caqtl_top_effects_noregion <- qtl_overlap_wvariant[order(abs(qtl_overlap_wvariant[['zscore_caqtl']]), abs(qtl_overlap_wvariant[['zscore_eqtl']]), decreasing = T), ]
 # and grab only the first combination
 qtl_overlap_wvariant_caqtl_top_effects_noregion <- qtl_overlap_wvariant_caqtl_top_effects[!duplicated(paste(qtl_overlap_wvariant_caqtl_top_effects_noregion[['celltype']], 
                                                                                                 qtl_overlap_wvariant_caqtl_top_effects_noregion[['gene']], 
@@ -1172,3 +1172,22 @@ caqtl_contingency_noregion
 fisher.test(caqtl_contingency_noregion)
 
 ```
+
+```{r check_variant_replication_top_effects_noregion_noct, include=T, fig.width=10, fig.height=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# sort the qtl overlaps by the absolute Z score for eQTLs
+qtl_overlap_wvariant_eqtl_top_effects_noregionnoct <- qtl_overlap_wvariant[order(abs(qtl_overlap_wvariant[['zscore_eqtl']]), abs(qtl_overlap_wvariant[['zscore_caqtl']]), decreasing = T), ]
+# and grab only the first combination
+qtl_overlap_wvariant_eqtl_top_effects_noregionnoct <- qtl_overlap_wvariant_eqtl_top_effects_noregionnoct[!duplicated(
+                                                                                                qtl_overlap_wvariant_eqtl_top_effects_noregionnoct[['gene']]), ]
+# check how often it replicates and is in the actual peak
+eqtl_contingency_noregionnoct <- table(qtl_overlap_wvariant_eqtl_top_effects_noregionnoct[, c('replicate_cre', 'variant_in_peak')])
+# reorder a bit
+eqtl_contingency_noregionnoct <- eqtl_contingency_noregionnoct[c(2,1), c(2,1)]
+eqtl_contingency_noregionnoct
+# check for significance
+fisher.test(eqtl_contingency_noregionnoct)
+
+```
+
