@@ -641,6 +641,71 @@ location_name_to_irange <- function(genomic_locations_table, name_column='name',
 }
 
 
+check_overlap_other_lists <- function(list1, list2, list_name='list_name', list1_name='list1', list2_name='list2') {
+  # get the names present in any of the two lists
+  names_either <- unique(c(names(list1), names(list2)))
+  # create a matrix that has the number of overlaps and number of diffs
+  nr_df <- data.frame(matrix(, nrow = length(names_either), ncol = 4, dimnames = list(names_either, c(list_name, paste0('only_', list1_name), paste0('also_', list2_name, '_same'), paste0('also_', list2_name, '_only_diff')))))
+  # we'll need the full set multiple times, so let's make that one only once
+  all_list2_all_names <- unique(do.call('c', list2))
+  # check each of the names
+  for (name_in_list in names_either) {
+    # set the values to defaults
+    n_only_list1 <- 0
+    n_also_list2_same <- 0
+    n_also_list2_only_diff <- 0
+    # if the name is in both lists
+    if (name_in_list %in% names(list1) & name_in_list %in% names(list2)) {
+      # get the total
+      all_list1 <- list1[[name_in_list]]
+      # and how many those are
+      n_all_list1 <- length(all_list1)
+      # check which of those are also in list 2 for the same name
+      list1_list2_same_name <- intersect(all_list1, list2[[name_in_list]])
+      # and how many of those these are
+      n_list1_list2_same_name <- length(list1_list2_same_name)
+      # check which ones we couldn't find yet
+      list1_not_list2_same_name <- setdiff(all_list1, n_list1_list2_same_name)
+      # and try to find those in the rest of the lists
+      list1_list2_other_name <- intersect(list1_not_list2_same_name, unique(do.call('c', list2[setdiff(names(list2), name_in_list)])))
+      # check now many these are
+      n_list1_list2_other_name <- length(list1_list2_other_name)
+      # and calculate how many we could not find
+      n_list1_not_found <- n_all_list1 - (n_list1_list2_same_name + n_list1_list2_other_name)
+      # and name properly
+      n_only_list1 <- n_list1_not_found
+      n_also_list2_same <- n_list1_list2_same_name
+      n_also_list2_only_diff <- n_list1_list2_other_name
+    }
+    # if it is only in list 1
+    else if (name_in_list %in% names(list1) & !(name_in_list %in% names(list2))) {
+      # get the total
+      all_list1 <- list1[[name_in_list]]
+      # and how many those are
+      n_all_list1 <- length(all_list1)
+      # and try to find everything in the rest of the lists
+      list1_list2_other_name <- intersect(all_list1, unique(do.call(list2[setdiff(names(list2), name_in_list)])))
+      # get how many those are
+      n_list1_list2_other_name <- length(list1_list2_other_name)
+      # and how many we didn't find
+      n_list1_not_found <- n_all_list1 - n_list1_list2_other_name
+      # and update only two values this time
+      n_only_list1 <- n_list1_not_found
+      n_also_list2_only_diff <- n_list1_list2_other_name
+    }
+    # if it is only in list 2
+    else if (!(name_in_list %in% names(list1)) & name_in_list %in% names(list2)) {
+      # nothing, we keep all at zero
+    }
+    # fill the table
+    nr_df[name_in_list, list_name] <- name_in_list
+    nr_df[name_in_list, paste0('only_', list1_name)] <- n_only_list1
+    nr_df[name_in_list, paste0('also_', list2_name, '_same')] <- n_also_list2_same
+    nr_df[name_in_list, paste0('also_', list2_name, '_only_diff')] <- n_also_list2_only_diff
+  }
+  return(nr_df)
+}
+
 ```
 
 ```{r path_setup, include=FALSE}
@@ -910,8 +975,11 @@ variant_locations[['name']] <- paste(variant_locations[['chrom']], variant_locat
 region_locations_hm <- location_name_to_irange(region_locations)
 variant_locations_hm <- location_name_to_irange(variant_locations)
 
+# get the unique variant-region combinations
+var_region <- unique(qtl_overlap_wvariant[, c('variant', 'region')])
+
 # check if the variant is in the region for each row
-qtl_overlap_wvariant[['variant_in_peak']] <- apply(qtl_overlap_wvariant, 1, function(x) {
+var_region[['variant_in_peak']] <- apply(var_region, 1, function(x) {
   # check if there is an overlap
   n_overlap <- GenomicRanges::countOverlaps(
     query = region_locations_hm[[x[['region']]]],
@@ -926,6 +994,52 @@ qtl_overlap_wvariant[['variant_in_peak']] <- apply(qtl_overlap_wvariant, 1, func
     return(F)
   }
 })
+
+```
+
+```{r plot_replication_others, include=T, fig.width=10, fig.height=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# get the list overlaps
+ct_overlap_qtl_to_cre <- check_overlap_other_lists(qtl_pairs, cre_pairs, list_name = 'cell_type', list1_name = 'qtl', list2_name = 'cre')
+# turn into a long table instead
+ct_overlap_qtl_to_cre_wide <- wide_to_long_table(ct_overlap_qtl_to_cre)
+# make the names safe
+ct_overlap_qtl_to_cre_wide[['cell_type']] <- rename_labels(ct_overlap_qtl_to_cre_wide[['cell_type']])
+# rename the categories
+ct_overlap_qtl_to_cre_wide[['category']] <- unlist(list('only_qtl' = 'only QTL', 'also_cre_same' = 'CRE same cell type', 'also_cre_only_diff' = 'CRE only other cell type')[ct_overlap_qtl_to_cre_wide[['category']]])
+
+# add a category of the celltype and category
+ct_overlap_qtl_to_cre_wide[['cell_type_category']] <- paste(ct_overlap_qtl_to_cre_wide[['cell_type']], ct_overlap_qtl_to_cre_wide[['category']])
+# order the data by the category by making it into a factor
+ct_overlap_qtl_to_cre_wide[['category']] <- factor(ct_overlap_qtl_to_cre_wide[['category']], levels = c('only QTL', 'CRE same cell type', 'CRE only other cell type'))
+# and then ordering
+ct_overlap_qtl_to_cre_wide <- ct_overlap_qtl_to_cre_wide[order(ct_overlap_qtl_to_cre_wide[['cell_type']], ct_overlap_qtl_to_cre_wide[['category']]), ]
+# and then make this order the order of the value we plot
+ct_overlap_qtl_to_cre_wide[['cell_type_category']] <- factor(ct_overlap_qtl_to_cre_wide[['cell_type_category']], levels = ct_overlap_qtl_to_cre_wide[['cell_type_category']])
+
+# make a colour list
+ct_overlap_qtl_to_cre_wide_colour_list <- list()
+# check each of the cell types
+for (cell_type in unique(ct_overlap_qtl_to_cre_wide[['cell_type']])) {
+  # make the colours
+  pct_whitening <- 40
+  ct_overlap_qtl_to_cre_wide_colour_list[[paste(cell_type, 'only QTL')]] <- get_color_coding_dict()[[cell_type]]
+  ct_overlap_qtl_to_cre_wide_colour_list[[paste(cell_type, 'CRE same cell type')]]  <- colorRampPalette(c(get_color_coding_dict()[[cell_type]], "white"))(100)[pct_whitening]
+  ct_overlap_qtl_to_cre_wide_colour_list[[paste(cell_type, 'CRE only other cell type')]] <- colorRampPalette(c(get_color_coding_dict()[[cell_type]], "black"))(100)[pct_whitening]
+}
+
+# make into a plot
+p_qtl_cre_overlaps <- ggplot(data = ct_overlap_qtl_to_cre_wide, mapping = aes(x = cell_type, y = value, fill = cell_type_category)) + 
+  geom_bar(position = 'stack', stat = 'identity') + 
+  xlab('Cell type') + 
+  ylab('Number of region-gene pairs') +
+  scale_fill_manual(values = ct_overlap_qtl_to_cre_wide_colour_list) +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+  ggtitle('Number of overlapping region-gene pairs') + 
+  guides(fill=guide_legend(title = 'Cell type and significant'))
+# show the plot
+p_qtl_cre_overlaps
 
 ```
 
