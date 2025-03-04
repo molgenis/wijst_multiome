@@ -29,6 +29,8 @@ library(RColorBrewer)
 library(roycols)
 library(UpSetR)
 library(grid)
+library(r2r)
+library(GenomicRanges)
 
 ```
 
@@ -601,6 +603,44 @@ wide_to_long_table <- function(wide_table, metadata_columns=c('cell_type')) {
   return(table_all_values)
 }
 
+
+#' Convert Genomic Locations Table to Hashmap of IRanges Objects
+#'
+#' This function takes a table of genomic locations and converts it into a hashmap where each name is associated with an IRanges object.
+#'
+#' @param genomic_locations_table A data frame containing genomic locations.
+#' @param name_column A string specifying the column name for the names. Default is 'name'.
+#' @param chrom_column A string specifying the column name for the chromosome. Default is 'chrom'.
+#' @param chrom_start A string specifying the column name for the start position. Default is 'start'.
+#' @param chrom_end A string specifying the column name for the end position. Default is 'end'.
+#'
+#' @return A hashmap where each key is a name and each value is an IRanges object.
+#'
+#' @examples
+#' genomic_locations_table <- data.frame(
+#'   name = c("gene1", "gene2"),
+#'   chrom = c("chr1", "chr2"),
+#'   start = c(100, 200),
+#'   end = c(150, 250)
+#' )
+#' location_name_to_irange(genomic_locations_table)
+location_name_to_irange <- function(genomic_locations_table, name_column='name', chrom_column='chrom', chrom_start='start', chrom_end='end') {
+  # make the hash table
+  name_to_gr_hash <- r2r::hashmap()
+  # go through the table
+  apply(genomic_locations_table, 1, function(x){
+    # create an iranges object
+    gr <- GRanges(
+      seqnames = c(x[chrom_column]),
+      ranges = IRanges(c(as.numeric(x[chrom_start])), end = c(as.numeric(x[chrom_end])), names = c(x[name_column]))
+    )
+    # put in the map under that name
+    name_to_gr_hash[[x[[name_column]]]] <- gr
+  })
+  return(name_to_gr_hash)
+}
+
+
 ```
 
 ```{r path_setup, include=FALSE}
@@ -827,9 +867,65 @@ p_scenic_qtl_overlaps
 
 ```
 
-```{r plot_replication_scenic, include=T, fig.width=10, fig.height=5}
+```{r check_variant_replication_location, include=T, fig.width=10, fig.height=5}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
-# 
+# location of the region-gene pairs, with also the variant
+qtl_overlap_wvariant_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/caQTL_eQTL_overlap_for_CRE/all_effects_peak_gene_pairs_matched_snp_ct.tsv'
+# read the file
+qtl_overlap_wvariant <- read.table(qtl_overlap_wvariant_loc, header = F, sep = '\t')
+# subset to what we care about
+qtl_overlap_wvariant <- qtl_overlap_wvariant[, c('V47', 'V46', 'V1', 'V26', 'V2')]
+# and rename the columns
+colnames(qtl_overlap_wvariant) <- c('condition', 'celltype', 'variant', 'region', 'gene')
+# check if the region and gene replicate
+qtl_overlap_wvariant[['replicate_cre']] <- apply(qtl_overlap_wvariant, 1, function(x) {
+  # paste together the region and gene
+  possible_cre <- paste(x['region'], x['gene'], sep = ' + ')
+  # get check if the cre is in the list of CREs for this cell type
+  replicates_cre <- possible_cre %in% cre_pairs[[x['celltype']]]
+  # return whether it replicates
+  return(replicates_cre)
+})
+
+# create an region locations table
+region_locations <- data.frame(do.call("rbind", strsplit(as.character(unique(qtl_overlap_wvariant[['region']])), "-", fixed = TRUE)))
+# remove the chr from the region location
+region_locations[['X1']] <- gsub('chr', '', region_locations[['X1']])
+# update the column names
+colnames(region_locations) <- c('chrom', 'start', 'end')
+# and the name back
+region_locations[['name']] <- paste(paste0('chr', region_locations[['chrom']]), region_locations[['start']], region_locations[['end']], sep = '-')
+
+# variant locations as well
+variant_locations <- data.frame(do.call("rbind", strsplit(as.character(unique(qtl_overlap_wvariant[['variant']])), ":", fixed = TRUE)))
+# duplicate the chromosomal location
+variant_locations <- variant_locations[, c('X1', 'X2', 'X2', 'X3', 'X4')]
+# update the column names
+colnames(variant_locations) <- c('chrom', 'start', 'end', 'ref', 'alt')
+# and the name back
+variant_locations[['name']] <- paste(variant_locations[['chrom']], variant_locations[['start']], variant_locations[['ref']], variant_locations[['alt']], sep = ':')
+
+# make hashmaps of each of the locations, when the peak or variant name is the key, and the genomicrange is the value
+region_locations_hm <- location_name_to_irange(region_locations)
+variant_locations_hm <- location_name_to_irange(variant_locations)
+
+# check if the variant is in the region for each row
+qtl_overlap_wvariant[['variant_in_peak']] <- apply(qtl_overlap_wvariant, 1, function(x) {
+  # check if there is an overlap
+  n_overlap <- GenomicRanges::countOverlaps(
+    query = region_locations_hm[[x[['region']]]],
+    subject = variant_locations_hm[[x[['variant']]]], 
+    ignore.strand = T
+  )
+  # check if the overlap was more than zero (so one, since we test pairs), if yes, then the variant and region overlap
+  if (sum(n_overlap) > 0) {
+    return(T)
+  }
+  else {
+    return(F)
+  }
+})
 
 ```
+
