@@ -989,8 +989,28 @@ p_qtl_cre_overlaps <- ggplot(data = ct_overlap_qtl_to_cre_wide, mapping = aes(x 
   theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
   ggtitle('Number of overlapping region-gene pairs') + 
   guides(fill=guide_legend(title = 'Cell type and significant'))
+
+# alternate version
+p_qtl_cre_overlaps_ugly <- ggplot(data = ct_overlap_qtl_to_cre_wide, mapping = aes(x = cell_type, y = value, fill = category)) + 
+  geom_bar(position = 'dodge', stat = 'identity') + 
+  xlab('Cell type') + 
+  ylab('Number of region-gene pairs') +
+  scale_fill_manual(values = get_color_list(ct_overlap_qtl_to_cre_wide[['category']])) +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+  ggtitle('Number of overlapping region-gene pairs') + 
+  guides(fill=guide_legend(title = 'Significant in'))
+
+# show the plot
+#p_qtl_cre_overlaps
+# and save it
+dir.create('~/plots/')
+ggsave(filename = '~/plots/mo_overlapping_qtl_cre_replication_alt.pdf', plot = p_qtl_cre_overlaps_ugly, width = 10, height = 5)
 # show the plot
 p_qtl_cre_overlaps
+# and save it
+dir.create('~/plots/')
+ggsave(filename = '~/plots/mo_overlapping_qtl_cre_replication.pdf', plot = p_qtl_cre_overlaps, width = 10, height = 5)
+
 
 ```
 
