@@ -641,7 +641,22 @@ location_name_to_irange <- function(genomic_locations_table, name_column='name',
   return(name_to_gr_hash)
 }
 
-
+#' Check Overlap Between Two Lists
+#'
+#' This function checks for overlaps and differences between two lists, checking specifically what is present under the same name, and what is only present under the other names
+#'
+#' @param list1 A named list. The first list to compare.
+#' @param list2 A named list. The second list to compare.
+#' @param list_name A character string. The name of the column representing the names present in either list. Default is 'list_name'.
+#' @param list1_name A character string. The name of the first list. Default is 'list1'.
+#' @param list2_name A character string. The name of the second list. Default is 'list2'.
+#'
+#' @return A data frame with columns representing the names present in either list, the number of items only in the first list, the number of items in both lists with the same name, and the number of items in both lists but with different names.
+#'
+#' @examples
+#' list1 <- list(a = 1:3, b = 4:6)
+#' list2 <- list(a = 2:4, c = 5:7)
+#' check_overlap_other_lists(list1, list2)
 check_overlap_other_lists <- function(list1, list2, list_name='list_name', list1_name='list1', list2_name='list2') {
   # get the names present in any of the two lists
   names_either <- unique(c(names(list1), names(list2)))
@@ -933,6 +948,52 @@ p_scenic_qtl_overlaps
 
 ```
 
+```{r plot_replication_others, include=T, fig.width=10, fig.height=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# get the list overlaps
+ct_overlap_qtl_to_cre <- check_overlap_other_lists(qtl_pairs, cre_pairs, list_name = 'cell_type', list1_name = 'qtl', list2_name = 'cre')
+# turn into a long table instead
+ct_overlap_qtl_to_cre_wide <- wide_to_long_table(ct_overlap_qtl_to_cre)
+# make the names safe
+ct_overlap_qtl_to_cre_wide[['cell_type']] <- rename_labels(ct_overlap_qtl_to_cre_wide[['cell_type']])
+# rename the categories
+ct_overlap_qtl_to_cre_wide[['category']] <- unlist(list('only_qtl' = 'only QTL', 'also_cre_same' = 'CRE same cell type', 'also_cre_only_diff' = 'CRE only other cell type')[ct_overlap_qtl_to_cre_wide[['category']]])
+
+# add a category of the celltype and category
+ct_overlap_qtl_to_cre_wide[['cell_type_category']] <- paste(ct_overlap_qtl_to_cre_wide[['cell_type']], ct_overlap_qtl_to_cre_wide[['category']])
+# order the data by the category by making it into a factor
+ct_overlap_qtl_to_cre_wide[['category']] <- factor(ct_overlap_qtl_to_cre_wide[['category']], levels = c('only QTL', 'CRE same cell type', 'CRE only other cell type'))
+# and then ordering
+ct_overlap_qtl_to_cre_wide <- ct_overlap_qtl_to_cre_wide[order(ct_overlap_qtl_to_cre_wide[['cell_type']], ct_overlap_qtl_to_cre_wide[['category']]), ]
+# and then make this order the order of the value we plot
+ct_overlap_qtl_to_cre_wide[['cell_type_category']] <- factor(ct_overlap_qtl_to_cre_wide[['cell_type_category']], levels = ct_overlap_qtl_to_cre_wide[['cell_type_category']])
+
+# make a colour list
+ct_overlap_qtl_to_cre_wide_colour_list <- list()
+# check each of the cell types
+for (cell_type in unique(ct_overlap_qtl_to_cre_wide[['cell_type']])) {
+  # make the colours
+  pct_whitening <- 40
+  ct_overlap_qtl_to_cre_wide_colour_list[[paste(cell_type, 'only QTL')]] <- get_color_coding_dict()[[cell_type]]
+  ct_overlap_qtl_to_cre_wide_colour_list[[paste(cell_type, 'CRE same cell type')]]  <- colorRampPalette(c(get_color_coding_dict()[[cell_type]], "white"))(100)[pct_whitening]
+  ct_overlap_qtl_to_cre_wide_colour_list[[paste(cell_type, 'CRE only other cell type')]] <- colorRampPalette(c(get_color_coding_dict()[[cell_type]], "black"))(100)[pct_whitening]
+}
+
+# make into a plot
+p_qtl_cre_overlaps <- ggplot(data = ct_overlap_qtl_to_cre_wide, mapping = aes(x = cell_type, y = value, fill = cell_type_category)) + 
+  geom_bar(position = 'stack', stat = 'identity') + 
+  xlab('Cell type') + 
+  ylab('Number of region-gene pairs') +
+  scale_fill_manual(values = ct_overlap_qtl_to_cre_wide_colour_list) +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+  ggtitle('Number of overlapping region-gene pairs') + 
+  guides(fill=guide_legend(title = 'Cell type and significant'))
+# show the plot
+p_qtl_cre_overlaps
+
+```
+
 ```{r check_variant_replication_location, include=T, fig.width=10, fig.height=5}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
@@ -1011,49 +1072,103 @@ mdfiver::create_md5_for_file(qtl_overlap_annotated_loc)
 
 ```
 
-```{r plot_replication_others, include=T, fig.width=10, fig.height=5}
+```{r check_variant_replication_top_effects, include=T, fig.width=10, fig.height=5}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
-# get the list overlaps
-ct_overlap_qtl_to_cre <- check_overlap_other_lists(qtl_pairs, cre_pairs, list_name = 'cell_type', list1_name = 'qtl', list2_name = 'cre')
-# turn into a long table instead
-ct_overlap_qtl_to_cre_wide <- wide_to_long_table(ct_overlap_qtl_to_cre)
-# make the names safe
-ct_overlap_qtl_to_cre_wide[['cell_type']] <- rename_labels(ct_overlap_qtl_to_cre_wide[['cell_type']])
-# rename the categories
-ct_overlap_qtl_to_cre_wide[['category']] <- unlist(list('only_qtl' = 'only QTL', 'also_cre_same' = 'CRE same cell type', 'also_cre_only_diff' = 'CRE only other cell type')[ct_overlap_qtl_to_cre_wide[['category']]])
+# sort the qtl overlaps by the absolute Z score for eQTLs
+qtl_overlap_wvariant_eqtl_top_effects <- qtl_overlap_wvariant[order(abs(qtl_overlap_wvariant[['zscore_eqtl']]), decreasing = T), ]
+# and grab only the first combination
+qtl_overlap_wvariant_eqtl_top_effects <- qtl_overlap_wvariant_eqtl_top_effects[!duplicated(paste(qtl_overlap_wvariant_eqtl_top_effects[['celltype']], 
+                                                                                                qtl_overlap_wvariant_eqtl_top_effects[['region']], 
+                                                                                                qtl_overlap_wvariant_eqtl_top_effects[['gene']], 
+                                                                                                sep = '+')), ]
+# check how often it replicates and is in the actual peak
+eqtl_contingency <- table(qtl_overlap_wvariant_eqtl_top_effects[, c('replicate_cre', 'variant_in_peak')])
+# reorder a bit
+eqtl_contingency <- eqtl_contingency[c(2,1), c(2,1)]
+eqtl_contingency
+# check for significance
+fisher.test(eqtl_contingency)
 
-# add a category of the celltype and category
-ct_overlap_qtl_to_cre_wide[['cell_type_category']] <- paste(ct_overlap_qtl_to_cre_wide[['cell_type']], ct_overlap_qtl_to_cre_wide[['category']])
-# order the data by the category by making it into a factor
-ct_overlap_qtl_to_cre_wide[['category']] <- factor(ct_overlap_qtl_to_cre_wide[['category']], levels = c('only QTL', 'CRE same cell type', 'CRE only other cell type'))
-# and then ordering
-ct_overlap_qtl_to_cre_wide <- ct_overlap_qtl_to_cre_wide[order(ct_overlap_qtl_to_cre_wide[['cell_type']], ct_overlap_qtl_to_cre_wide[['category']]), ]
-# and then make this order the order of the value we plot
-ct_overlap_qtl_to_cre_wide[['cell_type_category']] <- factor(ct_overlap_qtl_to_cre_wide[['cell_type_category']], levels = ct_overlap_qtl_to_cre_wide[['cell_type_category']])
-
-# make a colour list
-ct_overlap_qtl_to_cre_wide_colour_list <- list()
-# check each of the cell types
-for (cell_type in unique(ct_overlap_qtl_to_cre_wide[['cell_type']])) {
-  # make the colours
-  pct_whitening <- 40
-  ct_overlap_qtl_to_cre_wide_colour_list[[paste(cell_type, 'only QTL')]] <- get_color_coding_dict()[[cell_type]]
-  ct_overlap_qtl_to_cre_wide_colour_list[[paste(cell_type, 'CRE same cell type')]]  <- colorRampPalette(c(get_color_coding_dict()[[cell_type]], "white"))(100)[pct_whitening]
-  ct_overlap_qtl_to_cre_wide_colour_list[[paste(cell_type, 'CRE only other cell type')]] <- colorRampPalette(c(get_color_coding_dict()[[cell_type]], "black"))(100)[pct_whitening]
-}
-
-# make into a plot
-p_qtl_cre_overlaps <- ggplot(data = ct_overlap_qtl_to_cre_wide, mapping = aes(x = cell_type, y = value, fill = cell_type_category)) + 
-  geom_bar(position = 'stack', stat = 'identity') + 
-  xlab('Cell type') + 
-  ylab('Number of region-gene pairs') +
-  scale_fill_manual(values = ct_overlap_qtl_to_cre_wide_colour_list) +
-  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
-  ggtitle('Number of overlapping region-gene pairs') + 
-  guides(fill=guide_legend(title = 'Cell type and significant'))
-# show the plot
-p_qtl_cre_overlaps
+# sort the qtl overlaps by the absolute Z score for caQTLs
+qtl_overlap_wvariant_caqtl_top_effects <- qtl_overlap_wvariant[order(abs(qtl_overlap_wvariant[['zscore_caqtl']]), decreasing = T), ]
+# and grab only the first combination
+qtl_overlap_wvariant_caqtl_top_effects <- qtl_overlap_wvariant_caqtl_top_effects[!duplicated(paste(qtl_overlap_wvariant_caqtl_top_effects[['celltype']], 
+                                                                                                qtl_overlap_wvariant_caqtl_top_effects[['region']], 
+                                                                                                qtl_overlap_wvariant_caqtl_top_effects[['gene']], 
+                                                                                                sep = '+')), ]
+# check how often it replicates and is in the actual peak
+caqtl_contingency <- table(qtl_overlap_wvariant_caqtl_top_effects[, c('replicate_cre', 'variant_in_peak')])
+# reorder a bit
+caqtl_contingency <- caqtl_contingency[c(2,1), c(2,1)]
+caqtl_contingency
+# check for significance
+fisher.test(caqtl_contingency)
 
 ```
 
+```{r check_variant_replication_top_effects_nogene, include=T, fig.width=10, fig.height=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# sort the qtl overlaps by the absolute Z score for eQTLs
+qtl_overlap_wvariant_eqtl_top_effects_nogene <- qtl_overlap_wvariant[order(abs(qtl_overlap_wvariant[['zscore_eqtl']]), decreasing = T), ]
+# and grab only the first combination
+qtl_overlap_wvariant_eqtl_top_effects_nogene <- qtl_overlap_wvariant_eqtl_top_effects_nogene[!duplicated(paste(qtl_overlap_wvariant_eqtl_top_effects_nogene[['celltype']], 
+                                                                                                qtl_overlap_wvariant_eqtl_top_effects_nogene[['region']], 
+                                                                                                sep = '+')), ]
+# check how often it replicates and is in the actual peak
+eqtl_contingency_nogene <- table(qtl_overlap_wvariant_eqtl_top_effects_nogene[, c('replicate_cre', 'variant_in_peak')])
+# reorder a bit
+eqtl_contingency_nogene <- eqtl_contingency_nogene[c(2,1), c(2,1)]
+eqtl_contingency_nogene
+# check for significance
+fisher.test(eqtl_contingency_nogene)
+
+# sort the qtl overlaps by the absolute Z score for caQTLs
+qtl_overlap_wvariant_caqtl_top_effects_nogene <- qtl_overlap_wvariant[order(abs(qtl_overlap_wvariant[['zscore_caqtl']]), decreasing = T), ]
+# and grab only the first combination
+qtl_overlap_wvariant_caqtl_top_effects_nogene <- qtl_overlap_wvariant_caqtl_top_effects[!duplicated(paste(qtl_overlap_wvariant_caqtl_top_effects_nogene[['celltype']], 
+                                                                                                qtl_overlap_wvariant_caqtl_top_effects_nogene[['region']], 
+                                                                                                sep = '+')), ]
+# check how often it replicates and is in the actual peak
+caqtl_contingency_nogene <- table(qtl_overlap_wvariant_caqtl_top_effects_nogene[, c('replicate_cre', 'variant_in_peak')])
+# reorder a bit
+caqtl_contingency_nogene <- caqtl_contingency_nogene[c(2,1), c(2,1)]
+caqtl_contingency_nogene
+# check for significance
+fisher.test(caqtl_contingency_nogene)
+
+```
+
+```{r check_variant_replication_top_effects_noregion, include=T, fig.width=10, fig.height=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# sort the qtl overlaps by the absolute Z score for eQTLs
+qtl_overlap_wvariant_eqtl_top_effects_noregion <- qtl_overlap_wvariant[order(abs(qtl_overlap_wvariant[['zscore_eqtl']]), decreasing = T), ]
+# and grab only the first combination
+qtl_overlap_wvariant_eqtl_top_effects_noregion <- qtl_overlap_wvariant_eqtl_top_effects_noregion[!duplicated(paste(qtl_overlap_wvariant_eqtl_top_effects_noregion[['celltype']], 
+                                                                                                qtl_overlap_wvariant_eqtl_top_effects_noregion[['gene']], 
+                                                                                                sep = '+')), ]
+# check how often it replicates and is in the actual peak
+eqtl_contingency_noregion <- table(qtl_overlap_wvariant_eqtl_top_effects_noregion[, c('replicate_cre', 'variant_in_peak')])
+# reorder a bit
+eqtl_contingency_noregion <- eqtl_contingency_noregion[c(2,1), c(2,1)]
+eqtl_contingency_noregion
+# check for significance
+fisher.test(eqtl_contingency_noregion)
+
+# sort the qtl overlaps by the absolute Z score for caQTLs
+qtl_overlap_wvariant_caqtl_top_effects_noregion <- qtl_overlap_wvariant[order(abs(qtl_overlap_wvariant[['zscore_caqtl']]), decreasing = T), ]
+# and grab only the first combination
+qtl_overlap_wvariant_caqtl_top_effects_noregion <- qtl_overlap_wvariant_caqtl_top_effects[!duplicated(paste(qtl_overlap_wvariant_caqtl_top_effects_noregion[['celltype']], 
+                                                                                                qtl_overlap_wvariant_caqtl_top_effects_noregion[['gene']], 
+                                                                                                sep = '+')), ]
+# check how often it replicates and is in the actual peak
+caqtl_contingency_noregion <- table(qtl_overlap_wvariant_caqtl_top_effects_noregion[, c('replicate_cre', 'variant_in_peak')])
+# reorder a bit
+caqtl_contingency_noregion <- caqtl_contingency_noregion[c(2,1), c(2,1)]
+caqtl_contingency_noregion
+# check for significance
+fisher.test(caqtl_contingency_noregion)
+
+```
