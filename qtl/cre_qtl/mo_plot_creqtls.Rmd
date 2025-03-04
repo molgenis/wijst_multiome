@@ -31,6 +31,7 @@ library(UpSetR)
 library(grid)
 library(r2r)
 library(GenomicRanges)
+library(mdfiver)
 
 ```
 
@@ -938,11 +939,11 @@ knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 # location of the region-gene pairs, with also the variant
 qtl_overlap_wvariant_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/caQTL_eQTL_overlap_for_CRE/all_effects_peak_gene_pairs_matched_snp_ct.tsv'
 # read the file
-qtl_overlap_wvariant <- read.table(qtl_overlap_wvariant_loc, header = F, sep = '\t')
+qtl_overlap_wvariant <- read.table(qtl_overlap_wvariant_loc, header = T, sep = '\t')
 # subset to what we care about
-qtl_overlap_wvariant <- qtl_overlap_wvariant[, c('V47', 'V46', 'V1', 'V26', 'V2')]
+qtl_overlap_wvariant <- qtl_overlap_wvariant[, c('cond', 'ct_caqtl', 'snp_id', 'feature_id_caqtl', 'feature_id_eqtl', 'zscore_caqtl', 'zscore_eqtl')]
 # and rename the columns
-colnames(qtl_overlap_wvariant) <- c('condition', 'celltype', 'variant', 'region', 'gene')
+colnames(qtl_overlap_wvariant) <- c('condition', 'celltype', 'variant', 'region', 'gene', 'zscore_caqtl', 'zscore_eqtl')
 # check if the region and gene replicate
 qtl_overlap_wvariant[['replicate_cre']] <- apply(qtl_overlap_wvariant, 1, function(x) {
   # paste together the region and gene
@@ -994,6 +995,19 @@ var_region[['variant_in_peak']] <- apply(var_region, 1, function(x) {
     return(F)
   }
 })
+
+# add this information to the big table
+qtl_overlap_wvariant[['variant_in_peak']] <- var_region[
+  match(
+    paste(qtl_overlap_wvariant[['region']], qtl_overlap_wvariant[['variant']]), 
+    paste(var_region[['region']], var_region[['variant']])
+  ), 'variant_in_peak']
+
+# save this somewhere
+qtl_overlap_annotated_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/caQTL_eQTL_overlap_for_CRE/all_effects_peak_gene_pairs_matched_snp_ct_wanno.tsv.gz'
+write.table(qtl_overlap_wvariant, gzfile(qtl_overlap_annotated_loc), row.names = F, col.names = T, quote = F, sep = '\t')
+# and make an MD5 checksum
+mdfiver::create_md5_for_file(qtl_overlap_annotated_loc)
 
 ```
 
