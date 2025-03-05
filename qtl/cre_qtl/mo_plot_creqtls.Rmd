@@ -1211,3 +1211,22 @@ fisher.test(eqtl_contingency_noregionnoct)
 
 ```
 
+```{r check_final_numbers, include=T, fig.width=10, fig.height=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# add whether the CRE replicated in any cell type
+qtl_overlap_wvariant[['cre_any_celltype']] <- paste(qtl_overlap_wvariant[['region']], qtl_overlap_wvariant[['gene']], sep = ' + ') %in% do.call('c', cre_pairs)
+# take only the top variant for each combination for each cell type
+qtl_overlap_wvariant_top_variant <- qtl_overlap_wvariant[order(abs(qtl_overlap_wvariant[['zscore_eqtl']]), abs(qtl_overlap_wvariant[['zscore_caqtl']]), decreasing = T), ]
+qtl_overlap_wvariant_top_variant <- qtl_overlap_wvariant_top_variant[!duplicated(paste(
+  paste(qtl_overlap_wvariant[['celltype']], qtl_overlap_wvariant[['region']], qtl_overlap_wvariant[['gene']], sep = ' + ')
+)), ]
+# get how any replicated at all, compared to total
+frac_rep <- sum(qtl_overlap_wvariant_top_variant[['cre_any_celltype']]) / nrow(qtl_overlap_wvariant_top_variant)
+# and how many in the correct cell type
+frac_rep_ct <- sum(qtl_overlap_wvariant_top_variant[['replicate_cre']]) / nrow(qtl_overlap_wvariant_top_variant)
+
+# print the result
+cat(paste(as.character(round(frac_rep, digits = 2)), 'of QTL pairs replicate as CRE, while', as.character(round(frac_rep_ct, digits = 2)), 'of QTL pairs replicate in the same cell type as they were found\n'))
+```
+
