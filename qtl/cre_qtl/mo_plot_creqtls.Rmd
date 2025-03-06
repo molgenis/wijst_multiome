@@ -1098,10 +1098,7 @@ knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 # sort the qtl overlaps by the absolute Z score for eQTLs
 qtl_overlap_wvariant_eqtl_top_effects <- qtl_overlap_wvariant[order(abs(qtl_overlap_wvariant[['zscore_eqtl']]), abs(qtl_overlap_wvariant[['zscore_caqtl']]), decreasing = T), ]
 # and grab only the first combination
-qtl_overlap_wvariant_eqtl_top_effects <- qtl_overlap_wvariant_eqtl_top_effects[!duplicated(paste(qtl_overlap_wvariant_eqtl_top_effects[['celltype']], 
-                                                                                                qtl_overlap_wvariant_eqtl_top_effects[['region']], 
-                                                                                                qtl_overlap_wvariant_eqtl_top_effects[['gene']], 
-                                                                                                sep = '+')), ]
+qtl_overlap_wvariant_eqtl_top_effects <- qtl_overlap_wvariant_eqtl_top_effects[!duplicated(paste(qtl_overlap_wvariant_eqtl_top_effects[['celltype']], qtl_overlap_wvariant_eqtl_top_effects[['region']], qtl_overlap_wvariant_eqtl_top_effects[['gene']], sep = '+')), ]
 # check how often it replicates and is in the actual peak
 eqtl_contingency <- table(qtl_overlap_wvariant_eqtl_top_effects[, c('replicate_cre', 'variant_in_peak')])
 # reorder a bit
@@ -1228,5 +1225,62 @@ frac_rep_ct <- sum(qtl_overlap_wvariant_top_variant[['replicate_cre']]) / nrow(q
 
 # print the result
 cat(paste(as.character(round(frac_rep, digits = 2)), 'of QTL pairs replicate as CRE, while', as.character(round(frac_rep_ct, digits = 2)), 'of QTL pairs replicate in the same cell type as they were found\n'))
+```
+
+```{r check_final_numbers, include=T, fig.width=10, fig.height=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# initialize
+qtl_overlap_wvariant[['cre_z']] <- NA
+# check each cell type
+for (cell_type in unique(qtl_overlap_wvariant[['celltype']])) {
+  # for the entries of this cell type, add the cre z score
+  qtl_overlap_wvariant[qtl_overlap_wvariant[['celltype']] == cell_type, 'cre_z'] <- cre_outputs[[cell_type]][match(
+    paste(qtl_overlap_wvariant[qtl_overlap_wvariant[['celltype']] == cell_type, 'region'], 
+          qtl_overlap_wvariant[qtl_overlap_wvariant[['celltype']] == cell_type, 'gene'], sep = ' + '), 
+    cre_outputs[[cell_type]][['cre']]
+  ), 'meta_z']
+}
+
+# sort the qtl overlaps by the absolute Z score for eQTLs
+qtl_overlap_wvariant_eqtl_top_effects_noregion <- qtl_overlap_wvariant[order(abs(qtl_overlap_wvariant[['zscore_eqtl']]), abs(qtl_overlap_wvariant[['zscore_caqtl']]), decreasing = T), ]
+# and grab only the first combination
+qtl_overlap_wvariant_eqtl_top_effects_noregion <- qtl_overlap_wvariant_eqtl_top_effects_noregion[!duplicated(paste(
+                                                                                                qtl_overlap_wvariant_eqtl_top_effects_noregion[['gene']], qtl_overlap_wvariant_eqtl_top_effects_noregion[['celltype']])), ]
+# add whether or not the sign was the same
+qtl_overlap_wvariant_eqtl_top_effects_noregion[['qtl_signs']] <- sign(qtl_overlap_wvariant_eqtl_top_effects_noregion[['zscore_eqtl']]) * sign(qtl_overlap_wvariant_eqtl_top_effects_noregion[['zscore_caqtl']])
+
+```
+
+```{r qtl_directions, include=T, fig.width=10, fig.height=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# get how many of the replicating effects were negative
+n_rep_neg <- nrow(qtl_overlap_wvariant_eqtl_top_effects_noregion[qtl_overlap_wvariant_eqtl_top_effects_noregion$replicate_cre == T & qtl_overlap_wvariant_eqtl_top_effects_noregion$cre_z < 0, ])
+# get how many of the replicating effects were positive
+n_rep_pos <- nrow(qtl_overlap_wvariant_eqtl_top_effects_noregion[qtl_overlap_wvariant_eqtl_top_effects_noregion$replicate_cre == T & qtl_overlap_wvariant_eqtl_top_effects_noregion$cre_z > 0, ])
+# the same for it it was a different cell type
+n_rep_neg_other <- nrow(qtl_overlap_wvariant_eqtl_top_effects_noregion[qtl_overlap_wvariant_eqtl_top_effects_noregion$cre_any_celltype == T & qtl_overlap_wvariant_eqtl_top_effects_noregion$cre_z < 0, ])
+n_rep_pos_other <- nrow(qtl_overlap_wvariant_eqtl_top_effects_noregion[qtl_overlap_wvariant_eqtl_top_effects_noregion$cre_any_celltype == T & qtl_overlap_wvariant_eqtl_top_effects_noregion$cre_z > 0, ])
+
+# check if the original QTL also had a different direction
+n_rep_neg_directed <- nrow(qtl_overlap_wvariant_eqtl_top_effects_noregion[qtl_overlap_wvariant_eqtl_top_effects_noregion$replicate_cre == T & qtl_overlap_wvariant_eqtl_top_effects_noregion$cre_z < 0 & qtl_overlap_wvariant_eqtl_top_effects_noregion$qtl_signs < 0, ])
+n_rep_pos_directed <- nrow(qtl_overlap_wvariant_eqtl_top_effects_noregion[qtl_overlap_wvariant_eqtl_top_effects_noregion$replicate_cre == T & qtl_overlap_wvariant_eqtl_top_effects_noregion$cre_z > 0 & qtl_overlap_wvariant_eqtl_top_effects_noregion$qtl_signs > 0, ])
+n_rep_neg_other_directed <- nrow(qtl_overlap_wvariant_eqtl_top_effects_noregion[qtl_overlap_wvariant_eqtl_top_effects_noregion$cre_any_celltype == T & qtl_overlap_wvariant_eqtl_top_effects_noregion$cre_z < 0 & qtl_overlap_wvariant_eqtl_top_effects_noregion$qtl_signs < 0, ])
+n_rep_pos_other_directed <- nrow(qtl_overlap_wvariant_eqtl_top_effects_noregion[qtl_overlap_wvariant_eqtl_top_effects_noregion$cre_any_celltype == T & qtl_overlap_wvariant_eqtl_top_effects_noregion$cre_z > 0 & qtl_overlap_wvariant_eqtl_top_effects_noregion$qtl_signs > 0, ])
+
+
+# print this
+cat(paste0(
+  'Number of negative replicating CRE effects in the same cell type: ', 
+  as.character(n_rep_neg), '\n', 
+  'Number of positive replicating CRE effects in the same cell type: ', 
+  as.character(n_rep_pos), '\n', 
+  'Number of negative replicating CRE effects in an other cell type: ', 
+  as.character(n_rep_neg_other), '\n', 
+  'Number of positive replicating CRE effects in an other cell type: ', 
+  as.character(n_rep_pos_other), '\n'
+))
+
 ```
 
