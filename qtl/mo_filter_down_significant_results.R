@@ -319,8 +319,8 @@ merge_chromosome_output <- function(input_dir, input_prepend='qtl_results_all_qv
 ####################
 
 # location of the QTL outputs
-eqtl_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/output/L1/UT/'
-caqtl_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/output_cis_50kb_updated_features/L1/UT/'
+eqtl_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/sc-eqtlgen/output/L1/combined/'
+caqtl_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/output/L1/combined/'
 # perform splitting
 split_output_by_column(
   input_dir=eqtl_output_loc,
@@ -335,6 +335,32 @@ split_output_by_column(
   mtc_column_to_add='feature_q_value',
   verbose=T
 )
+# check each chromosome
+for (chrom in 1:22) {
+  # in location
+  in_file <- paste('qtl_results_all_qval_', chrom, '.txt.gz', sep = '')
+  # now filter on FDR as well
+  fdr_file <- paste('qtl_results_all_qval_', chrom, '_fdr005_significant.txt.gz', sep = '')
+  filter_output_by_significance(
+    unfiltered_loc=eqtl_output_loc, 
+    unfiltered_file=in_file, 
+    filtered_loc=NULL, 
+    filtered_file=fdr_file, 
+    significance_column='feature_q_value', 
+    significance_cutoff=0.05, 
+    verbose=T, 
+    add_mtc = F
+  )
+}
+# now merge the significant ones
+merge_chromosome_output(
+  input_dir=eqtl_output_loc, 
+  input_prepend='qtl_results_all_qval_', 
+  input_append='_fdr005_significant.txt.gz', 
+  output_dir=NULL, 
+  output_file='qtl_results_all_qval_allchroms_fdr005_significant.txt.gz'
+)
+
 # for caQTL as well
 split_output_by_column(
   input_dir=caqtl_output_loc,
@@ -353,70 +379,20 @@ split_output_by_column(
 for (chrom in 1:22) {
   # in location
   in_file <- paste('qtl_results_all_qval_', chrom, '.txt.gz', sep = '')
-  # out location
-  out_file <- paste('qtl_results_all_qval_', chrom, '_nominally_significant.txt.gz', sep = '')
-  # do filtering
-  filter_output_by_significance(
-    unfiltered_loc=eqtl_output_loc, 
-    unfiltered_file=in_file, 
-    filtered_loc=NULL, 
-    filtered_file=out_file, 
-    significance_column='p_value', 
-    significance_cutoff=0.05, 
-    verbose=T, 
-    add_mtc = F
-  )
   # now filter on FDR as well
-  fdr_file <- paste('qtl_results_all_qval_', chrom, '_fdr01_significant.txt.gz', sep = '')
-  filter_output_by_significance(
-    unfiltered_loc=eqtl_output_loc, 
-    unfiltered_file=out_file, 
-    filtered_loc=NULL, 
-    filtered_file=fdr_file, 
-    significance_column='feature_q_value', 
-    significance_cutoff=0.1, 
-    verbose=T, 
-    add_mtc = F
-  )
-}
-# check each chromosome
-for (chrom in 1:22) {
-  # in location
-  in_file <- paste('qtl_results_all_qval_', chrom, '.txt.gz', sep = '')
-  # out location
-  out_file <- paste('qtl_results_all_qval_', chrom, '_nominally_significant.txt.gz', sep = '')
-  # do filtering
+  fdr_file <- paste('qtl_results_all_qval_', chrom, '_fdr005_significant.txt.gz', sep = '')
   filter_output_by_significance(
     unfiltered_loc=caqtl_output_loc, 
     unfiltered_file=in_file, 
     filtered_loc=NULL, 
-    filtered_file=out_file, 
-    significance_column='p_value', 
-    significance_cutoff=0.05, 
-    verbose=T, 
-    add_mtc = F
-  )
-  # now filter on FDR as well
-  fdr_file <- paste('qtl_results_all_qval_', chrom, '_fdr01_significant.txt.gz', sep = '')
-  filter_output_by_significance(
-    unfiltered_loc=caqtl_output_loc, 
-    unfiltered_file=out_file, 
-    filtered_loc=NULL, 
     filtered_file=fdr_file, 
     significance_column='feature_q_value', 
-    significance_cutoff=0.1, 
+    significance_cutoff=0.05, 
     verbose=T, 
     add_mtc = F
   )
 }
 # now merge the significant ones
-merge_chromosome_output(
-  input_dir=eqtl_output_loc, 
-  input_prepend='qtl_results_all_qval_', 
-  input_append='_fdr01_significant.txt.gz', 
-  output_dir=NULL, 
-  output_file='qtl_results_all_qval_allchroms_fdr01_significant.txt.gz'
-)
 merge_chromosome_output(
   input_dir=caqtl_output_loc, 
   input_prepend='qtl_results_all_qval_', 
@@ -424,6 +400,12 @@ merge_chromosome_output(
   output_dir=NULL, 
   output_file='qtl_results_all_qval_allchroms_fdr01_significant.txt.gz'
 )
+
+# location of the interaction-eQTL outputs
+ieqtl_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/output/nominal_condition/L1/'
+# read the ieqtl output, and filter by ones that are FDR significant in the combined mapping
+
+
 # now do the eQTL output of sc-eQTLgen
 sceqtlgen_base_loc <- '/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/Meta_14/'
 filter_file_by_significance(
