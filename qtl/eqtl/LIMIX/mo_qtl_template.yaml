@@ -41,7 +41,7 @@ smf_loc: /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interacti
 ##       input files/folders       ###
 #####################################
 
-out_folder: /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/output/L1/
+out_folder: /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/sc-eqtlgen/output/L1/combined/
 
 
 ######################################
