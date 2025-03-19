@@ -1,7 +1,7 @@
 """
-mo_pycistopic_normalize_accessibility.py
+mo_pycistopic_identify_dars_wilcoxon.py
 
-This script is used to normalize the accessibility
+This script is used to identify DARs using the Wilcoxon method
 
 authors: Roy Oelen, Martijn van der Werf
 
@@ -79,7 +79,7 @@ def create_md5_file(input_file):
 ##########################################
 
 # location to store the object
-pycistopic_object_loc = '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/pycistopic/objects/merged_major_and_minor_celltypes_120topics.pkl'
+pycistopic_object_loc = '/scratch/hb-functionalgenomics/projects/multiome/ongoing/scenicplus_workdir/pycistopic/objects/merged_major_and_minor_celltypes_120topics.pkl'
 # use symlinks due to path size limitations
 pycistopic_object_loc = './120'
 
@@ -93,7 +93,7 @@ with open(pycistopic_object_loc, 'rb') as f:
 ######################################
 
 # load the object from disk
-pycistopic_object_wimputations_jl_loc = '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/pycistopic/objects/merged_major_and_minor_celltypes_120topics_imputed.joblib'
+pycistopic_object_wimputations_jl_loc = '//scratch/hb-functionalgenomics/projects/multiome/ongoing/scenicplus_workdir/pycistopic/objects/merged_major_and_minor_celltypes_120topics_imputed.joblib'
 imputed_acc_obj = joblib.load(pycistopic_object_wimputations_jl_loc)
 
 
@@ -111,3 +111,12 @@ markers_dict= find_diff_features(
     _temp_dir=os.environ["TMPDIR"],
     split_pattern = '_'
 )
+
+# location to store the object
+markers_loc = '/scratch/hb-functionalgenomics/projects/multiome/ongoing/scenicplus_workdir/pycistopic/dar_detection/merged_major_and_minor_celltypes_120topics/wilcoxon/merged_major_and_minor_celltypes_120topics_dars.joblib'
+
+# save the object
+joblib.dump(markers_dict, markers_loc)
+
+# make a checksum
+create_md5_file(markers_loc)
