@@ -103,7 +103,9 @@ get_genotype_correlations <- function(genotypes, use_covshrink=F) {
     cor_shrink <- stats::cov2cor(fitted)
   }
   else {
-    cor_shrink <- cor(t(genotypes_t))
+    cor_shrink <- cor(genotypes_t)
+    rownames(cor_shrink) <- colnames(genotypes_t)
+    colnames(cor_shrink) <- colnames(genotypes_t)
   }
   return(cor_shrink)
 }
@@ -151,8 +153,11 @@ finemap_feature <- function(results_feature, genotypes, variant_column='variant_
   genotypes_variants <- ReigenMT::subset_genotypes(genotypes, variants_feature)
   # get the correlation matrix for those variants
   genotype_correlations <- get_genotype_correlations(genotypes_variants)
-  # make sure it is in the same order as the variants
-  genotype_correlations <- genotype_correlations[variants_feature, variants_feature]
+  # if there is only one variant, we need to not order, because it will be made into a single value
+  if (nrow(genotype_correlations) > 1) {
+    # make sure it is in the same order as the variants
+    genotype_correlations <- genotype_correlations[variants_feature, variants_feature]
+  }
   # perform finemapping
   finemapped_feature <- susie_rss(bhat = results_feature[[slope_column]], shat = results_feature[[se_column]], n = n, R = genotype_correlations, L = L, estimate_residual_variance = estimate_residual_variance)
   # put into a list
