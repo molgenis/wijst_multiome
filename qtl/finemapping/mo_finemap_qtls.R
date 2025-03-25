@@ -84,26 +84,30 @@ get_genotype_correlations <- function(genotypes, use_covshrink=F) {
   }
   # make into double
   genotypes_t[, (names(genotypes_t)) := lapply(.SD, function(x){as.double(x)})]
-  # get the means of each column
-  var_means <- colMeans(genotypes_t, na.rm = T)
-  # make var means into list
-  var_means_list <- as.list(var_means)
-  names(var_means_list) <- colnames(genotypes_t)
-  # replace all the NAs
-  for (col in names(var_means_list)) {
-    setnafill(genotypes_t, type=c("const","locf","nocb"), fill=var_means_list[[col]], cols=col)
-  }
-  # Perform the fit using the corpcor package
-  fitted <- corpcor::cov.shrink(genotypes_t)
-  # Extract the alpha (shrinkage intensity)
-  alpha <- attributes(fitted)$lambda
   # get the correlation matrix
   cor_shrink <- NULL
+  # use covariance shrinkage method
   if (use_covshrink) {
+    # get the means of each column
+    var_means <- colMeans(genotypes_t, na.rm = T)
+    # make var means into list
+    var_means_list <- as.list(var_means)
+    names(var_means_list) <- colnames(genotypes_t)
+    # replace all the NAs
+    for (col in names(var_means_list)) {
+      setnafill(genotypes_t, type=c("const","locf","nocb"), fill=var_means_list[[col]], cols=col)
+    }
+    # Perform the fit using the corpcor package
+    fitted <- corpcor::cov.shrink(genotypes_t)
+    # Extract the alpha (shrinkage intensity)
+    alpha <- attributes(fitted)$lambda
     cor_shrink <- stats::cov2cor(fitted)
   }
+  # or canonical pearson correlation that is present in R
   else {
+    # calculate correlations
     cor_shrink <- cor(genotypes_t)
+    # and set the dimension names
     rownames(cor_shrink) <- colnames(genotypes_t)
     colnames(cor_shrink) <- colnames(genotypes_t)
   }
