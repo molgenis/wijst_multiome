@@ -128,6 +128,8 @@ get_genotype_correlations <- function(genotypes, use_covshrink=F) {
 #' @param estimate_residual_variance A logical value indicating whether to estimate residual variance. Default is TRUE.
 #' @param n_sample_column A character string specifying the column name for the number of samples in `results_feature`. Default is 'n_sample'.
 #' @param n_sample A number specifying the number of sample. Default is 'NULL'.
+#' @param initial_iter the initial number of iterations to try for finemapping
+#' @param n_retries the max number of retries to try before giving up on finemapping
 #' @return A list containing the fine-mapped results.
 #' @details The function subsets the genotype data to the variants of interest, calculates the correlation matrix for these variants, and performs fine-mapping using the `susie_rss` function.
 #' @examples
@@ -140,7 +142,7 @@ get_genotype_correlations <- function(genotypes, use_covshrink=F) {
 #' @import data.table
 #' @import ReigenMT
 #' @import susieR
-finemap_feature <- function(results_feature, genotypes, variant_column='variant_id', slope_column='slope', se_column='slope_se', L=10, estimate_residual_variance=T, n_sample_column=NULL, n_sample=NULL) {
+finemap_feature <- function(results_feature, genotypes, variant_column='variant_id', slope_column='slope', se_column='slope_se', L=10, estimate_residual_variance=T, n_sample_column=NULL, n_sample=NULL, initial_iter=100, n_retries=3) {
   # get the n
   n <- NA
   if (!is.null(n_sample_column)) {
@@ -164,6 +166,28 @@ finemap_feature <- function(results_feature, genotypes, variant_column='variant_
   }
   # perform finemapping
   finemapped_feature <- susie_rss(bhat = results_feature[[slope_column]], shat = results_feature[[se_column]], n = n, R = genotype_correlations, L = L, estimate_residual_variance = estimate_residual_variance)
+  # let's see how often we retried
+  n_retried <- 0
+  # and how many iterations we used
+  n_iterations_used <- initial_iter
+  # if we didnt converge, let's keep trying
+  if (!finemapped_feature[['susie_rss']]$converged) {
+    # set up our converge parameter
+    converged <- F
+    # and keep trying until we run out of retries or we converge
+    while(!(converged) & n_retried < n_retries) {
+      # get the number of times we tried
+      n_tried <- n_retried + 1
+      # and use that to get the new number of iterations
+      n_iterations_used <- (2 ^ (n_tried)) * initial_iter
+      # then rerun
+      finemapped_feature <- susie_rss(bhat = results_feature[[slope_column]], shat = results_feature[[se_column]], n = n, R = genotype_correlations, L = L, estimate_residual_variance = estimate_residual_variance, max_iter = n_iterations_used)
+      # get whether we converged
+      converged <- finemapped_feature[['susie_rss']]$converged
+      # increase the number of times we retried
+      n_retried <- n_retried + 1
+    }
+  }
   # put into a list
   finemapped_feature <- list('susie_rss' = finemapped_feature)
   # get the lambda
@@ -175,6 +199,10 @@ finemap_feature <- function(results_feature, genotypes, variant_column='variant_
   }
   # add to the finemapping
   finemapped_feature[['lambda']] <- finemapped_lambda
+  # and the number of retries
+  finemapped_feature[['n_retries']] <- n_retried
+  # and the eventual number of iterations
+  finemapped_feature[['n_iterations']] <- n_iterations_used
   return(finemapped_feature)
 }
 
