@@ -5,17 +5,17 @@
 # Function: perform statistical finemapping on the QTL results
 # Example: 
 # Rscript ~/mo_finemap_qtls.R \
-#   --qtl_file /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/output/nominal_condition/L1/monocyte/inflammation_final/iqtl_results_all.txt.gz \
-#   --genotype_file /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/genotype/imputed_hg38_all_anc \
-#   --significance_column empirical_feature_p_value \
-#   --significance_cutoff 0 \
-#   --output_rds /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/output/nominal_condition/L1/monocyte/inflammation_final/iqtl_results_all_finemapped_genotype.rds \
-#   --num_threads 2 \
-#   --variant_column snp_id \
-#   --feature_column feature_id \
-#   --slope_column beta_SNP \
-#   --se_column beta_se_SNP \
-#   --n_sample 318
+#  --qtl_file /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/output/nominal_condition/L1//B/inflammation_final/iqtl_results_all.txt.gz \
+#  --genotype_file /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/genotype/imputed_hg38_all_anc \
+#  --significance_column empirical_feature_p_value \
+#  --significance_cutoff 0 \
+#  --output_rds /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/finemapping/interaction_eqtl/sc-eqtlgen/output/nominal_condition/L1//B_finemapped.rds \
+#  --num_threads 2 \
+#  --variant_column snp_id \
+#  --feature_column feature_id \
+#  --slope_column beta_SNP \
+#  --se_column beta_se_SNP \
+#  --n_sample 318
 #
 ############################################################################################################################
 
@@ -186,6 +186,33 @@ finemap_feature <- function(results_feature, genotypes, variant_column='variant_
       converged <- finemapped_feature[['susie_rss']]$converged
       # increase the number of times we retried
       n_retried <- n_retried + 1
+    }
+  }
+  # if we cannot do it even with so many iterations, let's just try to reduce the number of credible sets
+  if (!finemapped_feature[['susie_rss']]$converged) {
+    # set up our converge parameter
+    converged <- F
+    # keep track of last l
+    last_l <- L
+    # reduce the number of credible sets
+    n_l <- ceiling(L / 2)
+    # reset these
+    n_retried <- 1
+    n_iterations_used <- initial_iter
+    # as long as we didn't converg and we still have a number
+    while (!(converged) & n_l > 0 & last_l != n_l) {
+      # then rerun
+      finemapped_feature <- susie_rss(bhat = results_feature[[slope_column]], shat = results_feature[[se_column]], n = n, R = genotype_correlations, L = n_l, estimate_residual_variance = estimate_residual_variance, max_iter = initial_iter)
+      # get whether we converged
+      converged <- finemapped_feature[['susie_rss']]$converged
+      # check if we converged
+      if (converged) {
+        break
+      }
+      # update last_l
+      last_l <- n_l
+      # calculate new l
+      n_l <- ceiling(last_l / 2)
     }
   }
   # put into a list
@@ -529,3 +556,4 @@ finemapped <- finemap_features_serial(qtl_result,
                                       n_sample = n_sample)
 # finally save the result
 saveRDS(finemapped, output_rds)
+
