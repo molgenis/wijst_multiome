@@ -42,7 +42,7 @@ FINEMAP_FORMATTED_APPEND='_finemapped.tsv.gz'
 JOB_PREPEND='finemap_'
 JOB_APPEND=''
 # and for the input
-INPUT_FILE='iqtl_results_all.txt.gz'
+INPUT_FILE='inflammation_final/iqtl_results_all.txt.gz'
 
 # and how the columns are named
 SIGNIFICANCE_COLUMN='empirical_feature_p_value'
