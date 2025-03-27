@@ -24,7 +24,7 @@ GENOTYPE_LOC=$4
 
 # these we always have
 CORES='2'
-MEMORY_GB='128'
+MEMORY_GB='48'
 TMP_SIZE='512mb'
 RUNTIME='23:59:59'
 
