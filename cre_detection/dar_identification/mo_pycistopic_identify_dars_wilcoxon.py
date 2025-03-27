@@ -25,7 +25,10 @@ from pycisTopic.diff_features import (
 import joblib
 # for making the md5
 import hashlib
-
+# we need numpy
+import numpy as np
+# for the paths
+import os
 
 #############
 # functions #
