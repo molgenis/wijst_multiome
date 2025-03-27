@@ -171,7 +171,7 @@ finemap_feature <- function(results_feature, genotypes, variant_column='variant_
   # and how many iterations we used
   n_iterations_used <- initial_iter
   # if we didnt converge, let's keep trying
-  if (!finemapped_feature[['susie_rss']]$converged) {
+  if (!(finemapped_feature$converged)) {
     # set up our converge parameter
     converged <- F
     # and keep trying until we run out of retries or we converge
@@ -183,13 +183,13 @@ finemap_feature <- function(results_feature, genotypes, variant_column='variant_
       # then rerun
       finemapped_feature <- susie_rss(bhat = results_feature[[slope_column]], shat = results_feature[[se_column]], n = n, R = genotype_correlations, L = L, estimate_residual_variance = estimate_residual_variance, max_iter = n_iterations_used)
       # get whether we converged
-      converged <- finemapped_feature[['susie_rss']]$converged
+      converged <- finemapped_feature$converged
       # increase the number of times we retried
       n_retried <- n_retried + 1
     }
   }
   # if we cannot do it even with so many iterations, let's just try to reduce the number of credible sets
-  if (!finemapped_feature[['susie_rss']]$converged) {
+  if (!finemapped_feature$converged) {
     # set up our converge parameter
     converged <- F
     # keep track of last l
@@ -204,7 +204,7 @@ finemap_feature <- function(results_feature, genotypes, variant_column='variant_
       # then rerun
       finemapped_feature <- susie_rss(bhat = results_feature[[slope_column]], shat = results_feature[[se_column]], n = n, R = genotype_correlations, L = n_l, estimate_residual_variance = estimate_residual_variance, max_iter = initial_iter)
       # get whether we converged
-      converged <- finemapped_feature[['susie_rss']]$converged
+      converged <- finemapped_feature$converged
       # check if we converged
       if (converged) {
         break
@@ -230,6 +230,8 @@ finemap_feature <- function(results_feature, genotypes, variant_column='variant_
   finemapped_feature[['n_retries']] <- n_retried
   # and the eventual number of iterations
   finemapped_feature[['n_iterations']] <- n_iterations_used
+  # and whether we calculated the resvar
+  finemapped_feature[['resvar']] <- estimate_residual_variance
   return(finemapped_feature)
 }
 
