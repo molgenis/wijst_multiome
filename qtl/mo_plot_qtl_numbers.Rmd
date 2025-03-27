@@ -30,7 +30,7 @@ library(RColorBrewer)
 library(roycols)
 library(ggrastr)
 library(ggpubr)
-
+library(UpSetR)
 
 ```
 
@@ -182,6 +182,10 @@ get_color_coding_dict <- function() {
 	  color_coding_dict[[paste(cell_type, 'up')]] <- color_coding_dict[[cell_type]]
 	  # but the down one will have a more faded colour
 	  color_coding_dict[[paste(cell_type, 'down')]] <- colorRampPalette(c(color_coding_dict[[cell_type]], "white"))(100)[pct_whitening]
+	  # we'll do something similiar when we have multiple conditions
+	  color_coding_dict[[paste(cell_type, 'combined')]] <- color_coding_dict[[cell_type]]
+	  color_coding_dict[[paste(cell_type, 'UT')]] <- colorRampPalette(c(color_coding_dict[[cell_type]], "white"))(100)[pct_whitening]
+	  color_coding_dict[[paste(cell_type, '24hCA')]] <- colorRampPalette(c(color_coding_dict[[cell_type]], "black"))(100)[pct_whitening]
 	}
 	# general
 	color_coding_dict[['AI']] <- 'darkblue'
@@ -504,6 +508,54 @@ egene_overlap_to_plot <- function(egene_overlap_numbers, celltype_column='group'
 }
 
 
+#' get the eGenes per cell type from QTL output
+#' 
+#' @param qtl_output_loc base location of the QTL output per cell type
+#' @param output_file which output file to read for the results
+#' @param gene_column which column to use as the gene identifier
+#' @returns a list with the egenes per cell type
+#' 
+get_egenes_per_celltype_limix <- function(qtl_output_loc, output_file='qtl_results_all.txt.gz', gene_column='feature_id', significance_column='feature_q_value', significance_cutoff=0.05, verbose=T) {
+  # get the folders in the directory, which should be the cell types
+  cell_types <- list.dirs(qtl_output_loc, full.names = F, recursive = F)
+  # we will store the results in a list for now
+  egenes_per_celltype <- list()
+  # check each cell type
+  for (cell_type in cell_types) {
+    # paste together the full path
+    full_cell_type_path <- paste(qtl_output_loc, '/', cell_type, '/', output_file, sep = '')
+    # log if requested
+    if (verbose) {
+      print(paste('reading', full_cell_type_path))
+    }
+    # read the file
+    cell_type_output <- read.table(full_cell_type_path, sep = '\t', header = T)
+    # filter the results on significance
+    if (!is.null(significance_column)) {
+      # print progress if requested
+      if (verbose) {
+        print(paste('variant+phenotype before filtering', nrow(cell_type_output)))
+      }
+      # filter
+      cell_type_output <- cell_type_output[
+        !is.na(cell_type_output[[significance_column]]) &
+          cell_type_output[[significance_column]] < significance_cutoff, 
+      ]
+      if (verbose) {
+        print(paste('variant+phenotype after filtering', nrow(cell_type_output)))
+      }
+    }
+    # get the unique genes in this file
+    unique_genes <- unique(cell_type_output[[gene_column]])
+    # add to the list
+    egenes_per_celltype[[cell_type]] <- unique_genes
+  }
+  # turn into a dataframe
+  return(egenes_per_celltype)
+}
+
+
+
 get_ndonors_celltype <- function(covariates_folder, min_cell=10, ncell_column='CellCount', covariates_append='.covariates.txt') {
   # we will store per cell type
   ndonors_celltype <- list()
@@ -651,6 +703,99 @@ create_confusion_matrix <- function(assignment_table, truth_column, prediction_c
   return(p)
 }
 
+#' Plot Sharing of  Genes per Cell Type
+#'
+#' This function plots the sharing of differentially genes across cell types using an UpSet plot. It allows the use of custom label and color dictionaries.
+#'
+#' @param genes_per_ct list with the genes for each cell type
+#' @param use_label_dict A logical value indicating whether to use a custom label dictionary for renaming cell types. Default is TRUE.
+#' @param use_color_dict A logical value indicating whether to use a custom color dictionary for cell types. Default is TRUE.
+#' @param n_intersects value describing how many intersections to plot, default is all
+#' @return An UpSet plot showing the sharing of DE genes across cell types.
+#'
+plot_sharing_per_celltype <- function(genes_per_ct, use_label_dict=T, use_color_dict=T, n_intersects=NA){
+  # get the total overlap
+  total_overlap <- fromList(genes_per_ct)
+  # count how many in each overlap
+  combination_to_overlap <- list()
+  apply(total_overlap, 1, function(x){
+    # get which ones have a number
+    positions_1 <- x > 0
+    # get which these are, and paste together
+    cols_1 <- paste(colnames(total_overlap)[positions_1], collapse = ',')
+    # add to list if does not exist
+    if (cols_1 %in% c(names(combination_to_overlap))) {
+      combination_to_overlap[[cols_1]] <<- combination_to_overlap[[cols_1]] + 1
+    }
+    else{
+      combination_to_overlap[[cols_1]] <<- 1
+    }
+  })
+  # make into an ordered df
+  combination_numbers <- data.frame('combination' = names(combination_to_overlap), 'nr' = as.vector(unlist(combination_to_overlap)))
+  combination_numbers <- combination_numbers[order(combination_numbers[['nr']], combination_numbers[['combination']], decreasing = T), ]
+  # get lowest number we have for the sets
+  intersect_size_smallest <- 0
+  if (is.na(n_intersects)) {
+    intersect_size_smallest <- min(combination_numbers[['nr']])
+  }
+  else {
+    intersect_size_smallest <- combination_numbers[n_intersects, 'nr']
+  }
+  # set queries and colours
+  queries <- list()
+  sets.bar.color <- 'black'
+  if(use_color_dict){
+    # create df to store the number of each set, so we know how to order
+    nrs_df <- NULL
+    # get the cell types we have
+    cell_types <- names(genes_per_ct)
+    # get colour codes for the cell types
+    cell_type_colours <- get_color_coding_dict()
+    # also get colours for the cell types we don't have colours for
+    cell_type_colours_missing <- get_color_list(setdiff(cell_types, names(cell_type_colours)))
+    # and merge them
+    cell_type_colours <- c(cell_type_colours, cell_type_colours_missing)
+    # add the colors for the cell types
+    i <- 1
+    for(cell_type in cell_types){
+      # check if there is a singleton for this cell type, so this celltype is 1, but the total of the row is also 1
+      n_singletons <- nrow(total_overlap[total_overlap[[cell_type]] == 1 & rowSums(total_overlap) == 1, ])
+      # if we have singletons, colour it
+      if (n_singletons > 0 & n_singletons >= intersect_size_smallest) {
+        # add for the singles in the intersection sizes
+        ct_list <- list(
+          query = intersects,
+          params = list(cell_type),
+          color = cell_type_colours[[cell_type]],
+          active = T)
+        queries[[i]] <- ct_list
+        i <- i + 1
+      }
+      # add for the DF to order the set sizes
+      numbers_row <- data.frame(ct=c(cell_type), nr=c(length(genes_per_ct[[cell_type]])), stringsAsFactors = F)
+      if(is.null(nrs_df)){
+        nrs_df <- numbers_row
+      }
+      else{
+        nrs_df <- rbind(nrs_df, numbers_row)
+      }
+    }
+    # get the order of the sets
+    ordered_cts <- nrs_df[order(nrs_df$nr, decreasing = T), 'ct']
+    # add the colors for the sets
+    sets.bar.color <- unlist(cell_type_colours[ordered_cts])
+    # make the plot
+    upset(total_overlap, order.by = 'freq', nsets = length(genes_per_ct), queries = queries, sets.bar.color=sets.bar.color, nintersects = n_intersects)
+  }
+  else {
+    upset(total_overlap, order.by = 'freq', nsets = length(genes_per_ct), nintersects = n_intersects)
+  }
+  
+  #return(DE_genes_per_ct)
+}
+
+
 
 ```
 
@@ -663,9 +808,11 @@ knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 ####################
 
 # location of eQTL
-eqtl_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/output/L1/UT/'
+eqtl_output_ut_loc <- '/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/output/L1/UT/'
+eqtl_output_24hca_loc <- '/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/output/L1/24hCA/'
+eqtl_output_combined_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/sc-eqtlgen/output/L1/combined/'
 # location of caQTL output
-caqtl_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/output_cis_50kb_updated_features/L1/UT/'
+caqtl_output_ut_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/output_cis_50kb_updated_features/L1/UT/'
 
 ```
 
@@ -681,7 +828,9 @@ caqtl_peak_numbers <- get_egene_numbers_per_celltype_limix(caqtl_output_loc, out
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # get the number of ca peaks
-eqtl_gene_numbers <- get_egene_numbers_per_celltype_limix(eqtl_output_loc, output_file = 'qtl_results_all_qval_allchroms_fdr01_significant.txt.gz')
+eqtl_gene_numbers_ut <- get_egene_numbers_per_celltype_limix(eqtl_output_ut_loc, output_file = 'qtl_results_all_qval_allchroms_fdr005_significant.txt.gz')
+eqtl_gene_numbers_24hca <- get_egene_numbers_per_celltype_limix(eqtl_output_24hca_loc, output_file = 'qtl_results_all_qval_allchroms_fdr005_significant.txt.gz')
+eqtl_gene_numbers_combined <- get_egene_numbers_per_celltype_limix(eqtl_output_combined_loc, output_file = 'qtl_results_all_qval_allchroms_fdr005_significant.txt.gz')
 
 ```
 
@@ -756,12 +905,53 @@ ggsave('~/ashg_multiome_epeak_numbers_ncellorderded.pdf', width = 8, height = 8,
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # make a plot of the numbers
-p_eqtl_peak_numbers <- egene_numbers_to_plot(eqtl_gene_numbers, legendless = T, use_color_dict = T) +
-  ggtitle('Number of genes affected by genetic variants') +
+p_eqtl_peak_numbers_ut <- egene_numbers_to_plot(eqtl_gene_numbers_ut, legendless = T, use_color_dict = T) +
+  ggtitle('Number of genes affected by genetic variants in UT') +
   xlab('Cell type') +
-  ylab('Number of genes')
-p_eqtl_peak_numbers
+  ylab('Number of genes') +
+  ylim(c(0, 2100))
+p_eqtl_peak_numbers_24hca <- egene_numbers_to_plot(eqtl_gene_numbers_24hca, legendless = T, use_color_dict = T) +
+  ggtitle('Number of genes affected by genetic variants in 24hCA') +
+  xlab('Cell type') +
+  ylab('Number of genes') +
+  ylim(c(0, 2100))
+p_eqtl_peak_numbers_combined <- egene_numbers_to_plot(eqtl_gene_numbers_combined, legendless = T, use_color_dict = T) +
+  ggtitle('Number of genes affected by genetic variants using UT+24hCA') +
+  xlab('Cell type') +
+  ylab('Number of genes') +
+  ylim(c(0, 2100))
+# show the plots
+p_eqtl_peak_numbers_ut
+p_eqtl_peak_numbers_24hca
+p_eqtl_peak_numbers_combined
 
+```
+
+```{r get_egene_lists, include=TRUE, fig.width=10, fig.height=10}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# get the egenes for each cell type in UT
+eqtl_egenes_ut <- get_egenes_per_celltype_limix(eqtl_output_ut_loc, output_file = 'qtl_results_all_qval_allchroms_fdr005_significant.txt.gz')
+eqtl_egenes_24hca <- get_egenes_per_celltype_limix(eqtl_output_24hca_loc, output_file = 'qtl_results_all_qval_allchroms_fdr005_significant.txt.gz')
+eqtl_egenes_combined <- get_egenes_per_celltype_limix(eqtl_output_combined_loc, output_file = 'qtl_results_all_qval_allchroms_fdr005_significant.txt.gz')
+
+# rename the labels to something nicer
+names(eqtl_egenes_ut) <- rename_labels(names(eqtl_egenes_ut))
+names(eqtl_egenes_24hca) <- rename_labels(names(eqtl_egenes_24hca))
+names(eqtl_egenes_combined) <- rename_labels(names(eqtl_egenes_combined))
+
+# add the condition
+names(eqtl_egenes_ut) <- paste(names(eqtl_egenes_ut), 'UT')
+names(eqtl_egenes_24hca) <- paste(names(eqtl_egenes_24hca), '24hCA')
+names(eqtl_egenes_combined) <- paste(names(eqtl_egenes_combined), 'combined')
+
+# merge the lists
+eqtl_egenes_all <- c(eqtl_egenes_ut, eqtl_egenes_24hca, eqtl_egenes_combined)
+# remove ones that were duplicated
+eqtl_egenes_all <- eqtl_egenes_all[unique(names(eqtl_egenes_all))]
+
+# and make the plot
+plot_sharing_per_celltype(eqtl_egenes_all, use_label_dict = F, use_color_dict = T, n_intersects = 25)
 ```
 
 ```{r get_caqtls_mono, include=TRUE, fig.width=10, fig.height=10}
