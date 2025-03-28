@@ -100,6 +100,28 @@ pycistopic_object_wimputations_jl_loc = '//scratch/hb-functionalgenomics/project
 imputed_acc_obj = joblib.load(pycistopic_object_wimputations_jl_loc)
 
 
+################################
+# get most contributing topics #
+################################
+
+# get the topics
+cell_topics = imputed_acc_obj.selected_model.cell_topic.T
+# Highest contributing topic per cells
+highest_topic = imputed_acc_obj.apply(lambda x: cell_topics.columns[np.argmax(x)], axis = 1)
+imputed_acc_obj.cell_data['most_contributing_topic'] = highest_topic
+# second highest condtributing topic
+second_highest_topic = cell_topics.apply(lambda row: row.nlargest(2).index[-1],axis=1)
+# add to cell_data
+imputed_acc_obj.cell_data['second_most_contributing_topic'] = second_highest_topic
+
+# same for unimputed object
+cell_topics = cistopic_obj.selected_model.cell_topic.T
+highest_topic = cell_topics.apply(lambda x: cell_topics.columns[np.argmax(x)], axis = 1)
+cistopic_obj.cell_data['most_contributing_topic'] = highest_topic
+second_highest_topic = cell_topics.apply(lambda row: row.nlargest(2).index[-1],axis=1)
+cistopic_obj.cell_data['second_most_contributing_topic'] = second_highest_topic
+
+
 ##################################################
 # run DAR identification using wilcoxon-rank-sum #
 ##################################################
@@ -107,7 +129,8 @@ imputed_acc_obj = joblib.load(pycistopic_object_wimputations_jl_loc)
 # Run DAR analysis
 markers_dict= find_diff_features(
     cistopic_obj,
-    imputed_acc_obj,
+    imputed_acc_obj, 
+    variable = 'most_contributing_topic',
     adjpval_thr=0.05,
     log2fc_thr=np.log2(1.5),
     n_cpu=4,

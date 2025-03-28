@@ -796,6 +796,177 @@ plot_sharing_per_celltype <- function(genes_per_ct, use_label_dict=T, use_color_
 }
 
 
+#' Get Condition Overlap Numbers
+#'
+#' This function calculates the overlap of features across different conditions and cell types.
+#'
+#' @param cell_type_lists_per_condition A named list where each element is a list of cell types and their features for a specific condition.
+#' @param pct Boolean, plot percentage instead of number of features
+#' @return A data frame with the number of unique, shared, and condition-specific features for each cell type.
+#' @examples
+#' cell_type_lists_per_condition <- list(
+#'   condition1 = list(cell_type1 = c("feature1", "feature2"), cell_type2 = c("feature3")),
+#'   condition2 = list(cell_type1 = c("feature2", "feature4"), cell_type3 = c("feature5"))
+#' )
+#' get_condition_overlap_numbers(cell_type_lists_per_condition)
+get_condition_overlap_numbers <- function(cell_type_lists_per_condition, pct=F) { 
+  # get all the cell types
+  cell_types_outer_join <- c()
+  # check each list
+  for (condition in names(cell_type_lists_per_condition)) {
+    # get those cell types
+    cell_types_condition <- names(cell_type_lists_per_condition[[condition]])
+    # add to the list
+    cell_types_outer_join <- unique(c(cell_types_outer_join, cell_types_condition))
+  }
+  # store result per cell type
+  result_per_cell_type <- list()
+  # check cell type
+  for (cell_type in cell_types_outer_join) {
+    # get anything of any other cell types
+    anything_other_cell_type <- c()
+    # and for specific conditions of that cell type
+    features_per_condition <- list()
+    # check every other cell type for each condition
+    for (condition in names(cell_type_lists_per_condition)) {
+      # get the other cell types of that condition
+      other_cell_types <- setdiff(names(cell_type_lists_per_condition[[condition]]), cell_type)
+      # check all the features
+      features_other_celltypes <- do.call('c', cell_type_lists_per_condition[[condition]][other_cell_types])
+      # add to the vector
+      anything_other_cell_type <- unique(c(anything_other_cell_type, features_other_celltypes))
+      # now do this specific cell type
+      if (cell_type %in% names(cell_type_lists_per_condition[[condition]])) {
+        # put in the list
+        features_per_condition[[condition]] <- cell_type_lists_per_condition[[condition]][[cell_type]]
+      }
+    }
+    # get the conditions we have for this cell type
+    conditions_cell_type <- names(features_per_condition)
+    # get how many conditions we have
+    n_conditions_cell_type <- length(conditions_cell_type)
+    # put the other cell types in the list as well
+    features_per_condition[['other']] <- anything_other_cell_type
+    # get the overlaps
+    features_per_condition_overlap <- UpSetR::fromList(features_per_condition)
+    # get how many of these were completely unique
+    n_unique <- sum(features_per_condition_overlap[['other']] == 0 & rowSums(features_per_condition_overlap) == 1)
+    # get how many of these might be shared across conditions
+    n_condition_shared <- sum(features_per_condition_overlap[['other']] == 0 & rowSums(features_per_condition_overlap) > 1)
+    # get how many of these are unique for the condition, but still present in other cell types
+    n_condition_unique_other <- sum(features_per_condition_overlap[['other']] == 1 & rowSums(features_per_condition_overlap) == 2)
+    # get this into fraction if asked
+    if (pct) {
+      n_unique_pct <- n_unique / (n_unique + n_condition_shared + n_condition_unique_other)
+      n_condition_shared_pct <- n_condition_shared / (n_unique + n_condition_shared + n_condition_unique_other)
+      n_condition_unique_other_pct <- n_condition_unique_other / (n_unique + n_condition_shared + n_condition_unique_other)
+      # and update values
+      n_unique <- n_unique_pct
+      n_condition_shared <- n_condition_shared_pct
+      n_condition_unique_other <- n_condition_unique_other_pct
+    }
+    # put this in a dataframe
+    overlaps_celltype <- data.frame('cell_type' = rep(cell_type, times = 3), 'found_in' = c('condition_and_cell_type specific', 'multiple_conditions_same_cell_type', 'one_condition_celltype_and_other_celltype/condition'), 'nfeature' = c(n_unique, n_condition_shared, n_condition_unique_other))
+    # put in the list
+    result_per_cell_type[[cell_type]] <- overlaps_celltype
+  }
+  # merge them
+  result_all_celltype <- do.call('rbind', result_per_cell_type)
+  return(result_all_celltype)
+}
+
+
+#' Plot Condition Overlaps
+#'
+#' This function creates a bar plot showing the number of features for each cell type across different conditions.
+#'
+#' @param cell_type_lists_per_condition A named list where each element is a list of cell types and their features for a specific condition.
+#' @param use_label_dict Logical, whether to remap cell type names using a label dictionary. Default is FALSE.
+#' @param use_colour_dict Logical, whether to use a color dictionary for cell types. Default is TRUE.
+#' @param paper_style Logical, whether to apply a paper-style theme to the plot. Default is TRUE.
+#' @param split_long_labels_to_lines Logical, whether to split long labels into multiple lines. Default is FALSE.
+#' @param max_length_split_string Integer, maximum length of strings before splitting into multiple lines. Default is 15.
+#' @param pct Boolean, plot percentage instead of number of features
+#' @return A ggplot object representing the bar plot of feature overlaps.
+#' @examples
+#' cell_type_lists_per_condition <- list(
+#'   condition1 = list(cell_type1 = c("feature1", "feature2"), cell_type2 = c("feature3")),
+#'   condition2 = list(cell_type1 = c("feature2", "feature4"), cell_type3 = c("feature5"))
+#' )
+#' plot_condition_overlaps(cell_type_lists_per_condition)
+plot_condition_overlaps <- function(cell_type_lists_per_condition, use_label_dict=F, use_colour_dict=T, paper_style=T, split_long_labels_to_lines=F, max_length_split_string=15, pct=F) { 
+  # get the numbers per cell type
+  nrs_per_celltype <- get_condition_overlap_numbers(cell_type_lists_per_condition, pct = pct)
+  # remap names if requested
+  if (use_label_dict) {
+    nrs_per_celltype[['cell_type']] <- remap_with_label_dict(nrs_per_celltype[['cell_type']])
+  }
+  # store the order
+  nrs_per_celltype[['found_in_factor']] <- factor(nrs_per_celltype[['found_in']], levels = c('condition_and_cell_type specific', 'multiple_conditions_same_cell_type', 'one_condition_celltype_and_other_celltype/condition'))
+  # replace the underscores with spaces
+  nrs_per_celltype[['found_in']] <- gsub('_', ' ', nrs_per_celltype[['found_in']])
+  # add the celltype and found together
+  nrs_per_celltype[['celltype_found_in']] <- paste0(nrs_per_celltype[['cell_type']], ': ', nrs_per_celltype[['found_in']])
+  # make them multiline
+  if (split_long_labels_to_lines) {
+    nrs_per_celltype[['celltype_found_in']] <- split_strings_with_max_length(nrs_per_celltype[['celltype_found_in']], max_length = max_length_split_string)
+  }
+  # order the table
+  nrs_per_celltype <- nrs_per_celltype[order(nrs_per_celltype[['cell_type']], rev(nrs_per_celltype[['found_in_factor']])), ]
+  # and make the colouring column a factor so it is in the same orde with the same hue
+  nrs_per_celltype[['celltype_found_in']] <- factor(nrs_per_celltype[['celltype_found_in']], levels = nrs_per_celltype[['celltype_found_in']])
+  # make the plot
+  p <- ggplot(data = nrs_per_celltype, mapping = aes(x = cell_type, y = nfeature, fill = celltype_found_in)) + 
+    geom_bar(stat = 'identity') + 
+    xlab('Cell type') +
+    ylab('Number of features') + 
+    labs(fill = 'Found in')
+  # update ylab if we have a fraction
+  if (pct) {
+    p <- p + ylab('Fraction of features')
+  }
+  # use paper style if requested
+  if (paper_style) {
+    p <- p + theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+  }
+  # add colours
+  if (use_colour_dict) {
+    # get colour codes for the cell types
+    cell_type_colours <- get_color_coding_dict()
+    # also get colours for the cell types we don't have colours for
+    cell_type_colours_missing <- get_color_list(setdiff(unique(nrs_per_celltype[['cell_type']]), names(cell_type_colours)))
+    # and merge them
+    cell_type_colours <- c(cell_type_colours, cell_type_colours_missing)
+    # get the found in 
+    found_in_unique <- unique(nrs_per_celltype[['found_in']])
+    # check each cell type
+    for (cell_type in unique(nrs_per_celltype[['cell_type']])) {
+      # check each of the found_in values
+      for (i in 1:length(found_in_unique)) {
+        # we have a couple of set colours
+        pct_whitening <- 40
+        if (i == 1) {
+          cell_type_colours[[paste0(cell_type, ': ', found_in_unique[i])]] <- colorRampPalette(c(cell_type_colours[[cell_type]], "white"))(100)[pct_whitening]
+        }
+        else if(i == 2) {
+          cell_type_colours[[paste0(cell_type, ': ', found_in_unique[i])]] <- colorRampPalette(c(cell_type_colours[[cell_type]], "black"))(100)[pct_whitening]
+        }
+        else if(i == 3) {
+          cell_type_colours[[paste0(cell_type, ': ', found_in_unique[i])]] <- cell_type_colours[[cell_type]]
+        }
+        # otherwise, add a random value between 41 and 99 for both black or white
+        else if(i %% 2 == 1) {
+          cell_type_colours[[paste0(cell_type, ': ', found_in_unique[i])]] <- colorRampPalette(c(cell_type_colours[[cell_type]], "black"))(sample(41:99, 1))[pct_whitening]
+        }
+        else if(i %% 2 == 0) {
+          cell_type_colours[[paste0(cell_type, ': ', found_in_unique[i])]] <- colorRampPalette(c(cell_type_colours[[cell_type]], "white"))(sample(41:99, 1))[pct_whitening]
+        }
+      }
+    }
+    p <- p + scale_fill_manual(values = cell_type_colours)
+  }
+  return(p)
+}
 
 ```
 
@@ -952,6 +1123,24 @@ eqtl_egenes_all <- eqtl_egenes_all[unique(names(eqtl_egenes_all))]
 
 # and make the plot
 plot_sharing_per_celltype(eqtl_egenes_all, use_label_dict = F, use_color_dict = T, n_intersects = 25)
+```
+```{r get_egene_overlaps, include=TRUE, fig.width=10, fig.height=10}
+
+# remove the extra names we added
+names(eqtl_egenes_ut) <- gsub(' UT', '', names(eqtl_egenes_ut))
+names(eqtl_egenes_24hca) <- gsub(' 24hCA', '', names(eqtl_egenes_24hca))
+names(eqtl_egenes_combined) <- gsub(' combined', '', names(eqtl_egenes_combined))
+
+# put in a list per condition
+eqtl_gene_lists_per_condition <- list(
+  'UT' = eqtl_egenes_ut[c('B', 'CD4+ T', 'CD8+ T', 'DC', 'Monocyte', 'NK')], 
+  '24hCA' = eqtl_egenes_24hca[c('B', 'CD4+ T', 'CD8+ T', 'DC', 'Monocyte', 'NK')], 
+  'combined' = eqtl_egenes_combined[c('B', 'CD4+ T', 'CD8+ T', 'DC', 'Monocyte', 'NK')]
+)
+# now make into a plot
+plot_condition_overlaps(eqtl_gene_lists_per_condition)
+plot_condition_overlaps(eqtl_gene_lists_per_condition, pct = T)
+
 ```
 
 ```{r get_caqtls_mono, include=TRUE, fig.width=10, fig.height=10}
