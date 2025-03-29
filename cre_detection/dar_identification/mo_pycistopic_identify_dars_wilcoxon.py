@@ -105,21 +105,18 @@ imputed_acc_obj = joblib.load(pycistopic_object_wimputations_jl_loc)
 ################################
 
 # get the topics
-cell_topics = imputed_acc_obj.selected_model.cell_topic.T
+cell_topics = cistopic_obj.selected_model.cell_topic.T
 # Highest contributing topic per cells
-highest_topic = imputed_acc_obj.apply(lambda x: cell_topics.columns[np.argmax(x)], axis = 1)
-imputed_acc_obj.cell_data['most_contributing_topic'] = highest_topic
+highest_topic = cell_topics.apply(lambda x: cell_topics.columns[np.argmax(x)], axis = 1)
 # second highest condtributing topic
 second_highest_topic = cell_topics.apply(lambda row: row.nlargest(2).index[-1],axis=1)
 # add to cell_data
-imputed_acc_obj.cell_data['second_most_contributing_topic'] = second_highest_topic
-
-# same for unimputed object
-cell_topics = cistopic_obj.selected_model.cell_topic.T
-highest_topic = cell_topics.apply(lambda x: cell_topics.columns[np.argmax(x)], axis = 1)
 cistopic_obj.cell_data['most_contributing_topic'] = highest_topic
-second_highest_topic = cell_topics.apply(lambda row: row.nlargest(2).index[-1],axis=1)
 cistopic_obj.cell_data['second_most_contributing_topic'] = second_highest_topic
+
+# add to imputed object as well
+imputed_acc_obj.cell_data['most_contributing_topic'] = highest_topic
+imputed_acc_obj.cell_data['second_most_contributing_topic'] = second_highest_topic
 
 
 ##################################################
