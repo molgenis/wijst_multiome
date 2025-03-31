@@ -968,6 +968,222 @@ plot_condition_overlaps <- function(cell_type_lists_per_condition, use_label_dic
   return(p)
 }
 
+
+#' Get Condition Overlap Features
+#'
+#' This function identifies and categorizes features based on their uniqueness across different conditions and cell types.
+#'
+#' @param cell_type_lists_per_condition A named list where each element is a list of cell types and their features for a specific condition.
+#' @param pct Logical, whether to convert the number of features to a fraction of the total features for each cell type. Default is FALSE.
+#' @return A list where each element is a list of features categorized by their uniqueness for each cell type.
+#' @examples
+#' cell_type_lists_per_condition <- list(
+#'   condition1 = list(cell_type1 = c("feature1", "feature2"), cell_type2 = c("feature3")),
+#'   condition2 = list(cell_type1 = c("feature2", "feature4"), cell_type3 = c("feature5"))
+#' )
+#' get_condition_overlap_features(cell_type_lists_per_condition)
+get_condition_overlap_features <- function(cell_type_lists_per_condition, pct=F) { 
+  # get all the cell types
+  cell_types_outer_join <- c()
+  # check each list
+  for (condition in names(cell_type_lists_per_condition)) {
+    # get those cell types
+    cell_types_condition <- names(cell_type_lists_per_condition[[condition]])
+    # add to the list
+    cell_types_outer_join <- unique(c(cell_types_outer_join, cell_types_condition))
+  }
+  # store result per cell type
+  result_per_cell_type <- list()
+  # check cell type
+  for (cell_type in cell_types_outer_join) {
+    # get anything of any other cell types
+    anything_other_cell_type <- c()
+    # and for specific conditions of that cell type
+    features_per_condition <- list()
+    # check every other cell type for each condition
+    for (condition in names(cell_type_lists_per_condition)) {
+      # get the other cell types of that condition
+      other_cell_types <- setdiff(names(cell_type_lists_per_condition[[condition]]), cell_type)
+      # check all the features
+      features_other_celltypes <- do.call('c', cell_type_lists_per_condition[[condition]][other_cell_types])
+      # add to the vector
+      anything_other_cell_type <- unique(c(anything_other_cell_type, features_other_celltypes))
+      # now do this specific cell type
+      if (cell_type %in% names(cell_type_lists_per_condition[[condition]])) {
+        # put in the list
+        features_per_condition[[condition]] <- cell_type_lists_per_condition[[condition]][[cell_type]]
+      }
+    }
+    # get the conditions we have for this cell type
+    conditions_cell_type <- names(features_per_condition)
+    # get how many conditions we have
+    n_conditions_cell_type <- length(conditions_cell_type)
+    # put the other cell types in the list as well
+    features_per_condition[['other']] <- anything_other_cell_type
+    
+    # get which are completely unique
+    complete_unique_list <- c()
+    # which are specific to celltype, but not condition
+    celltype_unique <- c()
+    # which are unique to condition in celltype, but not across celltype
+    condition_unique_celltype <- c()
+    # check each condition
+    for (condition in conditions_cell_type) {
+      # extract this condition
+      features_condition <- features_per_condition[[condition]]
+      # and the other celltypes
+      features_other_celltypes <- features_per_condition[['other']]
+      # get all other conditions
+      features_other_conditons <- do.call('c', features_per_condition[setdiff(conditions_cell_type, condition)])
+      
+      # check what was completely unique
+      features_condition_completely_unique <- features_condition[!(features_condition %in% features_other_celltypes) & !(features_condition %in% features_other_conditons)]
+      # check what was unique to the condition in the celltype, but not across cell types
+      features_condition_unique_within_celltype <- features_condition[(features_condition %in% features_other_celltypes) & !(features_condition %in% features_other_conditons)]
+      # check what was unique to the celltype, but not across conditions
+      features_celltype_unique <- features_condition[!(features_condition %in% features_other_celltypes) & (features_condition %in% features_other_conditons)]
+      
+      # add to the vectors
+      complete_unique_list[[condition]] <- features_condition_completely_unique
+      celltype_unique <- c(celltype_unique, features_celltype_unique)
+      condition_unique_celltype <- c(condition_unique_celltype, features_condition_unique_within_celltype)
+    }
+    # store in list
+    result_per_cell_type[[cell_type]][['condition_unique_celltype']] <- condition_unique_celltype
+    result_per_cell_type[[cell_type]][['celltype_unique']] <- celltype_unique
+    result_per_cell_type[[cell_type]][['complete_unique']] <- do.call('c', complete_unique_list)
+    # but also per condition
+    result_per_cell_type[[cell_type]][['complete_unique_percondition']] <- complete_unique_list
+  }
+  # merge them
+  return(result_per_cell_type)
+}
+
+
+#' Get Unique Features Numbers
+#'
+#' This function calculates the number of unique features for each cell type across different conditions.
+#'
+#' @param unique_features_per_celltype A named list where each element is a list of unique features for each cell type and condition.
+#' @param pct Logical, whether to convert the number of features to a fraction of the total features for each cell type. Default is FALSE.
+#' @return A data frame with the number of unique features for each cell type and condition.
+#' @examples
+#' unique_features_per_celltype <- list(
+#'   cell_type1 = list(condition1 = c("feature1", "feature2"), condition2 = c("feature3")),
+#'   cell_type2 = list(condition1 = c("feature4"), condition2 = c("feature5", "feature6"))
+#' )
+#' get_unique_features_numbers(unique_features_per_celltype)
+get_unique_features_numbers <- function(unique_features_per_celltype, pct=F) {
+  # create a list of numbers tables
+  numbers_per_celltype <- list()
+  # now check each cell type
+  for (cell_type in names(unique_features_per_celltype)) {
+    # get the conditions
+    conditions <- names(unique_features_per_celltype[[cell_type]])
+    # count how many conditions we have
+    n_conditions <- length(conditions)
+    # create a numbers table
+    numbers_ct <- data.frame('cell_type' = rep(cell_type, times = n_conditions), 'condition' = conditions, 'nfeature' = rep(NA, times = n_conditions))
+    # check each condition
+    for (i in 1 : n_conditions) {
+      # get condition
+      condition <- conditions[i]
+      # get the number of features for that condition
+      n_features <- length(unique_features_per_celltype[[cell_type]][[condition]])
+      # add that to the table
+      numbers_ct[i, 'nfeature'] <- n_features
+    }
+    # convert to fraction if requested
+    if (pct) {
+      numbers_ct[['nfeature']] <- numbers_ct[['nfeature']] / sum(numbers_ct[['nfeature']])
+    }
+    # put into the list
+    numbers_per_celltype[[cell_type]] <- numbers_ct
+  }
+  # merge everything
+  numbers_all <- do.call('rbind', numbers_per_celltype)
+  return(numbers_all)
+}
+
+
+#' Plot Unique Features Numbers
+#'
+#' This function creates a bar plot showing the number of unique features for each cell type across different conditions.
+#'
+#' @param unique_features_per_celltype A named list where each element is a list of unique features for each cell type and condition.
+#' @param use_label_dict Logical, whether to remap cell type names using a label dictionary. Default is FALSE.
+#' @param use_colour_dict Logical, whether to use a color dictionary for cell types. Default is TRUE.
+#' @param paper_style Logical, whether to apply a paper-style theme to the plot. Default is TRUE.
+#' @param pct Logical, whether to convert the number of features to a fraction of the total features for each cell type. Default is FALSE.
+#' @return A ggplot object representing the bar plot of unique features.
+#' @examples
+#' unique_features_per_celltype <- list(
+#'   cell_type1 = list(condition1 = c("feature1", "feature2"), condition2 = c("feature3")),
+#'   cell_type2 = list(condition1 = c("feature4"), condition2 = c("feature5", "feature6"))
+#' )
+#' plot_unique_features_numbers(unique_features_per_celltype)
+plot_unique_features_numbers <- function(unique_features_per_celltype, use_label_dict=F, use_colour_dict=T, paper_style=T, pct=F) {
+  # get the unique features
+  nrs_per_celltype <- get_unique_features_numbers(unique_features_per_celltype, pct)
+  # remap names if requested
+  if (use_label_dict) {
+    nrs_per_celltype[['cell_type']] <- remap_with_label_dict(nrs_per_celltype[['cell_type']])
+  }
+  # add the celltype and found together
+  nrs_per_celltype[['celltype_found_in']] <- paste0(nrs_per_celltype[['cell_type']], ': ', nrs_per_celltype[['condition']])
+  # make the plot
+  p <- ggplot(data = nrs_per_celltype, mapping = aes(x = cell_type, y = nfeature, fill = celltype_found_in)) + 
+    geom_bar(stat = 'identity') + 
+    xlab('Cell type') +
+    ylab('Number of features') + 
+    labs(fill = 'Found only in')
+  # update ylab if we have a fraction
+  if (pct) {
+    p <- p + ylab('Fraction of features')
+  }
+  # use paper style if requested
+  if (paper_style) {
+    p <- p + theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+  }
+  # add colours
+  if (use_colour_dict) {
+    # get colour codes for the cell types
+    cell_type_colours <- get_color_coding_dict()
+    # also get colours for the cell types we don't have colours for
+    cell_type_colours_missing <- get_color_list(setdiff(unique(nrs_per_celltype[['cell_type']]), names(cell_type_colours)))
+    # and merge them
+    cell_type_colours <- c(cell_type_colours, cell_type_colours_missing)
+    # get the found in 
+    found_in_unique <- unique(nrs_per_celltype[['condition']])
+    # check each cell type
+    for (cell_type in unique(nrs_per_celltype[['cell_type']])) {
+      # check each of the found_in values
+      for (i in 1:length(found_in_unique)) {
+        # we have a couple of set colours
+        pct_whitening <- 40
+        if (i == 1) {
+          cell_type_colours[[paste0(cell_type, ': ', found_in_unique[i])]] <- colorRampPalette(c(cell_type_colours[[cell_type]], "white"))(100)[pct_whitening]
+        }
+        else if(i == 2) {
+          cell_type_colours[[paste0(cell_type, ': ', found_in_unique[i])]] <- colorRampPalette(c(cell_type_colours[[cell_type]], "black"))(100)[pct_whitening]
+        }
+        else if(i == 3) {
+          cell_type_colours[[paste0(cell_type, ': ', found_in_unique[i])]] <- cell_type_colours[[cell_type]]
+        }
+        # otherwise, add a random value between 41 and 99 for both black or white
+        else if(i %% 2 == 1) {
+          cell_type_colours[[paste0(cell_type, ': ', found_in_unique[i])]] <- colorRampPalette(c(cell_type_colours[[cell_type]], "black"))(sample(41:99, 1))[pct_whitening]
+        }
+        else if(i %% 2 == 0) {
+          cell_type_colours[[paste0(cell_type, ': ', found_in_unique[i])]] <- colorRampPalette(c(cell_type_colours[[cell_type]], "white"))(sample(41:99, 1))[pct_whitening]
+        }
+      }
+    }
+    p <- p + scale_fill_manual(values = cell_type_colours)
+  }
+  return(p)
+}
+
 ```
 
 
@@ -1140,6 +1356,26 @@ eqtl_gene_lists_per_condition <- list(
 # now make into a plot
 plot_condition_overlaps(eqtl_gene_lists_per_condition)
 plot_condition_overlaps(eqtl_gene_lists_per_condition, pct = T)
+
+```
+
+```{r eqtl_unique_conditions, include=TRUE, fig.width=10, fig.height=10}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# get the completely unique features
+eqtl_unique_features <- get_condition_overlap_features(eqtl_gene_lists_per_condition)
+# we only care about the completely unique ones
+eqtl_unique_features_per_celltype <- list()
+# check each cell type
+for (cell_type in names(eqtl_unique_features)) {
+  # extract data for that cell type
+  unique_features_celltype <- eqtl_unique_features[[cell_type]][['complete_unique_percondition']]
+  # add to this list
+  eqtl_unique_features_per_celltype[[cell_type]] <- unique_features_celltype
+}
+# now plot these unique features
+plot_unique_features_numbers(eqtl_unique_features_per_celltype) + ggtitle('Condition unique features were found')
+plot_unique_features_numbers(eqtl_unique_features_per_celltype, pct = T) + ggtitle('Condition unique features were found')
 
 ```
 

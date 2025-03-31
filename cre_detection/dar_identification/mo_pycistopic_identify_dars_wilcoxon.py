@@ -114,10 +114,6 @@ second_highest_topic = cell_topics.apply(lambda row: row.nlargest(2).index[-1],a
 cistopic_obj.cell_data['most_contributing_topic'] = highest_topic
 cistopic_obj.cell_data['second_most_contributing_topic'] = second_highest_topic
 
-# add to imputed object as well
-imputed_acc_obj.cell_data['most_contributing_topic'] = highest_topic
-imputed_acc_obj.cell_data['second_most_contributing_topic'] = second_highest_topic
-
 
 ##################################################
 # run DAR identification using wilcoxon-rank-sum #
