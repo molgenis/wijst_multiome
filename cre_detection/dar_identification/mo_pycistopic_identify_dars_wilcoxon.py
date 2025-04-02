@@ -126,7 +126,7 @@ markers_dict= find_diff_features(
     variable = 'most_contributing_topic',
     adjpval_thr=0.05,
     log2fc_thr=np.log2(1.5),
-    n_cpu=4,
+    n_cpu=24,
     _temp_dir=os.environ["TMPDIR"],
     split_pattern = '_'
 )
