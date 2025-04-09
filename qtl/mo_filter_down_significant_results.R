@@ -85,11 +85,17 @@ filter_file_by_significance <- function(input_loc, output_loc, significance_colu
 #' @param mtc_column_to_add the name of the column that has the mtc-corrected values
 #' @param filter_alpha remove entries that have an abhorrant alpha param
 #' @param verbose print progress
+#' @param folders vector of folders to consider. optional, if not supplied, all folders will be considered
+#' @param sep value separator in table
 #' @returns 0 if success
 #' 
-split_output_by_column <- function(input_dir, input_file='qtl_results_all.txt.gz', output_dir=NULL, output_file_prepend='qtl_results_all_qval_', output_file_append='.txt.gz', split_column='feature_chromosome', add_mtc=T, mtc_column='empirical_feature_p_value', feature_mtc_column='feature_id', mtc_column_to_add='feature_q_value', verbose=T, filter_alpha=T) {
+split_output_by_column <- function(input_dir, input_file='qtl_results_all.txt.gz', output_dir=NULL, output_file_prepend='qtl_results_all_qval_', output_file_append='.txt.gz', split_column='feature_chromosome', add_mtc=T, mtc_column='empirical_feature_p_value', feature_mtc_column='feature_id', mtc_column_to_add='feature_q_value', verbose=T, filter_alpha=T, folders=NULL, sep='\t') {
   # get the folders in the directory, which should be the cell types
   cell_types <- list.dirs(input_dir, full.names = F, recursive = F)
+  # subset if a set of folders was supplied
+  if (!is.null(folders)) {
+    cell_types <- intersect(cell_types, folders)
+  }
   # we will store the results in a list for now
   numbers_per_celltype <- list()
   # check each cell type
@@ -101,7 +107,7 @@ split_output_by_column <- function(input_dir, input_file='qtl_results_all.txt.gz
       print(paste('reading', full_cell_type_path))
     }
     # read the file
-    cell_type_output <- fread(full_cell_type_path, sep = '\t', header = T)
+    cell_type_output <- fread(full_cell_type_path, sep = sep, header = T)
     
     # filter on alpha if requested
     if (filter_alpha) {
@@ -113,6 +119,17 @@ split_output_by_column <- function(input_dir, input_file='qtl_results_all.txt.gz
       if (verbose) {
         print(paste('adding MTC to', full_cell_type_path))
       }
+      # if the feature mtc column was multiple, combine them
+      if (length(feature_mtc_column) > 1) {
+        # by taking the first column
+        cell_type_output[[paste(feature_mtc_column, collapse = '_')]] <- cell_type_output[[feature_mtc_column[1]]]
+        # and adding the other columns
+        for (i in 1 : length(feature_mtc_column)) {
+          cell_type_output[[paste(feature_mtc_column, collapse = '_')]] <- paste(cell_type_output[[paste(feature_mtc_column, collapse = '_')]], cell_type_output[[feature_mtc_column[i]]])
+        }
+        # and setting the new column as the feature column
+        feature_mtc_column <- paste(feature_mtc_column, collapse = '_')
+      }
       # get just the two columns we care about
       cell_type_output_features <- cell_type_output[, c(feature_mtc_column, mtc_column), with = F]
       # order by significance
@@ -123,8 +140,6 @@ split_output_by_column <- function(input_dir, input_file='qtl_results_all.txt.gz
       cell_type_output_features[!duplicated(cell_type_output_features[[feature_mtc_column]]), ]
       # set the values that are larger than 1, to be 1, problem with precision
       cell_type_output_features[cell_type_output_features[[mtc_column]] > 1, mtc_column] <- 1
-      print(min(cell_type_output_features[[mtc_column]]))
-      print(max(cell_type_output_features[[mtc_column]]))
       # add multiple testing correction
       cell_type_output_features[['qvalue']] <- qvalue(cell_type_output_features[[mtc_column]])$qvalues
       # now add back to the original table
@@ -184,11 +199,16 @@ split_output_by_column <- function(input_dir, input_file='qtl_results_all.txt.gz
 #' @param mtc_column the column of values to apply multiple testing on
 #' @param feature_mtc_column the column that has the feature group to perform the multiple testing on
 #' @param mtc_column_to_add the name of the column that has the mtc-corrected values
+#' @param folders optional vector of folders to look at specifically
 #' @returns 0 if success
 #' 
-filter_output_by_significance <- function(unfiltered_loc, unfiltered_file='qtl_results_all.txt.gz', filtered_loc=NULL, filtered_file=NULL, significance_column='p_value', significance_cutoff=0.05, verbose=T, add_mtc=T, mtc_column='empirical_feature_p_value', feature_mtc_column='feature_id', mtc_column_to_add='feature_q_value') {
+filter_output_by_significance <- function(unfiltered_loc, unfiltered_file='qtl_results_all.txt.gz', filtered_loc=NULL, filtered_file=NULL, significance_column='p_value', significance_cutoff=0.05, verbose=T, add_mtc=T, mtc_column='empirical_feature_p_value', feature_mtc_column='feature_id', mtc_column_to_add='feature_q_value', folders=NULL) {
   # get the folders in the directory, which should be the cell types
   cell_types <- list.dirs(unfiltered_loc, full.names = F, recursive = F)
+  # check if overlaps with the folders that we want to take a look at
+  if (!is.null(folders)) {
+    cell_types <- intersect(cell_types, folders)
+  }
   # we will store the results in a list for now
   numbers_per_celltype <- list()
   # check each cell type
@@ -263,9 +283,13 @@ filter_output_by_significance <- function(unfiltered_loc, unfiltered_file='qtl_r
 }
 
 
-merge_chromosome_output <- function(input_dir, input_prepend='qtl_results_all_qval_', input_append='_fdr01_significant.txt.gz', output_dir=NULL, output_file='qtl_results_all_qval_allchroms_fdr01_significant.txt.gz') {
+merge_chromosome_output <- function(input_dir, input_prepend='qtl_results_all_qval_', input_append='_fdr01_significant.txt.gz', output_dir=NULL, output_file='qtl_results_all_qval_allchroms_fdr01_significant.txt.gz', folders=NULL) {
   # get the folders in the directory, which should be the cell types
   cell_types <- list.dirs(input_dir, full.names = F, recursive = F)
+  # subset to folders we are interested in, if supplied with that option
+  if (!is.null(folders)) {
+    cell_types <- intersect(cell_types, folders)
+  }
   # we will store the results in a list for now
   numbers_per_celltype <- list()
   # check each cell type
@@ -320,7 +344,6 @@ merge_chromosome_output <- function(input_dir, input_prepend='qtl_results_all_qv
 
 # location of the QTL outputs
 eqtl_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/sc-eqtlgen/output/L1/combined/'
-caqtl_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/output/L1/combined/'
 # perform splitting
 split_output_by_column(
   input_dir=eqtl_output_loc,
@@ -361,6 +384,124 @@ merge_chromosome_output(
   output_file='qtl_results_all_qval_allchroms_fdr005_significant.txt.gz'
 )
 
+# for UT and 24hCA as well
+eqtl_output_ut_loc <- '/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/output/L1/UT/'
+eqtl_output_24hca_loc <- '/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/output/L1/24hCA/'
+# perform splitting
+split_output_by_column(
+  input_dir=eqtl_output_ut_loc,
+  input_file='qtl_results_all.txt.gz',
+  output_dir=NULL,
+  output_file_prepend='qtl_results_all_qval_',
+  output_file_append='.txt.gz',
+  split_column='feature_chromosome',
+  add_mtc=T,
+  mtc_column='empirical_feature_p_value',
+  feature_mtc_column='feature_id',
+  mtc_column_to_add='feature_q_value',
+  verbose=T, 
+  folders=c('B', 'CD4T', 'CD8T', 'DC', 'monocyte', 'NK')
+)
+split_output_by_column(
+  input_dir=eqtl_output_24hca_loc,
+  input_file='qtl_results_all.txt.gz',
+  output_dir=NULL,
+  output_file_prepend='qtl_results_all_qval_',
+  output_file_append='.txt.gz',
+  split_column='feature_chromosome',
+  add_mtc=T,
+  mtc_column='empirical_feature_p_value',
+  feature_mtc_column='feature_id',
+  mtc_column_to_add='feature_q_value',
+  verbose=T, 
+  folders=c('B', 'CD4T', 'CD8T', 'DC', 'monocyte', 'NK')
+)
+# check each chromosome
+for (chrom in 1:22) {
+  # in location
+  in_file <- paste('qtl_results_all_qval_', chrom, '.txt.gz', sep = '')
+  # now filter on FDR as well
+  fdr_file <- paste('qtl_results_all_qval_', chrom, '_fdr005_significant.txt.gz', sep = '')
+  # do the filtering
+  filter_output_by_significance(
+    unfiltered_loc=eqtl_output_ut_loc, 
+    unfiltered_file=in_file, 
+    filtered_loc=NULL, 
+    filtered_file=fdr_file, 
+    significance_column='feature_q_value', 
+    significance_cutoff=0.05, 
+    verbose=T, 
+    add_mtc = F,  
+    folders=c('B', 'CD4T', 'CD8T', 'DC', 'monocyte', 'NK')
+  )
+  filter_output_by_significance(
+    unfiltered_loc=eqtl_output_24hca_loc, 
+    unfiltered_file=in_file, 
+    filtered_loc=NULL, 
+    filtered_file=fdr_file, 
+    significance_column='feature_q_value', 
+    significance_cutoff=0.05, 
+    verbose=T, 
+    add_mtc = F,  
+    folders=c('B', 'CD4T', 'CD8T', 'DC', 'monocyte', 'NK')
+  )
+}
+# now merge the significant ones
+merge_chromosome_output(
+  input_dir=eqtl_output_ut_loc, 
+  input_prepend='qtl_results_all_qval_', 
+  input_append='_fdr005_significant.txt.gz', 
+  output_dir=NULL, 
+  output_file='qtl_results_all_qval_allchroms_fdr005_significant.txt.gz',  
+  folders=c('B', 'CD4T', 'CD8T', 'DC', 'monocyte', 'NK')
+)
+merge_chromosome_output(
+  input_dir=eqtl_output_24hca_loc, 
+  input_prepend='qtl_results_all_qval_', 
+  input_append='_fdr005_significant.txt.gz', 
+  output_dir=NULL, 
+  output_file='qtl_results_all_qval_allchroms_fdr005_significant.txt.gz',  
+  folders=c('B', 'CD4T', 'CD8T', 'DC', 'monocyte', 'NK')
+)
+
+# do onek1k as well
+eqtl_output_onek1k_loc <- '/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_oneK1k/output/L1/'
+# perform splitting
+split_output_by_column(
+  input_dir=eqtl_output_onek1k_loc,
+  input_file='qtl_results_all.txt.gz',
+  output_dir=NULL,
+  output_file_prepend='qtl_results_all_qval_',
+  output_file_append='.txt.gz',
+  split_column='feature_chromosome',
+  add_mtc=T,
+  mtc_column='empirical_feature_p_value',
+  feature_mtc_column='feature_id',
+  mtc_column_to_add='feature_q_value',
+  verbose=T, 
+  folders = c('monocyte', 'NK', 'DC')
+)
+
+# and the LCL data
+caqtl_lcl_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/replication/'
+# perform splitting
+split_output_by_column(
+  input_dir=caqtl_lcl_output_loc,
+  input_file='qtl_results_all.txt',
+  output_dir=NULL,
+  output_file_prepend='qtl_results_all_qval_',
+  output_file_append='.txt.gz',
+  split_column='feature_chromosome',
+  add_mtc=T,
+  mtc_column='p_value',
+  feature_mtc_column=c('snp_id', 'feature_id'),
+  mtc_column_to_add='qtl_q_value',
+  verbose=T, 
+  filter_alpha = F
+)
+
+# location of the caQTL
+caqtl_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/output/L1/combined/'
 # for caQTL as well
 split_output_by_column(
   input_dir=caqtl_output_loc,
@@ -373,7 +514,39 @@ split_output_by_column(
   mtc_column='empirical_feature_p_value',
   feature_mtc_column='feature_id',
   mtc_column_to_add='feature_q_value',
-  verbose=T
+  verbose=T, 
+  folders = c('CD8T', 'monocyte', 'NK')
+)
+# for UT and 24hCA as well
+caqtl_output_ut_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/combined_output_50kb/L1/UT/'
+caqtl_output_24hca_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/combined_output_50kb/L1/24hCA/'
+split_output_by_column(
+  input_dir=caqtl_output_ut_loc,
+  input_file='qtl_results_all.txt.gz',
+  output_dir=NULL,
+  output_file_prepend='qtl_results_all_qval_',
+  output_file_append='.txt.gz',
+  split_column='feature_chromosome',
+  add_mtc=T,
+  mtc_column='empirical_feature_p_value',
+  feature_mtc_column='feature_id',
+  mtc_column_to_add='feature_q_value',
+  verbose=T, 
+  sep = ','
+)
+split_output_by_column(
+  input_dir=caqtl_output_24hca_loc,
+  input_file='qtl_results_all.txt.gz',
+  output_dir=NULL,
+  output_file_prepend='qtl_results_all_qval_',
+  output_file_append='.txt.gz',
+  split_column='feature_chromosome',
+  add_mtc=T,
+  mtc_column='empirical_feature_p_value',
+  feature_mtc_column='feature_id',
+  mtc_column_to_add='feature_q_value',
+  verbose=T, 
+  sep = ','
 )
 # check each chromosome
 for (chrom in 1:22) {
@@ -382,7 +555,17 @@ for (chrom in 1:22) {
   # now filter on FDR as well
   fdr_file <- paste('qtl_results_all_qval_', chrom, '_fdr005_significant.txt.gz', sep = '')
   filter_output_by_significance(
-    unfiltered_loc=caqtl_output_loc, 
+    unfiltered_loc=caqtl_output_ut_loc, 
+    unfiltered_file=in_file, 
+    filtered_loc=NULL, 
+    filtered_file=fdr_file, 
+    significance_column='feature_q_value', 
+    significance_cutoff=0.05, 
+    verbose=T, 
+    add_mtc = F
+  )
+  filter_output_by_significance(
+    unfiltered_loc=caqtl_output_24hca_loc, 
     unfiltered_file=in_file, 
     filtered_loc=NULL, 
     filtered_file=fdr_file, 
