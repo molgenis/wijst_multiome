@@ -242,19 +242,19 @@ write_confinements <- function(significant_variant_gene_list, confinements_loc, 
 ####################
 
 # location of eQTL result files
-eqtl_results_loc <- '/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/output/L1/'
+eqtl_results_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/sc-eqtlgen/output/L1/'
 
 # get the var-feature links for the eQTL cell types
-eqtl_var_feature_celltypes <- get_significant_pairs_per_celltype_merged_conditions(eqtl_results_loc)
+eqtl_var_feature_celltypes <- get_significant_pairs_per_celltype_merged_conditions(eqtl_results_loc, qtl_append='_nominally_significant.txt.gz$', qtl_prepend='qtl_results_all_qval_')
 
 # get the location where to put the confinements
 confinement_eqt_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/confinements/'
 # write them
-write_confinements(eqtl_var_feature_celltypes, confinement_eqt_loc)
+write_confinements(eqtl_var_feature_celltypes, confinement_eqt_loc, confinement_file_append = '_anycondsig_confinement.tsv.gz')
 
 # do nonimally significant ones as well
 eqtl_var_feature_celltypes_nominal <- get_significant_pairs_per_celltype_merged_conditions(eqtl_results_loc, significance_list = list('p_value' = 0.05))
-write_confinements(eqtl_var_feature_celltypes_nominal, confinement_eqt_loc, confinement_file_append = '_nominal_confinement.tsv.gz')
+write_confinements(eqtl_var_feature_celltypes_nominal, confinement_eqt_loc, confinement_file_append = '_anycondsig_nominal_confinement.tsv.gz')
 
 
 
