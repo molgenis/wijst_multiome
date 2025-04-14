@@ -342,8 +342,17 @@ merge_chromosome_output <- function(input_dir, input_prepend='qtl_results_all_qv
 # Main Code        #
 ####################
 
+
+###################
+# mo eQTLs        #
+###################
+
 # location of the QTL outputs
 eqtl_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/sc-eqtlgen/output/L1/combined/'
+# for UT and 24hCA as well
+eqtl_output_ut_loc <- '/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/output/L1/UT/'
+eqtl_output_24hca_loc <- '/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/output/L1/24hCA/'
+
 # perform splitting
 split_output_by_column(
   input_dir=eqtl_output_loc,
@@ -356,38 +365,9 @@ split_output_by_column(
   mtc_column='empirical_feature_p_value',
   feature_mtc_column='feature_id',
   mtc_column_to_add='feature_q_value',
-  verbose=T
+  verbose=T, 
+  folders=c('B', 'CD4T', 'CD8T', 'DC', 'monocyte', 'NK')
 )
-# check each chromosome
-for (chrom in 1:22) {
-  # in location
-  in_file <- paste('qtl_results_all_qval_', chrom, '.txt.gz', sep = '')
-  # now filter on FDR as well
-  fdr_file <- paste('qtl_results_all_qval_', chrom, '_fdr005_significant.txt.gz', sep = '')
-  filter_output_by_significance(
-    unfiltered_loc=eqtl_output_loc, 
-    unfiltered_file=in_file, 
-    filtered_loc=NULL, 
-    filtered_file=fdr_file, 
-    significance_column='feature_q_value', 
-    significance_cutoff=0.05, 
-    verbose=T, 
-    add_mtc = F
-  )
-}
-# now merge the significant ones
-merge_chromosome_output(
-  input_dir=eqtl_output_loc, 
-  input_prepend='qtl_results_all_qval_', 
-  input_append='_fdr005_significant.txt.gz', 
-  output_dir=NULL, 
-  output_file='qtl_results_all_qval_allchroms_fdr005_significant.txt.gz'
-)
-
-# for UT and 24hCA as well
-eqtl_output_ut_loc <- '/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/output/L1/UT/'
-eqtl_output_24hca_loc <- '/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/output/L1/24hCA/'
-# perform splitting
 split_output_by_column(
   input_dir=eqtl_output_ut_loc,
   input_file='qtl_results_all.txt.gz',
@@ -416,13 +396,24 @@ split_output_by_column(
   verbose=T, 
   folders=c('B', 'CD4T', 'CD8T', 'DC', 'monocyte', 'NK')
 )
+
 # check each chromosome
 for (chrom in 1:22) {
   # in location
   in_file <- paste('qtl_results_all_qval_', chrom, '.txt.gz', sep = '')
   # now filter on FDR as well
   fdr_file <- paste('qtl_results_all_qval_', chrom, '_fdr005_significant.txt.gz', sep = '')
-  # do the filtering
+  filter_output_by_significance(
+    unfiltered_loc=eqtl_output_loc, 
+    unfiltered_file=in_file, 
+    filtered_loc=NULL, 
+    filtered_file=fdr_file, 
+    significance_column='feature_q_value', 
+    significance_cutoff=0.05, 
+    verbose=T, 
+    add_mtc = F, 
+    folders=c('B', 'CD4T', 'CD8T', 'DC', 'monocyte', 'NK')
+  )
   filter_output_by_significance(
     unfiltered_loc=eqtl_output_ut_loc, 
     unfiltered_file=in_file, 
@@ -446,26 +437,14 @@ for (chrom in 1:22) {
     folders=c('B', 'CD4T', 'CD8T', 'DC', 'monocyte', 'NK')
   )
 }
-# now merge the significant ones
-merge_chromosome_output(
-  input_dir=eqtl_output_ut_loc, 
-  input_prepend='qtl_results_all_qval_', 
-  input_append='_fdr005_significant.txt.gz', 
-  output_dir=NULL, 
-  output_file='qtl_results_all_qval_allchroms_fdr005_significant.txt.gz',  
-  folders=c('B', 'CD4T', 'CD8T', 'DC', 'monocyte', 'NK')
-)
-merge_chromosome_output(
-  input_dir=eqtl_output_24hca_loc, 
-  input_prepend='qtl_results_all_qval_', 
-  input_append='_fdr005_significant.txt.gz', 
-  output_dir=NULL, 
-  output_file='qtl_results_all_qval_allchroms_fdr005_significant.txt.gz',  
-  folders=c('B', 'CD4T', 'CD8T', 'DC', 'monocyte', 'NK')
-)
+
+###################
+# oneK1K eQTLs    #
+###################
 
 # do onek1k as well
 eqtl_output_onek1k_loc <- '/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_oneK1k/output/L1/'
+
 # perform splitting
 split_output_by_column(
   input_dir=eqtl_output_onek1k_loc,
@@ -482,8 +461,14 @@ split_output_by_column(
   folders = c('monocyte', 'NK', 'DC')
 )
 
+
+#################
+# LCL caQTLs    #
+#################
+
 # and the LCL data
 caqtl_lcl_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/replication/'
+
 # perform splitting
 split_output_by_column(
   input_dir=caqtl_lcl_output_loc,
@@ -500,8 +485,17 @@ split_output_by_column(
   filter_alpha = F
 )
 
+
+#################
+# mo caQTLs     #
+#################
+
 # location of the caQTL
 caqtl_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/output/L1/combined/'
+# for UT and 24hCA as well
+caqtl_output_ut_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/combined_output_50kb/L1/UT/'
+caqtl_output_24hca_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/combined_output_50kb/L1/24hCA/'
+
 # for caQTL as well
 split_output_by_column(
   input_dir=caqtl_output_loc,
@@ -515,11 +509,8 @@ split_output_by_column(
   feature_mtc_column='feature_id',
   mtc_column_to_add='feature_q_value',
   verbose=T, 
-  folders = c('CD8T', 'monocyte', 'NK')
+  folders = c('B', 'CD4T', 'CD8T', 'DC', 'monocyte', 'NK')
 )
-# for UT and 24hCA as well
-caqtl_output_ut_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/combined_output_50kb/L1/UT/'
-caqtl_output_24hca_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/combined_output_50kb/L1/24hCA/'
 split_output_by_column(
   input_dir=caqtl_output_ut_loc,
   input_file='qtl_results_all.txt.gz',
@@ -532,7 +523,8 @@ split_output_by_column(
   feature_mtc_column='feature_id',
   mtc_column_to_add='feature_q_value',
   verbose=T, 
-  sep = ','
+  sep = ',', 
+  folders=c('B', 'CD4T', 'CD8T', 'DC', 'monocyte', 'NK')
 )
 split_output_by_column(
   input_dir=caqtl_output_24hca_loc,
@@ -546,8 +538,10 @@ split_output_by_column(
   feature_mtc_column='feature_id',
   mtc_column_to_add='feature_q_value',
   verbose=T, 
-  sep = ','
+  sep = ',', 
+  folders=c('B', 'CD4T', 'CD8T', 'DC', 'monocyte', 'NK')
 )
+
 # check each chromosome
 for (chrom in 1:22) {
   # in location
@@ -555,47 +549,58 @@ for (chrom in 1:22) {
   # now filter on FDR as well
   fdr_file <- paste('qtl_results_all_qval_', chrom, '_fdr005_significant.txt.gz', sep = '')
   filter_output_by_significance(
-    unfiltered_loc=caqtl_output_ut_loc, 
-    unfiltered_file=in_file, 
-    filtered_loc=NULL, 
-    filtered_file=fdr_file, 
-    significance_column='feature_q_value', 
-    significance_cutoff=0.05, 
-    verbose=T, 
-    add_mtc = F
+    unfiltered_loc=caqtl_output_ut_loc,
+    unfiltered_file=in_file,
+    filtered_loc=NULL,
+    filtered_file=fdr_file,
+    significance_column='feature_q_value',
+    significance_cutoff=0.05,
+    verbose=T,
+    add_mtc = F,
+    folders=c('B', 'CD4T', 'CD8T', 'DC', 'monocyte', 'NK')
   )
   filter_output_by_significance(
-    unfiltered_loc=caqtl_output_24hca_loc, 
+    unfiltered_loc=caqtl_output_24hca_loc,
+    unfiltered_file=in_file,
+    filtered_loc=NULL,
+    filtered_file=fdr_file,
+    significance_column='feature_q_value',
+    significance_cutoff=0.05,
+    verbose=T,
+    add_mtc = F,
+    folders=c('B', 'CD4T', 'CD8T', 'DC', 'monocyte', 'NK')
+  )
+  filter_output_by_significance(
+    unfiltered_loc=caqtl_output_loc, 
     unfiltered_file=in_file, 
     filtered_loc=NULL, 
     filtered_file=fdr_file, 
     significance_column='feature_q_value', 
     significance_cutoff=0.05, 
     verbose=T, 
-    add_mtc = F
+    add_mtc = F, 
+    folders=c('B', 'CD4T', 'CD8T', 'DC', 'monocyte', 'NK')
   )
 }
-# now merge the significant ones
-merge_chromosome_output(
-  input_dir=caqtl_output_loc, 
-  input_prepend='qtl_results_all_qval_', 
-  input_append='_fdr01_significant.txt.gz', 
-  output_dir=NULL, 
-  output_file='qtl_results_all_qval_allchroms_fdr01_significant.txt.gz'
-)
+
 
 # location of the interaction-eQTL outputs
 ieqtl_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/output/nominal_condition/L1/'
 # read the ieqtl output, and filter by ones that are FDR significant in the combined mapping
 
 
+########################
+# sc-eQTLgen eQTLs     #
+########################
+
 # now do the eQTL output of sc-eQTLgen
 sceqtlgen_base_loc <- '/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/Meta_14/'
+# now filter on FDR 
 filter_file_by_significance(
-    input_loc=paste(sceqtlgen_base_loc, 'Mono.Ds.wg3_Ye_wg3_wijst2018_wg3_sawcer_wg3_oneK1K_wg3_okada_wg3_Li_wg3_Franke_split_v3_wg3_Franke_split_v2_wg3_multiome_UT_wg3_idaghdour.qtl_results_all.txt', sep = ''), 
-    output_loc=paste(sceqtlgen_base_loc, 'Mono.Ds.wg3_Ye_wg3_wijst2018_wg3_sawcer_wg3_oneK1K_wg3_okada_wg3_Li_wg3_Franke_split_v3_wg3_Franke_split_v2_wg3_multiome_UT_wg3_idaghdour.qtl_results_all.qval005.txt.gz', sep = ''), 
-    significance_column='feature_q_value', 
-    significance_cutoff=0.05, 
-    verbose=T, 
-    add_mtc = F
+  input_loc=paste(sceqtlgen_base_loc, 'Mono.Ds.wg3_Ye_wg3_wijst2018_wg3_sawcer_wg3_oneK1K_wg3_okada_wg3_Li_wg3_Franke_split_v3_wg3_Franke_split_v2_wg3_multiome_UT_wg3_idaghdour.qtl_results_all.txt', sep = ''), 
+  output_loc=paste(sceqtlgen_base_loc, 'Mono.Ds.wg3_Ye_wg3_wijst2018_wg3_sawcer_wg3_oneK1K_wg3_okada_wg3_Li_wg3_Franke_split_v3_wg3_Franke_split_v2_wg3_multiome_UT_wg3_idaghdour.qtl_results_all.qval005.txt.gz', sep = ''), 
+  significance_column='feature_q_value', 
+  significance_cutoff=0.05, 
+  verbose=T, 
+  add_mtc = F
 )
