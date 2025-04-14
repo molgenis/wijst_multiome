@@ -23,7 +23,7 @@ import hashlib
 ##################
 
 # location the object was stored
-pycistopic_object_wtopics_loc = '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/pycistopic/objects/merged_major_and_minor_celltypes_160topics.pkl'
+pycistopic_object_wtopics_loc = '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/pycistopic/objects/merged_major_and_minor_celltypes_120topics.pkl'
 
 # read the object
 with open(pycistopic_object_wtopics_loc, 'rb') as f:
@@ -35,10 +35,10 @@ with open(pycistopic_object_wtopics_loc, 'rb') as f:
 ###########################
 
 # export the topic contribution matrix for the cells
-topic_contribution_cells_loc = ''.join(['/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/pycistopic/models/all_nuclei_and_regions_major_minor/', 'mo_cell_topic_contributions_160_topics.tsv.gz'])
+topic_contribution_cells_loc = ''.join(['/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/pycistopic/models/all_nuclei_and_regions_major_minor/', 'mo_cell_topic_contributions_120_topics.tsv.gz'])
 cistopic_obj.selected_model.cell_topic.to_csv(topic_contribution_cells_loc, sep = '\t', header = True, index = True, compression = 'gzip')
 # and for the regions
-region_contribution_cells_loc = ''.join(['/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/pycistopic/models/all_nuclei_and_regions_major_minor/', 'mo_region_topic_contributions_160_topics.tsv.gz'])
+region_contribution_cells_loc = ''.join(['/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/pycistopic/models/all_nuclei_and_regions_major_minor/', 'mo_region_topic_contributions_120_topics.tsv.gz'])
 cistopic_obj.selected_model.region_topic.to_csv(region_contribution_cells_loc, sep = '\t', header = True, index = True, compression = 'gzip')
 
 
