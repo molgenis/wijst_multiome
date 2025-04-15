@@ -20,7 +20,31 @@ library(stats)
 ####################
 
 
-
+#' Calculate Nominal Thresholds
+#'
+#' This function calculates nominal thresholds for p-values based on a given false discovery rate (FDR).
+#'
+#' @param res_df A data frame containing the results with p-values and other relevant columns.
+#' @param fdr A numeric value specifying the false discovery rate threshold. Default is 0.05.
+#' @param pval_col A character string specifying the name of the column with p-values. Default is 'p_value'.
+#' @param nominal_threshold_column A character string specifying the name of the column to store the nominal thresholds. Default is 'pval_nominal_threshold'.
+#' @param cutoff_column A character string specifying the name of the column with feature q-values. Default is 'feature_q_value'.
+#' @param alpha_column A character string specifying the name of the column with alpha parameters for the beta distribution. Default is 'alpha_param'.
+#' @param beta_column A character string specifying the name of the column with beta parameters for the beta distribution. Default is 'beta_param'.
+#'
+#' @return A data frame with an additional column for nominal thresholds.
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#'   res_df <- data.frame(
+#'     p_value = runif(100),
+#'     feature_q_value = runif(100),
+#'     alpha_param = rep(1, 100),
+#'     beta_param = rep(1, 100)
+#'   )
+#'   calculate_nominal_thresholds(res_df)
+#' }
 calculate_nominal_thresholds <- function(res_df, fdr=0.05, pval_col='p_value', nominal_threshold_column='pval_nominal_threshold', cutoff_column='feature_q_value', alpha_column='alpha_param', beta_column='beta_param') {
   # get the lowerbound p values, so the ones that are smaller than the FDR
   indices_lb <- res_df[[cutoff_column]] < fdr
@@ -57,7 +81,45 @@ calculate_nominal_thresholds <- function(res_df, fdr=0.05, pval_col='p_value', n
 }
 
 
-
+#' Filter File by Significance
+#'
+#' This function filters a file based on significance levels and optionally adds multiple testing correction (MTC) and global nominal thresholds.
+#'
+#' @param input_loc A character string specifying the location of the input file.
+#' @param output_loc A character string specifying the location to save the filtered output file.
+#' @param significance_column A character string specifying the name of the column with significance values. Default is 'p_value'.
+#' @param significance_cutoff A numeric value specifying the significance cutoff threshold. Default is 0.05.
+#' @param verbose A logical value indicating whether to print progress messages. Default is TRUE.
+#' @param add_mtc A logical value indicating whether to add multiple testing correction. Default is TRUE.
+#' @param mtc_column A character string specifying the name of the column with empirical feature p-values. Default is 'empirical_feature_p_value'.
+#' @param feature_mtc_column A character string specifying the name of the column with feature IDs for MTC. Default is 'feature_id'.
+#' @param mtc_column_to_add A character string specifying the name of the column to store the MTC values. Default is 'feature_q_value'.
+#' @param add_global_nominal_threshold A logical value indicating whether to add global nominal thresholds. Default is FALSE.
+#' @param global_nominal_threshold_column_to_add A character string specifying the name of the column to store global nominal thresholds. Default is 'pval_nominal_threshold_global'.
+#' @param alpha_column A character string specifying the name of the column with alpha parameters for the beta distribution. Default is 'alpha_param'.
+#' @param beta_column A character string specifying the name of the column with beta parameters for the beta distribution. Default is 'beta_param'.
+#'
+#' @return None. The function writes the filtered data to the specified output location.
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#'   filter_file_by_significance(
+#'     input_loc = "path/to/input/file.txt",
+#'     output_loc = "path/to/output/file.txt",
+#'     significance_column = 'p_value',
+#'     significance_cutoff = 0.05,
+#'     verbose = TRUE,
+#'     add_mtc = TRUE,
+#'     mtc_column = 'empirical_feature_p_value',
+#'     feature_mtc_column = 'feature_id',
+#'     mtc_column_to_add = 'feature_q_value',
+#'     add_global_nominal_threshold = FALSE,
+#'     global_nominal_threshold_column_to_add = 'pval_nominal_threshold_global',
+#'     alpha_column = 'alpha_param',
+#'     beta_column = 'beta_param'
+#'   )
+#' }
 filter_file_by_significance <- function(input_loc, output_loc, significance_column='p_value', significance_cutoff=0.05, verbose=T, add_mtc=T, mtc_column='empirical_feature_p_value', feature_mtc_column='feature_id', mtc_column_to_add='feature_q_value', add_global_nominal_threshold=F, global_nominal_threshold_column_to_add='pval_nominal_threshold_global', alpha_column='alpha_param', beta_column='beta_param') {
   # paste together the full path
   full_cell_type_path <- input_loc
@@ -114,6 +176,7 @@ filter_file_by_significance <- function(input_loc, output_loc, significance_colu
   # create md5
   mdfiver::create_md5_for_file(output_loc)
 }
+
 
 #' get the number eGenes per cell type from QTL output
 #' 
@@ -346,6 +409,31 @@ filter_output_by_significance <- function(unfiltered_loc, unfiltered_file='qtl_r
 }
 
 
+#' Merge Chromosome Output
+#'
+#' This function merges chromosome-specific output files from different cell types into a single file.
+#'
+#' @param input_dir A character string specifying the directory containing the input files.
+#' @param input_prepend A character string specifying the prefix of the input files. Default is 'qtl_results_all_qval_'.
+#' @param input_append A character string specifying the suffix of the input files. Default is '_fdr01_significant.txt.gz'.
+#' @param output_dir A character string specifying the directory to save the merged output file. Default is NULL.
+#' @param output_file A character string specifying the name of the merged output file. Default is 'qtl_results_all_qval_allchroms_fdr01_significant.txt.gz'.
+#' @param folders A character vector specifying the folders to include. Default is NULL.
+#'
+#' @return An integer value indicating the success of the operation. The function writes the merged data to the specified output location.
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#'   merge_chromosome_output(
+#'     input_dir = "path/to/input/dir",
+#'     input_prepend = 'qtl_results_all_qval_',
+#'     input_append = '_fdr01_significant.txt.gz',
+#'     output_dir = "path/to/output/dir",
+#'     output_file = 'qtl_results_all_qval_allchroms_fdr01_significant.txt.gz',
+#'     folders = c("folder1", "folder2")
+#'   )
+#' }
 merge_chromosome_output <- function(input_dir, input_prepend='qtl_results_all_qval_', input_append='_fdr01_significant.txt.gz', output_dir=NULL, output_file='qtl_results_all_qval_allchroms_fdr01_significant.txt.gz', folders=NULL) {
   # get the folders in the directory, which should be the cell types
   cell_types <- list.dirs(input_dir, full.names = F, recursive = F)
@@ -400,6 +488,7 @@ merge_chromosome_output <- function(input_dir, input_prepend='qtl_results_all_qv
   }
   return(0)
 }
+
 
 ####################
 # Main Code        #
