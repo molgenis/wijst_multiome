@@ -35,13 +35,13 @@ library(data.table)
 #' qtl_output_loc <- "path/to/qtl/results"
 #' cell_types <- c("cell_type1", "cell_type2")
 #' results <- get_significant_pairs_per_cell_type(qtl_output_loc, cell_types=cell_types)
-get_significant_pairs_per_cell_type <- function(qtl_output_loc, qtl_prepend='qtl_results_all_qval_', qtl_append='_nominally_significant.txt.gz$', variant_column='snp_id', feature_column='feature_id', significance_list=list('feature_q_value' = 0.05, 'empirical_feature_p_value' = 0.05), sep='\t', cell_types=cell_types) {
+get_significant_pairs_per_cell_type <- function(qtl_output_loc, qtl_prepend='qtl_results_all_qval_', qtl_append='_nominally_significant.txt.gz$', variant_column='snp_id', feature_column='feature_id', significance_list=list('feature_q_value' = 0.05, 'empirical_feature_p_value' = 0.05), sep='\t', cell_types=NULL) {
   # store per cell type
   results_per_cell_type <- list()
   # list all the folders
   cell_type_folders <- list.dirs(qtl_output_loc, recursive = F, full.names = F)
   # filter on cell types if requested
-  if (!is.null(cell_type_folders)) {
+  if (!is.null(cell_types)) {
     cell_type_folders <- intersect(cell_type_folders, cell_types)
   }
   # go through each folder
@@ -245,7 +245,7 @@ write_confinements <- function(significant_variant_gene_list, confinements_loc, 
 eqtl_results_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/sc-eqtlgen/output/L1/'
 
 # get the var-feature links for the eQTL cell types
-eqtl_var_feature_celltypes <- get_significant_pairs_per_celltype_merged_conditions(eqtl_results_loc, qtl_append='_nominally_significant.txt.gz$', qtl_prepend='qtl_results_all_qval_')
+eqtl_var_feature_celltypes <- get_significant_pairs_per_celltype_merged_conditions(eqtl_results_loc, qtl_append='.txt.gz$', qtl_prepend='qtl_results_all_qval_')
 
 # get the location where to put the confinements
 confinement_eqt_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/confinements/'
@@ -253,19 +253,18 @@ confinement_eqt_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoin
 write_confinements(eqtl_var_feature_celltypes, confinement_eqt_loc, confinement_file_append = '_anycondsig_confinement.tsv.gz')
 
 # do nonimally significant ones as well
-eqtl_var_feature_celltypes_nominal <- get_significant_pairs_per_celltype_merged_conditions(eqtl_results_loc, significance_list = list('p_value' = 0.05))
+eqtl_var_feature_celltypes_nominal <- get_significant_pairs_per_celltype_merged_conditions(eqtl_results_loc, significance_list = list('p_value' = 0.05), qtl_append='.txt.gz$', qtl_prepend='qtl_results_all_qval_')
 write_confinements(eqtl_var_feature_celltypes_nominal, confinement_eqt_loc, confinement_file_append = '_anycondsig_nominal_confinement.tsv.gz')
 
 
 
 # get the var-feature links for caQTL cell types
-caqtl_results_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/output_to_sigs/L1/'
-caqtl_var_feature_celltypes <- get_significant_pairs_per_celltype_merged_conditions(caqtl_results_loc, qtl_prepend = '', qtl_append = '.tsv', significance_list=list())
+caqtl_results_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/output/L1/'
+caqtl_var_feature_celltypes <- get_significant_pairs_per_celltype_merged_conditions(caqtl_results_loc, qtl_append='.txt.gz$', qtl_prepend='qtl_results_all_qval_')
 # write the confinements
 confinement_caqtl_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_caqtl/sc-eqtlgen/confinements/'
-write_confinements(caqtl_var_feature_celltypes, confinement_caqtl_loc)
+write_confinements(caqtl_var_feature_celltypes, confinement_caqtl_loc, confinement_file_append = '_anycondsig_confinement.tsv.gz')
 
 # try nominally significant as well
-caqtl_results_all_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/combined_output_50kb/L1/'
-caqtl_var_feature_celltypes_nominal <- get_significant_pairs_per_celltype_merged_conditions(caqtl_results_all_loc, qtl_prepend = '', qtl_append = 'qtl_results_all.txt.gz', significance_list=list('p_value' = 0.05), conditions = c('UT', '24hCA'), cell_types = c('B', 'CD4T', 'CD8T', 'DC', 'monocyte', 'NK'), sep = ',')
-write_confinements(caqtl_var_feature_celltypes_nominal, confinement_caqtl_loc, confinement_file_append = '_nominal_confinement.tsv.gz')
+caqtl_var_feature_celltypes_nominal <- get_significant_pairs_per_celltype_merged_conditions(caqtl_results_loc, significance_list = list('p_value' = 0.05))
+write_confinements(caqtl_var_feature_celltypes_nominal, confinement_caqtl_loc, confinement_file_append = '_anycondsig_nominal_confinement.tsv.gz')
