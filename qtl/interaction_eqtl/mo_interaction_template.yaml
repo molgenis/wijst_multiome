@@ -42,13 +42,13 @@ smf_loc: /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interacti
 # location of the variant-features to test for interactions
 variant_feature_confinement_loc: /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/confinements/
 variant_feature_confinement_prepend:
-variant_feature_confinement_append: _confinement.tsv.gz
+variant_feature_confinement_append: _anycondsig_confinement.tsv.gz
 
 #####################################
 ##       input files/folders       ###
 #####################################
 
-out_folder: /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/output/L1/
+out_folder: /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/output/combined_significant/L1/
 
 interaction_terms:
     - inflammation_final
