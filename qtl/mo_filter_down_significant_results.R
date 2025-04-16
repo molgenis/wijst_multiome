@@ -590,6 +590,12 @@ for (chrom in 1:22) {
   )
 }
 
+# merge chromosome outputs
+merge_chromosome_output(eqtl_output_ut_loc, input_append='_fdr005_significant.txt.gz', output_dir=NULL, output_file='qtl_results_all_qval_allchroms_fdr005_significant.txt.gz')
+merge_chromosome_output(eqtl_output_24hca_loc, input_append='_fdr005_significant.txt.gz', output_dir=NULL, output_file='qtl_results_all_qval_allchroms_fdr005_significant.txt.gz')
+merge_chromosome_output(eqtl_output_combined_loc, input_append='_fdr005_significant.txt.gz', output_dir=NULL, output_file='qtl_results_all_qval_allchroms_fdr005_significant.txt.gz')
+
+
 ###################
 # oneK1K eQTLs    #
 ###################
@@ -735,6 +741,10 @@ for (chrom in 1:22) {
   )
 }
 
+# merge chromosome outputs
+merge_chromosome_output(caqtl_output_ut_loc, input_append='_fdr005_significant.txt.gz', output_dir=NULL, output_file='qtl_results_all_qval_allchroms_fdr005_significant.txt.gz')
+merge_chromosome_output(caqtl_output_24hca_loc, input_append='_fdr005_significant.txt.gz', output_dir=NULL, output_file='qtl_results_all_qval_allchroms_fdr005_significant.txt.gz')
+merge_chromosome_output(caqtl_output_combined_loc, input_append='_fdr005_significant.txt.gz', output_dir=NULL, output_file='qtl_results_all_qval_allchroms_fdr005_significant.txt.gz')
 
 # location of the interaction-eQTL outputs
 ieqtl_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/output/nominal_condition/L1/'
