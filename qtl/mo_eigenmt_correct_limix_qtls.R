@@ -15,6 +15,7 @@ library(data.table)
 library(r2r)
 library(rhdf5)
 library(ReigenMT)
+library(qvalue)
 
 
 ####################
@@ -129,6 +130,102 @@ correct_all_chunks_all_chromosomes <- function(genotype_loc, chunks_loc, chromos
 }
 
 
+perform_qvalue_correction <- function(cell_type_output, mtc_column='empirical_feature_p_value', feature_mtc_column='feature_id', mtc_column_to_add='feature_q_value') {
+  # subset to only the important columns
+  cell_type_output_features <- cell_type_output[, c(feature_mtc_column, mtc_column), with = F]
+  # order by significance
+  cell_type_output_features <- cell_type_output_features[order(cell_type_output_features[[mtc_column]]), ]
+  # remove where the feature is smaller than zero
+  cell_type_output_features <- cell_type_output_features[!(cell_type_output_features[[mtc_column]] < 0), ]
+  # keep only the first entry
+  cell_type_output_features[!duplicated(cell_type_output_features[[feature_mtc_column]]), ]
+  # set the values that are larger than 1, to be 1, problem with precision
+  cell_type_output_features[cell_type_output_features[[mtc_column]] > 1, mtc_column] <- 1
+  # add multiple testing correction
+  cell_type_output_features[['qvalue']] <- qvalue::qvalue(cell_type_output_features[[mtc_column]])$qvalues
+  # now add back to the original table
+  cell_type_output[[mtc_column_to_add]] <- cell_type_output_features[match(cell_type_output[[feature_mtc_column]], cell_type_output_features[[feature_mtc_column]]), 'qvalue'][['qvalue']]
+  return(cell_type_output)
+}
+
+
+#' Calculate Nominal Thresholds
+#'
+#' This function calculates nominal thresholds for p-values based on a given false discovery rate (FDR).
+#'
+#' @param res_df A data frame containing the results with p-values and other relevant columns.
+#' @param fdr A numeric value specifying the false discovery rate threshold. Default is 0.05.
+#' @param pval_col A character string specifying the name of the column with p-values. Default is 'p_value'.
+#' @param nominal_threshold_column A character string specifying the name of the column to store the nominal thresholds. Default is 'pval_nominal_threshold'.
+#' @param cutoff_column A character string specifying the name of the column with feature q-values. Default is 'feature_q_value'.
+#' @param alpha_column A character string specifying the name of the column with alpha parameters for the beta distribution. Default is 'alpha_param'.
+#' @param beta_column A character string specifying the name of the column with beta parameters for the beta distribution. Default is 'beta_param'.
+#'
+#' @return A data frame with an additional column for nominal thresholds.
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#'   res_df <- data.frame(
+#'     p_value = runif(100),
+#'     feature_q_value = runif(100),
+#'     alpha_param = rep(1, 100),
+#'     beta_param = rep(1, 100)
+#'   )
+#'   calculate_nominal_thresholds(res_df)
+#' }
+calculate_nominal_thresholds <- function(res_df, fdr=0.05, pval_col='p_value', nominal_threshold_column='pval_nominal_threshold', cutoff_column='feature_q_value', alpha_column='alpha_param', beta_column='beta_param') {
+  # get the lowerbound p values, so the ones that are smaller than the FDR
+  indices_lb <- res_df[[cutoff_column]] < fdr
+  lb <- as.vector(res_df[indices_lb, ][[pval_col]])
+  # put then in ascending order
+  lb <- lb[order(lb)]
+  # get the upperbound p values, so the ones that are bigger than the FDR
+  indices_ub <- res_df[[cutoff_column]] > fdr
+  ub <- as.vector(res_df[indices_ub, ][[pval_col]])
+  # and order them
+  ub <- ub[order(ub)]
+  # if we have any significant effects, we can get a cutoff
+  if (length(lb) > 0) {
+    # get the highest (p) significant value
+    highest_in_lb <- tail(lb, 1)
+    # if there are any non significant effects
+    if (length(ub) > 0) {
+      # get the lowest (p) non-significant value
+      lowest_in_ub <- head(ub, 1)
+      # and calculate the threshold
+      pthreshold <- (highest_in_lb + lowest_in_ub) / 2
+    } else {
+      # otherwise the highest effect will just be the cutoff
+      pthreshold <- highest_in_lb
+    }
+    # ge the threshold, based on the shapes of the beta distribution and the significance threshold
+    res_df[[nominal_threshold_column]] <- stats::qbeta(pthreshold, as.vector(res_df[[alpha_column]]), as.vector(res_df[[beta_column]]))
+  }
+  else {
+    # otherwise it would have to be zero
+    res_df[[nominal_threshold_column]] <- 0
+  }
+  return(res_df)
+}
+
+
+perform_nominal_threshold_calculation <- function(cell_type_output, significance_cutoff=0.05, mtc_column='feature_q_value', feature_mtc_column='feature_id', nominal_threshold_column='pval_nominal_threshold_global', alpha_column='alpha_param', beta_column='beta_param', nominal_p_column='p_value') {
+  # subset to only the important columns
+  cell_type_output_features <- cell_type_output[, c(feature_mtc_column, mtc_column, alpha_column, beta_column, nominal_p_column), with = F]
+  # order by significance
+  cell_type_output_features <- cell_type_output_features[order(cell_type_output_features[[mtc_column]]), ]
+  # remove where the feature is smaller than zero
+  cell_type_output_features <- cell_type_output_features[!(cell_type_output_features[[mtc_column]] < 0), ]
+  # keep only the first entry
+  cell_type_output_features[!duplicated(cell_type_output_features[[feature_mtc_column]]), ]
+  # get the nominal p value cutoff based on the p values and the beta distribution
+  cell_type_output_global_threshold <- calculate_nominal_thresholds(cell_type_output_features, fdr=significance_cutoff, pval_col=nominal_p_column, nominal_threshold_column='nomthres', cutoff_column='qvalue', alpha_column = alpha_column, beta_column = beta_column)
+  # now add the nominal threshold to the full table
+  cell_type_output[[nominal_threshold_column]] <- cell_type_output_global_threshold[match(cell_type_output[[feature_mtc_column]], cell_type_output_global_threshold[[feature_mtc_column]]), ][['nomthres']]
+  return(cell_type_output)
+}
+
 ####################
 # Settings        #
 ####################
@@ -140,12 +237,12 @@ correct_all_chunks_all_chromosomes <- function(genotype_loc, chunks_loc, chromos
 
 # genotypes 
 genotypes_loc <- '/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/genotype_input/'
+summary_stats_loc <- '/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/output/L1/'
 
 # location of the eQTL interactions
 eqtl_interaction_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/output/L1/'
-eqtl_interaction_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/output/nominal_condition/L1/'
 # location of the caQTL interactions
-caqtl_interaction_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_caqtl/sc-eqtlgen/output/nominal_condition/L1/'
+caqtl_interaction_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_caqtl/sc-eqtlgen/output/L1/'
 
 # check each cell type in the eQTLs
 eqtl_interactions_per_celltype <- list()
@@ -166,6 +263,10 @@ for (ct in list.dirs(eqtl_interaction_loc, recursive = F, full.names = F)) {
   ct_res[['total_bf_eigen']] <- ct_res[['p_value']] * n_tests
   # but of course no more than 1
   ct_res[ct_res[['total_bf_eigen']] > 1, 'total_bf_eigen'] <- 1
+  # add qvalue as well, based on the feature-corrrected eigenMT p-value
+  ct_res <- perform_qvalue_correction(ct_res, mtc_column = 'feature_bf_eigen', feature_mtc_column = 'feature')
+  # and also add the 
+  #ct_res <- perform_nominal_threshold_calculation(ct_res, mtc_column = 'feature_q_value', nominal_threshold_column='pval_nominal_threshold', feature_mtc_column='feature')
   # put in list
   eqtl_interactions_per_celltype[[ct]] <- ct_res
   # put the output location together
@@ -178,9 +279,7 @@ for (ct in list.dirs(eqtl_interaction_loc, recursive = F, full.names = F)) {
 
 # check each cell type in the eQTLs
 caqtl_interactions_per_celltype <- list()
-#for (ct in list.dirs(caqtl_interaction_loc, recursive = F, full.names = F)) {
-#for (ct in c('B')) {
-for (ct in c('CD4T', 'CD8T', 'DC', 'monocyte', 'NK')) {
+for (ct in list.dirs(caqtl_interaction_loc, recursive = F, full.names = F)) {
   print(ct)
   ct_res <- correct_all_chunks_all_chromosomes(
     genotype_loc = genotypes_loc, 
@@ -197,6 +296,10 @@ for (ct in c('CD4T', 'CD8T', 'DC', 'monocyte', 'NK')) {
   ct_res[['total_bf_eigen']] <- ct_res[['p_value']] * n_tests
   # but of course no more than 1
   ct_res[ct_res[['total_bf_eigen']] > 1, 'total_bf_eigen'] <- 1
+  # add qvalue as well, based on the feature-corrrected eigenMT p-value
+  ct_res <- perform_qvalue_correction(ct_res, mtc_column = 'feature_bf_eigen', feature_mtc_column = 'feature')
+  # and also add the 
+  #ct_res <- perform_nominal_threshold_calculation(ct_res, mtc_column = 'feature_q_value', nominal_threshold_column='pval_nominal_threshold', feature_mtc_column='feature')
   # put in list
   caqtl_interactions_per_celltype[[ct]] <- ct_res
   # put the output location together
