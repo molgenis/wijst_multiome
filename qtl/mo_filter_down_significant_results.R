@@ -490,6 +490,114 @@ merge_chromosome_output <- function(input_dir, input_prepend='qtl_results_all_qv
 }
 
 
+perform_qvalue_correction <- function(cell_type_output, mtc_column='empirical_feature_p_value', feature_mtc_column='feature_id', mtc_column_to_add='feature_q_value') {
+  # subset to only the important columns
+  if (is.data.table(cell_type_output)){
+    cell_type_output_features <- cell_type_output[, c(feature_mtc_column, mtc_column), with = F]
+  }
+  else {
+    cell_type_output_features <- cell_type_output[, c(feature_mtc_column, mtc_column)]
+  }
+  # order by significance
+  cell_type_output_features <- cell_type_output_features[order(cell_type_output_features[[mtc_column]]), ]
+  # remove where the feature is smaller than zero
+  cell_type_output_features <- cell_type_output_features[!(cell_type_output_features[[mtc_column]] < 0), ]
+  # keep only the first entry
+  cell_type_output_features[!duplicated(cell_type_output_features[[feature_mtc_column]]), ]
+  # set the values that are larger than 1, to be 1, problem with precision
+  cell_type_output_features[cell_type_output_features[[mtc_column]] > 1, mtc_column] <- 1
+  # add multiple testing correction
+  cell_type_output_features[['qvalue']] <- qvalue::qvalue(cell_type_output_features[[mtc_column]])$qvalues
+  # now add back to the original table
+  cell_type_output[[mtc_column_to_add]] <- cell_type_output_features[match(cell_type_output[[feature_mtc_column]], cell_type_output_features[[feature_mtc_column]]), ][['qvalue']]
+  return(cell_type_output)
+}
+
+
+filter_interactions_by_qtls <- function(input_dir_interactions, input_dir_qtls, output_dir_interactions=NULL, output_file_interactions='/inflammation_final/iqtl_results_all_eigenmt_qval.tsv.gz', input_interactions_filename='/inflammation_final/iqtl_results_all_eigenmt.tsv.gz', input_qtls_prepend='qtl_results_all_qval_', input_qtls_append='_fdr005_significant.txt.gz', significance_cutoffs_qlts=list('feature_q_value'=0.05), feature_column_qtls='feature_id', feature_column_interactions='feature', add_qvalue_interactions=T, qvalue_column_interactions='feature_q_value', column_to_mtc_interactions='feature_bf_eigen', add_total_eigen=T, total_eigen_column_interactions='total_bf_eigen', nominal_p_column_interactions='p_value', n_tests_column_interaction='n_tests_feature') {
+  # get the folders in the directory, which should be the cell types
+  cell_types <- list.dirs(input_dir_interactions, full.names = F, recursive = F)
+  # get the output location
+  output_location <- input_dir_interactions
+  # if supplied, set the output directory
+  if (!is.null(output_dir_interactions)) {
+    output_location <- output_dir_interactions
+  }
+  # we will also store the results
+  results_per_celltype <- list()
+  # check each cell type
+  for (cell_type in cell_types) {
+    # paste together the path to the interactions
+    input_file_interactions <- paste(input_dir_interactions, '/', cell_type, '/', input_interactions_filename, sep = '')
+    # paste together the cell type folder for the qtls
+    input_celltype_dir_qtls <- paste(input_dir_qtls, '/', cell_type, '/', sep = '')
+    # check if the file and directory exist
+    if (file.exists(input_file_interactions) & dir.exists(input_celltype_dir_qtls)) {
+      # list the files
+      input_files_celltype_qtls <- list.files(input_celltype_dir_qtls, full.names = F, recursive = F)
+      # now filter only for the ones we want
+      input_files_celltype_qtls <- input_files_celltype_qtls[grep(paste(input_qtls_prepend, '\\d+', input_qtls_append, '$', sep  = ''), input_files_celltype_qtls)]
+      # we'll save the entire table in parts first
+      qtl_files_list <- list()
+      # and go through each file
+      for (input_file_celltype in input_files_celltype_qtls) {
+        # read the file
+        input_single_file <- read.table(paste(input_celltype_dir_qtls, input_file_celltype, sep = '/'), header = T, sep = '\t')
+        # subset using subsets
+        if (!is.null(significance_cutoffs_qlts)) {
+          # where each key is the column, and the cutoff the value
+          for (cutoff_column in names(significance_cutoffs_qlts)) {
+            input_single_file <- input_single_file[!is.na(input_single_file[[cutoff_column]]) & input_single_file[[cutoff_column]] < significance_cutoffs_qlts[[cutoff_column]], ]
+          }
+          # add to the list
+          qtl_files_list[[input_file_celltype]] <- input_single_file
+        }
+      }
+      # merge all
+      qtl_files_all <- do.call('rbind', qtl_files_list)
+      # get the features
+      qtl_files_all_features <- qtl_files_all[[feature_column_qtls]]
+      # read the interactions
+      input_interactions <- read.table(input_file_interactions, header = T, sep = '\t')
+      # subset to the features that were significant before
+      input_interactions <- input_interactions[input_interactions[[feature_column_interactions]] %in% qtl_files_all_features, ]
+      # (re-) add qvalue correction
+      if (add_qvalue_interactions) {
+        input_interactions <- perform_qvalue_correction(input_interactions, mtc_column = column_to_mtc_interactions, feature_mtc_column = feature_column_interactions, mtc_column_to_add = qvalue_column_interactions)
+      }
+      # add the total eigenMT
+      if (add_total_eigen) {
+        # get the sum of tests
+        n_tests <- sum(input_interactions[!duplicated(input_interactions[[feature_column_interactions]]), n_tests_column_interaction])
+        # bonferroni
+        input_interactions[[total_eigen_column_interactions]] <- input_interactions[[nominal_p_column_interactions]] * n_tests
+      }
+      # paste together the full output location
+      full_output_loc <- paste(output_location, cell_type, output_file_interactions, sep = '/')
+      # store the gz connection if we need it
+      full_output_loc_wzip <- full_output_loc
+      # gzip it if the extention ends on gz
+      if (grepl('.gz$', full_output_loc)) {
+        full_output_loc_wzip <- gzfile(full_output_loc)
+      }
+      # write the file
+      write.table(input_interactions, full_output_loc_wzip, row.names = F, col.names = T, sep = '\t')
+      # make checksum
+      mdfiver::create_md5_for_file(full_output_loc)
+      # put in the list as well
+      results_per_celltype[[cell_type]] <- input_interactions
+    }
+    else {
+      warning(paste('skipping', cell_type, 'because either the interaction file or qtl directory does not exist:', input_dir_interactions, input_dir_qtls))
+    }
+  }
+  return(results_per_celltype)
+}
+
+
+
+
+
 ####################
 # Main Code        #
 ####################
@@ -747,9 +855,9 @@ merge_chromosome_output(caqtl_output_24hca_loc, input_append='_fdr005_significan
 merge_chromosome_output(caqtl_output_loc, input_append='_fdr005_significant.txt.gz', output_dir=NULL, output_file='qtl_results_all_qval_allchroms_fdr005_significant.txt.gz')
 
 # location of the interaction-eQTL outputs
-ieqtl_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/output/nominal_condition/L1/'
-# read the ieqtl output, and filter by ones that are FDR significant in the combined mapping
-
+icaqtl_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_caqtl/sc-eqtlgen/output/combined_significant/L1/'
+# read the icaqtl output, and filter by ones that are FDR significant in the combined mapping
+filter_interactions_by_qtls(icaqtl_output_loc, caqtl_output_loc)
 
 ########################
 # sc-eQTLgen eQTLs     #
