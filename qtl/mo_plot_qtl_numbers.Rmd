@@ -1204,6 +1204,11 @@ caqtl_output_ut_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoin
 caqtl_output_24hca_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/combined_output_50kb/L1/24hCA/'
 caqtl_output_combined_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/output/L1/combined/'
 
+# location of interaction-eQTLs
+
+# location of interaction-caQTLs
+icaqtl_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_caqtl/sc-eqtlgen/output/combined_significant/L1/'
+
 ```
 
 ```{r get_capeak_numbers, include=FALSE}
@@ -1223,6 +1228,15 @@ knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 eqtl_gene_numbers_ut <- get_egene_numbers_per_celltype_limix(eqtl_output_ut_loc, output_file = 'qtl_results_all_qval_allchroms_fdr005_significant.txt.gz')
 eqtl_gene_numbers_24hca <- get_egene_numbers_per_celltype_limix(eqtl_output_24hca_loc, output_file = 'qtl_results_all_qval_allchroms_fdr005_significant.txt.gz')
 eqtl_gene_numbers_combined <- get_egene_numbers_per_celltype_limix(eqtl_output_combined_loc, output_file = 'qtl_results_all_qval_allchroms_fdr005_significant.txt.gz')
+
+```
+
+```{r get_icapeak_numbers, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# get the number of interactions with caQTLs
+icaqtl_peak_numbers <- get_egene_numbers_per_celltype_limix(icaqtl_output_loc, output_file = 'inflammation_final/iqtl_results_all_eigenmt_qval.tsv.gz', significance_column = 'feature_q_value', gene_column = 'feature', significance_cutoff = 0.05)
+
 
 ```
 
@@ -1492,6 +1506,20 @@ for (cell_type in names(caqtl_unique_features)) {
 # now plot these unique features
 plot_unique_features_numbers(caqtl_unique_features_per_celltype) + ggtitle('Condition unique ePeaks were found')
 plot_unique_features_numbers(caqtl_unique_features_per_celltype, pct = T) + ggtitle('Condition unique ePeaks were found')
+
+```
+
+```{r get_icapeak_numbers_plots, include=TRUE, fig.width=7, fig.height=7}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# make a plot of the numbers
+p_icaqtl_peak_numbers_combined <- egene_numbers_to_plot(icaqtl_peak_numbers, legendless = T, use_color_dict = T) +
+  ggtitle('Number of ATAC regions with interaction-caQTL in UT vs 24hCA') +
+  xlab('Cell type') +
+  ylab('Number of ATAC regions') +
+  ylim(c(0, 1300))
+# show the plots
+p_icaqtl_peak_numbers_combined
 
 ```
 
