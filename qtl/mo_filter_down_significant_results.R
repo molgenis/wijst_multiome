@@ -571,6 +571,8 @@ filter_interactions_by_qtls <- function(input_dir_interactions, input_dir_qtls, 
         n_tests <- sum(input_interactions[!duplicated(input_interactions[[feature_column_interactions]]), n_tests_column_interaction])
         # bonferroni
         input_interactions[[total_eigen_column_interactions]] <- input_interactions[[nominal_p_column_interactions]] * n_tests
+        # but of course no more than 1
+        input_interactions[input_interactions[[total_eigen_column_interactions]] > 1, total_eigen_column_interactions] <- 1
       }
       # paste together the full output location
       full_output_loc <- paste(output_location, cell_type, output_file_interactions, sep = '/')
