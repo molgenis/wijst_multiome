@@ -1,45 +1,45 @@
 input_data:
-  cisTopic_obj_fname: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/pycistopic/monocytes_all_cells/cistopic_objects/cistopic_obj_20_topics_model.pkl"
-  GEX_anndata_fname: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scanpy_objects/reconstructed_objects/monocyte.h5ad"
-  region_set_folder: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_limma/region_sets/model_20_topics/"
+  cisTopic_obj_fname: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/pycistopic/objects/merged_major_and_minor_celltypes_120topics.pkl"
+  GEX_anndata_fname: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scanpy_objects/reconstructed_objects/merged_major_and_minor_celltypes.h5ad"
+  region_set_folder: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/region_sets/"
   ctx_db_fname: "/groups/umcg-franke-scrna/tmp04/external_datasets/cistarget/hg38_screen_v10_clust.regions_vs_motifs.rankings.feather"
   dem_db_fname: "/groups/umcg-franke-scrna/tmp04/external_datasets/cistarget/hg38_screen_v10_clust.regions_vs_motifs.scores.feather"
   path_to_motif_annotations: "/groups/umcg-franke-scrna/tmp04/external_datasets/cistarget/motifs-v10nr_clust-nr.hgnc-m0.001-o0.0.tbl"
 
 output_data:
   # output for prepare_GEX_ACC .h5mu
-  combined_GEX_ACC_mudata: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_limma/output/ACC_GEX.h5mu"
+  combined_GEX_ACC_mudata: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/ACC_GEX.h5mu"
   # output for motif enrichment results .hdf5
-  dem_result_fname: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_limma/output/dem_results.hdf5"
-  ctx_result_fname: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_limma/output/ctx_results.hdf5"
+  dem_result_fname: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/dem_results.hdf5"
+  ctx_result_fname: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/ctx_results.hdf5"
   # output html for motif enrichment results .html
-  output_fname_dem_html: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_limma/output/dem_results.html"
-  output_fname_ctx_html: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_limma/output/ctx_results.html"
+  output_fname_dem_html: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/dem_results.html"
+  output_fname_ctx_html: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/ctx_results.html"
   # output for prepare_menr .h5ad
-  cistromes_direct: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_limma/output/cistromes_direct.h5ad"
-  cistromes_extended: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_limma/output/cistromes_extended.h5ad"
+  cistromes_direct: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/cistromes_direct.h5ad"
+  cistromes_extended: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/cistromes_extended.h5ad"
   # output tf names .txt
-  tf_names: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_limma/output/tf_names.txt"
+  tf_names: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/tf_names.txt"
   # output for download_genome_annotations .tsv
-  genome_annotation: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_limma/output/genome_annotation.tsv"
-  chromsizes: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_limma/output/chromsizes.tsv"
+  genome_annotation: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/genome_annotation.tsv"
+  chromsizes: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/chromsizes.tsv"
   # output for search_space .tsb
-  search_space: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_limma/output/search_space.tsv"
+  search_space: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/search_space.tsv"
   # output tf_to_gene .tsv
-  tf_to_gene_adjacencies: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_limma/output/tf_to_gene_adj.tsv"
+  tf_to_gene_adjacencies: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/tf_to_gene_adj.tsv"
   # output region_to_gene .tsv
-  region_to_gene_adjacencies: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_limma/output/region_to_gene_adj.tsv"
+  region_to_gene_adjacencies: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/region_to_gene_adj.tsv"
   # output eGRN .tsv
-  eRegulons_direct: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_limma/output/eRegulon_direct.tsv"
-  eRegulons_extended: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_limma/output/eRegulons_extended.tsv"
+  eRegulons_direct: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eRegulon_direct.tsv"
+  eRegulons_extended: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eRegulons_extended.tsv"
   # output AUCell .h5mu
-  AUCell_direct: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_limma/output/AUCell_direct.h5mu"
-  AUCell_extended: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_limma/output/AUCell_extended.h5mu"
+  AUCell_direct: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/AUCell_direct.h5mu"
+  AUCell_extended: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/AUCell_extended.h5mu"
   # output scplus mudata .h5mu
-  scplus_mdata: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_limma/output/scplusmdata.h5mu"
+  scplus_mdata: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/scplusmdata.h5mu"
 
 params_general:
-  temp_dir: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_limma/tmp/"
+  temp_dir: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/tmp/"
   n_cpu: 40
   seed: 1337
 
