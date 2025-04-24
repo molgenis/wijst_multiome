@@ -1,4 +1,6 @@
 """
+python mo_parts_to_scanpy.py
+
 This script is for creating a scanpy object
 
 authors: Roy Oelen
@@ -6,12 +8,13 @@ authors: Roy Oelen
 example usage:
 
 python mo_parts_to_scanpy.py \
-    --matrix_location /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scanpy_objects/deconstructed_objects/monocyte/RNA/counts/matrix.mtx \
-    --barcodes_location /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scanpy_objects/deconstructed_objects/monocyte/RNA/counts/barcodes.tsv.gz \
-    --features_location /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scanpy_objects/deconstructed_objects/monocyte/RNA/counts/features.tsv.gz \
-    --output_location /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scanpy_objects/reconstructed_objects/monocyte.h5ad \
-    --metadata_location /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scanpy_objects/deconstructed_objects/monocyte/metadata.tsv.gz \
-    --barcode_include_location /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/pycistopic/deconstruced_atac_objects/merged_major_and_minor_celltypes/barcodes.tsv.gz
+    --matrix_location /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scanpy_objects/deconstructed_objects/all/RNA/counts/matrix.mtx \
+    --barcodes_location /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scanpy_objects/deconstructed_objects/all/RNA/counts/barcodes.tsv.gz \
+    --features_location /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scanpy_objects/deconstructed_objects/all/RNA/counts/features.tsv.gz \
+    --output_location /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scanpy_objects/reconstructed_objects/merged_major_and_minor_celltypes.h5ad \
+    --metadata_location /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scanpy_objects/deconstructed_objects/all/metadata.tsv.gz \
+    --barcode_include_location /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/pycistopic/deconstruced_atac_objects/merged_major_and_minor_celltypes/barcodes.tsv.gz \
+    --skip_qc
 
 """
 
@@ -24,6 +27,8 @@ import pandas as pd
 import argparse
 import pathlib
 import scanpy as sc
+import hashlib
+
 
 ##########################################
 # create md5 checksum for created object #
@@ -82,7 +87,7 @@ parser.add_argument('-b', '--barcodes_location', type = str, help = 'location of
 parser.add_argument('-f', '--features_location', type = str, help = 'location of the features.tsv.gz file (string)')
 parser.add_argument('-o', '--output_location', type = str, help = 'location of the resulting scanpy object (string)')
 parser.add_argument('-d', '--metadata_location', type = str, help = 'location of metadata to add to the object, first column must be the index (string)', default = None)
-parser.add_argument('-b', '--barcode_include_location', type = str, help = 'text file containing barcodes of cells to include, will only keep these cells (string)', default = None)
+parser.add_argument('-i', '--barcode_include_location', type = str, help = 'text file containing barcodes of cells to include, will only keep these cells (string)', default = None)
 parser.add_argument('-q', '--skip_qc', action='store_true', help = 'perform quality control on the the data (bool)', default = True)
 args = parser.parse_args()
 
@@ -116,7 +121,7 @@ if args.barcode_include_location is not None:
     # and filter on those barcodes
     object_raw = object_raw[bc_inclusion_list].copy()
 # backup the raw expression
-object_raw.raw = object_raw
+object_raw.layers['counts'] = object_raw.X.copy()
 
 
 ##############
