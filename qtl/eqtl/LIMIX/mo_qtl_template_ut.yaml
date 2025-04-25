@@ -20,11 +20,11 @@ genotype_loc: /groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pip
 genotype_prepend: EUR_imputed_hg38_varFiltered_chr
 genotype_append: .bgen #TODO not used
 # phenotype inputs
-phenotype_loc: /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/input/L1/combined/
+phenotype_loc: /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/sc-eqtlgen/input/L1/UT/
 phenotype_prepend:
 phenotype_append: .qtlInput.txt.gz
 # covariates and as such, interaction terms
-covariates_loc: /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/input/L1/combined/
+covariates_loc: /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/sc-eqtlgen/input/L1/UT/
 covariates_prepend:
 covariates_append: .qtlInput.Pcs.txt.gz
 # location of kinship file
@@ -34,14 +34,14 @@ chunking_file_loc: /groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortiu
 # location of the limix annotation file
 limix_annotation_loc: /groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/input/LimixAnnotationFile.txt
 # location of the sample mapping file
-smf_loc: /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/input/L1/combined/smf.txt
+smf_loc: /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/sc-eqtlgen/input/L1/UT/smf.txt
 
 
 #####################################
 ##       input files/folders       ###
 #####################################
 
-out_folder: /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/sc-eqtlgen/output/L1/combined/
+out_folder: /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/sc-eqtlgen/output/L1/UT/
 
 
 ######################################
