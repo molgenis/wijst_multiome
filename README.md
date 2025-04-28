@@ -101,7 +101,7 @@ Below we will outline the steps taken to process and analyse the data
 
 
 ### differential protein expression analysis
-'*differential_protein/lc_covid_olink.R*'   perform differential protein analysis with a linear regression model on the long-covid status\
+'*differential_protein/lc_covid_olink.R*'   perform differential protein analysis with a linear regression model on the long-covid status
 
 
 ### cpeaks-based ATAC data processing
@@ -154,31 +154,48 @@ Below we will outline the steps taken to process and analyse the data
 
 
 ### CRE detection
+'*cre_detection/mo_scenicplus_env.yml*' environment with packages used for CRE detection
+
 '*cre_detection/data_preparation/mo_deconstruct_signac_objects.R'* deconstruct the Signac objects into matrix/features/barcodes, to merge for pycistopic
 '*cre_detection/data_preparation/mo_deconstruct_rna_objects.R'* deconstruct the Seurat objects into matrix/features/barcodes, to use in the SCENIC+ step
-'*cre_detection/data_preparation/mo_get_outer_join_filtered_chromatin_regions.R'* get all the regions that are represented in .1% cells in any cell type
-'*cre_detection/data_preparation/mo_create_pycistopic_annotations.R'* create annotations for regions to use in pycistopic
-'*cre_detection/data_preparation/mo_merge_chunked_mtx_files.py'* merge chunked mtx files into one file
+'*cre_detection/data_preparation/mo_parts_to_scanpy.py'*    create scanpy object from deconstructed Seurat object
+'*cre_detection/data_preparation/mo_get_outer_join_filtered_chromatin_regions.R'*   get all the regions that are represented in .1% cells in any cell type
+'*cre_detection/data_preparation/mo_create_pycistopic_annotations.R'*   create annotations for regions to use in pycistopic
+'*cre_detection/data_preparation/mo_merge_chunked_mtx_files.py'*    merge chunked mtx files into one file
 
-'*cre_detection/pycistopic/mo_create_pycistopic_object.ipynb'* create pycistopic object
-'*cre_detection/pycistopic/mo_pycistopic_model_topics.ipynb'* perform topic modelling
-'*cre_detection/pycistopic/mo_pycistopic_binarize_topics.ipynb'* binarize topics
+'*cre_detection/pycistopic/mo_create_pycistopic_object.ipynb'*  create pycistopic object\
+'*cre_detection/pycistopic/mo_pycistopic_model_topics.ipynb'*   perform topic modelling\
+'*cre_detection/pycistopic/mo_pycistopic_binarize_topics.ipynb'*    binarize topics\
+'*cre_detection/pycistopic/mo_pycistopic_impute_accessibility.ipynb'*   impute accessibility matrices\
+'*cre_detection/pycistopic/mo_pycistopic_normalize_accessibility.ipynb'*   normalize accessibility matrices\
+'*cre_detection/pycistopic/mo_pycistopic_normalize_accessibilityfind_variable_features.ipynb'*   find DARs that vary\
+'*cre_detection/pycistopic/mo_pycistopic_export_topic_contributions.ipynb'*   export contributions of cells and regions to topics to tables\
+'*cre_detection/pycistopic/mo_region_topics_to_beds.R'*   export topic membership of regions to bed files
 
-'*cre_detection/pycistarget/mo_cistarget.ipynb*'  run pycistarget and DEM to identify overrepresented motifs in the DARs\
+'*cre_detection/dar_identification/mo_identify_dars_wilcoxon.py'*  perform DAR detection between topics in pycistopic using the wilcoxon rank sum test\
+'*cre_detection/dar_identification/mo_identify_dars_celltypes_wilcoxon.py'*  perform DAR detection between cell type in pycistopic using the wilcoxon rank sum test\
+'*cre_detection/dar_identification/mo_extract_dar_outputs.ipynb'*  convert binary DAR detection output into tsv format\
+'*cre_detection/dar_identification/mo_check_dar_numbers.ipynb'*  check DAR and topic membership against available metadata
 
-'*cre_detection/scenicplus/mo_parts_to_scanpy.py*'  use deconstructed Seurat objects and convert them into scanpy\
+'*cre_detection/pycistarget/mo_cistarget.ipynb*'  run pycistarget and DEM to identify overrepresented motifs in the DARs
+
 '*cre_detection/scenicplus/scenicplus_config.yaml*'  config for running scenic+ pipeline after setting up all inputs
 
 
 ### eQTL mapping
 '*qtl/eqtl/LIMIX/mo_create_limix_qtl_input.R*'  create input for LIMIX eQTL mapping\
-'*qtl/eqtl/mo_create_n_cellss_expressed_tables.R*'  create table of number of non-zero nuclei per gene and donor
+'*qtl/eqtl/mo_create_n_cellss_expressed_tables.R*'  create table of number of non-zero nuclei per gene and donor\
+'*qtl/eqtl/LIMIX/mo_annotation_to_chunking_file.R*' create chunking file for eQTL mapping in LIMIX\
+'*qtl/eqtl/LIMIX/limix_qtl.smk*'    LIMIX snakemake file to do eQTL mapping\
+'*qtl/eqtl/LIMIX/mo_qtl_template.yaml*' LIMIX configuration file to do eQTL mapping
 
 
 ### caQTL mapping
 '*qtl/caqtl/mo_create_limix_chromatin_input.R*'     create input for LIMIX caQTL mapping\
 '*qtl/caqtl/mo_create_n_cellss_accessible_tables.R*'  create table of number of non-zero nuclei per region and donor\
-'*qtl/caqtl/mo_create_caqtl_feature_filters.R*'   create lists of features to test for caQTL mapping
+'*qtl/caqtl/mo_create_caqtl_feature_filters.R*'   create lists of features to test for caQTL mapping\
+'*qtl/caqtl/mo_create_caqtl_feature_filters.R*'   create lists of features to test for caQTL mapping\
+'*qtl/caqtl/mo_caqtl_lcl_replication.Rmd*'  plot replication of LCL caQTLs in our B caQTL output
 
 
 ### QTL results
@@ -206,9 +223,27 @@ Below we will outline the steps taken to process and analyse the data
 '*qtl/mediation/mo_create_mediation_jobs.sh*'    create run eQTL-by-caQTL mediaton analysis jobs
 
 
+### QTL finemapping
+'*qtl/finemapping/mo_finemap_qtls.R*'   perform finemapping on QTL summary statistics coming from LIMIX-QTL\
+'*qtl/finemapping/lpmcv2_format_finemapping*'   convert binary .rds finemapping results into tsv files\
+'*qtl/finemapping/mo_create_finemap_jobs.sh*'   create sbatch jobs to do finemapping
+
+
 ### QTL utility scripts
 '*qtl/mo_regress_qtlinputs.py*'    regress PCs out of QTL input files\
 '*qtl/mo_eigenmt_correct_limix_qtls.R*'    perform eigenMT MTC on QTL outputs
+
+
+### QTL CRE replication
+'*qtl/cre_qtl/mo_creqtl_env.yml*'  yaml for creating conda environment to do CRE replication
+'*qtl/cre_qtl/mo_split_sample_and_celltype.R*'  split Seurat object into separate matrices/features/barcodes for each sample
+'*qtl/cre_qtl/mo_split_sample_and_celltype_each.sh*'    split each Seurat object
+'*qtl/cre_qtl/mo_calculate_atac_rna_betas.py*'  calculate the scaled beta+se between accessibility and expression using a binomial model for a combination of an accessiblity and an expression matrix
+'*qtl/cre_qtl/mo_create_beta_calculation_jobs.sh*'  create jobs to calculate beta+se of accessibility and expression for each sample
+'*qtl/cre_qtl/mo_aggregated_creqtl_inputs.sh*'  aggregate per-sample outputs of beta calculation jobs
+'*qtl/cre_qtl/mo_meta_analyse_creqtl_cres*' meta-analyse betas and ses calculated and aggregated in previous steps to get to significant region-gene pairs
+'*qtl/cre_qtl/mo_plot_replicating_cres.ipynb*'  plot properties of region-gene pairs that were overlapping eQTLs/caQTLs and replicate as CREs
+'*qtl/cre_qtl/mo_plot_creqtls.Rmd*' plot proportion of region-gene pairs that were overlapping eQTLs/caQTLs and replicate as CREs
 
 
 ### cell type composition GWAS
@@ -217,11 +252,10 @@ Below we will outline the steps taken to process and analyse the data
 '*ctc_gwas/mo_ctc_gwas_wg2_step4.sh*'    for the cell type composition GWAS, perform step 4 of sc-eQTLgen WG2 to get consortium-compatible cell types
 
 
-# scripts no longer used
+## scripts no longer used
 '*demultiplexing/mo_run_scrublet.py*'   python script to run Scrublet on a CellBender corrected 10x lane\
 '*demultiplexing/mo_test_scrublet.ipynb*'   jupyter notebook to test Scrublet on individual 10x lanes\
 '*differential_accessibility/mo_differential_accessibility_kimma_parameterised.R*'  check differential accessible regions using kimma on the stimulation status
-
 
 
 
