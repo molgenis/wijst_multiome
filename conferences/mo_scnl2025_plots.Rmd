@@ -1,0 +1,999 @@
+---
+title: "mo_scnl2025_plots"
+author: "Roy Oelen"
+date: "2025-03-31"
+output: html_document
+---
+
+```{r header, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+#!/usr/bin/env Rscript
+############################################################################################################################
+# Authors: Roy Oelen
+# Name: mo_scnl2025_plots.Rmd
+# Function: make the plots for the scnl poster
+############################################################################################################################
+```
+
+```{r libraries, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+####################
+# libraries        #
+####################
+
+library(data.table)
+library(ggplot2)
+library(cowplot)
+library(RColorBrewer)
+library(roycols)
+library(ggrastr)
+library(ggpubr)
+library(UpSetR)
+library(grid)
+library(IRanges)
+
+```
+
+```{r functions, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+####################
+# Functions        #
+####################
+
+
+#' get a label dict that replaces the posix safe names into printable versions
+#' 
+#' @returns a label dict that replaces the posix safe names into printable versions
+#' label_dict_names <- get_label_dict()
+get_label_dict <- function() {
+  label_dict <- list()
+  label_dict[['CD4_T_cells']] <- 'CD4+ T cells'
+  label_dict[['CD8_T_cells']] <- 'CD8+ T cells'
+  label_dict[['CD4T']] <- 'CD4+ T'
+  label_dict[['CD8T']] <- 'CD8+ T'
+  label_dict[['CD4_T']] <- 'CD4+ T'
+  label_dict[['CD8_T']] <- 'CD8+ T'
+  label_dict[['Dendritic_cells']] <- 'Dendritic cells'
+  label_dict[['Endothelial_cells']] <- 'Endothelial cells'
+  label_dict[['Fibroblasts']] <- 'Fibroblasts'
+  label_dict[['Glia_cells']] <- 'Glia cells'
+  label_dict[['Mast_cells']] <- 'MAST cells'
+  label_dict[['Mature_absorptive_enterocytes']] <- 'Mature absorptive enterocytes'
+  label_dict[['Mature_secretory_enterocytes']] <- 'Mature secretory enterocytes'
+  label_dict[['Memory_B']] <- 'Memory B cells'
+  label_dict[['Monocytes']] <- 'Monocytes'
+  label_dict[['monocyte']] <- 'Monocyte'
+  label_dict[['Mono']] <- 'Monocyte'
+  label_dict[['Plasma_cells']] <- 'Plasma cells'
+  label_dict[['Stem_cells']] <- 'Stem cells'
+  label_dict[['Stromal_cells']] <- 'Stromal cells'
+  label_dict[['T_others']] <- 'other T cells'
+  label_dict[['Transit_amplifying_cells']] <- 'Transit amplifying cells'
+  label_dict[['AI']] <- 'Actively Inflamed'
+  label_dict[['NI']] <- 'Non-Inflamed'
+  return(label_dict)
+}
+
+
+rename_labels <- function(vector_to_rename) {
+  # get the labels that are present
+  label_renaming <- get_label_dict()
+  # now check which labels we are missing
+  missing_renames <- setdiff(unique(vector_to_rename), names(label_renaming))
+  # add those renames as not being renames
+  for (missing_rename in missing_renames) {
+    label_renaming[[missing_rename]] <- missing_rename
+  }
+  # now replace each value with the rename
+  renamed_vector <- as.vector(unlist(label_renaming[vector_to_rename]))
+  # and return that
+  return(renamed_vector)
+}
+
+
+remap_with_label_dict <- function(vector_of_names) {
+  # get the label dict
+  relabels <- get_label_dict()
+  # get the labels available for renaming
+  labels_available <- names(relabels)
+  # get the ones we cant remap
+  unmappable <- setdiff(unique(vector_of_names), labels_available)
+  # report on those
+  if (length(unmappable) > 0) {
+    print(paste('cannot remap the following names, they will be returned unchanged:', paste(unmappable, collapse = ',')))
+    # and put those in our remapping list as their originals
+    relabels[unmappable] <- unmappable
+  }
+  # now actually do the remapping
+  remapped <- as.vector(unlist(relabels[vector_of_names]))
+  return(remapped)
+}
+
+
+get_color_coding_dict <- function() {
+	# medhigh
+  color_coding_dict <- list()
+  color_coding_dict[["B"]] <- "#71BC4B"
+  #color_coding_dict[['CD4_T_cells']] <- '#7FC97F'
+  color_coding_dict[['CD4_T_cells']] <- '#153057'
+  color_coding_dict[['CD4T']] <- '#153057'
+	#color_coding_dict[['CD8_T_cells']] <- '#BEAED4'
+	color_coding_dict[['CD8_T_cells']] <- '#009DDB'
+	color_coding_dict[['CD8T']] <- '#009DDB'
+	#color_coding_dict[['Dendritic_cells']] <- '#FDC086'
+	color_coding_dict[['Dendritic_cells']] <- '#965EC8'
+	color_coding_dict[['DC']] <- '#965EC8'
+	color_coding_dict[['Endothelial_cells']] <- '#FFFFB3'
+	color_coding_dict[['Fibroblasts']] <- '#386CB0'
+	color_coding_dict[['Glia_cells']] <- '#F0027F'
+	color_coding_dict[['Mast_cells']] <- '#BF5B17'
+	color_coding_dict[['Mature_absorptive_enterocytes']] <- '#A6CEE3'
+	color_coding_dict[['Mature_secretory_enterocytes']] <- '#1B9E77'
+	color_coding_dict[['Memory_B']] <- '#D95F02'
+	color_coding_dict[['Microfold_cell']] <- '#BEAED4'
+	#color_coding_dict[['Monocytes']] <- '#7570B3'
+	color_coding_dict[['Monocyte']] <- '#EDBA1B'
+	color_coding_dict[['Naive_B_cells']] <- '#FDC086'
+	color_coding_dict[['NK']] <- '#E64B50'
+	#color_coding_dict[['Plasma_cells']] <- '#E7298A'
+	color_coding_dict[['Plasma_cells']] <- '#DB8E00'
+	color_coding_dict[['Stem_cells']] <- '#66A61E'
+	color_coding_dict[['Stromal_cells']] <- '#8DD3C7'
+	#color_coding_dict[['T_others']] <- '#A6761D'
+	color_coding_dict[['T_others']] <- '#FF63B6'
+	color_coding_dict[['Transit_amplifying_cells']] <- '#FF7F00'
+	color_coding_dict[['disconcordant']] <- 'gray'
+  #color_coding_dict[['CD4+ T cells']] <- '#7FC97F'
+  color_coding_dict[['CD4+ T cells']] <- '#153057'
+  color_coding_dict[['CD4+ T']] <- '#153057'
+	#color_coding_dict[['CD8+ T cells']] <- '#BEAED4'
+	color_coding_dict[['CD8+ T cells']] <- '#009DDB'
+	color_coding_dict[['CD8+ T']] <- '#009DDB'
+	#color_coding_dict[['Dendritic cells']] <- '#FDC086'
+	color_coding_dict[['Dendritic cells']] <- '#965EC8'
+	color_coding_dict[['Endothelial cells']] <- '#FFFFB3'
+	color_coding_dict[['Endothelial\ncells']] <- '#FFFFB3'
+	color_coding_dict[['Fibroblasts']] <- '#386CB0'
+	color_coding_dict[['Glia cells']] <- '#F0027F'
+	color_coding_dict[['MAST cells']] <- '#BF5B17'
+	color_coding_dict[['Mature absorptive enterocytes']] <- '#A6CEE3'
+	color_coding_dict[['Mature\nabsorptive\nenterocytes']] <- '#A6CEE3'
+	color_coding_dict[['Mature secretory enterocytes']] <- '#1B9E77'
+	color_coding_dict[['Mature secretory\nenterocytes']] <- '#1B9E77'
+	color_coding_dict[['Memory B cells']] <- '#D95F02'
+	#color_coding_dict[['Monocytes']] <- '#7570B3'
+	color_coding_dict[['Microfold cells']] <- '#BEAED4'
+	color_coding_dict[['Monocytes']] <- '#EDBA1B'
+	color_coding_dict[['Naive B cells']] <- '#FDC086'
+	#color_coding_dict[['Plasma cells']] <- '#E7298A'
+	color_coding_dict[['Plasma cells']] <- '#DB8E00'
+	color_coding_dict[['Stem cells']] <- '#66A61E'
+	color_coding_dict[['Stromal cells']] <- '#8DD3C7'
+	#color_coding_dict[['other T cells']] <- '#A6761D'
+	color_coding_dict[['other T cells']] <- '#FF63B6'
+	color_coding_dict[['Transit amplifying cells']] <- '#FF7F00'
+	color_coding_dict[['Transit\namplifying cells']] <- '#FF7F00'
+	color_coding_dict[['disconcordant']] <- 'gray'
+	# up and down regulation will be added to, we need a whitening percentage
+	pct_whitening <- 40
+	# then we will check each cell type
+	for (cell_type in names(color_coding_dict)) {
+	  # the up color is the same as the regular one
+	  color_coding_dict[[paste(cell_type, 'up')]] <- color_coding_dict[[cell_type]]
+	  # but the down one will have a more faded colour
+	  color_coding_dict[[paste(cell_type, 'down')]] <- colorRampPalette(c(color_coding_dict[[cell_type]], "white"))(100)[pct_whitening]
+	  # we'll do something similiar when we have multiple conditions
+	  color_coding_dict[[paste(cell_type, 'combined')]] <- color_coding_dict[[cell_type]]
+	  color_coding_dict[[paste(cell_type, 'UT')]] <- colorRampPalette(c(color_coding_dict[[cell_type]], "white"))(100)[pct_whitening]
+	  color_coding_dict[[paste(cell_type, '24hCA')]] <- colorRampPalette(c(color_coding_dict[[cell_type]], "black"))(100)[pct_whitening]
+	}
+	# general
+	color_coding_dict[['AI']] <- 'darkblue'
+	color_coding_dict[['NI']] <- 'darkred'
+	color_coding_dict[['Actively Inflamed']] <- 'darkblue'
+	color_coding_dict[['Non-Inflamed']] <- 'darkred'
+	return(color_coding_dict)
+}
+
+
+split_string_with_max_length <- function(string, max_length=15) {
+  # split the string on the space first
+  words <- strsplit(string, ' ')[[1]]
+  # and initial pasted string
+  final_string <- ''
+  # and the temporary string
+  tmp_string <- ''
+  # check each word
+  for (word in words) {
+    # get the lenght of the temporary string
+    tmp_len <- nchar(tmp_string)
+    # get the length of the word
+    word_len <- nchar(word)
+    # length of the final string
+    final_len <- nchar(final_string)
+    # check if adding the next word would make us go over the limit
+    if ((tmp_len + word_len) > max_length) {
+      if (final_len > 0) {
+        # add the temporary word to the final string if it was not empty
+        final_string <- paste(final_string, '\n', tmp_string, sep = '')
+      }
+      else{
+        # if there was not final string yet, it will just become that temporary string
+        final_string <- tmp_string
+      }
+      # reset the temporary string
+      tmp_string <- word
+    }
+    else{
+      # otherwise add it to the temporary string
+      if (tmp_len > 0) {
+        tmp_string <- paste(tmp_string, word)
+      }
+      # or set if the temporary string was empty
+      else{
+        tmp_string <- word
+      }
+    }
+  }
+  # add last word
+  if (nchar(paste(final_string, tmp_string)) > max_length) {
+    if (nchar(final_string) == 0) {
+      final_string <- tmp_string
+    }
+    else if (nchar(tmp_string > 0)) {
+      final_string <- paste(final_string, '\n', tmp_string, sep = '')
+    }
+    else{
+      # nothing the final string is as it is
+    }
+  }
+  else {
+    if (nchar(final_string) == 0) {
+      final_string <- tmp_string
+    }
+    else if(nchar(tmp_string) == 0){
+      # nothing, the final string is as is
+    }
+    else{
+      final_string <- paste(final_string, ' ', tmp_string, sep = '')
+    }
+  }
+  # add the last word
+  return(final_string)
+}
+
+
+split_strings_with_max_length <- function(strings, max_length=15) {
+  strings_split <- sapply(strings, FUN = function(x){
+    split_string_with_max_length(x, max_length)
+  })
+  strings_split <- as.vector(strings_split)
+  return(strings_split)
+}
+
+
+#' get the eGenes per cell type from QTL output
+#' 
+#' @param qtl_output_loc base location of the QTL output per cell type
+#' @param output_file which output file to read for the results
+#' @param gene_column which column to use as the gene identifier
+#' @returns a list with the egenes per cell type
+#' 
+get_egenes_per_celltype_limix <- function(qtl_output_loc, output_file='qtl_results_all.txt.gz', gene_column='feature_id', significance_column='feature_q_value', significance_cutoff=0.05, verbose=T) {
+  # get the folders in the directory, which should be the cell types
+  cell_types <- list.dirs(qtl_output_loc, full.names = F, recursive = F)
+  # we will store the results in a list for now
+  egenes_per_celltype <- list()
+  # check each cell type
+  for (cell_type in cell_types) {
+    # paste together the full path
+    full_cell_type_path <- paste(qtl_output_loc, '/', cell_type, '/', output_file, sep = '')
+    # log if requested
+    if (verbose) {
+      print(paste('reading', full_cell_type_path))
+    }
+    # read the file
+    cell_type_output <- read.table(full_cell_type_path, sep = '\t', header = T)
+    # filter the results on significance
+    if (!is.null(significance_column)) {
+      # print progress if requested
+      if (verbose) {
+        print(paste('variant+phenotype before filtering', nrow(cell_type_output)))
+      }
+      # filter
+      cell_type_output <- cell_type_output[
+        !is.na(cell_type_output[[significance_column]]) &
+          cell_type_output[[significance_column]] < significance_cutoff, 
+      ]
+      if (verbose) {
+        print(paste('variant+phenotype after filtering', nrow(cell_type_output)))
+      }
+    }
+    # get the unique genes in this file
+    unique_genes <- unique(cell_type_output[[gene_column]])
+    # add to the list
+    egenes_per_celltype[[cell_type]] <- unique_genes
+  }
+  # turn into a dataframe
+  return(egenes_per_celltype)
+}
+
+
+
+#' Plot Sharing of  Genes per Cell Type
+#'
+#' This function plots the sharing of differentially genes across cell types using an UpSet plot. It allows the use of custom label and color dictionaries.
+#'
+#' @param genes_per_ct list with the genes for each cell type
+#' @param use_label_dict A logical value indicating whether to use a custom label dictionary for renaming cell types. Default is TRUE.
+#' @param use_color_dict A logical value indicating whether to use a custom color dictionary for cell types. Default is TRUE.
+#' @param n_intersects value describing how many intersections to plot, default is all
+#' @return An UpSet plot showing the sharing of DE genes across cell types.
+#'
+plot_sharing_per_celltype <- function(genes_per_ct, use_label_dict=T, use_color_dict=T, n_intersects=NA){
+  # get the total overlap
+  total_overlap <- fromList(genes_per_ct)
+  # count how many in each overlap
+  combination_to_overlap <- list()
+  apply(total_overlap, 1, function(x){
+    # get which ones have a number
+    positions_1 <- x > 0
+    # get which these are, and paste together
+    cols_1 <- paste(colnames(total_overlap)[positions_1], collapse = ',')
+    # add to list if does not exist
+    if (cols_1 %in% c(names(combination_to_overlap))) {
+      combination_to_overlap[[cols_1]] <<- combination_to_overlap[[cols_1]] + 1
+    }
+    else{
+      combination_to_overlap[[cols_1]] <<- 1
+    }
+  })
+  # make into an ordered df
+  combination_numbers <- data.frame('combination' = names(combination_to_overlap), 'nr' = as.vector(unlist(combination_to_overlap)))
+  combination_numbers <- combination_numbers[order(combination_numbers[['nr']], combination_numbers[['combination']], decreasing = T), ]
+  # get lowest number we have for the sets
+  intersect_size_smallest <- 0
+  if (is.na(n_intersects)) {
+    intersect_size_smallest <- min(combination_numbers[['nr']])
+  }
+  else {
+    intersect_size_smallest <- combination_numbers[n_intersects, 'nr']
+  }
+  # set queries and colours
+  queries <- list()
+  sets.bar.color <- 'black'
+  if(use_color_dict){
+    # create df to store the number of each set, so we know how to order
+    nrs_df <- NULL
+    # get the cell types we have
+    cell_types <- names(genes_per_ct)
+    # get colour codes for the cell types
+    cell_type_colours <- get_color_coding_dict()
+    # also get colours for the cell types we don't have colours for
+    cell_type_colours_missing <- get_color_list(setdiff(cell_types, names(cell_type_colours)))
+    # and merge them
+    cell_type_colours <- c(cell_type_colours, cell_type_colours_missing)
+    # add the colors for the cell types
+    i <- 1
+    for(cell_type in cell_types){
+      # check if there is a singleton for this cell type, so this celltype is 1, but the total of the row is also 1
+      n_singletons <- nrow(total_overlap[total_overlap[[cell_type]] == 1 & rowSums(total_overlap) == 1, ])
+      # if we have singletons, colour it
+      if (n_singletons > 0 & n_singletons >= intersect_size_smallest) {
+        # add for the singles in the intersection sizes
+        ct_list <- list(
+          query = intersects,
+          params = list(cell_type),
+          color = cell_type_colours[[cell_type]],
+          active = T)
+        queries[[i]] <- ct_list
+        i <- i + 1
+      }
+      # add for the DF to order the set sizes
+      numbers_row <- data.frame(ct=c(cell_type), nr=c(length(genes_per_ct[[cell_type]])), stringsAsFactors = F)
+      if(is.null(nrs_df)){
+        nrs_df <- numbers_row
+      }
+      else{
+        nrs_df <- rbind(nrs_df, numbers_row)
+      }
+    }
+    # get the order of the sets
+    ordered_cts <- nrs_df[order(nrs_df$nr, decreasing = T), 'ct']
+    # add the colors for the sets
+    sets.bar.color <- unlist(cell_type_colours[ordered_cts])
+    # make the plot
+    upset(total_overlap, order.by = 'freq', nsets = length(genes_per_ct), queries = queries, sets.bar.color=sets.bar.color, nintersects = n_intersects)
+  }
+  else {
+    upset(total_overlap, order.by = 'freq', nsets = length(genes_per_ct), nintersects = n_intersects)
+  }
+  
+  #return(DE_genes_per_ct)
+}
+
+#' plot in a barplot the number of DE genes per cell type
+#' 
+#' @param egene_numbers the table containing the number of eenes per cell type
+#' @param celltype_column which column of the supplied table has the celltype name
+#' @param number_column which column of the supplied table has the number of DE genes
+#' @param pointless draw the ticks on the bottom of the plot?
+#' @param legendless draw the legend?
+#' @param ylim the range for the y-axis
+#' @param paper_style use the paper style with more whitespace
+#' @param angle_labels angle the x labels 90 degrees?
+#' @param use_distinct_colours use the distinct colour palette instead of ggplot defaults (optional, default T)
+#' @param use_sampling randomly sample colours from the distinct colour palette (optional, default F)
+#' @param color_indices supply specific indices relating to colours to use from the distinct colour palette. Use 'get_available_colours_grid' to get the colours and their indices (optional, unused by default)
+#' @param use_label_dict change names to a more pleasing format
+#' @param make_labels_multiline make labels multiline if they are long
+#' @param x_order to order the values on the x axis
+#' @returns a barplot with the number of eGenes per cell type
+#' 
+egene_numbers_to_plot <- function(egene_numbers, celltype_column='cell_type', number_column='nr', pointless=F, legendless=F, ylim=NULL, paper_style=T, angle_labels=T, use_distinct_colours=T, use_sampling=F, color_indices=NULL, use_color_dict=F, use_label_dict=T, split_long_labels_to_lines=T, x_order=NULL) {
+  # remap names if requested
+  if (use_label_dict) {
+    egene_numbers[[celltype_column]] <- remap_with_label_dict(egene_numbers[[celltype_column]])
+  }
+  # make them multiline
+  if (split_long_labels_to_lines) {
+    egene_numbers[[celltype_column]] <- split_strings_with_max_length(egene_numbers[[celltype_column]])
+  }
+  # order the x axis if requested
+  if (!is.null(x_order)) {
+    egene_numbers[[celltype_column]] <- factor(egene_numbers[[celltype_column]], levels = x_order)
+  }
+  # start plot
+  p <- ggplot(mapping = aes(x = egene_numbers[[celltype_column]], y = egene_numbers[[number_column]], fill = egene_numbers[[celltype_column]])) +
+    geom_bar(stat='identity') + xlab(celltype_column) + ylab(number_column)
+  # options
+  if (use_distinct_colours) {
+    # get the unique possible assigments
+    possible_assignments <- unique(egene_numbers[[celltype_column]])
+    # put into a list
+    colour_mapping <- roycols::get_color_list(possible_assignments)
+    # add to plot
+    p <- p + scale_fill_manual(values = colour_mapping)
+  }
+  if (use_color_dict) {
+    # get the color coding dict
+    colour_mapping <- get_color_coding_dict()
+    # also rename here then
+    if (split_long_labels_to_lines) {
+      names(colour_mapping) <- split_strings_with_max_length(names(colour_mapping))
+    }
+    # add to plot
+    p <- p + scale_fill_manual(values = colour_mapping)
+  }
+  if(!is.null(ylim)){
+    p <- p + ylim(ylim)
+  }
+  if(pointless){
+    p <- p + theme(axis.text.x=element_blank(), 
+                   axis.ticks = element_blank())
+  }
+  if(legendless){
+    p <- p + theme(legend.position = 'none')
+  }
+  if (paper_style) {
+    p <- p + theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+  }
+  if (angle_labels) {
+    p <- p + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+  }
+  return(p)
+}
+
+
+
+```
+
+```{r path_setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+####################
+# Main Code        #
+####################
+
+# location of eQTL
+eqtl_output_combined_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/sc-eqtlgen/output/L1/combined/'
+# location of caQTL output
+caqtl_output_ut_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/output_cis_50kb_updated_features/L1/UT/'
+caqtl_output_24hca_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/output_cis_50kb_updated_features/L1/24hCA/'
+
+```
+
+```{r get_egene_lists, include=TRUE, fig.width=10, fig.height=10}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# get the egenes for each cell type in UT
+eqtl_egenes_combined <- get_egenes_per_celltype_limix(eqtl_output_combined_loc, output_file = 'qtl_results_all_qval_allchroms_fdr005_significant.txt.gz', significance_column='p_value')[c('B', 'CD4T', 'CD8T', 'DC', 'monocyte', 'NK')]
+
+# rename the labels to something nicer
+names(eqtl_egenes_combined) <- rename_labels(names(eqtl_egenes_combined))
+
+# save into plot
+pdf("~/plots/mo_scnl_egene_sharing.pdf", width = 10, height = 10)
+# and make the plot
+plot_sharing_per_celltype(eqtl_egenes_combined, use_label_dict = F, use_color_dict = T, n_intersects = 25)
+# add some text
+grid.text("Sharing of genes affected by genetic variants", x = 0.65, y = 0.95,
+          gp = gpar(fontsize = 20))
+
+# save this plot
+dev.off()
+
+# and make the plot
+plot_sharing_per_celltype(eqtl_egenes_combined, use_label_dict = F, use_color_dict = T, n_intersects = 25)
+# add some text
+grid.text("Sharing of genes affected by genetic variants", x = 0.65, y = 0.95,
+          gp = gpar(fontsize = 20))
+
+```
+
+```{r get_egene_numbers, include=TRUE, fig.width=10, fig.height=10}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# turn the gene lists into numbers
+egene_numbers <- data.frame('cell_type' = names(eqtl_egenes_combined), 'nr' = rep(NA, times = length(eqtl_egenes_combined)))
+egene_numbers[['nr']] <- apply(egene_numbers, 1, function(x){return(length(eqtl_egenes_combined[[x['cell_type']]]))})
+# make the plot
+egene_numbers_to_plot(egene_numbers, legendless = T, use_color_dict = T) +
+  ggtitle('Number of genes affected by genetic variants') +
+  xlab('Cell type') +
+  ylab('Number of genes') +
+  ylim(c(0, 2100))
+
+# save this plot
+ggsave('~/plots/mo_egene_numbers.pdf', width=5, height=5)
+
+# also mention the total number of ePeaks
+tot_ngenes <- length(unique(do.call('c', eqtl_egenes_combined)))
+print(paste('total number of eGenes', as.character(tot_ngenes)))
+```
+
+```{r get_epeak_lists, include=TRUE, fig.width=10, fig.height=10}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# get the egenes for each cell type in UT
+caqtl_epeaks_significant_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/output_cis_50kb_updated_features/final_FDR/'
+# save in a list
+caqtl_epeaks_combined <- list()
+# check each condition
+for (condition in c('UT', '24hCA')) {
+  # check each cell type
+  for (cell_type in c('B', 'CD4T', 'CD8T', 'DC', 'monocyte', 'NK')) {
+    # paste the path together
+    celltype_path <- paste0(caqtl_epeaks_significant_loc, '/', 'fdr_significant_peaks_', condition, '_', cell_type, '.tsv')
+    # read that table
+    cell_type_output <- fread(celltype_path, header = T, sep = '\t')
+    # get just the features
+    cell_type_output_features <- unique(cell_type_output[[1]])
+    # add to the list
+    if (cell_type %in% names(caqtl_epeaks_combined)) {
+      caqtl_epeaks_combined[[cell_type]] <- unique(c(caqtl_epeaks_combined[[cell_type]], cell_type_output_features))
+    }
+    else {
+      caqtl_epeaks_combined[[cell_type]] <- cell_type_output_features
+    }
+  }
+}
+
+
+# rename the labels to something nicer
+names(caqtl_epeaks_combined) <- rename_labels(names(caqtl_epeaks_combined))
+
+# save into plot
+pdf("~/plots/mo_scnl_epeak_sharing.pdf", width = 10, height = 10)
+# and make the plot
+plot_sharing_per_celltype(caqtl_epeaks_combined, use_label_dict = F, use_color_dict = T, n_intersects = 25)
+# add some text
+grid.text("Sharing of chromatin regions\naffected by genetic variants", x = 0.65, y = 0.95,
+          gp = gpar(fontsize = 20))
+# exit
+dev.off()
+
+# and make the plot
+plot_sharing_per_celltype(caqtl_epeaks_combined, use_label_dict = F, use_color_dict = T, n_intersects = 25)
+# add some text
+grid.text("Sharing of chromatin regions\naffected by genetic variants", x = 0.65, y = 0.95,
+          gp = gpar(fontsize = 20))
+
+```
+
+```{r get_epeak_numbers, include=TRUE, fig.width=10, fig.height=10}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# turn the peak lists into numbers
+epeak_numbers <- data.frame('cell_type' = names(caqtl_epeaks_combined), 'nr' = rep(NA, times = length(caqtl_epeaks_combined)))
+epeak_numbers[['nr']] <- apply(epeak_numbers, 1, function(x){return(length(caqtl_epeaks_combined[[x['cell_type']]]))})
+# make the plot
+egene_numbers_to_plot(epeak_numbers, legendless = T, use_color_dict = T) +
+  ggtitle('Number of chromatin regions affected by variants') +
+  xlab('Cell type') +
+  ylab('Number of chromatin regions')
+# save this plot
+ggsave('~/plots/mo_epeak_numbers.pdf', width=5, height=5)
+
+# also mention the total number of ePeaks
+tot_npeaks <- length(unique(do.call('c', caqtl_epeaks_combined)))
+print(paste('total number of ePeaks', as.character(tot_npeaks)))
+```
+
+```{r get_lcl_overlap, include=TRUE, fig.width=10, fig.height=10}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# location of the UT monocyte caQTLs
+mono_ut_caqtl_significant_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/output_cis_50kb_updated_features/final_FDR/subset_of_significant_qtls/fdr_subset_UT_monocyte.tsv'
+# location of the LCL caQTLs
+lcl_caqtl_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/replication//lcl/'
+
+# read the mono ut caqtl output
+mono_ut_caqtl_significant <- fread(mono_ut_caqtl_significant_loc, header = T, sep = '\t')
+# order by significance
+mono_ut_caqtl_significant <- mono_ut_caqtl_significant[order(mono_ut_caqtl_significant[['p_value']]), ]
+# and get just top effects
+mono_ut_caqtl_significant_top <- mono_ut_caqtl_significant[!duplicated(mono_ut_caqtl_significant[['feature_id']]), ]
+# and order that per chromosome and position, so it easy to look these up in the LCL data
+mono_ut_caqtl_significant_top <- mono_ut_caqtl_significant_top[order(mono_ut_caqtl_significant_top[['feature_chromosome']], mono_ut_caqtl_significant_top[['feature_start']]), ]
+# add the QTL explicitly
+mono_ut_caqtl_significant_top[['qtl']] <- paste0(mono_ut_caqtl_significant_top[['feature_id']], '_', mono_ut_caqtl_significant_top[['snp_chromosome']], ':', mono_ut_caqtl_significant_top[['snp_position']])
+# the featuresa are all significant, these are all significante, so let's denote that
+mono_ut_caqtl_significant_top[['significant']] <- mono_ut_caqtl_significant_top[['p_value']] < 0.05
+# let's reduce the data to what is strictly necessary
+mono_ut_caqtl_significant_top <- mono_ut_caqtl_significant_top[, c('qtl', 'zscore', 'assessed_allele', 'significant')]
+# and rename columns so they don't conflict with the lcl data
+colnames(mono_ut_caqtl_significant_top) <- c('qtl', 'mo_zscore', 'mo_assesed_allele', 'mo_significant')
+
+# we'll read the LCL output per chromosome, so we'll store that in a list first
+lcl_per_chromosome <- list()
+# we'll check each chromosome
+for (chromosome in 1:22) {
+  # progress
+  message(paste('doing chromosome', chromosome))
+  # paste together the path
+  lcl_chromosome_loc <- paste0(lcl_caqtl_loc, '/qtl_results_all_qval_', chromosome, '.txt.gz')
+  # read this output
+  lcl_chromosome <- fread(lcl_chromosome_loc, header = T, sep = '\t')
+  # harmonize region name
+  lcl_chromosome[['feature_id']] <- paste('chr', gsub(':', '-', lcl_chromosome[['feature_id']]), sep = '')
+  # # get only positions for this chromosome
+  lcl_chromosome_positions <- unique(lcl_chromosome[, c('feature_id', 'feature_start', 'feature_end')])
+  # get the ranges
+  lcl_chromosome_iranges <- IRanges(start = lcl_chromosome_positions[['feature_start']], end = lcl_chromosome_positions[['feature_end']])
+  # get only this chromosome
+  mono_ut_caqtl_significant_chromosome_positions <- unique(mono_ut_caqtl_significant[mono_ut_caqtl_significant[['feature_chromosome']] == chromosome, c('feature_id', 'feature_start', 'feature_end')])
+  # and make those iranges
+  mono_ut_caqtl_significant_chromosome_iranges <- IRanges(mono_ut_caqtl_significant_chromosome_positions[['feature_start']], end = mono_ut_caqtl_significant_chromosome_positions[['feature_end']])
+  # find overlaps
+  feature_chromosome_overlaps <- findOverlaps(mono_ut_caqtl_significant_chromosome_iranges, lcl_chromosome_iranges)
+  # extract overlapping ranges
+  overlapping_ranges <- pintersect(lcl_chromosome_iranges[subjectHits(feature_chromosome_overlaps)], mono_ut_caqtl_significant_chromosome_iranges[queryHits(feature_chromosome_overlaps)])
+  # create a  table for the overlaps
+  overlaps_table <- data.table(
+    'feature_id' = lcl_chromosome_positions[['feature_id']][subjectHits(feature_chromosome_overlaps)],
+    'overlap_start' = start(overlapping_ranges),
+    'overlap_end' = end(overlapping_ranges)
+  )
+  # add these positions
+  lcl_chromosome <- merge(lcl_chromosome, overlaps_table, by = 'feature_id', all.x = T, allow.cartesian=TRUE)
+  # remove the ones we cannot remap
+  lcl_chromosome <- lcl_chromosome[!is.na(lcl_chromosome[['overlap_start']]), ]
+  # # add the qtl column
+  lcl_chromosome[['qtl']] <- paste0('chr', lcl_chromosome[['feature_chromosome']], '-', lcl_chromosome[['overlap_start']], '-', lcl_chromosome[['overlap_end']], '_', lcl_chromosome[['snp_chromosome']], ':', lcl_chromosome[['snp_position']])
+  # keep only what we already have in the multiome data
+  lcl_chromosome <- lcl_chromosome[lcl_chromosome[['qtl']] %in% mono_ut_caqtl_significant_top[['qtl']], ]
+  # add column denoting significance
+  lcl_chromosome[['significant']] <- lcl_chromosome[['qtl_q_value']] < 0.05
+  # calculate the Z
+  lcl_chromosome[['zscore']] <- lcl_chromosome[['beta']] / lcl_chromosome[['beta_se']]
+  # order by that z
+  lcl_chromosome <- lcl_chromosome[order(abs(lcl_chromosome[['zscore']]), decreasing = T), ]
+  # if there were multiple overlapping ranges, keep the most significant one
+  lcl_chromosome <- lcl_chromosome[!duplicated(lcl_chromosome[['qtl']]), ]
+  # subset to the column we want
+  lcl_chromosome <- lcl_chromosome[, c('qtl', 'zscore', 'assessed_allele', 'significant')]
+  # and rename columns so they don't conflict with the lcl data
+  colnames(lcl_chromosome) <- c('qtl', 'lcl_zscore', 'lcl_assesed_allele', 'lcl_significant')
+  # and put in the list
+  lcl_per_chromosome[[paste0('chr', chromosome)]] <- lcl_chromosome
+}
+# merge all the lcl chromosomes
+lcl_caqtls <- do.call('rbind', lcl_per_chromosome)
+
+# now merge the two tables
+mono_ut_top_and_lcl_caqtl <- merge(x = mono_ut_caqtl_significant_top, y = lcl_caqtls, by = 'qtl')
+# and flip the z score if in the opposite direction
+mono_ut_top_and_lcl_caqtl[['lcl_zscore_signed']] <- mono_ut_top_and_lcl_caqtl[['lcl_zscore']]
+mono_ut_top_and_lcl_caqtl[mono_ut_top_and_lcl_caqtl[['mo_assesed_allele']] != mono_ut_top_and_lcl_caqtl[['lcl_assesed_allele']], 'lcl_zscore_signed'] <- -1 * mono_ut_top_and_lcl_caqtl[mono_ut_top_and_lcl_caqtl[['mo_assesed_allele']] != mono_ut_top_and_lcl_caqtl[['lcl_assesed_allele']], 'lcl_zscore']
+
+```
+
+```{r plot_lcl_overlap, include=TRUE, fig.width=5, fig.height=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# get the minimal significant z for lcl
+min_sig_z_lcl <- min(abs(mono_ut_top_and_lcl_caqtl[mono_ut_top_and_lcl_caqtl[['lcl_significant']] == T, 'lcl_zscore_signed']))
+min_sig_z_mo <- min(abs(mono_ut_top_and_lcl_caqtl[mono_ut_top_and_lcl_caqtl[['mo_significant']] == T, 'mo_zscore']))
+# and the max z
+max_sig_z_lcl <- max(abs(mono_ut_top_and_lcl_caqtl[mono_ut_top_and_lcl_caqtl[['lcl_significant']] == T, 'lcl_zscore_signed']))
+max_sig_z_mo <- max(abs(mono_ut_top_and_lcl_caqtl[mono_ut_top_and_lcl_caqtl[['mo_significant']] == T, 'mo_zscore']))
+
+# calculate concordance
+n_significant_both <- sum(mono_ut_top_and_lcl_caqtl[['lcl_significant']] == T & mono_ut_top_and_lcl_caqtl[['mo_significant']] == T)
+n_significant_directed_both <- sum(mono_ut_top_and_lcl_caqtl[['lcl_significant']] == T & mono_ut_top_and_lcl_caqtl[['mo_significant']] == T &
+                                     sign(mono_ut_top_and_lcl_caqtl[['lcl_zscore_signed']]) == sign(mono_ut_top_and_lcl_caqtl[['mo_zscore']]))
+concordance <- round(n_significant_directed_both / n_significant_both, digits = 3)
+
+# plot the concordance of the two
+p <- ggplot(data = mono_ut_top_and_lcl_caqtl, mapping = aes(x = mo_zscore, y = lcl_zscore_signed)) + 
+  geom_point(size = 0.2) + 
+  xlim(c(max_sig_z_mo * -1, max_sig_z_mo * 1)) +
+  ylim(c(max_sig_z_lcl * -1, max_sig_z_lcl * 1)) + 
+  # left to right block of non-significant effects
+  geom_rect(aes(xmin = -1 * max_sig_z_mo, xmax = max_sig_z_mo, ymin = -1 * min_sig_z_lcl, ymax = min_sig_z_lcl), 
+            fill = "white", alpha = 0.005) +
+  # bottom to top block of non-significant effects
+  geom_rect(aes(xmin = -1 * min_sig_z_mo, xmax = min_sig_z_mo, ymin = -1 * max_sig_z_lcl, ymax = max_sig_z_lcl), 
+            fill = "white", alpha = 0.005) +
+  # bottom left block
+  geom_rect(aes(xmin = -1 * max_sig_z_mo, xmax = -1 *min_sig_z_mo, ymin = -1 * max_sig_z_lcl, ymax = -1 * min_sig_z_lcl), 
+            fill = "#0072B2", alpha = 0.01) +
+  # bottom right block
+  geom_rect(aes(xmin = min_sig_z_mo, xmax = max_sig_z_mo, ymin = -1 * max_sig_z_lcl, ymax = -1 * min_sig_z_lcl), 
+            fill = "#D55E00", alpha = 0.01) +
+  # top left block
+  geom_rect(aes(xmin = -1 * max_sig_z_mo, xmax = -1 *min_sig_z_mo, ymin = min_sig_z_lcl, ymax = max_sig_z_lcl), 
+            fill = "#D55E00", alpha = 0.01) + 
+  # top right block
+  geom_rect(aes(xmin = min_sig_z_mo, xmax = max_sig_z_mo, ymin = max_sig_z_lcl, ymax = min_sig_z_lcl), 
+            fill = "#0072B2", alpha = 0.01) + 
+  # labels for x and y axis
+  xlab('Z-score in multi-omics caQTLs') +
+  ylab('Z-score in LCL caQTLs') +
+  # vertical negative z cutoff line
+  geom_vline(xintercept=c(-1 *min_sig_z_mo), color="black", size=0.5, linetype = "dashed") +
+	# horizonal negative z cutoff line
+  geom_hline(yintercept=c(-1 *min_sig_z_lcl), color="black", size=0.5, linetype="dashed") +
+  # vertical positive z cutoff line
+  geom_vline(xintercept=c(min_sig_z_mo), color="black", size=0.5, linetype = "dashed") +
+	# horizonal positive z cutoff line
+  geom_hline(yintercept=c(min_sig_z_lcl), color="black", size=0.5, linetype="dashed") +
+  # make backgrounds white
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+  # add the concordance
+  annotate("label", x = max_sig_z_mo * 0.75 , y = max_sig_z_lcl * -0.75, label = paste('concordance', concordance, sep = ':\n')) +
+  # add the names of the concordant and non-concordant blocks
+  annotate("text", x = max_sig_z_mo * -0.70 , y = max_sig_z_lcl * 0.75, label = 'disconcordant', colour = '#D55E00', fontface = 'bold') +
+  # add the names of the concordant and non-concordant blocks
+  annotate("text", x = max_sig_z_mo * 0.70 , y = max_sig_z_lcl * 0.75, label = 'concordant', colour = '#0072B2', fontface = 'bold') +
+  # add the title
+  ggtitle('Concordance of caQTL effects between LCL\nand multi-omics monocytes in UT')
+p
+
+# save this plot
+ggsave('~/plots/mo_scatter_mo_vs_lcl_caqtl.pdf', width=5, height=5)
+
+```
+
+```{r get_onek1k_overlap, include=TRUE, fig.width=10, fig.height=10}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# the location of the UT eQTL output for monocytes
+mono_ut_eqtl_loc <- '/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/output/L1/UT/monocyte/'
+# we'll read the top UT eQTLs per chromosome
+mono_ut_top_eqtl_significant <- list()
+# same for OneK1K, the one to compare against
+mono_onek1k_loc <- '/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_oneK1k/output/L1/monocyte/'
+# which we'll also read the per chromosome
+mono_ut_onek1k_eqtl_matched <- list()
+# we'll check each chromosome
+for (chromosome in 1:22) {
+  # progress
+  message(paste('doing chromosome', chromosome))
+  # paste together the path
+  mono_ut_eqtl_chromosome_loc <- paste0(mono_ut_eqtl_loc, '/qtl_results_all_qval_', chromosome, '.txt.gz')
+  # read this output
+  mono_ut_eqtl_chromosome <- fread(mono_ut_eqtl_chromosome_loc, header = T, sep = '\t')
+  # order by significance
+  mono_ut_eqtl_chromosome <- mono_ut_eqtl_chromosome[order(mono_ut_eqtl_chromosome[['p_value']]), ]
+  # and get just top effects
+  mono_ut_eqtl_chromosome_top <- mono_ut_eqtl_chromosome[!duplicated(mono_ut_eqtl_chromosome[['feature_id']]), ]
+  # add the qtl column
+  mono_ut_eqtl_chromosome_top[['qtl']] <- paste0(mono_ut_eqtl_chromosome_top[['feature_id']], '_', mono_ut_eqtl_chromosome_top[['snp_id']])
+  # and significance
+  mono_ut_eqtl_chromosome_top[['significant']] <- mono_ut_eqtl_chromosome_top[['feature_q_value']] < 0.05 & mono_ut_eqtl_chromosome_top[['p_value']] < 0.05
+  # calculate the Z
+  mono_ut_eqtl_chromosome_top[['zscore']] <- mono_ut_eqtl_chromosome_top[['beta']] / mono_ut_eqtl_chromosome_top[['beta_se']]
+  # subset to the column we want
+  mono_ut_eqtl_chromosome_top <- mono_ut_eqtl_chromosome_top[, c('qtl', 'zscore', 'assessed_allele', 'significant')]
+  # rename the columns to not conflict
+  colnames(mono_ut_eqtl_chromosome_top) <- c('qtl', 'mo_zscore', 'mo_assessed_allele', 'mo_significant')
+  
+  # now paste the onek1k path
+  mono_one1k1_eqtl_chromosome_loc <- paste0(mono_onek1k_loc, '/qtl_results_all_qval_', chromosome, '.txt.gz')
+  # read this output
+  mono_one1k1_eqtl_chromosome <- fread(mono_one1k1_eqtl_chromosome_loc, header = T, sep = '\t')
+  # add the qtl column
+  mono_one1k1_eqtl_chromosome[['qtl']] <- paste0(mono_one1k1_eqtl_chromosome[['feature_id']], '_', mono_one1k1_eqtl_chromosome[['snp_id']])
+  # and keep only matching QTLs from our UT output
+  mono_one1k1_eqtl_chromosome <- mono_one1k1_eqtl_chromosome[mono_one1k1_eqtl_chromosome[['qtl']] %in% mono_ut_eqtl_chromosome_top[['qtl']], ]
+  # and significance
+  mono_one1k1_eqtl_chromosome[['significant']] <- mono_one1k1_eqtl_chromosome[['feature_q_value']] < 0.05 & mono_one1k1_eqtl_chromosome[['p_value']] < 0.05
+   # calculate the Z
+  mono_one1k1_eqtl_chromosome[['zscore']] <- mono_one1k1_eqtl_chromosome[['beta']] / mono_one1k1_eqtl_chromosome[['beta_se']]
+  # subset to the column we want
+  mono_one1k1_eqtl_chromosome <- mono_one1k1_eqtl_chromosome[, c('qtl', 'zscore', 'assessed_allele', 'significant')]
+  # rename the columns to not conflict
+  colnames(mono_one1k1_eqtl_chromosome) <- c('qtl', 'k1_zscore', 'k1_assessed_allele', 'k1_significant')
+  
+  # put both in lists
+  mono_ut_top_eqtl_significant[[paste0('chr', chromosome)]] <- mono_ut_eqtl_chromosome_top
+  mono_ut_onek1k_eqtl_matched[[paste0('chr', chromosome)]] <- mono_one1k1_eqtl_chromosome
+}
+
+# merge all the lcl chromosomes
+mono_ut_top_eqtl_significant_all <- do.call('rbind', mono_ut_top_eqtl_significant)
+mono_ut_onek1k_eqtl_matched_all <- do.call('rbind', mono_ut_onek1k_eqtl_matched)
+
+# now merge the two tables
+mono_ut_top_eqtl_onek1k <- merge(x = mono_ut_top_eqtl_significant_all, y = mono_ut_onek1k_eqtl_matched_all, by = 'qtl')
+# and flip the z score if in the opposite direction
+mono_ut_top_eqtl_onek1k[['k1_zscore_signed']] <- mono_ut_top_eqtl_onek1k[['k1_zscore']]
+mono_ut_top_eqtl_onek1k[mono_ut_top_eqtl_onek1k[['mo_assesed_allele']] != mono_ut_top_eqtl_onek1k[['k1_assesed_allele']], 'k1_zscore_signed'] <- -1 * mono_ut_top_eqtl_onek1k[mono_ut_top_eqtl_onek1k[['mo_assesed_allele']] != mono_ut_top_eqtl_onek1k[['k1_assesed_allele']], 'k1_zscore']
+
+```
+
+```{r plot_onek1k_overlap, include=TRUE, fig.width=5, fig.height=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# get the minimal significant z for k1
+min_sig_z_k1 <- min(abs(mono_ut_top_eqtl_onek1k[mono_ut_top_eqtl_onek1k[['k1_significant']] == T, 'k1_zscore_signed']))
+min_sig_z_mo <- min(abs(mono_ut_top_eqtl_onek1k[mono_ut_top_eqtl_onek1k[['mo_significant']] == T, 'mo_zscore']))
+# and the max z
+max_sig_z_k1 <- max(abs(mono_ut_top_eqtl_onek1k[mono_ut_top_eqtl_onek1k[['k1_significant']] == T, 'k1_zscore_signed']))
+max_sig_z_mo <- max(abs(mono_ut_top_eqtl_onek1k[mono_ut_top_eqtl_onek1k[['mo_significant']] == T, 'mo_zscore']))
+
+# calculate concordance
+n_significant_both <- sum(mono_ut_top_eqtl_onek1k[['k1_significant']] == T & mono_ut_top_eqtl_onek1k[['mo_significant']] == T)
+n_significant_directed_both <- sum(mono_ut_top_eqtl_onek1k[['k1_significant']] == T & mono_ut_top_eqtl_onek1k[['mo_significant']] == T &
+                                     sign(mono_ut_top_eqtl_onek1k[['k1_zscore_signed']]) == sign(mono_ut_top_eqtl_onek1k[['mo_zscore']]))
+concordance <- round(n_significant_directed_both / n_significant_both, digits = 3)
+
+# plot the concordance of the two
+p <- ggplot(data = mono_ut_top_eqtl_onek1k, mapping = aes(x = mo_zscore, y = k1_zscore_signed)) + 
+  geom_point(size = 0.2) + 
+  xlim(c(max_sig_z_mo * -1, max_sig_z_mo * 1)) +
+  ylim(c(max_sig_z_k1 * -1, max_sig_z_k1 * 1)) + 
+  # left to right block of non-significant effects
+  geom_rect(aes(xmin = -1 * max_sig_z_mo, xmax = max_sig_z_mo, ymin = -1 * min_sig_z_k1, ymax = min_sig_z_k1), 
+            fill = "white", alpha = 0.005) +
+  # bottom to top block of non-significant effects
+  geom_rect(aes(xmin = -1 * min_sig_z_mo, xmax = min_sig_z_mo, ymin = -1 * max_sig_z_k1, ymax = max_sig_z_k1), 
+            fill = "white", alpha = 0.005) +
+  # bottom left block
+  geom_rect(aes(xmin = -1 * max_sig_z_mo, xmax = -1 *min_sig_z_mo, ymin = -1 * max_sig_z_k1, ymax = -1 * min_sig_z_k1), 
+            fill = "#0072B2", alpha = 0.01) +
+  # bottom right block
+  geom_rect(aes(xmin = min_sig_z_mo, xmax = max_sig_z_mo, ymin = -1 * max_sig_z_k1, ymax = -1 * min_sig_z_k1), 
+            fill = "#D55E00", alpha = 0.01) +
+  # top left block
+  geom_rect(aes(xmin = -1 * max_sig_z_mo, xmax = -1 *min_sig_z_mo, ymin = min_sig_z_k1, ymax = max_sig_z_k1), 
+            fill = "#D55E00", alpha = 0.01) + 
+  # top right block
+  geom_rect(aes(xmin = min_sig_z_mo, xmax = max_sig_z_mo, ymin = max_sig_z_k1, ymax = min_sig_z_k1), 
+            fill = "#0072B2", alpha = 0.01) + 
+  # labels for x and y axis
+  xlab('Z-score in multi-omics eQTLs') +
+  ylab('Z-score in OneK1K eQTLs') +
+  # vertical negative z cutoff line
+  geom_vline(xintercept=c(-1 *min_sig_z_mo), color="black", size=0.5, linetype = "dashed") +
+	# horizonal negative z cutoff line
+  geom_hline(yintercept=c(-1 *min_sig_z_k1), color="black", size=0.5, linetype="dashed") +
+  # vertical positive z cutoff line
+  geom_vline(xintercept=c(min_sig_z_mo), color="black", size=0.5, linetype = "dashed") +
+	# horizonal positive z cutoff line
+  geom_hline(yintercept=c(min_sig_z_k1), color="black", size=0.5, linetype="dashed") +
+  # make backgrounds white
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+  # add the concordance
+  annotate("label", x = max_sig_z_mo * 0.75 , y = max_sig_z_k1 * -0.75, label = paste('concordance', concordance, sep = ':\n')) +
+  # add the names of the concordant and non-concordant blocks
+  annotate("text", x = max_sig_z_mo * -0.70 , y = max_sig_z_k1 * 0.75, label = 'disconcordant', colour = '#D55E00', fontface = 'bold') +
+  # add the names of the concordant and non-concordant blocks
+  annotate("text", x = max_sig_z_mo * 0.70 , y = max_sig_z_k1 * 0.75, label = 'concordant', colour = '#0072B2', fontface = 'bold') +
+  # add the title
+  ggtitle('Concordance of eQTL effects between OneK1K\nand multi-omics monocytes in UT')
+p
+
+# save this plot
+ggsave('~/plots/mo_scatter_mo_vs_onek1k_eqtl.pdf', width=5, height=5)
+
+```
+
+```{r get_overlapping_caqtl_eqtl, include=TRUE, fig.width=5, fig.height=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# location of the overlapping effects file
+mo_overlapping_effects_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/multiome_eqtl/master_tables_annotation/matched_snps_eqtl_caqtl/top_snp_per_gene_peak_pair_per_ct.tsv'
+# read that overlap file
+mo_overlapping_effects <- fread(mo_overlapping_effects_loc, header = T, sep = '\t')
+# subset to mono UT
+mo_overlapping_effects_mono_ut <- mo_overlapping_effects[mo_overlapping_effects[['ct_eqtl']] == 'monocyte' & mo_overlapping_effects[['cond']] == 'UT', ]
+# sort by eqtl z score, and then by caqtl z score
+mo_overlapping_effects_mono_ut <- mo_overlapping_effects_mono_ut[order(abs(mo_overlapping_effects_mono_ut[['zscore_eqtl']]), abs(mo_overlapping_effects_mono_ut[['zscore_caqtl']]), decreasing = T), ]
+# get only one gene
+mo_overlapping_effects_mono_ut_top <- mo_overlapping_effects_mono_ut[!duplicated(mo_overlapping_effects_mono_ut[['feature_id_eqtl']]), ]
+# and only one region
+mo_overlapping_effects_mono_ut_top <- mo_overlapping_effects_mono_ut_top[!duplicated(mo_overlapping_effects_mono_ut_top[['feature_id_caqtl']]), ]
+
+```
+
+```{r plot_eqtl_caqtl_overlap, include=TRUE, fig.width=5, fig.height=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# get the minimal significant z for k1
+min_sig_z_eqtl <- min(abs(mono_ut_top_eqtl_onek1k[mono_ut_top_eqtl_onek1k[['mo_significant']] == T, 'mo_zscore']))
+min_sig_z_caqtl <- min(abs(mono_ut_top_and_lcl_caqtl[mono_ut_top_and_lcl_caqtl[['mo_significant']] == T, 'mo_zscore']))
+# and the max z
+max_sig_z_eqtl <- max(abs(mo_overlapping_effects_mono_ut_top[['zscore_caqtl']]))
+max_sig_z_caqtl <- max(abs(mo_overlapping_effects_mono_ut_top[['zscore_eqtl']]))
+
+# calculate concordance
+n_significant_both <- nrow(mo_overlapping_effects_mono_ut_top)
+n_significant_directed_both <- sum(sign(mo_overlapping_effects_mono_ut_top[['zscore_caqtl']]) == sign(mo_overlapping_effects_mono_ut_top[['zscore_eqtl']]))
+concordance <- round(n_significant_directed_both / n_significant_both, digits = 3)
+
+# plot the concordance of the two
+p <- ggplot(data = mo_overlapping_effects_mono_ut_top, mapping = aes(x = zscore_caqtl, y = zscore_eqtl)) + 
+  geom_point(size = 0.2) + 
+  xlim(c(max_sig_z_caqtl * -1, max_sig_z_caqtl * 1)) +
+  ylim(c(max_sig_z_eqtl * -1, max_sig_z_eqtl * 1)) + 
+  # left to right block of non-significant effects
+  geom_rect(aes(xmin = -1 * max_sig_z_caqtl, xmax = max_sig_z_caqtl, ymin = -1 * min_sig_z_eqtl, ymax = min_sig_z_eqtl), 
+            fill = "white", alpha = 0.005) +
+  # bottom to top block of non-significant effects
+  geom_rect(aes(xmin = -1 * min_sig_z_caqtl, xmax = min_sig_z_caqtl, ymin = -1 * max_sig_z_eqtl, ymax = max_sig_z_eqtl), 
+            fill = "white", alpha = 0.005) +
+  # bottom left block
+  geom_rect(aes(xmin = -1 * max_sig_z_caqtl, xmax = -1 *min_sig_z_caqtl, ymin = -1 * max_sig_z_eqtl, ymax = -1 * min_sig_z_eqtl), 
+            fill = "#0072B2", alpha = 0.01) +
+  # bottom right block
+  geom_rect(aes(xmin = min_sig_z_caqtl, xmax = max_sig_z_caqtl, ymin = -1 * max_sig_z_eqtl, ymax = -1 * min_sig_z_eqtl), 
+            fill = "#D55E00", alpha = 0.01) +
+  # top left block
+  geom_rect(aes(xmin = -1 * max_sig_z_caqtl, xmax = -1 *min_sig_z_caqtl, ymin = min_sig_z_eqtl, ymax = max_sig_z_eqtl), 
+            fill = "#D55E00", alpha = 0.01) + 
+  # top right block
+  geom_rect(aes(xmin = min_sig_z_caqtl, xmax = max_sig_z_caqtl, ymin = max_sig_z_eqtl, ymax = min_sig_z_eqtl), 
+            fill = "#0072B2", alpha = 0.01) + 
+  # labels for x and y axis
+  xlab('Z-score in multi-omics caQTLs') +
+  ylab('Z-score in multi-omics eQTLs') +
+  # vertical negative z cutoff line
+  geom_vline(xintercept=c(-1 *min_sig_z_caqtl), color="black", size=0.5, linetype = "dashed") +
+	# horizonal negative z cutoff line
+  geom_hline(yintercept=c(-1 *min_sig_z_eqtl), color="black", size=0.5, linetype="dashed") +
+  # vertical positive z cutoff line
+  geom_vline(xintercept=c(min_sig_z_caqtl), color="black", size=0.5, linetype = "dashed") +
+	# horizonal positive z cutoff line
+  geom_hline(yintercept=c(min_sig_z_eqtl), color="black", size=0.5, linetype="dashed") +
+  # make backgrounds white
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+  # add the concordance
+  annotate("label", x = max_sig_z_caqtl * 0.75 , y = max_sig_z_eqtl * -0.75, label = paste('concordance', concordance, sep = ':\n')) +
+  # add the names of the concordant and non-concordant blocks
+  annotate("text", x = max_sig_z_caqtl * -0.70 , y = max_sig_z_eqtl * 0.75, label = 'disconcordant', colour = '#D55E00', fontface = 'bold') +
+  # add the names of the concordant and non-concordant blocks
+  annotate("text", x = max_sig_z_caqtl * 0.70 , y = max_sig_z_eqtl * 0.75, label = 'concordant', colour = '#0072B2', fontface = 'bold') +
+  # add the title
+  ggtitle('Concordance of caQTL versus eQTL effects in\nand multi-omics monocytes in UT')
+p
+
+# save this plot
+ggsave('~/plots/mo_scatter_mo_caqtl_vs_eqtl.pdf', width=5, height=5)
+
+```
+

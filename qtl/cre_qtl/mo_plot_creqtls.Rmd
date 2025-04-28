@@ -1,0 +1,1286 @@
+---
+title: "mo_plot_creqtls"
+author: "Roy Oelen"
+date: "2025-03-03"
+output: html_document
+---
+
+```{r header, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+#!/usr/bin/env Rscript
+############################################################################################################################
+# Authors: Roy Oelen
+# Name: mo_plot_creqtls.Rmd
+# Function: plot CREs identified with the CRE-QTL-esque method
+############################################################################################################################
+```
+
+```{r libraries, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+####################
+# libraries        #
+####################
+
+library(ggplot2)
+library(cowplot)
+library(RColorBrewer)
+library(roycols)
+library(UpSetR)
+library(grid)
+library(r2r)
+library(GenomicRanges)
+library(mdfiver)
+
+```
+
+```{r functions, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+####################
+# Functions        #
+####################
+
+
+#' get a label dict that replaces the posix safe names into printable versions
+#' 
+#' @returns a label dict that replaces the posix safe names into printable versions
+#' label_dict_names <- get_label_dict()
+get_label_dict <- function() {
+  label_dict <- list()
+  label_dict[['CD4_T_cells']] <- 'CD4+ T cells'
+  label_dict[['CD8_T_cells']] <- 'CD8+ T cells'
+  label_dict[['CD4T']] <- 'CD4+ T'
+  label_dict[['CD8T']] <- 'CD8+ T'
+  label_dict[['CD4_T']] <- 'CD4+ T'
+  label_dict[['CD8_T']] <- 'CD8+ T'
+  label_dict[['Dendritic_cells']] <- 'Dendritic cells'
+  label_dict[['Endothelial_cells']] <- 'Endothelial cells'
+  label_dict[['Fibroblasts']] <- 'Fibroblasts'
+  label_dict[['Glia_cells']] <- 'Glia cells'
+  label_dict[['Mast_cells']] <- 'MAST cells'
+  label_dict[['Mature_absorptive_enterocytes']] <- 'Mature absorptive enterocytes'
+  label_dict[['Mature_secretory_enterocytes']] <- 'Mature secretory enterocytes'
+  label_dict[['Memory_B']] <- 'Memory B cells'
+  label_dict[['Monocytes']] <- 'Monocytes'
+  label_dict[['monocyte']] <- 'Monocyte'
+  label_dict[['Mono']] <- 'Monocyte'
+  label_dict[['Plasma_cells']] <- 'Plasma cells'
+  label_dict[['Stem_cells']] <- 'Stem cells'
+  label_dict[['Stromal_cells']] <- 'Stromal cells'
+  label_dict[['T_others']] <- 'other T cells'
+  label_dict[['Transit_amplifying_cells']] <- 'Transit amplifying cells'
+  label_dict[['AI']] <- 'Actively Inflamed'
+  label_dict[['NI']] <- 'Non-Inflamed'
+  return(label_dict)
+}
+
+#' Rename Labels in a Vector
+#'
+#' This function renames the labels in a given vector based on a predefined dictionary of label renamings.
+#'
+#' @param vector_to_rename A vector containing the labels to be renamed.
+#' @return A vector with the renamed labels.
+#' @examples
+#' # Example usage:
+#' vector_to_rename <- c("label1", "label2", "label3")
+#' renamed_vector <- rename_labels(vector_to_rename)
+#' print(renamed_vector)
+rename_labels <- function(vector_to_rename) {
+  # get the labels that are present
+  label_renaming <- get_label_dict()
+  # now check which labels we are missing
+  missing_renames <- setdiff(unique(vector_to_rename), names(label_renaming))
+  # add those renames as not being renames
+  for (missing_rename in missing_renames) {
+    label_renaming[[missing_rename]] <- missing_rename
+  }
+  # now replace each value with the rename
+  renamed_vector <- as.vector(unlist(label_renaming[vector_to_rename]))
+  # and return that
+  return(renamed_vector)
+}
+
+
+#' Remap Names Using a Label Dictionary
+#'
+#' This function remaps the names in a given vector based on a predefined dictionary of label renamings. If any names cannot be remapped, they are returned unchanged.
+#'
+#' @param vector_of_names A vector containing the names to be remapped.
+#' @return A vector with the remapped names.
+#' @examples
+#' # Example usage:
+#' vector_of_names <- c("name1", "name2", "name3")
+#' remapped_vector <- remap_with_label_dict(vector_of_names)
+#' print(remapped_vector)
+remap_with_label_dict <- function(vector_of_names) {
+  # get the label dict
+  relabels <- get_label_dict()
+  # get the labels available for renaming
+  labels_available <- names(relabels)
+  # get the ones we cant remap
+  unmappable <- setdiff(unique(vector_of_names), labels_available)
+  # report on those
+  if (length(unmappable) > 0) {
+    print(paste('cannot remap the following names, they will be returned unchanged:', paste(unmappable, collapse = ',')))
+    # and put those in our remapping list as their originals
+    relabels[unmappable] <- unmappable
+  }
+  # now actually do the remapping
+  remapped <- as.vector(unlist(relabels[vector_of_names]))
+  return(remapped)
+}
+
+
+#' Get Color Coding Dictionary
+#'
+#' This function returns a dictionary of color codes for various cell types and conditions. It includes both the original colors and faded colors for down-regulated conditions.
+#'
+#' @return A list where the names are cell types or conditions and the values are their corresponding color codes.
+#' @examples
+#' # Example usage:
+#' color_coding_dict <- get_color_coding_dict()
+#' print(color_coding_dict)
+get_color_coding_dict <- function() {
+	# medhigh
+  color_coding_dict <- list()
+  color_coding_dict[["B"]] <- "#71BC4B"
+  #color_coding_dict[['CD4_T_cells']] <- '#7FC97F'
+  color_coding_dict[['CD4_T_cells']] <- '#153057'
+  color_coding_dict[['CD4T']] <- '#153057'
+	#color_coding_dict[['CD8_T_cells']] <- '#BEAED4'
+	color_coding_dict[['CD8_T_cells']] <- '#009DDB'
+	color_coding_dict[['CD8T']] <- '#009DDB'
+	#color_coding_dict[['Dendritic_cells']] <- '#FDC086'
+	color_coding_dict[['Dendritic_cells']] <- '#965EC8'
+	color_coding_dict[['DC']] <- '#965EC8'
+	color_coding_dict[['Endothelial_cells']] <- '#FFFFB3'
+	color_coding_dict[['Fibroblasts']] <- '#386CB0'
+	color_coding_dict[['Glia_cells']] <- '#F0027F'
+	color_coding_dict[['Mast_cells']] <- '#BF5B17'
+	color_coding_dict[['Mature_absorptive_enterocytes']] <- '#A6CEE3'
+	color_coding_dict[['Mature_secretory_enterocytes']] <- '#1B9E77'
+	color_coding_dict[['Memory_B']] <- '#D95F02'
+	color_coding_dict[['Microfold_cell']] <- '#BEAED4'
+	#color_coding_dict[['Monocytes']] <- '#7570B3'
+	color_coding_dict[['Monocyte']] <- '#EDBA1B'
+	color_coding_dict[['Naive_B_cells']] <- '#FDC086'
+	color_coding_dict[['NK']] <- '#E64B50'
+	#color_coding_dict[['Plasma_cells']] <- '#E7298A'
+	color_coding_dict[['Plasma_cells']] <- '#DB8E00'
+	color_coding_dict[['Stem_cells']] <- '#66A61E'
+	color_coding_dict[['Stromal_cells']] <- '#8DD3C7'
+	#color_coding_dict[['T_others']] <- '#A6761D'
+	color_coding_dict[['T_others']] <- '#FF63B6'
+	color_coding_dict[['Transit_amplifying_cells']] <- '#FF7F00'
+	color_coding_dict[['disconcordant']] <- 'gray'
+  #color_coding_dict[['CD4+ T cells']] <- '#7FC97F'
+  color_coding_dict[['CD4+ T cells']] <- '#153057'
+  color_coding_dict[['CD4+ T']] <- '#153057'
+	#color_coding_dict[['CD8+ T cells']] <- '#BEAED4'
+	color_coding_dict[['CD8+ T cells']] <- '#009DDB'
+	color_coding_dict[['CD8+ T']] <- '#009DDB'
+	#color_coding_dict[['Dendritic cells']] <- '#FDC086'
+	color_coding_dict[['Dendritic cells']] <- '#965EC8'
+	color_coding_dict[['Endothelial cells']] <- '#FFFFB3'
+	color_coding_dict[['Endothelial\ncells']] <- '#FFFFB3'
+	color_coding_dict[['Fibroblasts']] <- '#386CB0'
+	color_coding_dict[['Glia cells']] <- '#F0027F'
+	color_coding_dict[['MAST cells']] <- '#BF5B17'
+	color_coding_dict[['Mature absorptive enterocytes']] <- '#A6CEE3'
+	color_coding_dict[['Mature\nabsorptive\nenterocytes']] <- '#A6CEE3'
+	color_coding_dict[['Mature secretory enterocytes']] <- '#1B9E77'
+	color_coding_dict[['Mature secretory\nenterocytes']] <- '#1B9E77'
+	color_coding_dict[['Memory B cells']] <- '#D95F02'
+	#color_coding_dict[['Monocytes']] <- '#7570B3'
+	color_coding_dict[['Microfold cells']] <- '#BEAED4'
+	color_coding_dict[['Monocytes']] <- '#EDBA1B'
+	color_coding_dict[['Naive B cells']] <- '#FDC086'
+	#color_coding_dict[['Plasma cells']] <- '#E7298A'
+	color_coding_dict[['Plasma cells']] <- '#DB8E00'
+	color_coding_dict[['Stem cells']] <- '#66A61E'
+	color_coding_dict[['Stromal cells']] <- '#8DD3C7'
+	#color_coding_dict[['other T cells']] <- '#A6761D'
+	color_coding_dict[['other T cells']] <- '#FF63B6'
+	color_coding_dict[['Transit amplifying cells']] <- '#FF7F00'
+	color_coding_dict[['Transit\namplifying cells']] <- '#FF7F00'
+	color_coding_dict[['disconcordant']] <- 'gray'
+	# up and down regulation will be added to, we need a whitening percentage
+	pct_whitening <- 40
+	# then we will check each cell type
+	for (cell_type in names(color_coding_dict)) {
+	  # the up color is the same as the regular one
+	  color_coding_dict[[paste(cell_type, 'up')]] <- color_coding_dict[[cell_type]]
+	  # but the down one will have a more faded colour
+	  color_coding_dict[[paste(cell_type, 'down')]] <- colorRampPalette(c(color_coding_dict[[cell_type]], "white"))(100)[pct_whitening]
+	}
+	# general
+	color_coding_dict[['AI']] <- 'darkblue'
+	color_coding_dict[['NI']] <- 'darkred'
+	color_coding_dict[['Actively Inflamed']] <- 'darkblue'
+	color_coding_dict[['Non-Inflamed']] <- 'darkred'
+	return(color_coding_dict)
+}
+
+
+#' Split String with Maximum Length
+#'
+#' This function splits a string into multiple lines, ensuring that each line does not exceed a specified maximum length.
+#'
+#' @param string A character string to be split.
+#' @param max_length An integer specifying the maximum length of each line. Default is 15.
+#' @return A character string with the input string split into multiple lines.
+#' @examples
+#' # Example usage:
+#' long_string <- "This is a long string that needs to be split into multiple lines."
+#' split_string <- split_string_with_max_length(long_string, max_length = 15)
+#' cat(split_string)
+split_string_with_max_length <- function(string, max_length=15) {
+  # split the string on the space first
+  words <- strsplit(string, ' ')[[1]]
+  # and initial pasted string
+  final_string <- ''
+  # and the temporary string
+  tmp_string <- ''
+  # check each word
+  for (word in words) {
+    # get the lenght of the temporary string
+    tmp_len <- nchar(tmp_string)
+    # get the length of the word
+    word_len <- nchar(word)
+    # length of the final string
+    final_len <- nchar(final_string)
+    # check if adding the next word would make us go over the limit
+    if ((tmp_len + word_len) > max_length) {
+      if (final_len > 0) {
+        # add the temporary word to the final string if it was not empty
+        final_string <- paste(final_string, '\n', tmp_string, sep = '')
+      }
+      else{
+        # if there was not final string yet, it will just become that temporary string
+        final_string <- tmp_string
+      }
+      # reset the temporary string
+      tmp_string <- word
+    }
+    else{
+      # otherwise add it to the temporary string
+      if (tmp_len > 0) {
+        tmp_string <- paste(tmp_string, word)
+      }
+      # or set if the temporary string was empty
+      else{
+        tmp_string <- word
+      }
+    }
+  }
+  # add last word
+  if (nchar(paste(final_string, tmp_string)) > max_length) {
+    if (nchar(final_string) == 0) {
+      final_string <- tmp_string
+    }
+    else if (nchar(tmp_string > 0)) {
+      final_string <- paste(final_string, '\n', tmp_string, sep = '')
+    }
+    else{
+      # nothing the final string is as it is
+    }
+  }
+  else {
+    if (nchar(final_string) == 0) {
+      final_string <- tmp_string
+    }
+    else if(nchar(tmp_string) == 0){
+      # nothing, the final string is as is
+    }
+    else{
+      final_string <- paste(final_string, ' ', tmp_string, sep = '')
+    }
+  }
+  # add the last word
+  return(final_string)
+}
+
+
+#' Split Multiple Strings with Maximum Length
+#'
+#' This function splits multiple strings into lines, ensuring that each line does not exceed a specified maximum length.
+#'
+#' @param strings A vector of character strings to be split.
+#' @param max_length An integer specifying the maximum length of each line. Default is 15.
+#' @return A vector of character strings with the input strings split into multiple lines.
+#' @examples
+#' # Example usage:
+#' strings <- c("This is a long string that needs to be split.", "Another long string.")
+#' split_strings <- split_strings_with_max_length(strings, max_length = 15)
+#' print(split_strings)
+split_strings_with_max_length <- function(strings, max_length=15) {
+  strings_split <- sapply(strings, FUN = function(x){
+    split_string_with_max_length(x, max_length)
+  })
+  strings_split <- as.vector(strings_split)
+  return(strings_split)
+}
+
+
+#' Get CRE Tables from Folders
+#'
+#' This function retrieves tables from specified folders within a CRE directory, optionally filtering folders by a regex pattern. Each table is read and a column indicating the cell type (folder name) is added.
+#'
+#' @param cre_folder A character string specifying the path to the CRE directory.
+#' @param cre_file_name A character string specifying the name of the file to be read from each folder.
+#' @param cre_folder_regex An optional character string specifying a regex pattern to filter folders. Default is NULL.
+#' @return A list of data frames, each corresponding to a cell type (folder name) with the added cell type column.
+#' @examples
+#' # Example usage:
+#' cre_folder <- "path/to/cre_folder"
+#' cre_file_name <- "data.txt"
+#' cre_tables <- get_cre_tables_folders(cre_folder, cre_file_name, cre_folder_regex = "pattern")
+#' print(cre_tables)
+get_cre_tables_folders <- function(cre_folder, cre_file_name, cre_folder_regex=NULL) {
+  # list all the directories in the CRE folder
+  cre_folders <- list.dirs(cre_folder, full.names = F, recursive = F)
+  # subset if there is a pattern
+  if (!is.null(cre_folder_regex)) {
+    cre_folders <- cre_folders[grep(cre_folder_regex, cre_folders)]
+  }
+  # save each table in a list
+  cre_folder_per_celltype <- list()
+  # check each folder
+  for (cre_subfolder in cre_folders) {
+    # paste together the file
+    cre_file_loc <- paste(cre_folder, cre_subfolder, cre_file_name, sep = '/')
+    # check if this file exists
+    if (file.exists(cre_file_loc)) {
+      # read the file
+      cre_file <- read.table(cre_file_loc, header = T, sep = '\t')
+      # add celltype as column
+      cre_file <- cbind(data.frame('cell_type' = rep(cre_subfolder, times = nrow(cre_file))), cre_file)
+      # put in the list
+      cre_folder_per_celltype[[cre_subfolder]] <- cre_file
+    }
+  }
+  return(cre_folder_per_celltype)
+}
+
+
+#' Get Color List
+#'
+#' This function generates a list of colors corresponding to a given vector of names. It ensures each unique name is assigned a unique color.
+#'
+#' @param vector_of_names A character vector containing the names for which colors are to be generated.
+#' @param use_sampling A logical value indicating whether to use sampling when generating colors (default is FALSE).
+#' @param color_indices An optional vector of color indices to use for sampling.
+#'
+#' @return A named list of colors, where each name in the input vector is assigned a unique color.
+#'
+#' @examples
+#' \dontrun{
+#' color_list <- get_color_list(c("apple", "banana", "cherry"))
+#' }
+#'
+get_color_list <- function(vector_of_names, use_sampling=F, color_indices=NULL) {
+  # get the unique entries
+  vector_unique <- unique(vector_of_names)
+  # remove any NA
+  vector_unique <- vector_unique[!is.na(vector_unique)]
+  # get some colors
+  colors_to_use <- NULL
+  if (length(vector_unique) > 74) {
+    colors_to_use <- roycols::sample_tons_of_colors(length(vector_unique), use_sampling = use_sampling, color_indices = color_indices)
+  }
+  else{
+    colors_to_use <- roycols::sample_many_colours(length(vector_unique), use_sampling = use_sampling, color_indices = color_indices)
+  }
+  # turn into a list
+  colors_to_use_list <- as.list(colors_to_use)
+  # and add the names
+  names(colors_to_use_list) <- vector_unique
+  return(colors_to_use_list)
+}
+
+
+#' Plot Sharing of DE Genes per Cell Type
+#'
+#' This function plots the sharing of differentially expressed (DE) genes across cell types using an UpSet plot. It allows filtering by significance, log fold change, and the use of custom label and color dictionaries.
+#'
+#' @param table_per_ct A list of data frames, each containing DE genes for a cell type.
+#' @param feature_column A character string specifying the column name for features (genes). Default is 'feature'.
+#' @param pval_column A character string specifying the column name for p-values. Default is 'p.bonferroni'.
+#' @param sig_pval A numeric value specifying the significance threshold for p-values. Default is 0.05.
+#' @param only_positive A logical value indicating whether to include only positive log fold changes. Default is FALSE.
+#' @param only_negative A logical value indicating whether to include only negative log fold changes. Default is FALSE.
+#' @param lfc_column A character string specifying the column name for log fold changes. Default is 'metafc'.
+#' @param use_label_dict A logical value indicating whether to use a custom label dictionary for renaming cell types. Default is TRUE.
+#' @param use_color_dict A logical value indicating whether to use a custom color dictionary for cell types. Default is TRUE.
+#' @return An UpSet plot showing the sharing of DE genes across cell types.
+#' @examples
+#' # Example usage:
+#' table_per_ct <- list(
+#'   cell_type1 = data.frame(feature = c("gene1", "gene2"), p.bonferroni = c(0.01, 0.04), metafc = c(1.5, -1.2)),
+#'   cell_type2 = data.frame(feature = c("gene3", "gene4"), p.bonferroni = c(0.02, 0.03), metafc = c(-1.3, 1.4))
+#' )
+#' plot_sharing_per_celltype(table_per_ct)
+plot_sharing_per_celltype <- function(table_per_ct, feature_column='feature', pval_column='p.bonferroni', sig_pval=0.05, only_positive=F, only_negative=F, lfc_column='metafc', use_label_dict=T, use_color_dict=T){
+  DE_genes_per_ct <- list()
+  # get the DE genes for each cell type
+  for(cell_type in names(table_per_ct)){
+    # we'll get the specific table
+    de_table <- table_per_ct[[cell_type]]
+    # filter to only include the significant results
+    if (!is.null(pval_column) & !is.null(sig_pval)) {
+      de_table <- de_table[de_table[[pval_column]] <= sig_pval, ]
+    }
+    # filter for only the positive lfc if required
+    if(only_positive){
+      de_table <- de_table[de_table[[lfc_column]] < 0, ]
+    }
+    # filter for only the positive lfc if required
+    if(only_negative){
+      de_table <- de_table[de_table[[lfc_column]] > 0, ]
+    }
+    # we just care about the gene names
+    sig_genes <- NULL
+    if (is.null(feature_column)) {
+      sig_genes <- rownames(mast)
+    }
+    else {
+      sig_genes <- de_table[[feature_column]]
+    }
+    # store these for the cell type
+    DE_genes_per_ct[[cell_type]] <- sig_genes
+  }
+  if(use_label_dict){
+    names(DE_genes_per_ct) <- rename_labels(names(DE_genes_per_ct))
+  }
+  # get the total overlap
+  total_overlap <- fromList(DE_genes_per_ct)
+  # set queries and colours
+  queries <- list()
+  sets.bar.color <- 'black'
+  if(use_color_dict){
+    # create df to store the number of each set, so we know how to order
+    nrs_df <- NULL
+    # get the cell types we have
+    cell_types <- names(DE_genes_per_ct)
+    # get colour codes for the cell types
+    cell_type_colours <- get_color_coding_dict()
+    # also get colours for the cell types we don't have colours for
+    cell_type_colours_missing <- get_color_list(setdiff(cell_types, names(cell_type_colours)))
+    # and merge them
+    cell_type_colours <- c(cell_type_colours, cell_type_colours_missing)
+    # add the colors for the cell types
+    i <- 1
+    for(cell_type in cell_types){
+      # check if there is a singleton for this cell type, so this celltype is 1, but the total of the row is also 1
+      n_singletons <- nrow(total_overlap[total_overlap[[cell_type]] == 1 & rowSums(total_overlap) == 1, ])
+      # if we have singletons, colour it
+      if (n_singletons > 0) {
+        # add for the singles in the intersection sizes
+        ct_list <- list(
+          query = intersects,
+          params = list(cell_type),
+          color = cell_type_colours[[cell_type]],
+          active = T)
+        queries[[i]] <- ct_list
+        i <- i + 1
+      }
+      # add for the DF to order the set sizes
+      numbers_row <- data.frame(ct=c(cell_type), nr=c(length(DE_genes_per_ct[[cell_type]])), stringsAsFactors = F)
+      if(is.null(nrs_df)){
+        nrs_df <- numbers_row
+      }
+      else{
+        nrs_df <- rbind(nrs_df, numbers_row)
+      }
+    }
+    # get the order of the sets
+    ordered_cts <- nrs_df[order(nrs_df$nr, decreasing = T), 'ct']
+    # add the colors for the sets
+    sets.bar.color <- unlist(cell_type_colours[ordered_cts])
+    # make the plot
+    upset(total_overlap, order.by = 'freq', nsets = length(DE_genes_per_ct), queries = queries, sets.bar.color=sets.bar.color)
+  }
+  else {
+    upset(total_overlap, order.by = 'freq', nsets = length(DE_genes_per_ct))
+  }
+  
+  #return(DE_genes_per_ct)
+}
+
+
+#' Get List Overlaps
+#'
+#' This function calculates the overlaps and differences between two lists.
+#'
+#' @param list1 A named list.
+#' @param list2 A named list.
+#' @param list_name A character string for the name of the list column in the output data frame. Default is 'list_name'.
+#' @param list1_name A character string for the name of the first list column in the output data frame. Default is 'list1'.
+#' @param list2_name A character string for the name of the second list column in the output data frame. Default is 'list2'.
+#'
+#' @return A data frame with the number of overlaps and differences for each name in the lists.
+#' @export
+#'
+#' @examples
+#' list1 <- list(a = 1:5, b = 6:10)
+#' list2 <- list(a = 3:7, c = 8:12)
+#' get_list_overlaps(list1, list2)
+get_list_overlaps <- function(list1, list2, list_name='list_name', list1_name='list1', list2_name='list2') {
+  # get the names present in any of the two lists
+  names_either <- unique(c(names(list1), names(list2)))
+  # create a matrix that has the number of overlaps and number of diffs
+  nr_df <- data.frame(matrix(, nrow = length(names_either), ncol = 4, dimnames = list(names_either, c(list_name, 'in_both', paste0('only_', list1_name), paste0('only_', list2_name)))))
+  # check each of the names
+  for (name_in_list in names_either) {
+    # set the values to defaults
+    n_overlap <- 0
+    n_only_list1 <- 0
+    n_only_list2 <- 0
+    # if the name is in both lists
+    if (name_in_list %in% names(list1) & name_in_list %in% names(list2)) {
+      # check how many overlap
+      n_overlap <- length(
+        intersect(list1[[name_in_list]], list2[[name_in_list]])
+      )
+      # now many are only in list 1
+      n_only_list1 <- length(
+        setdiff(list1[[name_in_list]], list2[[name_in_list]])
+      )
+      # and how many are only in list 2
+      n_only_list2 <- length(
+        setdiff(list2[[name_in_list]], list1[[name_in_list]])
+      )
+    }
+    # if it is only in list 1
+    else if (name_in_list %in% names(list1) & !(name_in_list %in% names(list2))) {
+      n_only_list1 <- length(list1[[name_in_list]])
+    }
+    # if it is only in list 2
+    else if (!(name_in_list %in% names(list1)) & name_in_list %in% names(list2)) {
+      n_only_list2 <- length(list2[[name_in_list]])
+    }
+    # fill the table
+    nr_df[name_in_list, list_name] <- name_in_list
+    nr_df[name_in_list, 'in_both'] <- n_overlap
+    nr_df[name_in_list, paste0('only_', list1_name)] <- n_only_list1
+    nr_df[name_in_list, paste0('only_', list2_name)] <- n_only_list2
+  }
+  return(nr_df)
+}
+
+
+#' Convert Wide Table to Long Table
+#'
+#' This function converts a wide-format table to a long-format table.
+#'
+#' @param wide_table A data frame in wide format.
+#' @param metadata_columns A character vector of column names to be treated as metadata. Default is 'cell_type'.
+#'
+#' @return A data frame in long format with metadata columns, category, and value.
+#' @export
+#'
+#' @examples
+#' wide_table <- data.frame(cell_type = c('A', 'B'), gene1 = c(1, 2), gene2 = c(3, 4))
+#' wide_to_long_table(wide_table)
+wide_to_long_table <- function(wide_table, metadata_columns=c('cell_type')) {
+  # we will create the table per gene
+  table_per_value <- list()
+  # get the values
+  value_columns <- setdiff(colnames(wide_table), metadata_columns)
+  # check each gene
+  for (value_column in value_columns) {
+    # extract metadata
+    table_value <- wide_table[, metadata_columns, drop = F]
+    # set the gene
+    table_value[['category']] <- value_column
+    # set the expression
+    table_value[['value']] <- wide_table[[value_column]]
+    # add to list
+    table_per_value[[value_column]] <- table_value
+  }
+  # merge all the table
+  table_all_values <- do.call("rbind", table_per_value)
+  return(table_all_values)
+}
+
+
+#' Convert Genomic Locations Table to Hashmap of IRanges Objects
+#'
+#' This function takes a table of genomic locations and converts it into a hashmap where each name is associated with an IRanges object.
+#'
+#' @param genomic_locations_table A data frame containing genomic locations.
+#' @param name_column A string specifying the column name for the names. Default is 'name'.
+#' @param chrom_column A string specifying the column name for the chromosome. Default is 'chrom'.
+#' @param chrom_start A string specifying the column name for the start position. Default is 'start'.
+#' @param chrom_end A string specifying the column name for the end position. Default is 'end'.
+#'
+#' @return A hashmap where each key is a name and each value is an IRanges object.
+#'
+#' @examples
+#' genomic_locations_table <- data.frame(
+#'   name = c("gene1", "gene2"),
+#'   chrom = c("chr1", "chr2"),
+#'   start = c(100, 200),
+#'   end = c(150, 250)
+#' )
+#' location_name_to_irange(genomic_locations_table)
+location_name_to_irange <- function(genomic_locations_table, name_column='name', chrom_column='chrom', chrom_start='start', chrom_end='end') {
+  # make the hash table
+  name_to_gr_hash <- r2r::hashmap()
+  # go through the table
+  apply(genomic_locations_table, 1, function(x){
+    # create an iranges object
+    gr <- GRanges(
+      seqnames = c(x[chrom_column]),
+      ranges = IRanges(c(as.numeric(x[chrom_start])), end = c(as.numeric(x[chrom_end])), names = c(x[name_column]))
+    )
+    # put in the map under that name
+    name_to_gr_hash[[x[[name_column]]]] <- gr
+  })
+  return(name_to_gr_hash)
+}
+
+#' Check Overlap Between Two Lists
+#'
+#' This function checks for overlaps and differences between two lists, checking specifically what is present under the same name, and what is only present under the other names
+#'
+#' @param list1 A named list. The first list to compare.
+#' @param list2 A named list. The second list to compare.
+#' @param list_name A character string. The name of the column representing the names present in either list. Default is 'list_name'.
+#' @param list1_name A character string. The name of the first list. Default is 'list1'.
+#' @param list2_name A character string. The name of the second list. Default is 'list2'.
+#'
+#' @return A data frame with columns representing the names present in either list, the number of items only in the first list, the number of items in both lists with the same name, and the number of items in both lists but with different names.
+#'
+#' @examples
+#' list1 <- list(a = 1:3, b = 4:6)
+#' list2 <- list(a = 2:4, c = 5:7)
+#' check_overlap_other_lists(list1, list2)
+check_overlap_other_lists <- function(list1, list2, list_name='list_name', list1_name='list1', list2_name='list2') {
+  # get the names present in any of the two lists
+  names_either <- unique(c(names(list1), names(list2)))
+  # create a matrix that has the number of overlaps and number of diffs
+  nr_df <- data.frame(matrix(, nrow = length(names_either), ncol = 4, dimnames = list(names_either, c(list_name, paste0('only_', list1_name), paste0('also_', list2_name, '_same'), paste0('also_', list2_name, '_only_diff')))))
+  # we'll need the full set multiple times, so let's make that one only once
+  all_list2_all_names <- unique(do.call('c', list2))
+  # check each of the names
+  for (name_in_list in names_either) {
+    # set the values to defaults
+    n_only_list1 <- 0
+    n_also_list2_same <- 0
+    n_also_list2_only_diff <- 0
+    # if the name is in both lists
+    if (name_in_list %in% names(list1) & name_in_list %in% names(list2)) {
+      # get the total
+      all_list1 <- list1[[name_in_list]]
+      # and how many those are
+      n_all_list1 <- length(all_list1)
+      # check which of those are also in list 2 for the same name
+      list1_list2_same_name <- intersect(all_list1, list2[[name_in_list]])
+      # and how many of those these are
+      n_list1_list2_same_name <- length(list1_list2_same_name)
+      # check which ones we couldn't find yet
+      list1_not_list2_same_name <- setdiff(all_list1, n_list1_list2_same_name)
+      # and try to find those in the rest of the lists
+      list1_list2_other_name <- intersect(list1_not_list2_same_name, unique(do.call('c', list2[setdiff(names(list2), name_in_list)])))
+      # check now many these are
+      n_list1_list2_other_name <- length(list1_list2_other_name)
+      # and calculate how many we could not find
+      n_list1_not_found <- n_all_list1 - (n_list1_list2_same_name + n_list1_list2_other_name)
+      # and name properly
+      n_only_list1 <- n_list1_not_found
+      n_also_list2_same <- n_list1_list2_same_name
+      n_also_list2_only_diff <- n_list1_list2_other_name
+    }
+    # if it is only in list 1
+    else if (name_in_list %in% names(list1) & !(name_in_list %in% names(list2))) {
+      # get the total
+      all_list1 <- list1[[name_in_list]]
+      # and how many those are
+      n_all_list1 <- length(all_list1)
+      # and try to find everything in the rest of the lists
+      list1_list2_other_name <- intersect(all_list1, unique(do.call(list2[setdiff(names(list2), name_in_list)])))
+      # get how many those are
+      n_list1_list2_other_name <- length(list1_list2_other_name)
+      # and how many we didn't find
+      n_list1_not_found <- n_all_list1 - n_list1_list2_other_name
+      # and update only two values this time
+      n_only_list1 <- n_list1_not_found
+      n_also_list2_only_diff <- n_list1_list2_other_name
+    }
+    # if it is only in list 2
+    else if (!(name_in_list %in% names(list1)) & name_in_list %in% names(list2)) {
+      # nothing, we keep all at zero
+    }
+    # fill the table
+    nr_df[name_in_list, list_name] <- name_in_list
+    nr_df[name_in_list, paste0('only_', list1_name)] <- n_only_list1
+    nr_df[name_in_list, paste0('also_', list2_name, '_same')] <- n_also_list2_same
+    nr_df[name_in_list, paste0('also_', list2_name, '_only_diff')] <- n_also_list2_only_diff
+  }
+  return(nr_df)
+}
+
+```
+
+```{r path_setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+####################
+# Main Code        #
+####################
+
+# location of the CRE folders
+cre_folders_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/cre_eqtl/eqtl_caqtl_overlap/betas_ps/'
+# name of the file
+cre_file_name <- 'meta_result.tsv.gz'
+
+```
+
+```{r get_cre_outputs, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# get the output folders
+cre_outputs <- get_cre_tables_folders(cre_folders_loc, cre_file_name)
+
+```
+
+```{r get_plot_outputs, include=T, fig.width=10, fig.height=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# plot overlap of the CRE regions
+plot_sharing_per_celltype(table_per_ct = cre_outputs, feature_column = 'region', pval_column = 'meta_q', use_color_dict = T)
+grid.text('Significant regions with a CRE', x = 0.65, y = 0.95, gp = gpar(fontsize = 20))
+# plot overlap of the CRE genes
+plot_sharing_per_celltype(table_per_ct = cre_outputs, feature_column = 'gene', pval_column = 'meta_q', use_color_dict = T)
+grid.text('Significant genes with a CRE', x = 0.65, y = 0.95, gp = gpar(fontsize = 20))
+# add the combination of region-gene
+for (ct in names(cre_outputs)) {
+  cre_outputs[[ct]][['cre']] <- paste(cre_outputs[[ct]][['region']], cre_outputs[[ct]][['gene']], sep = ' + ')
+}
+# and plot that
+plot_sharing_per_celltype(table_per_ct = cre_outputs, feature_column = 'cre', pval_column = 'meta_q', use_color_dict = T)
+grid.text('Significant CREs', x = 0.65, y = 0.95, gp = gpar(fontsize = 20))
+
+```
+
+```{r get_cre_inputs, include=T, fig.width=10, fig.height=5}
+
+# location of the overlapping region-gene combination
+qtl_overlap_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/caQTL_eQTL_overlap_for_CRE/unique_peak_gene_pairs_matched_snp_ct.tsv'
+# load that data
+qtl_overlap <- read.table(qtl_overlap_loc, header = T, sep = '\t')
+# create a list for each cell type
+overlap_per_celltype <- list()
+# and subset to add to the list
+for (cell_type in unique(qtl_overlap[['ct.x']])) {
+  overlap_per_celltype[[cell_type]] <- qtl_overlap[qtl_overlap[['ct.x']] == cell_type, ]
+}
+
+```
+
+```{r get_overlap_outputs, include=T, fig.width=10, fig.height=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# plot overlap of the CRE regions
+plot_sharing_per_celltype(table_per_ct = overlap_per_celltype, feature_column = 'feature_id.x', pval_column = NULL, use_color_dict = T)
+grid.text('Regions with overlapping eQTL/caQTL variant', x = 0.65, y = 0.95, gp = gpar(fontsize = 20))
+# plot overlap of the CRE genes
+plot_sharing_per_celltype(table_per_ct = overlap_per_celltype, feature_column = 'feature_id.y', pval_column = NULL, use_color_dict = T)
+grid.text('Genes with overlapping eQTL/caQTL variant', x = 0.65, y = 0.95, gp = gpar(fontsize = 20))
+# add the combination of region-gene
+for (ct in names(cre_outputs)) {
+  overlap_per_celltype[[ct]][['cre']] <- paste(overlap_per_celltype[[ct]][['feature_id.x']], overlap_per_celltype[[ct]][['feature_id.y']], sep = ' + ')
+}
+# and plot that
+plot_sharing_per_celltype(table_per_ct = overlap_per_celltype, feature_column = 'cre', pval_column = NULL, use_color_dict = T)
+grid.text('Region-gene combinations with \neQTL/caQTL variant overlap', x = 0.65, y = 0.90, gp = gpar(fontsize = 20))
+
+```
+
+```{r get_replications, include=F}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# turn both of the lists of matrices into flat cre lists
+qtl_pairs <- list()
+for (cell_type in names(overlap_per_celltype)) {
+  qtl_pairs[[cell_type]] <- overlap_per_celltype[[cell_type]][['cre']]
+}
+cre_pairs <- list()
+for (cell_type in names(cre_outputs)) {
+  cre_pairs[[cell_type]] <- cre_outputs[[cell_type]][!is.na(cre_outputs[[cell_type]][['meta_q']]) & cre_outputs[[cell_type]][['meta_q']] < 0.05, 'cre']
+}
+
+# get the list overlaps
+ct_overlaps <- get_list_overlaps(qtl_pairs, cre_pairs, list_name = 'cell_type', list1_name = 'qtl', list2_name = 'cre')
+
+```
+
+```{r plot_replications, include=T, fig.width=10, fig.height=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# turn into a long table instead
+ct_overlaps_wide <- wide_to_long_table(ct_overlaps)
+# make the names safe
+ct_overlaps_wide[['cell_type']] <- rename_labels(ct_overlaps_wide[['cell_type']])
+# rename the categories
+ct_overlaps_wide[['category']] <- list('only_qtl' = 'only QTL', 'only_cre' = 'only CRE', 'in_both' = 'both')[ct_overlaps_wide[['category']]]
+# add a category of the celltype and category
+ct_overlaps_wide[['cell_type_category']] <- paste(ct_overlaps_wide[['cell_type']], ct_overlaps_wide[['category']])
+# order the data by the category by making it into a factor
+ct_overlaps_wide[['category']] <- factor(ct_overlaps_wide[['category']], levels = c('only CRE', 'only QTL', 'both'))
+# and then ordering
+ct_overlaps_wide <- ct_overlaps_wide[order(ct_overlaps_wide[['cell_type']], ct_overlaps_wide[['category']]), ]
+# and then make this order the order of the value we plot
+ct_overlaps_wide[['cell_type_category']] <- factor(ct_overlaps_wide[['cell_type_category']], levels = ct_overlaps_wide[['cell_type_category']])
+# make a colour list
+ct_overlaps_colour_list <- list()
+# check each of the cell types
+for (cell_type in unique(ct_overlaps_wide[['cell_type']])) {
+  # make the colours
+  pct_whitening <- 40
+  ct_overlaps_colour_list[[paste(cell_type, 'both')]] <- get_color_coding_dict()[[cell_type]]
+  ct_overlaps_colour_list[[paste(cell_type, 'only QTL')]] <- colorRampPalette(c(get_color_coding_dict()[[cell_type]], "white"))(100)[pct_whitening]
+  ct_overlaps_colour_list[[paste(cell_type, 'only CRE')]] <- colorRampPalette(c(get_color_coding_dict()[[cell_type]], "black"))(100)[pct_whitening]
+}
+# make into a plot
+p_overlaps <- ggplot(data = ct_overlaps_wide, mapping = aes(x = cell_type, y = value, fill = cell_type_category)) + 
+  geom_bar(position = 'stack', stat = 'identity') + 
+  xlab('Cell type') + 
+  ylab('Number of region-gene pairs') +
+  scale_fill_manual(values = ct_overlaps_colour_list) +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+  ggtitle('Number of overlapping region-gene pairs') + 
+  guides(fill=guide_legend(title = 'Cell type and significant'))
+# show the plot
+p_overlaps
+
+```
+
+```{r compare_scenic, include=T, fig.width=10, fig.height=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# the location of the annotated scenic output
+scenic_annotated_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_limma_001/output/eRegulon_direct_overlaps.tsv.gz'
+# read the scenic data
+scenic_annotated <- read.table(scenic_annotated_loc, header = T, sep = '\t')
+# make the region the same format
+scenic_annotated[['Region']] <- gsub(':', '-', scenic_annotated[['Region']])
+# and the CRE in the same format
+scenic_annotated[['cre']] <- paste(scenic_annotated[['Region']], scenic_annotated[['Gene']], sep  = ' + ')
+# now make a dummy list with this set of scenic CREs
+scenic_pairs <- list()
+for (cell_type in names(cre_pairs)) {
+  scenic_pairs[[cell_type]] <- scenic_annotated[['cre']]
+}
+# get the list overlaps
+scenic_cre_overlaps <- get_list_overlaps(scenic_pairs, cre_pairs, list_name = 'cell_type', list1_name = 'scenic', list2_name = 'naive_cre')
+scenic_qtl_overlaps <- get_list_overlaps(scenic_pairs, qtl_pairs, list_name = 'cell_type', list1_name = 'scenic', list2_name = 'qtl')
+
+```
+
+```{r plot_replication_scenic, include=T, fig.width=10, fig.height=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# turn into a long table instead
+scenic_cre_overlaps_wide <- wide_to_long_table(scenic_cre_overlaps)
+# make the names safe
+scenic_cre_overlaps_wide[['cell_type']] <- rename_labels(scenic_cre_overlaps_wide[['cell_type']])
+# rename the categories
+scenic_cre_overlaps_wide[['category']] <- list('only_qtl' = 'only QTL', 'only_naive_cre' = 'only naive CRE', 'in_both' = 'both', 'only_scenic' = 'only SCENIC+')[scenic_cre_overlaps_wide[['category']]]
+# add a category of the celltype and category
+scenic_cre_overlaps_wide[['cell_type_category']] <- paste(scenic_cre_overlaps_wide[['cell_type']], scenic_cre_overlaps_wide[['category']])
+# order the data by the category by making it into a factor
+scenic_cre_overlaps_wide[['category']] <- factor(scenic_cre_overlaps_wide[['category']], levels = c('only naive CRE', 'only QTL', 'only SCENIC+', 'both'))
+# and then ordering
+scenic_cre_overlaps_wide <- scenic_cre_overlaps_wide[order(scenic_cre_overlaps_wide[['cell_type']], scenic_cre_overlaps_wide[['category']]), ]
+# and then make this order the order of the value we plot
+scenic_cre_overlaps_wide[['cell_type_category']] <- factor(scenic_cre_overlaps_wide[['cell_type_category']], levels = scenic_cre_overlaps_wide[['cell_type_category']])
+# make a colour list
+scenic_cre_overlaps_colour_list <- list()
+# check each of the cell types
+for (cell_type in unique(scenic_cre_overlaps_wide[['cell_type']])) {
+  # make the colours
+  pct_whitening <- 40
+  scenic_cre_overlaps_colour_list[[paste(cell_type, 'both')]] <- get_color_coding_dict()[[cell_type]]
+  scenic_cre_overlaps_colour_list[[paste(cell_type, 'only SCENIC+')]]  <- colorRampPalette(c(get_color_coding_dict()[[cell_type]], "white"))(100)[pct_whitening]
+  scenic_cre_overlaps_colour_list[[paste(cell_type, 'only QTL')]] <- colorRampPalette(c(get_color_coding_dict()[[cell_type]], "black"))(100)[pct_whitening]
+  scenic_cre_overlaps_colour_list[[paste(cell_type, 'only naive CRE')]] <- colorRampPalette(c(get_color_coding_dict()[[cell_type]], "black"))(100)[pct_whitening]
+}
+# make into a plot
+p_scenic_cre_overlaps <- ggplot(data = scenic_cre_overlaps_wide, mapping = aes(x = cell_type, y = value, fill = cell_type_category)) + 
+  geom_bar(position = 'stack', stat = 'identity') + 
+  xlab('Cell type') + 
+  ylab('Number of region-gene pairs') +
+  scale_fill_manual(values = scenic_cre_overlaps_colour_list) +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+  ggtitle('Number of overlapping region-gene pairs') + 
+  guides(fill=guide_legend(title = 'Cell type and significant'))
+# show the plot
+p_scenic_cre_overlaps
+
+# turn into a long table instead
+scenic_qtl_overlaps_wide <- wide_to_long_table(scenic_qtl_overlaps)
+# make the names safe
+scenic_qtl_overlaps_wide[['cell_type']] <- rename_labels(scenic_qtl_overlaps_wide[['cell_type']])
+# rename the categories
+scenic_qtl_overlaps_wide[['category']] <- list('only_qtl' = 'only QTL', 'only_naive_cre' = 'only naive CRE', 'in_both' = 'both', 'only_scenic' = 'only SCENIC+')[scenic_qtl_overlaps_wide[['category']]]
+# add a category of the celltype and category
+scenic_qtl_overlaps_wide[['cell_type_category']] <- paste(scenic_qtl_overlaps_wide[['cell_type']], scenic_qtl_overlaps_wide[['category']])
+# order the data by the category by making it into a factor
+scenic_qtl_overlaps_wide[['category']] <- factor(scenic_qtl_overlaps_wide[['category']], levels = c('only naive CRE', 'only QTL', 'only SCENIC+', 'both'))
+# and then ordering
+scenic_qtl_overlaps_wide <- scenic_qtl_overlaps_wide[order(scenic_qtl_overlaps_wide[['cell_type']], scenic_qtl_overlaps_wide[['category']]), ]
+# and then make this order the order of the value we plot
+scenic_qtl_overlaps_wide[['cell_type_category']] <- factor(scenic_qtl_overlaps_wide[['cell_type_category']], levels = scenic_qtl_overlaps_wide[['cell_type_category']])
+# make into a plot
+p_scenic_qtl_overlaps <- ggplot(data = scenic_qtl_overlaps_wide, mapping = aes(x = cell_type, y = value, fill = cell_type_category)) + 
+  geom_bar(position = 'stack', stat = 'identity') + 
+  xlab('Cell type') + 
+  ylab('Number of region-gene pairs') +
+  scale_fill_manual(values = scenic_cre_overlaps_colour_list) +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+  ggtitle('Number of overlapping region-gene pairs') + 
+  guides(fill=guide_legend(title = 'Cell type and significant'))
+# show the plot
+p_scenic_qtl_overlaps
+
+```
+
+```{r plot_replication_others, include=T, fig.width=10, fig.height=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# get the list overlaps
+ct_overlap_qtl_to_cre <- check_overlap_other_lists(qtl_pairs, cre_pairs, list_name = 'cell_type', list1_name = 'qtl', list2_name = 'cre')
+# turn into a long table instead
+ct_overlap_qtl_to_cre_wide <- wide_to_long_table(ct_overlap_qtl_to_cre)
+# make the names safe
+ct_overlap_qtl_to_cre_wide[['cell_type']] <- rename_labels(ct_overlap_qtl_to_cre_wide[['cell_type']])
+# rename the categories
+ct_overlap_qtl_to_cre_wide[['category']] <- unlist(list('only_qtl' = 'only QTL', 'also_cre_same' = 'CRE same cell type', 'also_cre_only_diff' = 'CRE only other cell type')[ct_overlap_qtl_to_cre_wide[['category']]])
+
+# add a category of the celltype and category
+ct_overlap_qtl_to_cre_wide[['cell_type_category']] <- paste(ct_overlap_qtl_to_cre_wide[['cell_type']], ct_overlap_qtl_to_cre_wide[['category']])
+# order the data by the category by making it into a factor
+ct_overlap_qtl_to_cre_wide[['category']] <- factor(ct_overlap_qtl_to_cre_wide[['category']], levels = c('only QTL', 'CRE same cell type', 'CRE only other cell type'))
+# and then ordering
+ct_overlap_qtl_to_cre_wide <- ct_overlap_qtl_to_cre_wide[order(ct_overlap_qtl_to_cre_wide[['cell_type']], ct_overlap_qtl_to_cre_wide[['category']]), ]
+# and then make this order the order of the value we plot
+ct_overlap_qtl_to_cre_wide[['cell_type_category']] <- factor(ct_overlap_qtl_to_cre_wide[['cell_type_category']], levels = ct_overlap_qtl_to_cre_wide[['cell_type_category']])
+
+# make a colour list
+ct_overlap_qtl_to_cre_wide_colour_list <- list()
+# check each of the cell types
+for (cell_type in unique(ct_overlap_qtl_to_cre_wide[['cell_type']])) {
+  # make the colours
+  pct_whitening <- 40
+  ct_overlap_qtl_to_cre_wide_colour_list[[paste(cell_type, 'only QTL')]] <- get_color_coding_dict()[[cell_type]]
+  ct_overlap_qtl_to_cre_wide_colour_list[[paste(cell_type, 'CRE same cell type')]]  <- colorRampPalette(c(get_color_coding_dict()[[cell_type]], "white"))(100)[pct_whitening]
+  ct_overlap_qtl_to_cre_wide_colour_list[[paste(cell_type, 'CRE only other cell type')]] <- colorRampPalette(c(get_color_coding_dict()[[cell_type]], "black"))(100)[pct_whitening]
+}
+
+# make into a plot
+p_qtl_cre_overlaps <- ggplot(data = ct_overlap_qtl_to_cre_wide, mapping = aes(x = cell_type, y = value, fill = cell_type_category)) + 
+  geom_bar(position = 'stack', stat = 'identity') + 
+  xlab('Cell type') + 
+  ylab('Number of region-gene pairs') +
+  scale_fill_manual(values = ct_overlap_qtl_to_cre_wide_colour_list) +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+  ggtitle('Number of overlapping region-gene pairs') + 
+  guides(fill=guide_legend(title = 'Cell type and significant'))
+
+# alternate version
+p_qtl_cre_overlaps_ugly <- ggplot(data = ct_overlap_qtl_to_cre_wide, mapping = aes(x = cell_type, y = value, fill = category)) + 
+  geom_bar(position = 'dodge', stat = 'identity') + 
+  xlab('Cell type') + 
+  ylab('Number of region-gene pairs') +
+  scale_fill_manual(values = get_color_list(ct_overlap_qtl_to_cre_wide[['category']])) +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+  ggtitle('Number of overlapping region-gene pairs') + 
+  guides(fill=guide_legend(title = 'Significant in'))
+
+# show the plot
+#p_qtl_cre_overlaps
+# and save it
+dir.create('~/plots/')
+ggsave(filename = '~/plots/mo_overlapping_qtl_cre_replication_alt.pdf', plot = p_qtl_cre_overlaps_ugly, width = 10, height = 5)
+# show the plot
+p_qtl_cre_overlaps
+# and save it
+dir.create('~/plots/')
+ggsave(filename = '~/plots/mo_overlapping_qtl_cre_replication.pdf', plot = p_qtl_cre_overlaps, width = 10, height = 5)
+
+
+```
+
+```{r check_variant_replication_location, include=T, fig.width=10, fig.height=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# location of the region-gene pairs, with also the variant
+qtl_overlap_wvariant_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/caQTL_eQTL_overlap_for_CRE/all_effects_peak_gene_pairs_matched_snp_ct.tsv'
+# read the file
+qtl_overlap_wvariant <- read.table(qtl_overlap_wvariant_loc, header = T, sep = '\t')
+# subset to what we care about
+qtl_overlap_wvariant <- qtl_overlap_wvariant[, c('cond', 'ct_caqtl', 'snp_id', 'feature_id_caqtl', 'feature_id_eqtl', 'zscore_caqtl', 'zscore_eqtl')]
+# and rename the columns
+colnames(qtl_overlap_wvariant) <- c('condition', 'celltype', 'variant', 'region', 'gene', 'zscore_caqtl', 'zscore_eqtl')
+# check if the region and gene replicate
+qtl_overlap_wvariant[['replicate_cre']] <- apply(qtl_overlap_wvariant, 1, function(x) {
+  # paste together the region and gene
+  possible_cre <- paste(x['region'], x['gene'], sep = ' + ')
+  # get check if the cre is in the list of CREs for this cell type
+  replicates_cre <- possible_cre %in% cre_pairs[[x['celltype']]]
+  # return whether it replicates
+  return(replicates_cre)
+})
+
+# create an region locations table
+region_locations <- data.frame(do.call("rbind", strsplit(as.character(unique(qtl_overlap_wvariant[['region']])), "-", fixed = TRUE)))
+# remove the chr from the region location
+region_locations[['X1']] <- gsub('chr', '', region_locations[['X1']])
+# update the column names
+colnames(region_locations) <- c('chrom', 'start', 'end')
+# and the name back
+region_locations[['name']] <- paste(paste0('chr', region_locations[['chrom']]), region_locations[['start']], region_locations[['end']], sep = '-')
+
+# variant locations as well
+variant_locations <- data.frame(do.call("rbind", strsplit(as.character(unique(qtl_overlap_wvariant[['variant']])), ":", fixed = TRUE)))
+# duplicate the chromosomal location
+variant_locations <- variant_locations[, c('X1', 'X2', 'X2', 'X3', 'X4')]
+# update the column names
+colnames(variant_locations) <- c('chrom', 'start', 'end', 'ref', 'alt')
+# and the name back
+variant_locations[['name']] <- paste(variant_locations[['chrom']], variant_locations[['start']], variant_locations[['ref']], variant_locations[['alt']], sep = ':')
+
+# make hashmaps of each of the locations, when the peak or variant name is the key, and the genomicrange is the value
+region_locations_hm <- location_name_to_irange(region_locations)
+variant_locations_hm <- location_name_to_irange(variant_locations)
+
+# get the unique variant-region combinations
+var_region <- unique(qtl_overlap_wvariant[, c('variant', 'region')])
+
+# check if the variant is in the region for each row
+var_region[['variant_in_peak']] <- apply(var_region, 1, function(x) {
+  # check if there is an overlap
+  n_overlap <- GenomicRanges::countOverlaps(
+    query = region_locations_hm[[x[['region']]]],
+    subject = variant_locations_hm[[x[['variant']]]], 
+    ignore.strand = T
+  )
+  # check if the overlap was more than zero (so one, since we test pairs), if yes, then the variant and region overlap
+  if (sum(n_overlap) > 0) {
+    return(T)
+  }
+  else {
+    return(F)
+  }
+})
+
+# add this information to the big table
+qtl_overlap_wvariant[['variant_in_peak']] <- var_region[
+  match(
+    paste(qtl_overlap_wvariant[['region']], qtl_overlap_wvariant[['variant']]), 
+    paste(var_region[['region']], var_region[['variant']])
+  ), 'variant_in_peak']
+
+# save this somewhere
+qtl_overlap_annotated_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/caQTL_eQTL_overlap_for_CRE/all_effects_peak_gene_pairs_matched_snp_ct_wanno.tsv.gz'
+write.table(qtl_overlap_wvariant, gzfile(qtl_overlap_annotated_loc), row.names = F, col.names = T, quote = F, sep = '\t')
+# and make an MD5 checksum
+mdfiver::create_md5_for_file(qtl_overlap_annotated_loc)
+
+```
+
+```{r check_variant_replication_top_effects, include=T, fig.width=10, fig.height=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# sort the qtl overlaps by the absolute Z score for eQTLs
+qtl_overlap_wvariant_eqtl_top_effects <- qtl_overlap_wvariant[order(abs(qtl_overlap_wvariant[['zscore_eqtl']]), abs(qtl_overlap_wvariant[['zscore_caqtl']]), decreasing = T), ]
+# and grab only the first combination
+qtl_overlap_wvariant_eqtl_top_effects <- qtl_overlap_wvariant_eqtl_top_effects[!duplicated(paste(qtl_overlap_wvariant_eqtl_top_effects[['celltype']], qtl_overlap_wvariant_eqtl_top_effects[['region']], qtl_overlap_wvariant_eqtl_top_effects[['gene']], sep = '+')), ]
+# check how often it replicates and is in the actual peak
+eqtl_contingency <- table(qtl_overlap_wvariant_eqtl_top_effects[, c('replicate_cre', 'variant_in_peak')])
+# reorder a bit
+eqtl_contingency <- eqtl_contingency[c(2,1), c(2,1)]
+eqtl_contingency
+# check for significance
+fisher.test(eqtl_contingency)
+
+# sort the qtl overlaps by the absolute Z score for caQTLs
+qtl_overlap_wvariant_caqtl_top_effects <- qtl_overlap_wvariant[order(abs(qtl_overlap_wvariant[['zscore_caqtl']]), abs(qtl_overlap_wvariant[['zscore_eqtl']]), decreasing = T), ]
+# and grab only the first combination
+qtl_overlap_wvariant_caqtl_top_effects <- qtl_overlap_wvariant_caqtl_top_effects[!duplicated(paste(qtl_overlap_wvariant_caqtl_top_effects[['celltype']], 
+                                                                                                qtl_overlap_wvariant_caqtl_top_effects[['region']], 
+                                                                                                qtl_overlap_wvariant_caqtl_top_effects[['gene']], 
+                                                                                                sep = '+')), ]
+# check how often it replicates and is in the actual peak
+caqtl_contingency <- table(qtl_overlap_wvariant_caqtl_top_effects[, c('replicate_cre', 'variant_in_peak')])
+# reorder a bit
+caqtl_contingency <- caqtl_contingency[c(2,1), c(2,1)]
+caqtl_contingency
+# check for significance
+fisher.test(caqtl_contingency)
+
+```
+
+```{r check_variant_replication_top_effects_nogene, include=T, fig.width=10, fig.height=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# sort the qtl overlaps by the absolute Z score for eQTLs
+qtl_overlap_wvariant_eqtl_top_effects_nogene <- qtl_overlap_wvariant[order(abs(qtl_overlap_wvariant[['zscore_eqtl']]), abs(qtl_overlap_wvariant[['zscore_caqtl']]), decreasing = T), ]
+# and grab only the first combination
+qtl_overlap_wvariant_eqtl_top_effects_nogene <- qtl_overlap_wvariant_eqtl_top_effects_nogene[!duplicated(paste(qtl_overlap_wvariant_eqtl_top_effects_nogene[['celltype']], 
+                                                                                                qtl_overlap_wvariant_eqtl_top_effects_nogene[['region']], 
+                                                                                                sep = '+')), ]
+# check how often it replicates and is in the actual peak
+eqtl_contingency_nogene <- table(qtl_overlap_wvariant_eqtl_top_effects_nogene[, c('replicate_cre', 'variant_in_peak')])
+# reorder a bit
+eqtl_contingency_nogene <- eqtl_contingency_nogene[c(2,1), c(2,1)]
+eqtl_contingency_nogene
+# check for significance
+fisher.test(eqtl_contingency_nogene)
+
+# sort the qtl overlaps by the absolute Z score for caQTLs
+qtl_overlap_wvariant_caqtl_top_effects_nogene <- qtl_overlap_wvariant[order(abs(qtl_overlap_wvariant[['zscore_caqtl']]), abs(qtl_overlap_wvariant[['zscore_eqtl']]), decreasing = T), ]
+# and grab only the first combination
+qtl_overlap_wvariant_caqtl_top_effects_nogene <- qtl_overlap_wvariant_caqtl_top_effects[!duplicated(paste(qtl_overlap_wvariant_caqtl_top_effects_nogene[['celltype']], 
+                                                                                                qtl_overlap_wvariant_caqtl_top_effects_nogene[['region']], 
+                                                                                                sep = '+')), ]
+# check how often it replicates and is in the actual peak
+caqtl_contingency_nogene <- table(qtl_overlap_wvariant_caqtl_top_effects_nogene[, c('replicate_cre', 'variant_in_peak')])
+# reorder a bit
+caqtl_contingency_nogene <- caqtl_contingency_nogene[c(2,1), c(2,1)]
+caqtl_contingency_nogene
+# check for significance
+fisher.test(caqtl_contingency_nogene)
+
+```
+
+```{r check_variant_replication_top_effects_noregion, include=T, fig.width=10, fig.height=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# sort the qtl overlaps by the absolute Z score for eQTLs
+qtl_overlap_wvariant_eqtl_top_effects_noregion <- qtl_overlap_wvariant[order(abs(qtl_overlap_wvariant[['zscore_eqtl']]), abs(qtl_overlap_wvariant[['zscore_caqtl']]), decreasing = T), ]
+# and grab only the first combination
+qtl_overlap_wvariant_eqtl_top_effects_noregion <- qtl_overlap_wvariant_eqtl_top_effects_noregion[!duplicated(paste(qtl_overlap_wvariant_eqtl_top_effects_noregion[['celltype']], 
+                                                                                                qtl_overlap_wvariant_eqtl_top_effects_noregion[['gene']], 
+                                                                                                sep = '+')), ]
+# check how often it replicates and is in the actual peak
+eqtl_contingency_noregion <- table(qtl_overlap_wvariant_eqtl_top_effects_noregion[, c('replicate_cre', 'variant_in_peak')])
+# reorder a bit
+eqtl_contingency_noregion <- eqtl_contingency_noregion[c(2,1), c(2,1)]
+eqtl_contingency_noregion
+# check for significance
+fisher.test(eqtl_contingency_noregion)
+
+# sort the qtl overlaps by the absolute Z score for caQTLs
+qtl_overlap_wvariant_caqtl_top_effects_noregion <- qtl_overlap_wvariant[order(abs(qtl_overlap_wvariant[['zscore_caqtl']]), abs(qtl_overlap_wvariant[['zscore_eqtl']]), decreasing = T), ]
+# and grab only the first combination
+qtl_overlap_wvariant_caqtl_top_effects_noregion <- qtl_overlap_wvariant_caqtl_top_effects[!duplicated(paste(qtl_overlap_wvariant_caqtl_top_effects_noregion[['celltype']], 
+                                                                                                qtl_overlap_wvariant_caqtl_top_effects_noregion[['gene']], 
+                                                                                                sep = '+')), ]
+# check how often it replicates and is in the actual peak
+caqtl_contingency_noregion <- table(qtl_overlap_wvariant_caqtl_top_effects_noregion[, c('replicate_cre', 'variant_in_peak')])
+# reorder a bit
+caqtl_contingency_noregion <- caqtl_contingency_noregion[c(2,1), c(2,1)]
+caqtl_contingency_noregion
+# check for significance
+fisher.test(caqtl_contingency_noregion)
+
+```
+
+```{r check_variant_replication_top_effects_noregion_noct, include=T, fig.width=10, fig.height=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# sort the qtl overlaps by the absolute Z score for eQTLs
+qtl_overlap_wvariant_eqtl_top_effects_noregionnoct <- qtl_overlap_wvariant[order(abs(qtl_overlap_wvariant[['zscore_eqtl']]), abs(qtl_overlap_wvariant[['zscore_caqtl']]), decreasing = T), ]
+# and grab only the first combination
+qtl_overlap_wvariant_eqtl_top_effects_noregionnoct <- qtl_overlap_wvariant_eqtl_top_effects_noregionnoct[!duplicated(
+                                                                                                qtl_overlap_wvariant_eqtl_top_effects_noregionnoct[['gene']]), ]
+# check how often it replicates and is in the actual peak
+eqtl_contingency_noregionnoct <- table(qtl_overlap_wvariant_eqtl_top_effects_noregionnoct[, c('replicate_cre', 'variant_in_peak')])
+# reorder a bit
+eqtl_contingency_noregionnoct <- eqtl_contingency_noregionnoct[c(2,1), c(2,1)]
+eqtl_contingency_noregionnoct
+# check for significance
+fisher.test(eqtl_contingency_noregionnoct)
+
+```
+
+```{r check_final_numbers, include=T, fig.width=10, fig.height=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# add whether the CRE replicated in any cell type
+qtl_overlap_wvariant[['cre_any_celltype']] <- paste(qtl_overlap_wvariant[['region']], qtl_overlap_wvariant[['gene']], sep = ' + ') %in% do.call('c', cre_pairs)
+# take only the top variant for each combination for each cell type
+qtl_overlap_wvariant_top_variant <- qtl_overlap_wvariant[order(abs(qtl_overlap_wvariant[['zscore_eqtl']]), abs(qtl_overlap_wvariant[['zscore_caqtl']]), decreasing = T), ]
+qtl_overlap_wvariant_top_variant <- qtl_overlap_wvariant_top_variant[!duplicated(paste(
+  paste(qtl_overlap_wvariant[['celltype']], qtl_overlap_wvariant[['region']], qtl_overlap_wvariant[['gene']], sep = ' + ')
+)), ]
+# get how any replicated at all, compared to total
+frac_rep <- sum(qtl_overlap_wvariant_top_variant[['cre_any_celltype']]) / nrow(qtl_overlap_wvariant_top_variant)
+# and how many in the correct cell type
+frac_rep_ct <- sum(qtl_overlap_wvariant_top_variant[['replicate_cre']]) / nrow(qtl_overlap_wvariant_top_variant)
+
+# print the result
+cat(paste(as.character(round(frac_rep, digits = 2)), 'of QTL pairs replicate as CRE, while', as.character(round(frac_rep_ct, digits = 2)), 'of QTL pairs replicate in the same cell type as they were found\n'))
+```
+
+```{r check_final_numbers, include=T, fig.width=10, fig.height=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# initialize
+qtl_overlap_wvariant[['cre_z']] <- NA
+# check each cell type
+for (cell_type in unique(qtl_overlap_wvariant[['celltype']])) {
+  # for the entries of this cell type, add the cre z score
+  qtl_overlap_wvariant[qtl_overlap_wvariant[['celltype']] == cell_type, 'cre_z'] <- cre_outputs[[cell_type]][match(
+    paste(qtl_overlap_wvariant[qtl_overlap_wvariant[['celltype']] == cell_type, 'region'], 
+          qtl_overlap_wvariant[qtl_overlap_wvariant[['celltype']] == cell_type, 'gene'], sep = ' + '), 
+    cre_outputs[[cell_type]][['cre']]
+  ), 'meta_z']
+}
+
+# sort the qtl overlaps by the absolute Z score for eQTLs
+qtl_overlap_wvariant_eqtl_top_effects_noregion <- qtl_overlap_wvariant[order(abs(qtl_overlap_wvariant[['zscore_eqtl']]), abs(qtl_overlap_wvariant[['zscore_caqtl']]), decreasing = T), ]
+# and grab only the first combination
+qtl_overlap_wvariant_eqtl_top_effects_noregion <- qtl_overlap_wvariant_eqtl_top_effects_noregion[!duplicated(paste(
+                                                                                                qtl_overlap_wvariant_eqtl_top_effects_noregion[['gene']], qtl_overlap_wvariant_eqtl_top_effects_noregion[['celltype']])), ]
+# add whether or not the sign was the same
+qtl_overlap_wvariant_eqtl_top_effects_noregion[['qtl_signs']] <- sign(qtl_overlap_wvariant_eqtl_top_effects_noregion[['zscore_eqtl']]) * sign(qtl_overlap_wvariant_eqtl_top_effects_noregion[['zscore_caqtl']])
+
+```
+
+```{r qtl_directions, include=T, fig.width=10, fig.height=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# get how many of the replicating effects were negative
+n_rep_neg <- nrow(qtl_overlap_wvariant_eqtl_top_effects_noregion[qtl_overlap_wvariant_eqtl_top_effects_noregion$replicate_cre == T & qtl_overlap_wvariant_eqtl_top_effects_noregion$cre_z < 0, ])
+# get how many of the replicating effects were positive
+n_rep_pos <- nrow(qtl_overlap_wvariant_eqtl_top_effects_noregion[qtl_overlap_wvariant_eqtl_top_effects_noregion$replicate_cre == T & qtl_overlap_wvariant_eqtl_top_effects_noregion$cre_z > 0, ])
+# the same for it it was a different cell type
+n_rep_neg_other <- nrow(qtl_overlap_wvariant_eqtl_top_effects_noregion[qtl_overlap_wvariant_eqtl_top_effects_noregion$cre_any_celltype == T & qtl_overlap_wvariant_eqtl_top_effects_noregion$cre_z < 0, ])
+n_rep_pos_other <- nrow(qtl_overlap_wvariant_eqtl_top_effects_noregion[qtl_overlap_wvariant_eqtl_top_effects_noregion$cre_any_celltype == T & qtl_overlap_wvariant_eqtl_top_effects_noregion$cre_z > 0, ])
+
+# check if the original QTL also had a different direction
+n_rep_neg_directed <- nrow(qtl_overlap_wvariant_eqtl_top_effects_noregion[qtl_overlap_wvariant_eqtl_top_effects_noregion$replicate_cre == T & qtl_overlap_wvariant_eqtl_top_effects_noregion$cre_z < 0 & qtl_overlap_wvariant_eqtl_top_effects_noregion$qtl_signs < 0, ])
+n_rep_pos_directed <- nrow(qtl_overlap_wvariant_eqtl_top_effects_noregion[qtl_overlap_wvariant_eqtl_top_effects_noregion$replicate_cre == T & qtl_overlap_wvariant_eqtl_top_effects_noregion$cre_z > 0 & qtl_overlap_wvariant_eqtl_top_effects_noregion$qtl_signs > 0, ])
+n_rep_neg_other_directed <- nrow(qtl_overlap_wvariant_eqtl_top_effects_noregion[qtl_overlap_wvariant_eqtl_top_effects_noregion$cre_any_celltype == T & qtl_overlap_wvariant_eqtl_top_effects_noregion$cre_z < 0 & qtl_overlap_wvariant_eqtl_top_effects_noregion$qtl_signs < 0, ])
+n_rep_pos_other_directed <- nrow(qtl_overlap_wvariant_eqtl_top_effects_noregion[qtl_overlap_wvariant_eqtl_top_effects_noregion$cre_any_celltype == T & qtl_overlap_wvariant_eqtl_top_effects_noregion$cre_z > 0 & qtl_overlap_wvariant_eqtl_top_effects_noregion$qtl_signs > 0, ])
+
+
+# print this
+cat(paste0(
+  'Number of negative replicating CRE effects in the same cell type: ', 
+  as.character(n_rep_neg), '\n', 
+  'Number of positive replicating CRE effects in the same cell type: ', 
+  as.character(n_rep_pos), '\n', 
+  'Number of negative replicating CRE effects in an other cell type: ', 
+  as.character(n_rep_neg_other), '\n', 
+  'Number of positive replicating CRE effects in an other cell type: ', 
+  as.character(n_rep_pos_other), '\n'
+))
+
+```
+

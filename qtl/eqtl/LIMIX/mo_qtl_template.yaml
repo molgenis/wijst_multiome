@@ -5,18 +5,16 @@
 ###### The following arguments are for indicating file locations on your system #####
 #####################################################################################
 
-# The path to the folder within which the simgularity image & "wp3.simg" is located
-wp3_image_loc: /groups/umcg-franke-scrna/tmp04/software/wp3.simg
-# The path to the folder within which the simgularity image & "limixDec22.simg" is located
-limix_image_loc: /groups/umcg-franke-scrna/tmp04/software/limixAug24.A.sif
-# This folder will be bound to Singularty (needs to be highr up then every data item.
-top_dir: /groups/umcg-franke-scrna/tmp04/
+image_folder: /groups/umcg-franke-scrna/tmp04/software/ ### The path to the folder within which the simgularity image & "wp3.simg" "limixJune24.simg" is located
+top_dir: /groups/umcg-franke-scrna/tmp04/ ### Thhis folder will be bound to Singularty (needs to be highr up then every data item.
 # where the scripts are located, should be inside the container
 script_folder: /tools/WG3-pipeline-QTL/scripts/
-# where the limix QTL pipeline is located, should be outside the container
-limix_loc: /groups/umcg-franke-scrna/tmp04/software/Limix_QTL/
-# where the eigenmt script is located
-eigenmt_loc:
+# The path to the folder within which the simgularity image & "limixDec22.simg" is located
+limix_image_loc: /groups/umcg-franke-scrna/tmp04/software/limixAug24.A.sif
+# The path to the folder within which the simgularity image & "wp3.simg" is located
+wp3_image_loc: /groups/umcg-franke-scrna/tmp04/software/wp3.simg
+
+
 # genotype inputs
 genotype_loc: /groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/genotype_input/
 genotype_prepend: EUR_imputed_hg38_varFiltered_chr
@@ -34,31 +32,24 @@ kinship_loc: /groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipe
 # location of the chunking file
 chunking_file_loc: /groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/input/ChunkingFile.txt
 # location of the limix annotation file
-limix_annotation_loc: /groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/input/
-limix_annotation_prepend: LimixAnnotationFile
-limix_annotation_append: .txt
+limix_annotation_loc: /groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/input/LimixAnnotationFile.txt
 # location of the sample mapping file
 smf_loc: /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/input/L1/combined/smf.txt
-# location of the variant-features to test for interactions
-variant_feature_confinement_loc: /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/confinements/
-variant_feature_confinement_prepend:
-variant_feature_confinement_append: _anycondsig_confinement.tsv.gz
+
 
 #####################################
 ##       input files/folders       ###
 #####################################
 
-out_folder: /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/output/combined_significant/L1/
+out_folder: /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/sc-eqtlgen/output/L1/combined/
 
-interaction_terms:
-    - inflammation_final
 
 ######################################
 ######        Do not change      #####
 ######################################
-numberOfPermutations: '0'
-minorAlleleFrequency: '0.01'
-windowSize: '1' # gene + cis window from one side
+numberOfPermutations: '100'
+minorAlleleFrequency: '0.05'
+windowSize: '1000000' #gene + cis window from one side
 hardyWeinbergCutoff: '0.0001'
 compressFiles: true
 

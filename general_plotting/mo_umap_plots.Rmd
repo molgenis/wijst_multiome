@@ -1,0 +1,245 @@
+---
+title: "mo_umap_plots"
+author: "Roy Oelen"
+date: "2025-01-15"
+output: html_document
+---
+
+```{r header, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+#!/usr/bin/env Rscript
+############################################################################################################################
+# Authors: Roy Oelen
+# Name: mo_umap_plots.Rmd
+# Function: plot the umaps for the multiome project
+############################################################################################################################
+```
+
+```{r libraries, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+####################
+# libraries        #
+####################
+
+library(data.table)
+library(ggplot2)
+library(cowplot)
+library(RColorBrewer)
+library(roycols)
+library(ggrastr)
+library(ggpubr)
+library(Seurat)
+library(viridis)
+
+```
+
+```{r functions, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+####################
+# Functions        #
+####################
+
+
+get_label_dict <- function(){
+  label_dict <- list()
+  # condition combinations
+  label_dict[["UT"]] <- "UT"
+  label_dict[["24hCa"]] <- "24hCA"
+  label_dict[["24hCA"]] <- "24hCA"
+  # major cell types
+  label_dict[["Bulk"]] <- "bulk-like"
+  label_dict[["CD4T"]] <- "CD4+ T"
+  label_dict[["CD8T"]] <- "CD8+ T"
+  label_dict[["monocyte"]] <- "monocyte"
+  label_dict[["NK"]] <- "NK"
+  label_dict[["B"]] <- "B"
+  label_dict[["DC"]] <- "DC"
+  label_dict[["HSPC"]] <- "HSPC"
+  label_dict[["plasmablast"]] <- "plasmablast"
+  label_dict[["platelet"]] <- "platelet"
+  label_dict[["T_other"]] <- "other T"
+  label_dict[["hemapoietic_stem"]] <- "hemapoietic stem"
+  # minor cell types
+  label_dict[["CD4_TCM"]] <- "CD4 TCM"
+  label_dict[["Treg"]] <- "T regulatory"
+  label_dict[["CD4_Naive"]] <- "CD4 naive"
+  label_dict[["CD4_CTL"]] <- "CD4 CTL"
+  label_dict[["CD8_TEM"]] <- "CD8 TEM"
+  label_dict[["cMono"]] <- "cMono"
+  label_dict[["CD8_TCM"]] <- "CD8 TCM"
+  label_dict[["ncMono"]] <- "ncMono"
+  label_dict[["cDC2"]] <- "cDC2"
+  label_dict[["B_intermediate"]] <- "B intermediate"
+  label_dict[["NKdim"]] <- "NK dim"
+  label_dict[["pDC"]] <- "pDC"
+  label_dict[["ASDC"]] <- "ASDC"
+  label_dict[["CD8_Naive"]] <- "CD8 naive"
+  label_dict[["MAIT"]] <- "MAIT"
+  label_dict[["CD8_Proliferating"]] <- "CD8 proliferating"
+  label_dict[["CD4_TEM"]] <- "CD4 TEM"
+  label_dict[["B_memory"]] <- "B memory"
+  label_dict[["NKbright"]] <- "NK bright"
+  label_dict[["B_naive"]] <- "B naive"
+  label_dict[["gdT"]] <- "gamma delta T"
+  label_dict[["CD4_Proliferating"]] <- "CD4 proliferating"
+  label_dict[["NK_Proliferating"]] <- "NK proliferating"
+  label_dict[["cDC1"]] <- "cDC1"
+  label_dict[["ILC"]] <- "ILC"
+  label_dict[["dnT"]] <- "double negative T"
+  # unannotated ones
+  label_dict[['unannotated']] <- 'unannotated'
+  return(label_dict)
+}
+
+
+get_color_coding_dict <- function(){
+  # set the condition colors
+  color_coding <- list()
+  color_coding[["UT"]] <- "lightgrey"
+  color_coding[["24hCA"]] <- "forestgreen"
+  color_coding[["24hCa"]] <- "forestgreen"
+  # set the cell type colors
+  color_coding[["Bulk"]] <- "black"
+  color_coding[["CD4T"]] <- "#153057"
+  color_coding[["CD8T"]] <- "#009DDB"
+  color_coding[["monocyte"]] <- "#EDBA1B"
+  color_coding[["NK"]] <- "#E64B50"
+  color_coding[["B"]] <- "#71BC4B"
+  color_coding[["DC"]] <- "#965EC8"
+  color_coding[["CD4+ T"]] <- "#153057"
+  color_coding[["CD8+ T"]] <- "#009DDB"
+  # other cell type colors
+  color_coding[["HSPC"]] <- "#009E94"
+  color_coding[["platelet"]] <- "#9E1C00"
+  color_coding[["plasmablast"]] <- "#DB8E00"
+  color_coding[["other T"]] <- "#FF63B6"
+  color_coding[["T_other"]] <- "#FF63B6"
+  color_coding[["hemapoietic_stem"]] <- "#8B8000"
+  color_coding[["hemapoietic stem"]] <- "#8B8000"
+  color_coding[["unannotated"]] <- "gray"
+  return(color_coding)
+}
+
+rename_labels <- function(vector_to_rename) {
+  # get the labels that are present
+  label_renaming <- get_label_dict()
+  # now check which labels we are missing
+  missing_renames <- setdiff(unique(as.character(vector_to_rename)), names(label_renaming))
+  # add those renames as not being renames
+  for (missing_rename in missing_renames) {
+    label_renaming[[missing_rename]] <- missing_rename
+  }
+  # now replace each value with the rename
+  renamed_vector <- as.vector(unlist(label_renaming[as.character(vector_to_rename)]))
+  # and return that
+  return(renamed_vector)
+}
+
+
+get_colors_10x_groups <- function() {
+  # get shades
+  mono_colors <- roycols::get_color_list_shades(vector_of_names = c('CD14 Mono', 'CD16 Mono'), shades_from = c('gold', 'gold3'))
+  b_colors <- roycols::get_color_list_shades(vector_of_names = c('Memory B', 'Intermediate B', 'Naive B'), shades_from = c('olivedrab2', 'olivedrab4'))
+  nk_colors <- list('NK' = '#E64B50')
+  dc_colors <- roycols::get_color_list_shades(vector_of_names = c('cDC', 'pDC'), shades_from = c('darkorchid2', 'darkorchid4'))
+  cd8_colors <- roycols::get_color_list_shades(vector_of_names = c('CD8 TEM_1', 'CD8 TEM_2', 'CD8 Naive'), shades_from = c('steelblue2', 'steelblue4'))
+  cd4_colors <- roycols::get_color_list_shades(vector_of_names = c('CD4 TEM', 'CD4 TCM', 'CD4 Naive'), shades_from = c('blue2', 'blue4'))
+  hpsc_colors <- list("HSPC" = "#8B8000")
+  plasma_colors <- list('Plasma' = '#DB8E00')
+  unannotated_colors <- list('unannotated' = 'gray')
+  t_others_colors <- roycols::get_color_list_shades(vector_of_names = c('MAIT', 'gdT', 'Treg'), shades_from = c('deeppink1', 'deeppink4'))
+  # merge all of the shades
+  shades_all <- c(mono_colors, b_colors, nk_colors, dc_colors, cd8_colors, cd4_colors, hpsc_colors, plasma_colors, unannotated_colors, t_others_colors)
+  return(shades_all)
+}
+
+```
+
+```{r settings, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+####################
+# Settings         #
+####################
+
+set.seed(1337)
+
+```
+
+```{r main, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+####################
+# Main code        #
+####################
+
+# location of the multiome object
+mo_rna_object_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/seurat_preprocess_samples/objects/mo_all_20240517_seuratv5_annotated_agesexcovid.rds'
+# read the object
+mo_rna <- readRDS(mo_rna_object_loc)
+
+```
+
+```{r rna_umap, include=TRUE, fig.width=10, fig.height=10}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# rename the labels
+mo_rna@meta.data[is.na(mo_rna@meta.data[['predicted.mo_10x_cell_type.lowerres']]), 'predicted.mo_10x_cell_type.lowerres'] <- 'unannotated'
+mo_rna@meta.data[['cell type']] <- rename_labels(mo_rna@meta.data[['predicted.mo_10x_cell_type.lowerres']])
+
+# make the plot
+dim_p <- DimPlot(mo_rna, reduction = 'umap', group.by = 'cell type', raster = F) + 
+  scale_colour_manual(values = get_color_coding_dict()) +
+  xlab('UMAP 1') +
+  ylab('UMAP 2')
+# show the plot
+dim_p
+
+
+# make the plot
+dim_p_sup <- DimPlot(mo_rna, reduction = 'umap', group.by = 'predicted.mo_10x_cell_type', raster = F) + 
+  xlab('UMAP 1') +
+  ylab('UMAP 2') +
+  ggtitle('cell type') +
+  scale_color_manual(values = get_colors_10x_groups())
+# show the plot
+dim_p_sup
+
+```
+
+```{r ut_subset, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# subset to the UT samples
+mo_rna_ut <- mo_rna[, !is.na(mo_rna@meta.data[['condition_final']]) & mo_rna@meta.data[['condition_final']] == 'UT']
+rm(mo_rna)
+# redo clustering and UMAP
+mo_rna_ut <- RunPCA(mo_rna_ut)
+mo_rna_ut <- FindNeighbors(mo_rna_ut)
+mo_rna_ut <- FindClusters(mo_rna_ut)
+mo_rna_ut <- RunUMAP(mo_rna_ut, reduction='pca', dims=1:30)
+
+```
+
+```{r rna_ut_umap, include=TRUE, fig.width=10, fig.height=10}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# make the plot
+dim_p_ut <- DimPlot(mo_rna_ut, reduction = 'umap', group.by = 'cell type', raster = F) + 
+  scale_colour_manual(values = get_color_coding_dict()) +
+  xlab('UMAP 1') +
+  ylab('UMAP 2')
+# show the plot
+dim_p_ut
+
+
+# make the plot
+dim_p_sup_ut <- DimPlot(mo_rna_ut, reduction = 'umap', group.by = 'predicted.mo_10x_cell_type', raster = F) + 
+  xlab('UMAP 1') +
+  ylab('UMAP 2') +
+  ggtitle('cell type') +
+  scale_color_manual(values = get_colors_10x_groups())
+# show the plot
+dim_p_sup_ut
+
+```
