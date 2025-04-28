@@ -88,7 +88,7 @@ parser.add_argument('-f', '--features_location', type = str, help = 'location of
 parser.add_argument('-o', '--output_location', type = str, help = 'location of the resulting scanpy object (string)')
 parser.add_argument('-d', '--metadata_location', type = str, help = 'location of metadata to add to the object, first column must be the index (string)', default = None)
 parser.add_argument('-i', '--barcode_include_location', type = str, help = 'text file containing barcodes of cells to include, will only keep these cells (string)', default = None)
-parser.add_argument('-q', '--skip_qc', action='store_true', help = 'perform quality control on the the data (bool)', default = True)
+parser.add_argument('-q', '--skip_qc', action='store_true', help = 'perform quality control on the the data (false)', default = False)
 args = parser.parse_args()
 
 
@@ -120,8 +120,9 @@ if args.barcode_include_location is not None:
     bc_inclusion_list = pd.read_csv(args.barcode_include_location, header=None)[0].tolist()
     # and filter on those barcodes
     object_raw = object_raw[bc_inclusion_list].copy()
-# backup the raw expression
-object_raw.layers['counts'] = object_raw.X.copy()
+# backup the raw expression in the way that scenic+ wants
+#object_raw.layers['counts'] = object_raw.X.copy()
+object_raw.raw = object_raw
 
 
 ##############
@@ -134,7 +135,7 @@ sc.pp.calculate_qc_metrics(
     object_raw, qc_vars=["mt"], percent_top=None, log1p=False, inplace=True
 )
 # perform the QC if requested
-if args.do_qc is not False:
+if args.skip_qc is not False:
     # removing cells with few reads
     object_raw = object_raw[object_raw.obs.n_genes_by_counts < 2500, :].copy()
     # and high MT content
