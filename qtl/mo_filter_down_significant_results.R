@@ -2,7 +2,7 @@
 ############################################################################################################################
 # Authors: Roy Oelen
 # Name: mo_filter_down_significant_results.R
-# Function: 
+# Function: add multiple testing correction per feature to qtl outputs, and split them per chromosome
 ############################################################################################################################
 
 ####################
@@ -703,7 +703,7 @@ for (chrom in 1:22) {
 # merge chromosome outputs
 merge_chromosome_output(eqtl_output_ut_loc, input_append='_fdr005_significant.txt.gz', output_dir=NULL, output_file='qtl_results_all_qval_allchroms_fdr005_significant.txt.gz')
 merge_chromosome_output(eqtl_output_24hca_loc, input_append='_fdr005_significant.txt.gz', output_dir=NULL, output_file='qtl_results_all_qval_allchroms_fdr005_significant.txt.gz')
-merge_chromosome_output(eqtl_output_combined_loc, input_append='_fdr005_significant.txt.gz', output_dir=NULL, output_file='qtl_results_all_qval_allchroms_fdr005_significant.txt.gz')
+merge_chromosome_output(eqtl_output_loc, input_append='_fdr005_significant.txt.gz', output_dir=NULL, output_file='qtl_results_all_qval_allchroms_fdr005_significant.txt.gz')
 
 
 ###################
@@ -716,7 +716,8 @@ eqtl_output_onek1k_loc <- '/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-c
 # perform splitting
 split_output_by_column(
   input_dir=eqtl_output_onek1k_loc,
-  input_file='qtl_results_all.txt.gz',
+  #input_file='qtl_results_all.txt.gz',
+  input_file='qtl_results_all.txt',
   output_dir=NULL,
   output_file_prepend='qtl_results_all_qval_',
   output_file_append='.txt.gz',
@@ -726,7 +727,8 @@ split_output_by_column(
   feature_mtc_column='feature_id',
   mtc_column_to_add='feature_q_value',
   verbose=T, 
-  folders = c('monocyte', 'NK', 'DC')
+  #folders = c('monocyte', 'NK', 'DC'), 
+  folders = c('CD8T')
 )
 
 
@@ -866,13 +868,91 @@ filter_interactions_by_qtls(icaqtl_output_loc, caqtl_output_loc)
 ########################
 
 # now do the eQTL output of sc-eQTLgen
-sceqtlgen_base_loc <- '/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/Meta_14/'
-# now filter on FDR 
-filter_file_by_significance(
-  input_loc=paste(sceqtlgen_base_loc, 'Mono.Ds.wg3_Ye_wg3_wijst2018_wg3_sawcer_wg3_oneK1K_wg3_okada_wg3_Li_wg3_Franke_split_v3_wg3_Franke_split_v2_wg3_multiome_UT_wg3_idaghdour.qtl_results_all.txt', sep = ''), 
-  output_loc=paste(sceqtlgen_base_loc, 'Mono.Ds.wg3_Ye_wg3_wijst2018_wg3_sawcer_wg3_oneK1K_wg3_okada_wg3_Li_wg3_Franke_split_v3_wg3_Franke_split_v2_wg3_multiome_UT_wg3_idaghdour.qtl_results_all.qval005.txt.gz', sep = ''), 
-  significance_column='feature_q_value', 
-  significance_cutoff=0.05, 
+sceqtlgen_base_loc <- '/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/Meta_20250212_freeze1/'
+# for caQTL as well
+split_output_by_column(
+  input_dir=sceqtlgen_base_loc,
+  input_file='qtl_results_all.txt.gz',
+  output_dir=NULL,
+  output_file_prepend='qtl_results_all_qval_',
+  output_file_append='.txt.gz',
+  split_column='feature_chromosome',
+  add_mtc=T,
+  mtc_column='empirical_feature_p_value',
+  feature_mtc_column='feature_id',
+  mtc_column_to_add='feature_q_value',
   verbose=T, 
-  add_mtc = F
+  folders = c('B', 'CD4T', 'CD8T', 'DC', 'monocyte', 'NK')
 )
+# check each chromosome
+for (chrom in 1:22) {
+  # in location
+  in_file <- paste('qtl_results_all_qval_', chrom, '.txt.gz', sep = '')
+  # now filter on FDR as well
+  fdr_file <- paste('qtl_results_all_qval_', chrom, '_fdr005_significant.txt.gz', sep = '')
+  filter_output_by_significance(
+    unfiltered_loc=sceqtlgen_base_loc,
+    unfiltered_file=in_file,
+    filtered_loc=NULL,
+    filtered_file=fdr_file,
+    significance_column='feature_q_value',
+    significance_cutoff=0.05,
+    verbose=T,
+    add_mtc = F,
+    folders=c('B', 'CD4T', 'CD8T', 'DC', 'monocyte', 'NK')
+  )
+}
+# merge significant results
+merge_chromosome_output(sceqtlgen_base_loc, input_append='_fdr005_significant.txt.gz', output_dir=NULL, output_file='qtl_results_all_qval_allchroms_fdr005_significant.txt.gz')
+
+
+###########################
+# test directory QTLs     #
+###########################
+
+# any directory with QTL files
+qtl_test_dir <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/sc-eqtlgen/output/L1/combined_20perm/'
+# and which cell types are there
+qtl_test_celltypes <- 'monocyte'
+# perform splitting
+split_output_by_column(
+  input_dir=qtl_test_dir,
+  input_file='qtl_results_all.txt.gz',
+  output_dir=NULL,
+  output_file_prepend='qtl_results_all_qval_',
+  output_file_append='.txt.gz',
+  split_column='feature_chromosome',
+  add_mtc=T,
+  mtc_column='empirical_feature_p_value',
+  feature_mtc_column='feature_id',
+  mtc_column_to_add='feature_q_value',
+  verbose=T, 
+  folders=qtl_test_celltypes
+)
+# check each chromosome
+for (chrom in 1:22) {
+  # in location
+  in_file <- paste('qtl_results_all_qval_', chrom, '.txt.gz', sep = '')
+  # now filter on FDR as well
+  fdr_file <- paste('qtl_results_all_qval_', chrom, '_fdr005_significant.txt.gz', sep = '')
+  # check if the file exists
+  if (file.exists(in_file)) {
+    filter_output_by_significance(
+      unfiltered_loc=qtl_test_dir,
+      unfiltered_file=in_file,
+      filtered_loc=NULL,
+      filtered_file=fdr_file,
+      significance_column='feature_q_value',
+      significance_cutoff=0.05,
+      verbose=T,
+      add_mtc = F,
+      folders=qtl_test_celltypes
+    )
+  } else {
+    # otherwise warn
+    warning(paste('missing expected input file', in_file, '!'))
+  }
+  
+}
+# merge significant results
+merge_chromosome_output(qtl_test_dir, input_append='_fdr005_significant.txt.gz', output_dir=NULL, output_file='qtl_results_all_qval_allchroms_fdr005_significant.txt.gz', folders = qtl_test_celltypes)
