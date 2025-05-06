@@ -12,6 +12,8 @@
 library(r2r)
 library(data.table)
 library(mdfiver)
+library(stringr)
+
 
 ####################
 # Functions        #
@@ -108,14 +110,28 @@ r2r_to_datatable <- function(r2r_hasmap) {
 ####################
 
 # location of the topic files for membership after binarization
-binarized_topic_beds_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes_10_topics/region_sets/topic_memberships/'
+binarized_topic_beds_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/region_sets/topic_memberships/'
 # location of the topic dars
-dar_topic_beds_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes_10_topics/region_sets/topic_dars/'
+dar_topic_beds_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/region_sets/topic_dars/'
 
-# location of the file scenic output
-scenic_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes_10_topics/output/eRegulon_direct.tsv'
+# location of the direct file scenic output
+scenic_output_direct_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eRegulon_direct.tsv'
 # read the scenic output
-scenic_output <- read.table(scenic_output_loc, header = T, sep = '\t')
+scenic_output_direct <- read.table(scenic_output_direct_loc, header = T, sep = '\t')
+# location of the extended file scenic output
+scenic_output_extended_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eRegulons_extended.tsv'
+# read the scenic output
+scenic_output_extended <- read.table(scenic_output_extended_loc, header = T, sep = '\t')
+
+# add where the info came from
+scenic_output_extended[['source']] <- 'extended'
+scenic_output_direct[['source']] <- 'direct'
+# merge them
+scenic_output <- rbind(scenic_output_direct, scenic_output_extended)
+
+# add the signatures that come from the direction of the region to tf and gene
+scenic_output[['Gene_signature_direction']] <- str_extract(scenic_output[['Gene_signature_name']], '\\+\\/\\+|\\-\\/\\-|\\+\\/\\-|\\-\\/\\+')
+scenic_output[['Region_signature_direction']] <- str_extract(scenic_output[['Region_signature_name']], '\\+\\/\\+|\\-\\/\\-|\\+\\/\\-|\\-\\/\\+')
 
 # get the regions to the topics of the binarization
 regions_to_topic_memberships <- get_regions_to_topics(topic_dar_bed_loc = binarized_topic_beds_loc, interested_regions = scenic_output[['Region']])
@@ -132,7 +148,7 @@ regions_to_topics_dars_dt <- r2r_to_datatable(regions_to_topics_dars)
 scenic_output[['topics_dar']] <- regions_to_topics_dars_dt[match(scenic_output[['Region']], regions_to_topics_dars_dt[['r2r_key']]), 'r2r_values'][[1]]
 
 # save this file somewhere
-scenic_output_region_info <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes_10_topics/output/eRegulon_direct_wregion_info.tsv.gz'
+scenic_output_region_info <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eRegulon_both.tsv.gz'
 write.table(scenic_output, gzfile(scenic_output_region_info), row.names = F, col.names = T, sep = '\t')
 # and make a checksum
 mdfiver::create_md5_for_file(scenic_output_region_info)
