@@ -4,10 +4,10 @@
 # Name: mo_add_fm_info_to_qtls.R
 # Function: add finemapping information to the qtl output file
 # Example: 
-# Rscript ~/mo_add_fm_info_to_qtls.R \
-#  --qtl_file /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/output/L1/combined/monocyte/qtl_results_all_qval_allchroms_fdr005_significant.txt.gz \
-#  --finemapping_file /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/finemapping/interaction_caqtl/sc-eqtlgen/output/combined_significant/L1/monocyte_finemapped.tsv.gz \
-#  --out /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/finemapping/caqtl/sc-eqtlgen/combined_with_qtl/combined/L1/qtl_results_all_qval_allchroms_fdr005_significant_cs.tsv.gz \
+#   Rscript ~/mo_add_fm_info_to_qtls.R \
+#      --qtl_file /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/output/L1/combined/monocyte/qtl_results_all_qval_allchroms_fdr005_significant.txt.gz \
+#      --finemapping_file /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/finemapping/interaction_caqtl/sc-eqtlgen/output/combined_significant/L1/monocyte_finemapped.tsv.gz \
+#      --out /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/finemapping/caqtl/sc-eqtlgen/combined_with_qtl/combined/L1/qtl_results_all_qval_allchroms_fdr005_significant_cs.tsv.gz
 ############################################################################################################################
 
 ####################
@@ -120,6 +120,7 @@ if (!(dir.exists(out_dir))) {
 }
 
 # read the first ten lines of the input files
+message('attempting to read first 10 lines of each file to do pre-flight check')
 qtl_table <- fread(qtl_file, header = T, sep = '\t', nrows=10)
 finemapping_table <- fread(finemapping_file, header = T, sep = '\t', nrows=10)
 
@@ -127,7 +128,10 @@ finemapping_table <- fread(finemapping_file, header = T, sep = '\t', nrows=10)
 credible_set_columns <- strsplit(credible_set_columns_string, split = ',')[[1]]
 
 # check the inputs
-check_inputs(qtl_table, finemapping_table, qtl_variant_column, finemapping_variant_column, qtl_feature_column, finemapping_feature_column, credible_set_columns)
+inputs_okay <- check_inputs(qtl_table, finemapping_table, qtl_variant_column, finemapping_variant_column, qtl_feature_column, finemapping_feature_column, credible_set_columns)
+if (!is.null(inputs_okay) & !is.na(inputs_okay) & inputs_okay == 0) {
+  message('files pass pre-flight check')
+}
 
 # if the files are okay, read everything
 qtl_table <- fread(qtl_file, header = T, sep = '\t')
