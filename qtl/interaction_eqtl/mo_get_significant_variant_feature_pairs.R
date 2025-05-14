@@ -256,6 +256,10 @@ write_confinements(eqtl_var_feature_celltypes, confinement_eqt_loc, confinement_
 eqtl_var_feature_celltypes_nominal <- get_significant_pairs_per_celltype_merged_conditions(eqtl_results_loc, significance_list = list('p_value' = 0.05), qtl_append='.txt.gz$', qtl_prepend='qtl_results_all_qval_')
 write_confinements(eqtl_var_feature_celltypes_nominal, confinement_eqt_loc, confinement_file_append = '_anycondsig_nominal_confinement.tsv.gz')
 
+# get the var-feature links for the eQTL cell types, but only for 'combined'
+eqtl_var_feature_celltypes_combinedonly <- get_significant_pairs_per_celltype_merged_conditions(eqtl_results_loc, qtl_append='.txt.gz$', qtl_prepend='qtl_results_all_qval_', conditions = c('combined'))
+write_confinements(eqtl_var_feature_celltypes_combinedonly, confinement_eqt_loc, confinement_file_append = '_onlycombined_confinement.tsv.gz')
+
 
 
 # get the var-feature links for caQTL cell types
