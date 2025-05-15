@@ -105,6 +105,86 @@ r2r_to_datatable <- function(r2r_hasmap) {
 }
 
 
+#' get the eGenes per cell type from QTL output
+#' 
+#' @param qtl_output_loc base location of the QTL output per cell type
+#' @param output_file which output file to read for the results
+#' @param gene_column which column to use as the gene identifier
+#' @returns a list with the egenes per cell type
+#' 
+get_egenes_per_celltype_limix <- function(qtl_output_loc, output_file='qtl_results_all.txt.gz', gene_column='feature_id', significance_column='feature_q_value', significance_cutoff=0.05, verbose=T) {
+  # get the folders in the directory, which should be the cell types
+  cell_types <- list.dirs(qtl_output_loc, full.names = F, recursive = F)
+  # we will store the results in a list for now
+  egenes_per_celltype <- list()
+  # check each cell type
+  for (cell_type in cell_types) {
+    # paste together the full path
+    full_cell_type_path <- paste(qtl_output_loc, '/', cell_type, '/', output_file, sep = '')
+    # log if requested
+    if (verbose) {
+      print(paste('reading', full_cell_type_path))
+    }
+    # read the file
+    cell_type_output <- read.table(full_cell_type_path, sep = '\t', header = T)
+    # filter the results on significance
+    if (!is.null(significance_column)) {
+      # print progress if requested
+      if (verbose) {
+        print(paste('variant+phenotype before filtering', nrow(cell_type_output)))
+      }
+      # filter
+      cell_type_output <- cell_type_output[
+        !is.na(cell_type_output[[significance_column]]) &
+          cell_type_output[[significance_column]] < significance_cutoff, 
+      ]
+      if (verbose) {
+        print(paste('variant+phenotype after filtering', nrow(cell_type_output)))
+      }
+    }
+    # get the unique genes in this file
+    unique_genes <- unique(cell_type_output[[gene_column]])
+    # add to the list
+    egenes_per_celltype[[cell_type]] <- unique_genes
+  }
+  # turn into a dataframe
+  return(egenes_per_celltype)
+}
+
+
+add_region_qtl_info <- function(table_to_annotate, group_to_regions_list, to_annotate_region_column='Region', column_to_add='caqtl_celltypes') {
+  # extrac the unique regions
+  regions <- table_to_annotate[[to_annotate_region_column]]
+  # create table to put results
+  region_to_groups <- data.frame('region' = regions)
+  # add the groups to the table
+  region_to_groups[[column_to_add]] <- apply(region_to_groups, 1, function(x) {
+    # grab the region
+    region <- gsub(':', '-', x[['region']])
+    # initialize the results
+    groups_string <- NA
+    # check each of the vectors in the list
+    for (group in names(group_to_regions_list)) {
+      # check if the region is in there
+      if (region %in% group_to_regions_list[[group]]) {
+        # if the value was NA, it will be this one
+        if (is.na(groups_string)) {
+          groups_string <- group
+        }
+        # otherwise add it
+        else {
+          groups_string <- paste(groups_string, group, sep = ',')
+        }
+      }
+    }
+    return(groups_string)
+  })
+  # add this info to the table
+  table_to_annotate[[column_to_add]] <- region_to_groups[match(table_to_annotate[[to_annotate_region_column]], region_to_groups[['region']]), ][[column_to_add]]
+  return(table_to_annotate)
+}
+
+
 ####################
 # Main Code        #
 ####################
@@ -147,8 +227,53 @@ regions_to_topics_dars_dt <- r2r_to_datatable(regions_to_topics_dars)
 # join onto the table
 scenic_output[['topics_dar']] <- regions_to_topics_dars_dt[match(scenic_output[['Region']], regions_to_topics_dars_dt[['r2r_key']]), 'r2r_values'][[1]]
 
+# location of eQTL
+eqtl_output_combined_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/sc-eqtlgen/output/L1/combined/'
+# location of caQTL output
+caqtl_output_combined_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/output/L1/combined/'
+# get regions and genes that have eGenes or ePeaks
+eqtl_egenes_combined <- get_egenes_per_celltype_limix(eqtl_output_combined_loc, output_file = 'qtl_results_all_qval_allchroms_fdr005_significant.txt.gz')
+caqtl_epeaks_combined <- get_egenes_per_celltype_limix(caqtl_output_combined_loc, output_file = 'qtl_results_all_qval_allchroms_fdr005_significant.txt.gz')
+
+# add the QTL info
+scenic_output <- add_region_qtl_info(table_to_annotate = scenic_output, group_to_regions_list = caqtl_epeaks_combined, to_annotate_region_column = 'Region', column_to_add = 'caqtl_celltype')
+scenic_output <- add_region_qtl_info(table_to_annotate = scenic_output, group_to_regions_list = eqtl_egenes_combined, to_annotate_region_column = 'Gene', column_to_add = 'eqtl_celltype')
+
 # save this file somewhere
 scenic_output_region_info <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eRegulon_both.tsv.gz'
 write.table(scenic_output, gzfile(scenic_output_region_info), row.names = F, col.names = T, sep = '\t')
 # and make a checksum
 mdfiver::create_md5_for_file(scenic_output_region_info)
+
+
+# get the total number of eGenes
+n_egenes <- length(unique(do.call('c', eqtl_egenes_combined)))
+n_ePeaks <- length(unique(do.call('c', caqtl_epeaks_combined)))
+
+# make a table
+scenic_qtl_overlap <- data.frame(
+  'set' = c('cre_total', 'cre_with_caqtl', 'cre_with_eqtl', 'cre_with_any_qtl', 'cre_with_both_qtl', 'egene_total', 'epeak_total'), 
+  'number' = c(
+    nrow(scenic_output), 
+    nrow(scenic_output[!is.na(scenic_output[['caqtl_celltype']]), ]), 
+    nrow(scenic_output[!is.na(scenic_output[['eqtl_celltype']]), ]), 
+    nrow(scenic_output[!is.na(scenic_output[['eqtl_celltype']]) | !is.na(scenic_output[['caqtl_celltype']]), ]), 
+    nrow(scenic_output[!is.na(scenic_output[['eqtl_celltype']]) & !is.na(scenic_output[['caqtl_celltype']]), ]), 
+    n_egenes, 
+    n_ePeaks
+  )
+)
+# now if we do this without considering the TFs
+scenic_output_onlyregions <- unique(scenic_output[, c('Region', 'Gene', 'caqtl_celltype', 'eqtl_celltype')])
+scenic_qtl_overlap_notf <- data.frame(
+  'set' = c('cre_total', 'cre_with_caqtl', 'cre_with_eqtl', 'cre_with_any_qtl', 'cre_with_both_qtl', 'egene_total', 'epeak_total'), 
+  'number' = c(
+    nrow(scenic_output_onlyregions), 
+    nrow(scenic_output_onlyregions[!is.na(scenic_output_onlyregions[['caqtl_celltype']]), ]), 
+    nrow(scenic_output_onlyregions[!is.na(scenic_output_onlyregions[['eqtl_celltype']]), ]), 
+    nrow(scenic_output_onlyregions[!is.na(scenic_output_onlyregions[['eqtl_celltype']]) | !is.na(scenic_output_onlyregions[['caqtl_celltype']]), ]), 
+    nrow(scenic_output_onlyregions[!is.na(scenic_output_onlyregions[['eqtl_celltype']]) & !is.na(scenic_output_onlyregions[['caqtl_celltype']]), ]), 
+    n_egenes, 
+    n_ePeaks
+  )
+)
