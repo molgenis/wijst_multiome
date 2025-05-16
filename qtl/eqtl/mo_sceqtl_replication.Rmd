@@ -755,6 +755,15 @@ knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # extract specifically mono UT to make the plot
 mono_ut_top_eqtl_onek1k <- onek1k_vs_ut[['monocyte']]
+# subset to what is significant for our data
+mono_ut_top_eqtl_onek1k <- mono_ut_top_eqtl_onek1k[mono_ut_top_eqtl_onek1k[['mo_significant']] == T, ]
+# # add z based p
+# mono_ut_top_eqtl_onek1k[['k1_p_z']] <- pnorm(abs(mono_ut_top_eqtl_onek1k[['k1_zscore_signed']]), lower.tail = F)
+# then redo the multiple testing correction on the 
+mono_ut_top_eqtl_onek1k[['BH']] <- p.adjust(mono_ut_top_eqtl_onek1k[['k1_p']], method = 'BH')
+# and use that for significance
+mono_ut_top_eqtl_onek1k[['k1_significant']] <- mono_ut_top_eqtl_onek1k[['k1_p']] < 0.05
+
 
 # get the minimal significant z for k1
 min_sig_z_k1 <- min(abs(mono_ut_top_eqtl_onek1k[mono_ut_top_eqtl_onek1k[['k1_significant']] == T, 'k1_zscore_signed']))
@@ -824,10 +833,19 @@ knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # extract specifically mono combined to make the plot
 mono_combined_top_eqtl_onek1k <- onek1k_vs_combined[['monocyte']]
+# subset to what is significant for our data
+mono_combined_top_eqtl_onek1k <- mono_combined_top_eqtl_onek1k[mono_combined_top_eqtl_onek1k[['mo_significant']] == T, ]
+# # add z based p
+# mono_ut_top_eqtl_onek1k[['k1_p_z']] <- pnorm(abs(mono_ut_top_eqtl_onek1k[['k1_zscore_signed']]), lower.tail = F)
+# then redo the multiple testing correction on the
+mono_combined_top_eqtl_onek1k[['BH']] <- p.adjust(mono_combined_top_eqtl_onek1k[['k1_p']], method = 'BH')
+# and use that for significance
+mono_combined_top_eqtl_onek1k[['k1_significant']] <- mono_combined_top_eqtl_onek1k[['k1_p']] < 0.05
+
 
 # get the minimal significant z for k1
-min_sig_z_k1 <- max(abs(mono_combined_top_eqtl_onek1k[mono_combined_top_eqtl_onek1k[['k1_significant']] == F, 'k1_zscore_signed']))
-min_sig_z_mo <- max(abs(mono_combined_top_eqtl_onek1k[mono_combined_top_eqtl_onek1k[['mo_significant']] == F, 'mo_zscore']))
+min_sig_z_k1 <- min(abs(mono_combined_top_eqtl_onek1k[mono_combined_top_eqtl_onek1k[['k1_significant']] == T, 'k1_zscore_signed']))
+min_sig_z_mo <- min(abs(mono_combined_top_eqtl_onek1k[mono_combined_top_eqtl_onek1k[['mo_significant']] == T, 'mo_zscore']))
 # and the max z
 max_sig_z_k1 <- max(abs(mono_combined_top_eqtl_onek1k[mono_combined_top_eqtl_onek1k[['k1_significant']] == T, 'k1_zscore_signed']))
 max_sig_z_mo <- max(abs(mono_combined_top_eqtl_onek1k[mono_combined_top_eqtl_onek1k[['mo_significant']] == T, 'mo_zscore']))
@@ -889,7 +907,7 @@ ggsave('~/plots/mo_scatter_mo_mono_combined_vs_onek1k_eqtl.pdf', width=5, height
 
 ```
 
-```{r get_sceqtlgen_overlap, include=TRUE, fig.width=10, fig.height=10}
+```{r get_sceqtlgen_overlap, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # same for sc-eQTLgen, the one to compare against
