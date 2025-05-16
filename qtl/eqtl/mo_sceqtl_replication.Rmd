@@ -513,9 +513,9 @@ match_qtl_outputs <- function(replicating_qtl_folder, replicating_in_qtl_folder,
     # calculate the Z
     replicating_qtl_chromosome_top[['zscore']] <- replicating_qtl_chromosome_top[[replicating_qtl_beta_column]] / replicating_qtl_chromosome_top[[replicating_qtl_se_column]]
     # subset to the column we want
-    replicating_qtl_chromosome_top <- replicating_qtl_chromosome_top[, c('qtl', 'zscore', ..replicating_qtl_aa_column, 'significant', ..replicating_qtl_fdr_column, ..replicating_qtl_pval_column)]
+    replicating_qtl_chromosome_top <- replicating_qtl_chromosome_top[, c('qtl', 'zscore', ..replicating_qtl_aa_column, 'significant', ..replicating_qtl_fdr_column, ..replicating_qtl_pval_column, ..replicating_qtl_beta_column, ..replicating_qtl_se_column)]
     # rename the columns to not conflict
-    colnames(replicating_qtl_chromosome_top) <-c('qtl', paste(replicating_name, c('zscore', 'assessed_allele', 'significant', 'fdr', 'p'), sep = '_'))
+    colnames(replicating_qtl_chromosome_top) <-c('qtl', paste(replicating_name, c('zscore', 'assessed_allele', 'significant', 'fdr', 'p', 'beta', 'se'), sep = '_'))
   
     # now paste the onek1k path
     replicating_in_qtl_chromosome_loc <- paste0(replicating_in_qtl_folder, '/', replicating_in_qtl_prepend, chromosome, replicating_in_qtl_append)
@@ -530,9 +530,9 @@ match_qtl_outputs <- function(replicating_qtl_folder, replicating_in_qtl_folder,
     # calculate the Z
     replicating_in_qtl_chromosome[['zscore']] <- replicating_in_qtl_chromosome[[replicating_in_qtl_beta_column]] / replicating_in_qtl_chromosome[[replicating_in_qtl_se_column]]
     # subset to the column we want
-    replicating_in_qtl_chromosome <- replicating_in_qtl_chromosome[, c('qtl', 'zscore', ..replicating_in_qtl_aa_column, 'significant', ..replicating_in_qtl_fdr_column, ..replicating_in_qtl_pval_column)]
+    replicating_in_qtl_chromosome <- replicating_in_qtl_chromosome[, c('qtl', 'zscore', ..replicating_in_qtl_aa_column, 'significant', ..replicating_in_qtl_fdr_column, ..replicating_in_qtl_pval_column, ..replicating_in_qtl_beta_column, ..replicating_in_qtl_se_column)]
     # rename the columns to not conflict
-    colnames(replicating_in_qtl_chromosome) <- c('qtl', paste(replicating_in_name, c('zscore', 'assessed_allele', 'significant', 'fdr', 'p'), sep = '_'))
+    colnames(replicating_in_qtl_chromosome) <- c('qtl', paste(replicating_in_name, c('zscore', 'assessed_allele', 'significant', 'fdr', 'p', 'beta', 'se'), sep = '_'))
   
     # put both in lists
     replicating_top_qtl[[paste0('chr', chromosome)]] <- replicating_qtl_chromosome_top
@@ -615,9 +615,9 @@ match_qtl_outputs_one_to_all <- function(replicating_table, replicating_in_qtl_f
       # calculate the Z
       replicating_qtl_chromosome_top[['zscore']] <- replicating_qtl_chromosome_top[[replicating_qtl_beta_column]] / replicating_qtl_chromosome_top[[replicating_qtl_se_column]]
       # subset to the column we want
-      replicating_qtl_chromosome_top <- replicating_qtl_chromosome_top[, c('qtl', 'zscore', ..replicating_qtl_aa_column, 'significant', ..replicating_qtl_fdr_column, ..replicating_qtl_pval_column)]
+      replicating_qtl_chromosome_top <- replicating_qtl_chromosome_top[, c('qtl', 'zscore', ..replicating_qtl_aa_column, 'significant', ..replicating_qtl_fdr_column, ..replicating_qtl_pval_column, ..replicating_qtl_beta_column, replicating_qtl_se_column)]
       # rename the columns to not conflict
-      colnames(replicating_qtl_chromosome_top) <-c('qtl', paste(replicating_name, c('zscore', 'assessed_allele', 'significant', 'fdr', 'p'), sep = '_'))
+      colnames(replicating_qtl_chromosome_top) <-c('qtl', paste(replicating_name, c('zscore', 'assessed_allele', 'significant', 'fdr', 'p', 'beta', 'se'), sep = '_'))
       
       # now paste the onek1k path
       replicating_in_qtl_chromosome_loc <- paste0(replicating_in_qtl_folder_full, '/', replicating_in_qtl_prepend, chromosome, replicating_in_qtl_append)
@@ -632,9 +632,9 @@ match_qtl_outputs_one_to_all <- function(replicating_table, replicating_in_qtl_f
       # calculate the Z
       replicating_in_qtl_chromosome[['zscore']] <- replicating_in_qtl_chromosome[[replicating_in_qtl_beta_column]] / replicating_in_qtl_chromosome[[replicating_in_qtl_se_column]]
       # subset to the column we want
-      replicating_in_qtl_chromosome <- replicating_in_qtl_chromosome[, c('qtl', 'zscore', ..replicating_in_qtl_aa_column, 'significant', ..replicating_in_qtl_fdr_column, ..replicating_in_qtl_pval_column)]
+      replicating_in_qtl_chromosome <- replicating_in_qtl_chromosome[, c('qtl', 'zscore', ..replicating_in_qtl_aa_column, 'significant', ..replicating_in_qtl_fdr_column, ..replicating_in_qtl_pval_column, ..replicating_in_qtl_beta_column, replicating_in_qtl_se_column)]
       # rename the columns to not conflict
-      colnames(replicating_in_qtl_chromosome) <- c('qtl', paste(replicating_in_name, c('zscore', 'assessed_allele', 'significant', 'fdr', 'p'), sep = '_'))
+      colnames(replicating_in_qtl_chromosome) <- c('qtl', paste(replicating_in_name, c('zscore', 'assessed_allele', 'significant', 'fdr', 'p', 'beta', 'se'), sep = '_'))
   
       # put both in lists
       replicating_top_qtl[[paste0('chr', chromosome)]] <- replicating_qtl_chromosome_top
@@ -659,6 +659,170 @@ match_qtl_outputs_one_to_all <- function(replicating_table, replicating_in_qtl_f
   }
   return(matched_replication_tables)
 }
+
+
+get_stats_qtl_matches <- function(table_per_match, name_split='_vs_', 
+                                  significance_column_replicating_emperical='fdr', 
+                                  significance_column_replicating_nominal='p',
+                                  significance_column_replicating_in_emperical='fdr',
+                                  significance_column_replicating_in_nominal='p',
+                                  significance_cutoff_replicating_emperical=0.05, 
+                                  significance_cutoff_replicating_nominal=0.05, 
+                                  significance_cutoff_replicating_in_emperical=0.05, 
+                                  significance_cutoff_replicating_in_nominal=0.05, 
+                                  score_column_replicating='zscore', 
+                                  score_column_replicating_in='zscore', 
+                                  beta_column_replicating='beta', 
+                                  beta_column_replicating_in='beta', 
+                                  se_column_replicating='se', 
+                                  se_column_replicating_in='se', 
+                                  allele_column_replicating='assessed_allele', 
+                                  allele_column_replicating_in='assessed_allele', 
+                                  cor_method='spearman') {
+  # prepare a list of tables of all the comparisons
+  stats_per_combination <- list()
+  # check each of the tables
+  for (combination in names(table_per_match)) {
+    # extract the two names
+    replicating_name <- strsplit(combination, name_split)[[1]][1]
+    replicating_in_name <- strsplit(combination, name_split)[[1]][2]
+    # extract the table
+    replication_table <- table_per_match[[combination]]
+    # init variables
+    replicated_emperical_emperical_in_replicating <- NA
+    nominal_to_nominal_zscore_correlation <- NA
+    emperical_to_nominal_zscore_correlation <- NA
+    emperical_to_emperical_zscore_correlation <- NA
+    nominal_to_nominal_concordance <- NA
+    emperical_to_nominal_concordance <- NA
+    emperical_to_emperical_concordance <- NA
+    # if they are the same, we don't have to do much
+    if (replicating_name == replicating_in_name) {
+      # we check how many are significant
+      n_sig <- nrow(replication_table[
+          replication_table[[paste0(replicating_name, '_', significance_column_replicating_emperical, '.x')]] < significance_cutoff_replicating_emperical])
+      # and then all of these will be the same
+      replicated_emperical_emperical_in_replicating <- n_sig
+      replicated_emperical_nominal_in_replicating <- n_sig
+      replicated_emperical_tested_in_replicating <- n_sig
+      replicated_emperical_nominal_in_replicating <- n_sig
+      # these will all be one
+      nominal_to_nominal_zscore_correlation <- 1
+      emperical_to_nominal_zscore_correlation <- 1
+      emperical_to_emperical_zscore_correlation <- 1
+      nominal_to_nominal_concordance <- 1
+      emperical_to_nominal_concordance <- 1
+      emperical_to_emperical_concordance <- 1
+      nominal_to_nominal_rb <- 1
+      emperical_to_nominal_rb <- 1
+      emperical_to_emperical_rb <- 1
+    }
+    else {
+      # check how many significant in replicating, are present in the other
+      replicated_emperical_tested_in_replicating <- nrow(replication_table[
+          replication_table[[paste(replicating_name, significance_column_replicating_emperical, sep = '_')]] < significance_cutoff_replicating_emperical])
+      
+      # subset to nominal in both
+      replication_table <- replication_table[
+          replication_table[[paste(replicating_name, significance_column_replicating_nominal, sep = '_')]] < significance_cutoff_replicating_nominal &
+          replication_table[[paste(replicating_in_name, significance_column_replicating_in_nominal, sep = '_')]] < significance_cutoff_replicating_in_nominal, 
+      ]
+      # get the Z scores
+      zscore_replicating <- replication_table[[paste(replicating_name, score_column_replicating, sep = '_')]]
+      zscore_replicating_in <- replication_table[[paste(replicating_in_name, score_column_replicating_in, sep = '_')]]
+      # and the beta
+      beta_replicating_in <- replication_table[[paste(replicating_in_name, beta_column_replicating_in, sep = '_')]]
+      # check which have the same allelic direction
+      alleles_differ_locs <- which(replication_table[[paste(replicating_name, allele_column_replicating, sep = '_')]] != replication_table[[paste(replicating_in_name, allele_column_replicating_in, sep = '_')]])
+      # and flip direction of z score and betas to reflect this
+      zscore_replicating_in[alleles_differ_locs] <- -1 * zscore_replicating_in[alleles_differ_locs]
+      beta_replicating_in[alleles_differ_locs] <- -1 * beta_replicating_in[alleles_differ_locs]
+      # get the correlation of the two
+      nominal_to_nominal_zscore_correlation <- cor(zscore_replicating, zscore_replicating_in, method = cor_method)
+      # and concordance
+      nominal_to_nominal_concordance <- sum(sign(zscore_replicating) == sign(zscore_replicating_in)) / length(zscore_replicating)
+      # and the rb
+      #nominal_to_nominal_rb <- 1 - mean(abs(((zscore_replicating_in - zscore_replicating) / zscore_replicating)))
+      nominal_to_nominal_rb_table <- calcu_cor_true(b1 = replication_table[[paste(replicating_name, beta_column_replicating, sep = '_')]], se1 = replication_table[[paste(replicating_name, se_column_replicating, sep = '_')]], b2 = beta_replicating_in, se2 = replication_table[[paste(replicating_in_name, se_column_replicating_in, sep = '_')]])
+      nominal_to_nominal_rb <- nominal_to_nominal_rb_table[1, 'r']
+      
+      # subset the replicating to emperical for replicating
+      replication_table <- replication_table[
+          replication_table[[paste(replicating_name, significance_column_replicating_emperical, sep = '_')]] < significance_cutoff_replicating_emperical &
+          replication_table[[paste(replicating_in_name, significance_column_replicating_in_nominal, sep = '_')]] < significance_cutoff_replicating_in_nominal, 
+      ]
+      # check how many significant in replicating, are nominally significant in the other
+      replicated_emperical_nominal_in_replicating <- nrow(replication_table)
+      # get the Z scores
+      zscore_replicating <- replication_table[[paste(replicating_name, score_column_replicating, sep = '_')]]
+      zscore_replicating_in <- replication_table[[paste(replicating_in_name, score_column_replicating_in, sep = '_')]]
+      # and the beta
+      beta_replicating_in <- replication_table[[paste(replicating_in_name, beta_column_replicating_in, sep = '_')]]
+      # check which have the same allelic direction
+      alleles_differ_locs <- which(replication_table[[paste(replicating_name, allele_column_replicating, sep = '_')]] != replication_table[[paste(replicating_in_name, allele_column_replicating_in, sep = '_')]])
+      # and flip direction of z score to reflect this
+      zscore_replicating_in[alleles_differ_locs] <- -1 * zscore_replicating_in[alleles_differ_locs]
+      beta_replicating_in[alleles_differ_locs] <- -1 * beta_replicating_in[alleles_differ_locs]
+      # get the correlation of the two
+      emperical_to_nominal_zscore_correlation <- cor(zscore_replicating, zscore_replicating_in, method = cor_method)
+      # and concordance
+      emperical_to_nominal_concordance <- sum(sign(zscore_replicating) == sign(zscore_replicating_in)) / length(zscore_replicating)
+      # and the rb
+      #emperical_to_nominal_rb <- 1 - mean(abs(((zscore_replicating_in - zscore_replicating) / zscore_replicating)))
+      emperical_to_nominal_rb_table <- calcu_cor_true(b1 = replication_table[[paste(replicating_name, beta_column_replicating, sep = '_')]], se1 = replication_table[[paste(replicating_name, se_column_replicating, sep = '_')]], b2 = beta_replicating_in, se2 = replication_table[[paste(replicating_in_name, se_column_replicating_in, sep = '_')]])
+      emperical_to_nominal_rb <- emperical_to_nominal_rb_table[1, 'r']
+      
+      # subset the replicating to emperical for both
+      replication_table <- replication_table[
+          replication_table[[paste(replicating_name, significance_column_replicating_emperical, sep = '_')]] < significance_cutoff_replicating_emperical &
+          replication_table[[paste(replicating_in_name, significance_column_replicating_in_emperical, sep = '_')]] < significance_cutoff_replicating_in_emperical, 
+      ]
+      # check how many significant in replicating, are also significant in the other
+      replicated_emperical_emperical_in_replicating <- nrow(replication_table)
+      # get the Z scores
+      zscore_replicating <- replication_table[[paste(replicating_name, score_column_replicating, sep = '_')]]
+      zscore_replicating_in <- replication_table[[paste(replicating_in_name, score_column_replicating_in, sep = '_')]]
+      # and the beta
+      beta_replicating_in <- replication_table[[paste(replicating_in_name, beta_column_replicating_in, sep = '_')]]
+      # check which have the same allelic direction
+      alleles_differ_locs <- which(replication_table[[paste(replicating_name, allele_column_replicating, sep = '_')]] != replication_table[[paste(replicating_in_name, allele_column_replicating_in, sep = '_')]])
+      # and flip direction of z score to reflect this
+      zscore_replicating_in[alleles_differ_locs] <- -1 * zscore_replicating_in[alleles_differ_locs]
+      beta_replicating_in[alleles_differ_locs] <- -1 * beta_replicating_in[alleles_differ_locs]
+      # get the correlation of the two
+      emperical_to_emperical_zscore_correlation <- cor(zscore_replicating, zscore_replicating_in, method = cor_method)
+      # and concordance
+      emperical_to_emperical_concordance <- sum(sign(zscore_replicating) == sign(zscore_replicating_in)) / length(zscore_replicating)
+      # and the rb
+      #emperical_to_emperical_rb <- 1 - mean(abs(((zscore_replicating_in - zscore_replicating) / zscore_replicating)))
+      emperical_to_emperical_rb_table <- calcu_cor_true(b1 = replication_table[[paste(replicating_name, beta_column_replicating, sep = '_')]], se1 = replication_table[[paste(replicating_name, se_column_replicating, sep = '_')]], b2 = beta_replicating_in, se2 = replication_table[[paste(replicating_in_name, se_column_replicating_in, sep = '_')]])
+       emperical_to_emperical_rb <- emperical_to_emperical_rb_table[1, 'r']
+      
+    }
+    # put it all in a table
+      stats_combination <- data.frame(
+        'replicating' = c(replicating_name), 
+        'replicating_in' = c(replicating_in_name), 
+        'n_sig_tested' = c(replicated_emperical_tested_in_replicating), 
+        'n_sig_nom' = c(replicated_emperical_nominal_in_replicating), 
+        'n_sig_both' = c(replicated_emperical_emperical_in_replicating), 
+        'cor_nom_nom' = c(nominal_to_nominal_zscore_correlation), 
+        'cor_emp_nom' = c(emperical_to_nominal_zscore_correlation), 
+        'cor_emp_emp' = c(emperical_to_emperical_zscore_correlation), 
+        'con_nom_nom' = c(nominal_to_nominal_concordance), 
+        'con_emp_nom' = c(emperical_to_nominal_concordance), 
+        'con_emp_emp' = c(emperical_to_emperical_concordance), 
+        'rb_nom_nom' = c(nominal_to_nominal_rb), 
+        'rb_emp_nom' = c(emperical_to_nominal_rb), 
+        'rb_emp_emp' = c(emperical_to_emperical_rb))
+      # put in the list
+      stats_per_combination[[combination]] <- stats_combination
+  }
+  # merge all tables
+  stats_combination_all <- do.call('rbind', stats_per_combination)
+  return(stats_combination_all)
+}
+
 
 ```
 
@@ -1115,7 +1279,7 @@ eqtlgen_filtered <- eqtlgen[!is.na(eqtlgen[['snp_b38']]), ]
 
 ```
 
-```{r get_sceqtlgen_overlap3, include=FALSE, fig.width=10, fig.height=10}
+```{r get_sceqtlgen_overlap3, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # get replication table for that one
