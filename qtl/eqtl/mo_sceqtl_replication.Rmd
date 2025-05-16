@@ -927,26 +927,21 @@ for (cell_type in names(sceqtlgen_vs_ut)) {
   sceqtlgen_vs_ut[[cell_type]][['cell_type']] <- cell_type
   # and add the mo condition
   sceqtlgen_vs_ut[[cell_type]][['mo_condition']] <- 'UT'
+  # save these tables
+  sceqtlgen_vs_ut_ct_loc <- paste0('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/replication/sceqtlgen/L1/UT/mo_ut_vs_sceqtlgen_', cell_type, '_eqtls.tsv.gz')
+  write.table(sceqtlgen_vs_ut[[cell_type]], gzfile(sceqtlgen_vs_ut_ct_loc), row.names = F, col.names = T, sep = '\t')
+  mdfiver::create_md5_for_file(sceqtlgen_vs_ut_ct_loc)
 }
 # do the same for the combined one
 for (cell_type in names(sceqtlgen_vs_combined)) {
   sceqtlgen_vs_combined[[cell_type]][['cell_type']] <- cell_type
   # and add the mo condition
   sceqtlgen_vs_combined[[cell_type]][['mo_condition']] <- 'combined'
+  # save these tables
+  sceqtlgen_vs_combined_ct_loc <- paste0('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/replication/sceqtlgen/L1/combined/mo_combined_vs_sceqtlgen_', cell_type, '_eqtls.tsv.gz')
+  write.table(sceqtlgen_vs_combined[[cell_type]], gzfile(sceqtlgen_vs_combined_ct_loc), row.names = F, col.names = T, sep = '\t')
+  mdfiver::create_md5_for_file(sceqtlgen_vs_combined_ct_loc)
 }
-# merge the tables per folder
-sceqtlgen_vs_ut_tbl <- do.call('rbind', sceqtlgen_vs_ut)
-sceqtlgen_vs_combined_tbl <- do.call('rbind', sceqtlgen_vs_combined)
-
-# save these tables
-sceqtlgen_vs_ut_tbl_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/replication/onek1k/L1/UT/mo_ut_vs_sceqtlgen_eqtls.tsv.gz'
-write.table(sceqtlgen_vs_ut_tbl, gzfile(sceqtlgen_vs_ut_tbl_loc), row.names = F, col.names = T, sep = '\t')
-# with a checksum
-mdfiver::create_md5_for_file(sceqtlgen_vs_ut_tbl_loc)
-
-sceqtlgen_vs_combined_tbl_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/replication/onek1k/L1/UT/mo_combined_vs_sceqtlgen_eqtls.tsv.gz'
-write.table(sceqtlgen_vs_combined_tbl, gzfile(sceqtlgen_vs_combined_tbl_loc), row.names = F, col.names = T, sep = '\t')
-mdfiver::create_md5_for_file(sceqtlgen_vs_combined_tbl_loc)
 
 ```
 
@@ -1090,7 +1085,7 @@ ggsave('~/plots/mo_scatter_mo_cd4t_combined_vs_sceqtlgen_eqtl.pdf', width=5, hei
 
 ```
 
-```{r get_sceqtlgen_overlap, include=FALSE, fig.width=10, fig.height=10}
+```{r get_sceqtlgen_overlap, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # same for eQTLgen, the one to compare against
@@ -1253,3 +1248,4 @@ p
 ggsave('~/plots/mo_scatter_mo_cd4t_ut_vs_eqtlgen_eqtl.pdf', width=5, height=5)
 
 ```
+
