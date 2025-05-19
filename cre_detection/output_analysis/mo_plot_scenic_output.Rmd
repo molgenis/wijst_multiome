@@ -25,6 +25,8 @@ knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 library(data.table)
 library(ggplot2)
+library(ggvenn)
+library(cowplot)
 
 
 ```
@@ -296,6 +298,45 @@ p_gene_direction_distances <- ggplot(
 # show the plots
 p_region_direction_distances
 p_gene_direction_distances
+
+```
+
+```{r check_small_scenic, include=TRUE, fig.width=12, fig.height=8}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# check the small SCENIC+ run
+scenic_small_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/10x_multiome_10k_pbmcs/scenic/outs/eRegulons_both.tsv.gz'
+scenic_small <- fread(scenic_small_loc, header = T, sep = '\t')
+
+```
+
+
+```{r plot_small_scenic_overlap, include=TRUE, fig.width=12, fig.height=8}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# plot multiple
+p_overlap_small <- plot_grid(
+  # check overlap of regions
+  ggvenn::ggvenn(
+    data = list('multiome' = unique(scenic_output[['Region']]), '10x10k' = unique(scenic_small[['Region']]))
+  ) + ggtitle('Overlap of ATAC regions between multiome and 10x10k'), 
+  # check overlap of genes
+  ggvenn::ggvenn(
+    data = list('multiome' = unique(scenic_output[['Gene']]), '10x10k' = unique(scenic_small[['Gene']]))
+  ) + ggtitle('Overlap of genes between multiome and 10x10k'), 
+  # check overlap of region-gene pairs
+  ggvenn::ggvenn(
+    data = list('multiome' = unique(paste(scenic_output[['Gene']], scenic_output[['Region']])), '10x10k' = unique(paste(scenic_small[['Gene']], scenic_small[['Region']])))
+  ) + ggtitle('Overlap of region-gene pairs between multiome and 10x10k'), 
+  ggvenn::ggvenn(
+    data = list('multiome' = unique(paste(scenic_output[['Gene']], scenic_output[['Region']], scenic_output[['TF']])), '10x10k' = unique(paste(scenic_small[['Gene']], scenic_small[['Region']], scenic_small[['TF']])))
+  ) + ggtitle('Overlap of regulatory triplets between multiome and 10x10k'), 
+  nrow = 2, 
+  ncol = 2
+)
+
+# show the plot
+p_overlap_small
 
 ```
 
