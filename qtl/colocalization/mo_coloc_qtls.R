@@ -193,7 +193,7 @@ gene_annotation_loc <- '/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-cons
 region_annotation_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/annotations/pct01/LimixAnnotationFile.tsv.gz'
 
 # where we will save the results
-coloc_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/colocalization/eqtl_caqtl'
+coloc_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/colocalization/eqtl_caqtl/'
 
 # cell types to consider
 cell_types <- c('B', 'CD4T', 'CD8T', 'DC', 'monocyte', 'NK')
@@ -208,7 +208,11 @@ caqtl_finemapping_prepend <- ''
 caqtl_finemapping_append <- '_finemapped.tsv.gz'
 # prepend of coloc
 coloc_prepend <- ''
-coloc_append <- 'eqtl_caqtl_coloc.tsv.gz'
+coloc_append <- '_eqtl_caqtl_coloc.rds'
+
+# name of the first data
+dataset1_name <- 'caQTLs'
+dataset2_name <- 'eQTLs'
 
 # read the annotation files
 gene_annotation <- fread(gene_annotation_loc, header = T, sep = '\t')
@@ -244,17 +248,17 @@ for (cell_type in cell_types) {
     # perform the coloc
     coloc_chrom <- coloc_datasets(
       data.frame(caqtls_chrom), 
-      data.frame(eqtls_chrom)
+      data.frame(eqtls_chrom), 
+      dataset1_name = dataset1_name, 
+      dataset2_name = dataset2_name
     )
     # put in the list
     fm_per_chrom[[as.character(chrom)]] <- coloc_chrom
   }
-  # we'll merge the chromosomes
-  fm_all_chroms <- do.call('rbind', fm_per_chrom)
   # paste together the output location
   coloc_ct_output_loc <- paste0(coloc_output_loc, '/', coloc_prepend, cell_type, coloc_append)
   # write the output
-  write.table(fm_all_chroms, gzfile(coloc_ct_output_loc), row.names = F, col.names = T, sep = '\t')
+  saveRDS(fm_per_chrom, coloc_ct_output_loc)
   # make a checksum
   mdfiver::create_md5_for_file(coloc_ct_output_loc)
 }
