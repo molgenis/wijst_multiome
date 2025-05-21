@@ -184,18 +184,71 @@ caqtl_epeaks_combined <- get_egenes_per_celltype_limix(caqtl_output_combined_loc
 
 ```
 
+```{r qtl_tested_genes, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# save which genes are present in each celltype
+genes_celltypes <- list()
+# get the gene present in the eQTL matrices
+for (celltype in c('B', 'CD4T', 'CD8T', 'DC', 'monocyte', 'NK')) {
+  # get the path
+  top_qtl_results_ct_loc <- paste0('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/sc-eqtlgen/output/L1/combined/', '/', celltype, '/', 'top_qtl_results_all.txt')
+  # read the table
+  top_qtl_results_ct <- fread(top_qtl_results_ct_loc, header = T, sep = '\t')
+  # and get the genes to put into the list
+  genes_celltypes[[celltype]] <- top_qtl_results_ct[['feature_id']]
+}
+# merge all of those genes
+eqtl_genes_tested <- do.call('c', genes_celltypes)
+# and make unique
+eqtl_genes_tested <- unique(eqtl_genes_tested)
+
+# save which genes are present in each celltype
+epeaks_celltypes <- list()
+# get the gene present in the eQTL matrices
+for (celltype in c('B', 'CD4T', 'CD8T', 'DC', 'monocyte', 'NK')) {
+  # get the path
+  top_qtl_results_ct_loc <- paste0('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/output/L1/combined/', '/', celltype, '/', 'top_qtl_results_all.txt')
+  # this is the table we'll have
+  top_qtl_results_ct <- NULL
+  # sometimes we don't have this top file
+  if (file.exists(top_qtl_results_ct_loc)) {
+    # read the table
+    top_qtl_results_ct <- fread(top_qtl_results_ct_loc, header = T, sep = '\t')
+  }
+  else {
+    top_qtl_results_ct_loc <- paste0('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/output/L1/combined/', '/', celltype, '/', 'qtl_results_all.txt.gz')
+    # read the table
+    top_qtl_results_ct <- fread(top_qtl_results_ct_loc, header = T, sep = '\t')
+  }
+  
+  # and get the genes to put into the list
+  epeaks_celltypes[[celltype]] <- unique(top_qtl_results_ct[['feature_id']])
+}
+# merge all of those genes
+epeak_genes_tested <- do.call('c', epeaks_celltypes)
+# and make unique
+epeak_genes_tested <- unique(epeak_genes_tested)
+
+```
+
 ```{r qtl_comparison, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # get the total number of eGenes
 n_egenes <- length(unique(do.call('c', eqtl_egenes_combined)))
 n_epeaks <- length(unique(do.call('c', caqtl_epeaks_combined)))
+# check how many rows in the scenic output are tested as egenes
+n_egene_tested <- nrow(scenic_output[scenic_output[['Gene']] %in% eqtl_genes_tested, ])
+n_epeak_tested <- nrow(scenic_output[gsub(':', '-', scenic_output[['Region']]) %in% epeak_genes_tested, ])
 
 # make a table
 scenic_qtl_overlap <- data.frame(
-  'set' = c('ereg_total', 'ereg_with_caqtl', 'ereg_with_eqtl', 'ereg_with_any_qtl', 'ereg_with_both_qtl'), 
+  'set' = c('ereg_total', 'ereg_tested_eqtl', 'ereg_tested_caqtl', 'ereg_with_caqtl', 'ereg_with_eqtl', 'ereg_with_any_qtl', 'ereg_with_both_qtl'), 
   'number' = c(
     nrow(scenic_output), 
+    n_egene_tested, 
+    n_epeak_tested,
     nrow(scenic_output[!is.na(scenic_output[['caqtl_celltype']]), ]), 
     nrow(scenic_output[!is.na(scenic_output[['eqtl_celltype']]), ]), 
     nrow(scenic_output[!is.na(scenic_output[['eqtl_celltype']]) | !is.na(scenic_output[['caqtl_celltype']]), ]), 
@@ -203,14 +256,21 @@ scenic_qtl_overlap <- data.frame(
   )
 )
 # make a factor
-scenic_qtl_overlap[['set']] <- factor(scenic_qtl_overlap[['set']], levels = c('ereg_total', 'ereg_with_caqtl', 'ereg_with_eqtl', 'ereg_with_any_qtl', 'ereg_with_both_qtl'))
+scenic_qtl_overlap[['set']] <- factor(scenic_qtl_overlap[['set']], levels = c('ereg_total', 'ereg_tested_eqtl', 'ereg_with_eqtl', 'ereg_tested_caqtl', 'ereg_with_caqtl', 'ereg_with_any_qtl', 'ereg_with_both_qtl'))
 
 # now if we do this without considering the TFs
 scenic_output_onlyregions <- unique(scenic_output[, c('Region', 'Gene', 'caqtl_celltype', 'eqtl_celltype')])
+# check again how many rows in the scenic output are tested as egenes or epeaks
+n_egene_tested_rg <- nrow(scenic_output_onlyregions[scenic_output_onlyregions[['Gene']] %in% eqtl_genes_tested, ])
+n_epeak_tested_rg <- nrow(scenic_output_onlyregions[gsub(':', '-', scenic_output_onlyregions[['Region']]) %in% epeak_genes_tested, ])
+
+# make table again
 scenic_qtl_overlap_notf <- data.frame(
-  'set' = c('ereg_total', 'ereg_with_caqtl', 'ereg_with_eqtl', 'ereg_with_any_qtl', 'ereg_with_both_qtl'), 
+  'set' = c('ereg_total', 'ereg_tested_eqtl', 'ereg_tested_caqtl', 'ereg_with_caqtl', 'ereg_with_eqtl', 'ereg_with_any_qtl', 'ereg_with_both_qtl'), 
   'number' = c(
     nrow(scenic_output_onlyregions), 
+    n_egene_tested_rg, 
+    n_epeak_tested_rg, 
     nrow(scenic_output_onlyregions[!is.na(scenic_output_onlyregions[['caqtl_celltype']]), ]), 
     nrow(scenic_output_onlyregions[!is.na(scenic_output_onlyregions[['eqtl_celltype']]), ]), 
     nrow(scenic_output_onlyregions[!is.na(scenic_output_onlyregions[['eqtl_celltype']]) | !is.na(scenic_output_onlyregions[['caqtl_celltype']]), ]), 
@@ -218,7 +278,7 @@ scenic_qtl_overlap_notf <- data.frame(
   )
 )
 # make a factor
-scenic_qtl_overlap_notf[['set']] <- factor(scenic_qtl_overlap_notf[['set']], levels = c('ereg_total', 'ereg_with_caqtl', 'ereg_with_eqtl', 'ereg_with_any_qtl', 'ereg_with_both_qtl'))
+scenic_qtl_overlap_notf[['set']] <- factor(scenic_qtl_overlap_notf[['set']], levels = c('ereg_total', 'ereg_tested_eqtl', 'ereg_with_eqtl', 'ereg_tested_caqtl', 'ereg_with_caqtl', 'ereg_with_any_qtl', 'ereg_with_both_qtl'))
 
 ```
 
@@ -269,10 +329,17 @@ epeaks <- unique(do.call('c', caqtl_epeaks_combined))
 # and check how many overlap
 egenes_in_eregulons <- egenes[egenes %in% scenic_output[['Gene']]]
 epeaks_in_eregulons <- epeaks[epeaks %in% gsub(':', '-', scenic_output[['Region']])]
+# also for what was tested
+egene_tested_in_eregulons <- eqtl_genes_tested[eqtl_genes_tested %in% scenic_output[['Gene']]]
+epeak_tested_in_eregulons <- epeak_genes_tested[epeak_genes_tested %in% gsub(':', '-', scenic_output[['Region']])]
+
 
 # make into a table
-egene_number_table <- data.frame('set' = c('n eGenes', 'n eGenes in eReg'), 'nr' = c(length(egenes), length(egenes_in_eregulons)))
-epeak_number_table <- data.frame('set' = c('n ePeaks', 'n ePeaks in eReg'), 'nr' = c(length(epeaks), length(epeaks_in_eregulons)))
+egene_number_table <- data.frame('set' = c('n tested eGenes', 'n tested eGenes in eReg', 'n significant eGenes', 'n significant eGenes in eReg'), 'nr' = c(length(eqtl_genes_tested), length(egene_tested_in_eregulons), length(egenes), length(egenes_in_eregulons)))
+epeak_number_table <- data.frame('set' = c('n tested ePeaks', 'n tested ePeaks in eReg', 'n significant ePeaks', 'n significant ePeaks in eReg'), 'nr' = c(length(epeak_genes_tested), length(epeak_tested_in_eregulons), length(epeaks), length(epeaks_in_eregulons)))
+# order the levels
+egene_number_table[['set']] <- factor(egene_number_table[['set']], levels = c('n tested eGenes', 'n tested eGenes in eReg', 'n significant eGenes', 'n significant eGenes in eReg'))
+epeak_number_table[['set']] <- factor(epeak_number_table[['set']], levels = c('n tested ePeaks', 'n tested ePeaks in eReg', 'n significant ePeaks', 'n significant ePeaks in eReg'))
 
 # make into a plot
 ggplot(data = egene_number_table, mapping = aes(x = set, y = nr, fill = set)) +
