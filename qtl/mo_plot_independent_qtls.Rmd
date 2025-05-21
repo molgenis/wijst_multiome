@@ -128,6 +128,7 @@ get_color_coding_dict <- function() {
 	color_coding_dict[['Microfold_cell']] <- '#BEAED4'
 	#color_coding_dict[['Monocytes']] <- '#7570B3'
 	color_coding_dict[['Monocyte']] <- '#EDBA1B'
+	color_coding_dict[['monocyte']] <- '#EDBA1B'
 	color_coding_dict[['Naive_B_cells']] <- '#FDC086'
 	color_coding_dict[['NK']] <- '#E64B50'
 	#color_coding_dict[['Plasma_cells']] <- '#E7298A'
@@ -542,6 +543,80 @@ cs_numbers_to_plot <- function(egene_numbers, celltype_column='cell_type', numbe
 }
 
 
+#' plot in a barplot the number of DE genes per cell type
+#' 
+#' @param egene_numbers the table containing the number of eenes per cell type
+#' @param celltype_column which column of the supplied table has the celltype name
+#' @param number_column which column of the supplied table has the number of DE genes
+#' @param pointless draw the ticks on the bottom of the plot?
+#' @param legendless draw the legend?
+#' @param ylim the range for the y-axis
+#' @param paper_style use the paper style with more whitespace
+#' @param angle_labels angle the x labels 90 degrees?
+#' @param use_distinct_colours use the distinct colour palette instead of ggplot defaults (optional, default T)
+#' @param use_sampling randomly sample colours from the distinct colour palette (optional, default F)
+#' @param color_indices supply specific indices relating to colours to use from the distinct colour palette. Use 'get_available_colours_grid' to get the colours and their indices (optional, unused by default)
+#' @param use_label_dict change names to a more pleasing format
+#' @param make_labels_multiline make labels multiline if they are long
+#' @param x_order to order the values on the x axis
+#' @returns a barplot with the number of eGenes per cell type
+#' 
+egene_numbers_to_plot <- function(egene_numbers, celltype_column='cell_type', number_column='nr', pointless=F, legendless=F, ylim=NULL, paper_style=T, angle_labels=T, use_distinct_colours=T, use_sampling=F, color_indices=NULL, use_color_dict=F, use_label_dict=T, split_long_labels_to_lines=T, x_order=NULL) {
+  # remap names if requested
+  if (use_label_dict) {
+    egene_numbers[[celltype_column]] <- remap_with_label_dict(egene_numbers[[celltype_column]])
+  }
+  # make them multiline
+  if (split_long_labels_to_lines) {
+    egene_numbers[[celltype_column]] <- split_strings_with_max_length(egene_numbers[[celltype_column]])
+  }
+  # order the x axis if requested
+  if (!is.null(x_order)) {
+    egene_numbers[[celltype_column]] <- factor(egene_numbers[[celltype_column]], levels = x_order)
+  }
+  # start plot
+  p <- ggplot(mapping = aes(x = egene_numbers[[celltype_column]], y = egene_numbers[[number_column]], fill = egene_numbers[[celltype_column]])) +
+    geom_bar(stat='identity') + xlab(celltype_column) + ylab(number_column)
+  # options
+  if (use_distinct_colours) {
+    # get the unique possible assigments
+    possible_assignments <- unique(egene_numbers[[celltype_column]])
+    # put into a list
+    colour_mapping <- roycols::get_color_list(possible_assignments)
+    # add to plot
+    p <- p + scale_fill_manual(values = colour_mapping)
+  }
+  if (use_color_dict) {
+    # get the color coding dict
+    colour_mapping <- get_color_coding_dict()
+    # also rename here then
+    if (split_long_labels_to_lines) {
+      names(colour_mapping) <- split_strings_with_max_length(names(colour_mapping))
+    }
+    # add to plot
+    p <- p + scale_fill_manual(values = colour_mapping)
+  }
+  if(!is.null(ylim)){
+    p <- p + ylim(ylim)
+  }
+  if(pointless){
+    p <- p + theme(axis.text.x=element_blank(), 
+                   axis.ticks = element_blank())
+  }
+  if(legendless){
+    p <- p + theme(legend.position = 'none')
+  }
+  if (paper_style) {
+    p <- p + theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+  }
+  if (angle_labels) {
+    p <- p + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+  }
+  return(p)
+}
+
+
+
 ```
 
 
@@ -650,3 +725,146 @@ p_caqtl_cs_primary_and_other
 p_caqtl_cs_each
 
 ```
+
+```{r filter_variants, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# make filtered lists fo variants
+eqtl_outputs_filtered <- list()
+for (ct in names(eqtl_outputs)) {
+  # extract for that cell type
+  eqtl_output_ct <- eqtl_outputs[[ct]]
+  # filter on nominal threshold
+  #eqtl_output_ct <- eqtl_output_ct[eqtl_output_ct[['p_value']] < eqtl_output_ct[['pval_nominal_threshold_global']], ]
+  eqtl_output_ct[eqtl_output_ct[['empirical_feature_p_value']] < 0.05, ]
+  # put back into the list
+  eqtl_outputs_filtered[[ct]] <- eqtl_output_ct
+}
+
+# make filtered lists fo variants
+caqtl_outputs_filtered <- list()
+for (ct in names(caqtl_outputs)) {
+  # extract for that cell type
+  caqtl_output_ct <- caqtl_outputs[[ct]]
+  # filter on nominal threshold
+  # caqtl_output_ct <- caqtl_output_ct[eqtl_output_ct[['p_value']] < caqtl_output_ct[['pval_nominal_threshold_global']], ]
+  caqtl_output_ct[caqtl_output_ct[['empirical_feature_p_value']] < 0.05, ]
+  # put back into the list
+  caqtl_outputs_filtered[[ct]] <- caqtl_output_ct
+}
+
+# now merge based on variant
+qtl_outputs_overlapping <- list()
+for (ct in intersect(names(eqtl_outputs_filtered), names(caqtl_outputs_filtered))) {
+  # extract the eqtl
+  eqtl_output_ct <- eqtl_outputs_filtered[[ct]]
+  # extract the eqtl
+  caqtl_output_ct <- caqtl_outputs_filtered[[ct]]
+  # subset to just the variant and feature
+  eqtl_output_ct <- eqtl_output_ct[, c('snp_id', 'feature_id')]
+  caqtl_output_ct <- caqtl_output_ct[, c('snp_id', 'feature_id')]
+  # rename the columns
+  colnames(eqtl_output_ct) <- c('snp_id', 'feature_eqtl')
+  colnames(caqtl_output_ct) <- c('snp_id', 'feature_caqtl')
+  # merge them
+  qtl_output_ct_overlapping <- merge(caqtl_output_ct, eqtl_output_ct, on = 'snp_id')
+  # put back into list
+  qtl_outputs_overlapping[[ct]] <- qtl_output_ct_overlapping
+}
+
+```
+
+```{r plot_overlapping_effects, include=TRUE, fig.width=8, fig.height=8}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# we'll make some plots with numbers
+ngenes_with_overlapping_snps <- data.frame('cell_type' = rep(NA, times = length(names(qtl_outputs_overlapping))), 'number' = rep(NA, times = length(names(qtl_outputs_overlapping))))
+npeaks_with_overlapping_snps <- data.frame('cell_type' = rep(NA, times = length(names(qtl_outputs_overlapping))), 'number' = rep(NA, times = length(names(qtl_outputs_overlapping))))
+n_peak_gene_with_overlapping_effects <- data.frame('cell_type' = rep(NA, times = length(names(qtl_outputs_overlapping))), 'number' = rep(NA, times = length(names(qtl_outputs_overlapping))))
+
+# check each cell type
+for (i in 1 : length(names(qtl_outputs_overlapping))) {
+  # get the cell type
+  cell_type <- names(qtl_outputs_overlapping)[i]
+  # extract the table
+  qtl_output_ct_overlapping <- qtl_outputs_overlapping[[cell_type]]
+  # count the number of genes overlapping
+  n_genes_with_overlap <- length(unique(qtl_output_ct_overlapping[['feature_eqtl']]))
+  # and number of peaks
+  n_peaks_with_overlap <- length(unique(qtl_output_ct_overlapping[['feature_caqtl']]))
+  # and unique combinations
+  n_overlapping_peak_gene <- nrow(unique(qtl_output_ct_overlapping[, c('feature_eqtl', 'feature_caqtl')]))
+  # put into the tables
+  ngenes_with_overlapping_snps[i, 'cell_type'] <- cell_type
+  npeaks_with_overlapping_snps[i, 'cell_type'] <- cell_type
+  n_peak_gene_with_overlapping_effects[i, 'cell_type'] <- cell_type
+  ngenes_with_overlapping_snps[i, 'number'] <- n_genes_with_overlap
+  npeaks_with_overlapping_snps[i, 'number'] <- n_peaks_with_overlap
+  n_peak_gene_with_overlapping_effects[i, 'number'] <- n_overlapping_peak_gene
+}
+
+# make the actual plots now
+p_n_egenes_overlap_caqtl <- egene_numbers_to_plot(ngenes_with_overlapping_snps, celltype_column = 'cell_type', number_column = 'number', legendless = T, use_color_dict = T, use_label_dict = T) +
+  xlab('Cell type') +
+  ylab('Number of genes') +
+  ggtitle('Number of eGenes with variant overlapping caQTL')
+p_n_epeaks_overlap_eqtl <- egene_numbers_to_plot(npeaks_with_overlapping_snps, celltype_column = 'cell_type', number_column = 'number', legendless = T, use_color_dict = T, use_label_dict = T) +
+  xlab('Cell type') +
+  ylab('Number of peaks') +
+  ggtitle('Number of ePeaks with variant overlapping eQTL')
+p_n_egene_epeak_overlap <- egene_numbers_to_plot(n_peak_gene_with_overlapping_effects, celltype_column = 'cell_type', number_column = 'number', legendless = T, use_color_dict = T, use_label_dict = T) +
+  xlab('Cell type') +
+  ylab('Number of peak-gene combinatinos') +
+  ggtitle('Number of peak-gene pairs with an overlapping variant')
+
+# show the plots
+p_n_egenes_overlap_caqtl
+p_n_epeaks_overlap_eqtl
+p_n_egene_epeak_overlap
+
+```
+```{r plot_n_overlapping_effects, include=TRUE, fig.width=8, fig.height=8}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# store per cell type first
+n_peak_ocurrence_per_celltype <- list()
+
+# check each cell type
+for (i in 1 : length(names(qtl_outputs_overlapping))) {
+  # get the cell type
+  cell_type <- names(qtl_outputs_overlapping)[i]
+  # extract the table
+  qtl_output_ct_overlapping <- qtl_outputs_overlapping[[cell_type]]
+  # get the unique peak-gene combinations
+  qtl_output_ct_overlapping_unique <- unique(qtl_output_ct_overlapping[, c('feature_eqtl', 'feature_caqtl')])
+  # get the number of peaks per gene
+  n_peak_per_gene <- data.frame(table(qtl_output_ct_overlapping_unique[['feature_eqtl']]))
+  # next get the occurence of those numbers
+  n_peak_per_gene_occurence <- data.frame(table(n_peak_per_gene[['Freq']]))
+  # add the cell type
+  n_peak_per_gene_occurence[['cell_type']] <- cell_type
+  # rename the columns
+  colnames(n_peak_per_gene_occurence) <- c('n_peaks', 'nr', 'celltype')
+  # make the number of peaks a character vector
+  n_peak_per_gene_occurence[['n_peaks']] <- paste(as.character(n_peak_per_gene_occurence[['n_peaks']]), 'peaks')
+  # put in list
+  n_peak_ocurrence_per_celltype[[cell_type]] <- n_peak_per_gene_occurence
+}
+
+# merge everything
+n_peak_ocurrence_all <- do.call('rbind', n_peak_ocurrence_per_celltype)
+
+# make the plot
+p_n_peak_per_gene <- ggplot(data = n_peak_ocurrence_all[rep(1:nrow(n_peak_ocurrence_all), n_peak_ocurrence_all[['nr']]), , drop = FALSE], mapping = aes(x = nr, fill = celltype)) + 
+  geom_density(alpha = 0.5) + 
+  scale_fill_manual(values = get_color_coding_dict()[unique(n_peak_ocurrence_all[['celltype']])]) +
+  xlab('Number of ePeaks') + 
+  ylab('Density') + 
+  ggtitle('Number of ePeaks with variant overlapping eGene') + 
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+
+# show the plot
+p_n_peak_per_gene
+
+```
+
