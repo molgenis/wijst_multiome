@@ -257,3 +257,14 @@ ggvenn::ggvenn(
   ) + ggtitle('Overlap of CRE genes between multiome and GRANIE')
 
 ```
+
+```{r compare_genes, include=TRUE, fig.width=6, fig.height=4}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# now check how it looks if you add these
+ggvenn::ggvenn(
+    data = list('multiome' = unique(paste(scenic_output[['Region']], scenic_output[['Gene']])), 'GRANIE' = unique(paste(gr_union_macros[['overlapping_feature']], gr_union_macros[['gene.name']])))
+  ) + ggtitle('Overlap of region-gene links between multiome and GRANIE')
+
+```
+
