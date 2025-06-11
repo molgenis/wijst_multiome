@@ -156,6 +156,7 @@ Below we will outline the steps taken to process and analyse the data
 ### CRE detection
 '*cre_detection/mo_scenicplus_env.yml*' environment with packages used for CRE detection
 
+#### data peparation
 '*cre_detection/data_preparation/mo_deconstruct_signac_objects.R'* deconstruct the Signac objects into matrix/features/barcodes, to merge for pycistopic
 '*cre_detection/data_preparation/mo_deconstruct_rna_objects.R'* deconstruct the Seurat objects into matrix/features/barcodes, to use in the SCENIC+ step
 '*cre_detection/data_preparation/mo_parts_to_scanpy.py'*    create scanpy object from deconstructed Seurat object
@@ -163,6 +164,7 @@ Below we will outline the steps taken to process and analyse the data
 '*cre_detection/data_preparation/mo_create_pycistopic_annotations.R'*   create annotations for regions to use in pycistopic
 '*cre_detection/data_preparation/mo_merge_chunked_mtx_files.py'*    merge chunked mtx files into one file
 
+#### topic modelling
 '*cre_detection/pycistopic/mo_create_pycistopic_object.ipynb'*  create pycistopic object\
 '*cre_detection/pycistopic/mo_pycistopic_model_topics.ipynb'*   perform topic modelling\
 '*cre_detection/pycistopic/mo_pycistopic_binarize_topics.ipynb'*    binarize topics\
@@ -172,14 +174,23 @@ Below we will outline the steps taken to process and analyse the data
 '*cre_detection/pycistopic/mo_pycistopic_export_topic_contributions.ipynb'*   export contributions of cells and regions to topics to tables\
 '*cre_detection/pycistopic/mo_region_topics_to_beds.R'*   export topic membership of regions to bed files
 
+#### DAR identification
 '*cre_detection/dar_identification/mo_identify_dars_wilcoxon.py'*  perform DAR detection between topics in pycistopic using the wilcoxon rank sum test\
 '*cre_detection/dar_identification/mo_identify_dars_celltypes_wilcoxon.py'*  perform DAR detection between cell type in pycistopic using the wilcoxon rank sum test\
 '*cre_detection/dar_identification/mo_extract_dar_outputs.ipynb'*  convert binary DAR detection output into tsv format\
 '*cre_detection/dar_identification/mo_check_dar_numbers.ipynb'*  check DAR and topic membership against available metadata
 
+#### eRegulon detection
 '*cre_detection/pycistarget/mo_cistarget.ipynb*'  run pycistarget and DEM to identify overrepresented motifs in the DARs
 
 '*cre_detection/scenicplus/scenicplus_config.yaml*'  config for running scenic+ pipeline after setting up all inputs
+
+#### output analysis
+'*cre_detection/output_analysis/mo_calculate_eregulon_enrichments.ipynb*'  calculate enriched eRegulons for specific metadata variables\
+'*cre_detection/output_analysis/mo_plot_scenic_output.Rmd*'  plot eRegulons, genes and regions found in SCENIC, and compare to smaller 10x dataset\
+'*cre_detection/output_analysis/mo_scenic_add_region_info_to_cres.R*'  add information regarding QTLs to SCENIC output\
+'*cre_detection/output_analysis/mo_scenic_vs_granie_claringbould.Rmd*'  compare SCENIC output to macrophage dataset\
+'*cre_detection/output_analysis/mo_cre_method_outputs_comparison.R*'  compare SCENIC to pseudobulk and regression-based models
 
 
 ### eQTL mapping
@@ -204,7 +215,8 @@ Below we will outline the steps taken to process and analyse the data
 '*qtl/mo_plot_qtls.ipynb*'    plot how the QTLs and CREs look\
 '*qtl/mo_qtl_caqtl_eqtl_overlaps.ipynb*'    plot overlapping caQTLs and eQTLs\
 '*qtl/mo_plot_qtl_numbers.Rmd*'     plot the number of QTLs\
-'*qtl/mo_get_finemapped_variants.R*'     extract finemapped and non-finemapped eQTLs from sc-eQTLgen to compare the variants
+'*qtl/mo_get_finemapped_variants.R*'     extract finemapped and non-finemapped eQTLs from sc-eQTLgen to compare the variants\
+'*qtl/mo_plot_independent_qtls.Rmd*'     extract and plot overlapping and colocalizing QTLs
 
 
 ### interaction-QTL mapping
@@ -213,7 +225,7 @@ Below we will outline the steps taken to process and analyse the data
 '*qtl/interaction_eqtl/limix_interactions.smk*'    LIMIX-QTL interaction snakemake file\
 '*qtl/interaction_eqtl/mo_interaction_template.yaml*'    LIMIX-QTL interaction yaml file for interaction-eQTLs\
 '*qtl/interaction_caqtl/mo_create_limix_chromatin_interaction_input.R*'    create interaction-caQTL input files\
-'*qtl/interaction_caqtl/mo_interaction_caqtls.yaml*'    LIMIX-QTL interaction yaml file for interaction-caQTLs
+'*qtl/interaction_caqtl/mo_interaction_caqtls.yaml*'    LIMIX-QTL interaction yaml file for interaction-caQTL
 
 
 ### QTL mediation
