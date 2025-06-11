@@ -19,6 +19,9 @@ Demuxlet v2
 
 ## Custom code
 
+python/jupyter scripts have environment files supplied
+R software was run through this singularity container: https://github.com/royoelen/single-cell-container-server/releases/tag/v2.0.1
+
 Below we will outline the steps taken to process and analyse the data
 
 

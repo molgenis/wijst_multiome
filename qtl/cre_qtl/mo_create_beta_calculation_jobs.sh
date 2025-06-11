@@ -6,10 +6,10 @@
 #Author       	: Roy Oelen
 #Example
 # ./mo_create_beta_calculation_jobs.sh \
-#  /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/cre_eqtl/pseudobulk_replication/matrices/monocyte/ \
-#  /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/cre_eqtl/pseudobulk_replication/betas_ps_wperm/monocyte/ \
-#  /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/coeqtl/trial_run/cre_lists/mono_cre_scenic_and_pseudo.tsv.gz \
-#  /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/cre_eqtl/pseudobulk_replication/jobs_wperm/monocyte/ \
+#  /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/cre_eqtl/eqtl_caqtl_overlap/combined/matrices/monocyte/ \
+#  /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/cre_eqtl/eqtl_caqtl_overlap/combined/betas_ps_wperm/monocyte/ \
+#  /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/cre_eqtl/eqtl_caqtl_overlap/combined/confinements/region_to_peak_variant_overlaps.tsv.gz \
+#  /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/cre_eqtl/eqtl_caqtl_overlap/combined/jobs/monocyte/ \
 #  RNA \
 #  peaks
 ###################################################################
