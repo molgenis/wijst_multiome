@@ -616,6 +616,38 @@ egene_numbers_to_plot <- function(egene_numbers, celltype_column='cell_type', nu
 }
 
 
+#' get the eGenes per cell type from QTL output
+#' 
+#' @param qtl_output_loc base location of the QTL output per cell type
+#' @returns a list with the output tables per cell type
+#' 
+get_output_per_celltype_coloc <- function(coloc_output_loc, file_prepend='', file_append='_eqtl_caqtl_coloc.tsv.gz', h4_column='PP.H4.abf') {
+  # get the folders in the directory, which should be the cell types
+  cell_type_files <- list.files(coloc_output_loc, full.names = F, recursive = F)
+  # filter these on the pattern
+  cell_type_pattern <- paste0(file_prepend, '.*', file_append, '$')
+  cell_type_files <- cell_type_files[grep(cell_type_pattern, cell_type_files)]
+  # store the result per cell type
+  coloc_per_celltype <- list()
+  # check each file
+  for (cell_type_file in cell_type_files) {
+    # paste the full path together
+    cell_type_file_full <- paste0(coloc_output_loc, '/', cell_type_file)
+    # read the file
+    coloc_celltype <- fread(cell_type_file_full, header = T, sep = '\t')
+    # filter on existing h4
+    coloc_celltype <- coloc_celltype[!is.na(coloc_celltype[[h4_column]]), ]
+    # remove the prepend from the file
+    cell_type <- gsub(file_prepend, '', cell_type_file)
+    # and the append
+    cell_type <- gsub(file_append, '', cell_type)
+    # add the cell type to the table
+    coloc_celltype[['cell_type']] <- cell_type
+    # and put in list
+    coloc_per_celltype[[cell_type]] <- coloc_celltype
+  }
+  return(coloc_per_celltype)
+}
 
 ```
 
@@ -669,9 +701,23 @@ p_eqtl_cs_primary_and_other <- cs_numbers_to_plot(eqtl_cs_counts, use_color_dict
 p_eqtl_cs_each <- cs_numbers_to_plot(eqtl_cs_counts_full, use_color_dict = T, celltype_column = 'celltype', number_column = 'number') +
   ggtitle('Primary and additional effects in eQTLs')
 
+# and for the poster
+p_eqtl_cs_primary_and_other_poster <- p_eqtl_cs_primary_and_other + 
+  xlab('Cell type') +
+  ylab('Number of independent eQTLs') +
+  theme(legend.position="none") +
+  theme(
+    plot.title = element_text(size = 24),
+    axis.title.x = element_text(size = 20),
+    axis.title.y = element_text(size = 20), 
+    axis.text.x = element_text(size = 16), 
+    axis.text.y = element_text(size = 16)
+  )
+
 # save the plots
 ggsave(filename = '~/plots/mo_eqtl_cs_primary_and_other.pdf', plot = p_eqtl_cs_primary_and_other, width = 8, height = 8)
 ggsave(filename = '~/plots/mo_eqtl_cs_each.pdf', plot = p_eqtl_cs_each, width = 8, height = 8)
+ggsave(filename = '~/plots/mo_eqtl_cs_each_poster.pdf', plot = p_eqtl_cs_primary_and_other_poster, width = 8, height = 8)
 
 # show the plots
 p_eqtl_cs_primary_and_other
@@ -716,9 +762,24 @@ p_caqtl_cs_primary_and_other <- cs_numbers_to_plot(caqtl_cs_counts, use_color_di
 p_caqtl_cs_each <- cs_numbers_to_plot(caqtl_cs_counts_full, use_color_dict = T, celltype_column = 'celltype', number_column = 'number') +
   ggtitle('Primary and additional effects in caQTLs')
 
+# and for the poster
+p_caqtl_cs_primary_and_other_poster <- p_caqtl_cs_primary_and_other + 
+  xlab('Cell type') +
+  ylab('Number of independent caQTLs') +
+  theme(legend.position="none") +
+  theme(
+    plot.title = element_text(size = 24),
+    axis.title.x = element_text(size = 20),
+    axis.title.y = element_text(size = 20), 
+    axis.text.x = element_text(size = 16), 
+    axis.text.y = element_text(size = 16)
+  )
+
 # save the plots
 ggsave(filename = '~/plots/mo_caqtl_cs_primary_and_other.pdf', plot = p_caqtl_cs_primary_and_other, width = 8, height = 8)
 ggsave(filename = '~/plots/mo_caqtl_cs_each.pdf', plot = p_caqtl_cs_each, width = 8, height = 8)
+ggsave(filename = '~/plots/mo_caqtl_cs_each_poster.pdf', plot = p_caqtl_cs_primary_and_other_poster, width = 8, height = 8)
+
 
 # show the plots
 p_caqtl_cs_primary_and_other
@@ -865,6 +926,126 @@ p_n_peak_per_gene <- ggplot(data = n_peak_ocurrence_all[rep(1:nrow(n_peak_ocurre
 
 # show the plot
 p_n_peak_per_gene
+
+```
+
+```{r get_qtl_coloc_effects}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# location of the eQTL to caQTL coloc output
+qtl_coloc_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/colocalization/eqtl_caqtl/'
+# read this data
+qtl_coloc <- get_output_per_celltype_coloc(qtl_coloc_loc)
+
+# let's just keep the H4 => 0.8 
+qtl_coloc_filtered <- list()
+for (cell_type in names(qtl_coloc)) {
+  # get the table
+  qtl_coloc_celltype <- qtl_coloc[[cell_type]]
+  # filter
+  qtl_coloc_celltype <- qtl_coloc_celltype[!is.na(qtl_coloc_celltype[['PP.H4.abf']]) & qtl_coloc_celltype[['PP.H4.abf']] >= 0.8, ]
+  # put back in the list
+  qtl_coloc_filtered[[cell_type]] <- qtl_coloc_celltype
+}
+
+```
+
+```{r plot_n_colocing_effects, include=TRUE, fig.width=8, fig.height=8}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# we'll make some plots with numbers
+ngenes_with_colocing_snps <- data.frame('cell_type' = rep(NA, times = length(names(qtl_coloc_filtered))), 'number' = rep(NA, times = length(names(qtl_coloc_filtered))))
+npeaks_with_colocing_snps <- data.frame('cell_type' = rep(NA, times = length(names(qtl_coloc_filtered))), 'number' = rep(NA, times = length(names(qtl_coloc_filtered))))
+n_peak_gene_with_colocing_effects <- data.frame('cell_type' = rep(NA, times = length(names(qtl_coloc_filtered))), 'number' = rep(NA, times = length(names(qtl_coloc_filtered))))
+
+# check each cell type
+for (i in 1 : length(names(qtl_coloc_filtered))) {
+  # get the cell type
+  cell_type <- names(qtl_coloc_filtered)[i]
+  # extract the table
+  qtl_output_ct_colocing <- qtl_coloc_filtered[[cell_type]]
+  # count the number of genes colocing
+  n_genes_with_coloc <- length(unique(qtl_output_ct_colocing[['trait2']]))
+  # and number of peaks
+  n_peaks_with_coloc <- length(unique(qtl_output_ct_colocing[['trait1']]))
+  # and unique combinations
+  n_colocing_peak_gene <- nrow(unique(qtl_output_ct_colocing[, c('trait2', 'trait1')]))
+  # put into the tables
+  ngenes_with_colocing_snps[i, 'cell_type'] <- cell_type
+  npeaks_with_colocing_snps[i, 'cell_type'] <- cell_type
+  n_peak_gene_with_colocing_effects[i, 'cell_type'] <- cell_type
+  ngenes_with_colocing_snps[i, 'number'] <- n_genes_with_coloc
+  npeaks_with_colocing_snps[i, 'number'] <- n_peaks_with_coloc
+  n_peak_gene_with_colocing_effects[i, 'number'] <- n_colocing_peak_gene
+}
+
+# make the actual plots now
+p_n_egenes_coloc_caqtl <- egene_numbers_to_plot(ngenes_with_colocing_snps, celltype_column = 'cell_type', number_column = 'number', legendless = T, use_color_dict = T, use_label_dict = T) +
+  xlab('Cell type') +
+  ylab('Number of genes') +
+  ggtitle('Number of eGenes with variant colocing caQTL')
+p_n_epeaks_coloc_eqtl <- egene_numbers_to_plot(npeaks_with_colocing_snps, celltype_column = 'cell_type', number_column = 'number', legendless = T, use_color_dict = T, use_label_dict = T) +
+  xlab('Cell type') +
+  ylab('Number of peaks') +
+  ggtitle('Number of ePeaks with variant colocing eQTL')
+p_n_egene_epeak_coloc <- egene_numbers_to_plot(n_peak_gene_with_colocing_effects, celltype_column = 'cell_type', number_column = 'number', legendless = T, use_color_dict = T, use_label_dict = T) +
+  xlab('Cell type') +
+  ylab('Number of peak-gene combinatinos') +
+  ggtitle('Number of peak-gene pairs with an colocing variant')
+
+# show the plots
+p_n_egenes_coloc_caqtl
+p_n_epeaks_coloc_eqtl
+p_n_egene_epeak_coloc
+
+```
+
+```{r export_tables, include=TRUE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# base location of overlapping effects
+overlapping_effects_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl_caqtl_overlap/combined/L1/'
+# check each cell type
+for (cell_type in names(qtl_outputs_overlapping)) {
+  # paste the path together
+  cell_type_path <- paste(overlapping_effects_loc, cell_type, 'eqtl_caqtl_overlapping_variants.tsv.gz', sep = '/')
+  # write the table
+  write.table(qtl_outputs_overlapping[[cell_type]], gzfile(cell_type_path), row.names = F, col.names = T, sep = '\t', quote = F)
+  # make a checksum
+  mdfiver::create_md5_for_file(cell_type_path)
+}
+
+# finally also do the outer join of all cell types
+overlapping_effect_with_ct <- list()
+# check each cell type
+for (cell_type in names(qtl_outputs_overlapping)) {
+  # add cell type as explicit column, and put into new list
+  overlapping_effect_with_ct[[cell_type]] <- cbind(
+    qtl_outputs_overlapping[[cell_type]], 
+    data.frame('cell_type' = rep(cell_type, times = nrow(qtl_outputs_overlapping[[cell_type]])))
+  )
+}
+# merge all those
+overlapping_effect_all <- do.call('rbind', overlapping_effect_with_ct)
+# make a folder
+dir.create(paste(overlapping_effects_loc, 'all', sep = '/'))
+# make a path
+all_cell_types_path <- paste(overlapping_effects_loc, 'all', 'eqtl_caqtl_overlapping_variants.tsv.gz', sep = '/')
+# write the table
+write.table(overlapping_effect_all, gzfile(all_cell_types_path), row.names = F, col.names = T, sep = '\t', quote = F)
+# make a checksum
+mdfiver::create_md5_for_file(all_cell_types_path)
+
+# finally also just take the combination of region and gene
+overlapping_effects_region_to_gene <- unique(overlapping_effect_all[, c('feature_caqtl', 'feature_eqtl')])
+# order
+overlapping_effects_region_to_gene <- overlapping_effects_region_to_gene[order(overlapping_effects_region_to_gene[['feature_caqtl']], overlapping_effects_region_to_gene[['feature_eqtl']]), ]
+# which we will place somewhere
+combined_overlapping_region_to_gene_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/cre_eqtl/eqtl_caqtl_overlap/combined/confinements/region_to_peak_variant_overlaps.tsv.gz'
+# and write
+write.table(overlapping_effects_region_to_gene, gzfile(combined_overlapping_region_to_gene_loc), row.names = F, col.names = F, sep = '\t', quote = F)
+# and make checksum
+mdfiver::create_md5_for_file(combined_overlapping_region_to_gene_loc)
 
 ```
 

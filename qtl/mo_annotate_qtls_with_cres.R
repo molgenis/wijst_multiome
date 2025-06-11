@@ -101,7 +101,6 @@ qtl_merge_with_dars <- function(qtl_input, dar_input, variant_column_qtls='snp_i
 }
 
 
-
 #' Merge QTL Data with SCENIC CRE Annotations
 #'
 #' This function identifies overlaps between QTL variants and cis-regulatory elements (CREs) from SCENIC output,
