@@ -82,6 +82,9 @@ for dir_full in ${dirlist[*]}
 '> ${output_job_full}
                 # do the prerequisites
                 echo 'mkdir -p '${output_loc_full}'/' >> ${output_job_full}
+                # explictly load CUDA
+                echo 'ml CUDA' >> ${output_job_full}
+                # activate environment
                 echo 'conda activate gpu_env' >> ${output_job_full}
                 # also add the actual work
                 echo ${PYTHON_BIN}' '${SCRIPT_LOC}' \
