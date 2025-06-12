@@ -192,6 +192,75 @@ qtl_merge_with_scenic <- function(qtl_input, scenic_input, variant_column_qtls='
 }
 
 
+
+#' Merge QTL Data with Openness Regions Based on Genomic Overlaps
+#'
+#' This function merges QTL (Quantitative Trait Loci) data with genomic openness data
+#' by identifying overlaps between QTL variant positions and openness regions on the same chromosome.
+#' It returns the QTL data annotated with overlapping openness region identifiers and openness values.
+#'
+#' @param qtl_input A `data.table` or `data.frame` containing QTL data.
+#' @param openness_input A `data.table` or `data.frame` containing openness region data.
+#' @param variant_column_qtls Name of the column in `qtl_input` that contains variant identifiers. Default is `'snp_id'`.
+#' @param chromosome_column_qtls Name of the column in `qtl_input` that contains chromosome identifiers. Default is `'snp_chromosome'`.
+#' @param position_column_qtls Name of the column in `qtl_input` that contains variant positions. Default is `'snp_position'`.
+#' @param openness_column_region Name of the column in `openness_input` that contains openness region identifiers. Default is `'name'`.
+#' @param opennes_column_openness Name of the column in `openness_input` that contains openness values. Default is `'pct_exp'`.
+#' @param openness_column_chromosome Name of the column in `openness_input` that contains chromosome identifiers. Default is `'#chrom'`.
+#' @param openness_column_start Name of the column in `openness_input` that contains region start positions. Default is `'start'`.
+#' @param openness_column_end Name of the column in `openness_input` that contains region end positions. Default is `'end'`.
+#' @param overlapping_region_column Name of the output column for overlapping openness region identifiers. Default is `'openness_region'`.
+#' @param overlapping_openness_column Name of the output column for overlapping openness values. Default is `'openness_openness'`.
+#'
+#' @return A `data.table` containing the original QTL data with additional columns for overlapping openness region and openness value.
+#'
+#' @import data.table
+#' @importFrom IRanges IRanges findOverlaps pintersect
+#' @export
+#'
+#' @examples
+#' # Example usage:
+#' # result <- qtl_merge_with_openness(qtl_data, openness_data)
+qtl_merge_with_openness <- function(qtl_input, openness_input, variant_column_qtls='snp_id', chromosome_column_qtls='snp_chromosome', position_column_qtls='snp_position', openness_column_region='name', opennes_column_openness='pct_exp', openness_column_chromosome='#chrom', openness_column_start='start', openness_column_end='end', overlapping_region_column='openness_region', overlapping_openness_column='openness_openness') {
+  # get the chromosomes in the qtl data
+  qtl_chroms <- unique(qtl_input[[chromosome_column_qtls]])
+  # and in the dars
+  openness_chroms <- unique(openness_input[[openness_column_chromosome]])
+  # only do the ones present in both
+  chroms_both <- intersect(qtl_chroms, openness_chroms)
+  # we'll save the results in a list
+  overlaps_per_chrom <- list()
+  # and check each chromosome
+  for (chrom in chroms_both) {
+    # subset to this chrom
+    openness_input_regions_chromosome <- openness_input[!is.na(openness_input[[openness_column_chromosome]]) & openness_input[[openness_column_chromosome]] == chrom, ]
+    qtl_regions_chromosome <- qtl_input[!is.na(qtl_input[[chromosome_column_qtls]]) & qtl_input[[chromosome_column_qtls]] == chrom, ]
+    # then subset to unique variants for the QTLs
+    qtl_regions_chromosome_variants <- unique(qtl_regions_chromosome[, c(..variant_column_qtls, ..chromosome_column_qtls, ..position_column_qtls)])
+    # turn into iranges objects
+    openness_input_chromosome_iranges <- IRanges(start = openness_input_regions_chromosome[[openness_column_start]], end = openness_input_regions_chromosome[[openness_column_end]])
+    qtl_chromosome_iranges <- IRanges(start = qtl_regions_chromosome_variants[[position_column_qtls]], end = qtl_regions_chromosome_variants[[position_column_qtls]])
+    # find overlaps
+    feature_chromosome_overlaps <- findOverlaps(openness_input_chromosome_iranges, qtl_chromosome_iranges)
+    # extract overlapping ranges
+    overlapping_ranges <- pintersect(qtl_chromosome_iranges[subjectHits(feature_chromosome_overlaps)], openness_input_chromosome_iranges[queryHits(feature_chromosome_overlaps)])
+    # create a  table for the overlaps
+    overlaps_table <- data.table(
+      'variant_id' = qtl_regions_chromosome_variants[[variant_column_qtls]][subjectHits(feature_chromosome_overlaps)],
+      'openness_region' = openness_input_regions_chromosome[[openness_column_region]][queryHits(feature_chromosome_overlaps)],
+      'openness_openness' = openness_input_regions_chromosome[[opennes_column_openness]][queryHits(feature_chromosome_overlaps)]
+    )
+    # name them as we wanted
+    colnames(overlaps_table) <- c('variant_id', overlapping_region_column, overlapping_openness_column)
+    # add these positions
+    qtl_regions_chromosome <- merge(qtl_regions_chromosome, overlaps_table, by.x = variant_column_qtls, by.y = 'variant_id', all.x = T, allow.cartesian=TRUE)
+    # put in list
+    overlaps_per_chrom[[as.character(chrom)]] <- qtl_regions_chromosome
+  }
+  overlaps_all <- do.call('rbind', overlaps_per_chrom)
+  return(overlaps_all)
+}
+
 ####################
 # Settings         #
 ####################
@@ -211,6 +280,15 @@ scenic_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/
 
 # location of the DARs
 dars_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/pycistopic/dar_detection/merged_major_and_minor_celltypes_120topics/wilcoxon/merged_major_and_minor_celltypes_120topics_dars.tsv.gz'
+
+# location of openness files
+openness_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/signac_peaks/output/'
+# prepend and append
+openness_prepend <- 'mo_peaks_lane1to80_'
+openness_append <- '.bed'
+# and the openness cell types
+openness_cell_types <- c('B', 'CD4T', 'CD8T', 'DC', 'monocyte')
+
 
 # make command line options
 option_list <- list(
@@ -259,7 +337,7 @@ if (debug) {
   position_column <- 'snp_position'
   add_chrom <- 'chr'
   gene_chunk_size <- 100
-  remove_non_overlaps <- F
+  remove_non_overlaps <- T
   # let user know we are in debug mode
   warning('running in debug mode! parameters supplied will have no effect!')
 } else {
@@ -273,6 +351,10 @@ if (debug) {
     stop('output QTL file must be supplied')
   } else {
     qtl_out_loc <- opt[['out']]
+  }
+  # stop if we are overwriting our source file
+  if (qtl_in_loc == qtl_out_loc) {
+    stop('input and output are the same, do not overwrite your source file!')
   }
   # the others we can just fetch
   variant_column <- opt[['variant_column']]
@@ -291,9 +373,23 @@ if (!is.null(add_chrom)) {
   qtl_data[[chromosome_column]] <- paste0(add_chrom, qtl_data[[chromosome_column]])
 }
 # read the dars
+message(paste('reading DAR data at', dars_output_loc))
 dars <- fread(dars_output_loc, header = T, sep = '\t')
 # read the scenic data
+message(paste('reading scenic data at', scenic_output_loc))
 scenic <- fread(scenic_output_loc, header = T, sep = '\t')
+
+# we'll store openness data per cell type
+openness_table_per_celltype <- list()
+# read each of the openness tables
+for (cell_type in openness_cell_types) {
+  # we'll paste the path together
+  cell_type_openness_loc <- paste0(openness_output_loc, '/', openness_prepend, cell_type, openness_append)
+  # let the user know we are reading this data
+  message(paste('reading openness file at', cell_type_openness_loc))
+  # read the file
+  openness_table_per_celltype[[cell_type]] <- fread(cell_type_openness_loc, header = T, sep = '\t')
+}
 
 # get all unique genes
 qtl_genes <- unique(qtl_data[[feature_column]])
@@ -318,19 +414,28 @@ while(chunk_start < length(qtl_genes)) {
   # subset the data to those genes
   qtl_data_chunk <- qtl_data[!is.na(qtl_data[[feature_column]]) & qtl_data[[feature_column]] %in% chunk_genes, ]
   
-  # overlap based on scenic
-  qtl_data_chunk <- qtl_merge_with_scenic(qtl_data_chunk, scenic)
+  # overlap based on cell type openness
+  for (cell_type in names(openness_table_per_celltype)) {
+    qtl_data_chunk <- qtl_merge_with_openness(qtl_data_chunk, openness_table_per_celltype[[cell_type]], overlapping_region_column = paste0('openness_region_', cell_type), overlapping_openness_column = paste0('openness_openness_', cell_type))
+  }
   
   # overlap based on DAR
   qtl_data_chunk <- qtl_merge_with_dars(qtl_data_chunk, dars)
+  
+  # overlap based on scenic
+  qtl_data_chunk <- qtl_merge_with_scenic(qtl_data_chunk, scenic)
   
   # if requested, remove the entries that do not show any overlap (to conserve memory and disk)
   if (remove_non_overlaps) {
     # let the user know we are removing empty entries
     message('removing QTL entries without overlaps with DARs or CREs')
-    # actually remove them
+    # grab the cell type region column names
+    cell_type_openness_region_columns <- colnames(qtl_data_chunk)[grep('openness_region', colnames(qtl_data_chunk))]
+    # get the number of non-NA regions for the openness matched region names
+    cell_type_openness_region_nonnacounts <- apply(qtl_data_chunk[, ..cell_type_openness_region_columns], 1, function(x){return(sum(!is.na(x)))})
+    # remove entries that have no CRE, no DAR, and no openness matched regions
     qtl_data_chunk <- qtl_data_chunk[
-      !is.na(qtl_data_chunk[['overlapping_cre']]) | !is.na(qtl_data_chunk[['overlapping_dar']]), 
+      !is.na(qtl_data_chunk[['overlapping_cre']]) | !is.na(qtl_data_chunk[['overlapping_dar']]) | cell_type_openness_region_nonnacounts > 0, 
     ]
   }
   
