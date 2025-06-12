@@ -219,19 +219,19 @@ option_list <- list(
   make_option(c("-o", "--out"), type="character", default=NULL, 
               help="output QTL file to save", metavar="character"), 
   make_option(c("-v", "--variant_column"), type="character", default='snp_id', 
-              help="column denoting the variant", metavar="character"),
+              help="column denoting the variant [default: %default]", metavar="character"),
   make_option(c("-f", "--feature_column"), type="character", default='feature_id', 
-              help="column denoting the feature", metavar="character"), 
+              help="column denoting the feature [default: %default]", metavar="character"), 
   make_option(c("-c", "--chromosome_column"), type="character", default='snp_chromosome', 
-              help="column denoting the feature", metavar="character"), 
+              help="column chromosome of the variant [default: %default]", metavar="character"), 
   make_option(c("-p", "--position_column"), type="character", default='snp_position', 
-              help="column denoting the feature", metavar="character"), 
+              help="column denoting the position of the variant on the chromosome [default: %default]", metavar="character"), 
   make_option(c("-a", "--add_chrom"), type="character", default=NULL, 
-              help="column denoting the feature", metavar="character"), 
+              help="prepend to add to the chromsome column of the variant, something like 'chr' is common, leave parameter out for no prepend", metavar="character"), 
   make_option(c("-s", "--gene_chunk_size"), type="numeric", default=100, 
-              help="the number of genes to process in a chunk", metavar="numeric"), 
+              help="the number of genes to process in a chunk [default: %default]", metavar="numeric"), 
   make_option(c("-r", "--remove_non_overlaps"), action="store_true", default=FALSE,
-              help="remove entries that show no overlap [default: %default]")
+              help="remove QTL entries that show no overlap with DARs or CREs [default: %default]")
 )
 
 # initialize optparser
