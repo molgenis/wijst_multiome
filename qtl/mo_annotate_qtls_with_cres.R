@@ -287,7 +287,7 @@ openness_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoin
 openness_prepend <- 'mo_peaks_lane1to80_'
 openness_append <- '.bed'
 # and the openness cell types
-openness_cell_types <- c('B', 'CD4T', 'CD8T', 'DC', 'monocyte')
+openness_cell_types <- c('B', 'CD4T', 'CD8T', 'DC', 'monocyte', 'NK')
 
 
 # make command line options
