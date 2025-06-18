@@ -219,7 +219,9 @@ Below we will outline the steps taken to process and analyse the data
 '*qtl/mo_qtl_caqtl_eqtl_overlaps.ipynb*'    plot overlapping caQTLs and eQTLs\
 '*qtl/mo_plot_qtl_numbers.Rmd*'     plot the number of QTLs\
 '*qtl/mo_get_finemapped_variants.R*'     extract finemapped and non-finemapped eQTLs from sc-eQTLgen to compare the variants\
-'*qtl/mo_plot_independent_qtls.Rmd*'     extract and plot overlapping and colocalizing QTLs
+'*qtl/mo_plot_independent_qtls.Rmd*'     extract and plot overlapping and colocalizing QTLs\
+'*qtl/mo_annotate_qtls_with_cres.R*'     check QTL tables for overlap with DAR/SCENIC+/openness data\
+'*qtl/mo_annotate_overlapping_qtls_with_cres.R*'     check overlapping eQTLs/caQTLs if they are present in SCENIC+ output
 
 
 ### interaction-QTL mapping
