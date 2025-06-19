@@ -51,7 +51,7 @@ library(mdfiver)
 #' }
 #'
 #' @export
-qtl_merge_with_dars <- function(qtl_input, dar_input, variant_column_qtls='snp_id', chromosome_column_qtls='snp_chromosome', position_column_qtls='snp_position', region_column_dars='region') {
+qtl_merge_with_dars <- function(qtl_input, dar_input, variant_column_qtls='snp_id', chromosome_column_qtls='snp_chromosome', position_column_qtls='snp_position', region_column_dars='region', variant_window_left=0, variant_window_right=0) {
   # create a table of the DARs
   dar_table <- data.frame('chrom' = rep(NA, times = nrow(dar_input)), 'start' = rep(NA, times = nrow(dar_input)), 'end' = rep(NA, times = nrow(dar_input)))
   # split the dar output into regions
@@ -80,7 +80,10 @@ qtl_merge_with_dars <- function(qtl_input, dar_input, variant_column_qtls='snp_i
     qtl_regions_chromosome_variants <- unique(qtl_regions_chromosome[, c(..variant_column_qtls, ..chromosome_column_qtls, ..position_column_qtls)])
     # turn into iranges objects
     dar_input_chromosome_iranges <- IRanges(start = dar_input_regions_chromosome[['start']], end = dar_input_regions_chromosome[['end']])
-    qtl_chromosome_iranges <- IRanges(start = qtl_regions_chromosome_variants[[position_column_qtls]], end = qtl_regions_chromosome_variants[[position_column_qtls]])
+    # with the window supplied, making sure we don't get negative numbers
+    qtl_region_chromosome_variants_windowed_starts <- qtl_regions_chromosome_variants[[position_column_qtls]] - variant_window_left
+    qtl_region_chromosome_variants_windowed_starts[qtl_region_chromosome_variants_windowed_starts < 1] <- 1
+    qtl_chromosome_iranges <- IRanges(start = qtl_region_chromosome_variants_windowed_starts, end = qtl_regions_chromosome_variants[[position_column_qtls]] + variant_window_right)
     # find overlaps
     feature_chromosome_overlaps <- findOverlaps(dar_input_chromosome_iranges, qtl_chromosome_iranges)
     # extract overlapping ranges
@@ -132,7 +135,7 @@ qtl_merge_with_dars <- function(qtl_input, dar_input, variant_column_qtls='snp_i
 #' }
 #'
 #' @export
-qtl_merge_with_scenic <- function(qtl_input, scenic_input, variant_column_qtls='snp_id', chromosome_column_qtls='snp_chromosome', position_column_qtls='snp_position', region_column_scenic='Region', gene_column_scenic='Gene', tf_column_scenic='TF') {
+qtl_merge_with_scenic <- function(qtl_input, scenic_input, variant_column_qtls='snp_id', chromosome_column_qtls='snp_chromosome', position_column_qtls='snp_position', region_column_scenic='Region', gene_column_scenic='Gene', tf_column_scenic='TF', variant_window_left=0, variant_window_right=0) {
   # create a table of the scenics
   cre_table <- data.frame('chrom' = rep(NA, times = nrow(scenic_input)), 'start' = rep(NA, times = nrow(scenic_input)), 'end' = rep(NA, times = nrow(scenic_input)))
   # split the scenic output into regions
@@ -164,7 +167,10 @@ qtl_merge_with_scenic <- function(qtl_input, scenic_input, variant_column_qtls='
     qtl_regions_chromosome_variants <- unique(qtl_regions_chromosome[, c(..variant_column_qtls, ..chromosome_column_qtls, ..position_column_qtls)])
     # turn into iranges objects
     cre_input_chromosome_iranges <- IRanges(start = cre_input_regions_chromosome[['start']], end = cre_input_regions_chromosome[['end']])
-    qtl_chromosome_iranges <- IRanges(start = qtl_regions_chromosome_variants[[position_column_qtls]], end = qtl_regions_chromosome_variants[[position_column_qtls]])
+    # using the window, and making sure that we dont get negative numbers
+    qtl_region_chromosome_variants_windowed_starts <- qtl_regions_chromosome_variants[[position_column_qtls]] - variant_window_left
+    qtl_region_chromosome_variants_windowed_starts[qtl_region_chromosome_variants_windowed_starts < 1] <- 1
+    qtl_chromosome_iranges <- IRanges(start = qtl_region_chromosome_variants_windowed_starts, end = qtl_regions_chromosome_variants[[position_column_qtls]] + variant_window_right)
     # find overlaps
     feature_chromosome_overlaps <- findOverlaps(cre_input_chromosome_iranges, qtl_chromosome_iranges)
     # extract overlapping ranges
@@ -184,6 +190,8 @@ qtl_merge_with_scenic <- function(qtl_input, scenic_input, variant_column_qtls='
     qtl_regions_chromosome_creless <- qtl_regions_chromosome[is.na(qtl_regions_chromosome[['overlapping_cre']]), ]
     # and put those together
     overlaps_with_scenic <- rbind(overlaps_with_scenic, qtl_regions_chromosome_creless, fill = T)
+    # order the columns so the CRE stuff is at the back
+    overlaps_with_scenic <- overlaps_with_scenic[, c(setdiff(colnames(overlaps_with_scenic), c('overlapping_cre', 'cre_tf', 'cre_gene')), c('overlapping_cre', 'cre_tf', 'cre_gene'))]
     # put in list
     overlaps_per_chrom[[as.character(chrom)]] <- overlaps_with_scenic
   }
@@ -221,7 +229,7 @@ qtl_merge_with_scenic <- function(qtl_input, scenic_input, variant_column_qtls='
 #' @examples
 #' # Example usage:
 #' # result <- qtl_merge_with_openness(qtl_data, openness_data)
-qtl_merge_with_openness <- function(qtl_input, openness_input, variant_column_qtls='snp_id', chromosome_column_qtls='snp_chromosome', position_column_qtls='snp_position', openness_column_region='name', opennes_column_openness='pct_exp', openness_column_chromosome='#chrom', openness_column_start='start', openness_column_end='end', overlapping_region_column='openness_region', overlapping_openness_column='openness_openness') {
+qtl_merge_with_openness <- function(qtl_input, openness_input, variant_column_qtls='snp_id', chromosome_column_qtls='snp_chromosome', position_column_qtls='snp_position', openness_column_region='name', opennes_column_openness='pct_exp', openness_column_chromosome='#chrom', openness_column_start='start', openness_column_end='end', overlapping_region_column='openness_region', overlapping_openness_column='openness_openness', variant_window_left=0, variant_window_right=0) {
   # get the chromosomes in the qtl data
   qtl_chroms <- unique(qtl_input[[chromosome_column_qtls]])
   # and in the dars
@@ -239,7 +247,10 @@ qtl_merge_with_openness <- function(qtl_input, openness_input, variant_column_qt
     qtl_regions_chromosome_variants <- unique(qtl_regions_chromosome[, c(..variant_column_qtls, ..chromosome_column_qtls, ..position_column_qtls)])
     # turn into iranges objects
     openness_input_chromosome_iranges <- IRanges(start = openness_input_regions_chromosome[[openness_column_start]], end = openness_input_regions_chromosome[[openness_column_end]])
-    qtl_chromosome_iranges <- IRanges(start = qtl_regions_chromosome_variants[[position_column_qtls]], end = qtl_regions_chromosome_variants[[position_column_qtls]])
+    # with the window supplied (making sure that we don't get a negative number)
+    qtl_region_chromosome_variants_windowed_starts <- qtl_regions_chromosome_variants[[position_column_qtls]] - variant_window_left
+    qtl_region_chromosome_variants_windowed_starts[qtl_region_chromosome_variants_windowed_starts < 1] <- 1
+    qtl_chromosome_iranges <- IRanges(start = qtl_region_chromosome_variants_windowed_starts, end = qtl_regions_chromosome_variants[[position_column_qtls]] + variant_window_right)
     # find overlaps
     feature_chromosome_overlaps <- findOverlaps(openness_input_chromosome_iranges, qtl_chromosome_iranges)
     # extract overlapping ranges
@@ -308,6 +319,8 @@ option_list <- list(
               help="prepend to add to the chromsome column of the variant, something like 'chr' is common, leave parameter out for no prepend", metavar="character"), 
   make_option(c("-s", "--gene_chunk_size"), type="numeric", default=100, 
               help="the number of genes to process in a chunk [default: %default]", metavar="numeric"), 
+  make_option(c("-w", "--variant_window_size"), type="numeric", default=0, 
+              help="the window around the variant to use for overlaps (default is to only look at the variant position itself) [default: %default]", metavar="numeric"), 
   make_option(c("-r", "--remove_non_overlaps"), action="store_true", default=FALSE,
               help="remove QTL entries that show no overlap with DARs or CREs [default: %default]")
 )
@@ -326,18 +339,27 @@ position_column <- NULL
 add_chrom <- NULL
 gene_chunk_size <- NULL
 remove_non_overlaps <- NULL
+variant_window_size <- NULL
 
 # load debug settings if set to debug mode
 if (debug) {
-  qtl_in_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/sc-eqtlgen/output/L1/combined/monocyte/qtl_results_all_qval_allchroms_fdr005_significant.txt.gz'
-  qtl_out_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/sc-eqtlgen/output/L1/combined/monocyte/qtl_results_all_qval_allchroms_fdr005_significant_credar.txt.gz'
-  variant_column <- 'snp_id'
-  feature_column <- 'feature_id'
-  chromosome_column <- 'snp_chromosome'
-  position_column <- 'snp_position'
+  # qtl_in_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/sc-eqtlgen/output/L1/combined/monocyte/qtl_results_all_qval_allchroms_fdr005_significant.txt.gz'
+  # qtl_out_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/sc-eqtlgen/output/L1/combined/monocyte/qtl_results_all_qval_allchroms_fdr005_significant_credar.txt.gz'
+  qtl_in_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/eqtlgen_replications/cisonly_vs_transacting/qtl_tables/independent_variants_filtered_lbf2_mlog10p5_annotated_20250509_filtered-maxR2_0.9-noHla-noCrossmapping.txt'
+  qtl_out_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/eqtlgen_replications/cisonly_vs_transacting/qtl_tables/independent_variants_filtered_lbf2_mlog10p5_annotated_20250509_filtered-maxR2_0.9-noHla-noCrossmapping_credar.txt.gz'
+  # variant_column <- 'snp_id'
+  variant_column <- 'variant'
+  # feature_column <- 'feature_id'
+  feature_column <- 'gene_name'
+  # chromosome_column <- 'snp_chromosome'
+  chromosome_column <- 'chromosome'
+  # position_column <- 'snp_position'
+  position_column <- 'bp'
   add_chrom <- 'chr'
   gene_chunk_size <- 100
   remove_non_overlaps <- T
+  # variant_window_size <- 0
+  variant_window_size <- 1000
   # let user know we are in debug mode
   warning('running in debug mode! parameters supplied will have no effect!')
 } else {
@@ -364,7 +386,12 @@ if (debug) {
   add_chrom <- opt[['add_chrom']]
   gene_chunk_size <- opt[['gene_chunk_size']]
   remove_non_overlaps <- opt[['remove_non_overlaps']]
+  variant_window_size <- opt[['variant_window_size']]
 }
+
+# determine the left and right flank for the window around the variant
+left_window <- floor(variant_window_size / 2)
+right_window <- ceiling(variant_window_size / 2)
 
 # read the qtl data
 qtl_data <- fread(qtl_in_loc, header = T, sep = '\t')
@@ -416,14 +443,38 @@ while(chunk_start < length(qtl_genes)) {
   
   # overlap based on cell type openness
   for (cell_type in names(openness_table_per_celltype)) {
-    qtl_data_chunk <- qtl_merge_with_openness(qtl_data_chunk, openness_table_per_celltype[[cell_type]], overlapping_region_column = paste0('openness_region_', cell_type), overlapping_openness_column = paste0('openness_openness_', cell_type))
+    qtl_data_chunk <- qtl_merge_with_openness(
+      qtl_data_chunk, 
+      openness_table_per_celltype[[cell_type]], 
+      overlapping_region_column = paste0('openness_region_', cell_type), 
+      overlapping_openness_column = paste0('openness_openness_', cell_type), 
+      variant_window_left = left_window, 
+      variant_window_right = right_window, 
+      variant_column_qtls = variant_column, 
+      chromosome_column_qtls = chromosome_column, 
+      position_column_qtls = position_column
+    )
   }
   
   # overlap based on DAR
-  qtl_data_chunk <- qtl_merge_with_dars(qtl_data_chunk, dars)
+  qtl_data_chunk <- qtl_merge_with_dars(
+    qtl_data_chunk, dars, 
+    variant_window_left = left_window, 
+    variant_window_right = right_window, 
+    variant_column_qtls = variant_column, 
+    chromosome_column_qtls = chromosome_column, 
+    position_column_qtls = position_column
+  )
   
   # overlap based on scenic
-  qtl_data_chunk <- qtl_merge_with_scenic(qtl_data_chunk, scenic)
+  qtl_data_chunk <- qtl_merge_with_scenic(
+    qtl_data_chunk, 
+    scenic, 
+    variant_window_left = left_window, 
+    variant_window_right = right_window, variant_column_qtls = variant_column, 
+    chromosome_column_qtls = chromosome_column, 
+    position_column_qtls = position_column
+  )
   
   # if requested, remove the entries that do not show any overlap (to conserve memory and disk)
   if (remove_non_overlaps) {
