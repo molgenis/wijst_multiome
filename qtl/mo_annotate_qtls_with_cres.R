@@ -185,13 +185,14 @@ qtl_merge_with_scenic <- function(qtl_input, scenic_input, variant_column_qtls='
     # take the ones with a cre
     qtl_regions_chromosome_cre <- qtl_regions_chromosome[!is.na(qtl_regions_chromosome[['overlapping_cre']]), ]
     # now we need to add the eregulon for each of these cres
-    overlaps_with_scenic <- merge(qtl_regions_chromosome_cre, scenic_input[, c(..region_column_scenic, 'cre_tf', 'cre_gene')], by.x = 'overlapping_cre', by.y = region_column_scenic, all.x = T)
+    overlaps_with_scenic <- merge(qtl_regions_chromosome_cre, scenic_input[, c(..region_column_scenic, 'cre_tf', 'cre_gene')], by.x = 'overlapping_cre', by.y = region_column_scenic, all.x = T, allow.cartesian=TRUE)
     # also take the ones without a cre
     qtl_regions_chromosome_creless <- qtl_regions_chromosome[is.na(qtl_regions_chromosome[['overlapping_cre']]), ]
     # and put those together
     overlaps_with_scenic <- rbind(overlaps_with_scenic, qtl_regions_chromosome_creless, fill = T)
     # order the columns so the CRE stuff is at the back
-    overlaps_with_scenic <- overlaps_with_scenic[, c(setdiff(colnames(overlaps_with_scenic), c('overlapping_cre', 'cre_tf', 'cre_gene')), c('overlapping_cre', 'cre_tf', 'cre_gene'))]
+    column_order <- c(setdiff(colnames(overlaps_with_scenic), c('overlapping_cre', 'cre_tf', 'cre_gene')), 'overlapping_cre', 'cre_tf', 'cre_gene')
+    overlaps_with_scenic <- overlaps_with_scenic[, ..column_order]
     # put in list
     overlaps_per_chrom[[as.character(chrom)]] <- overlaps_with_scenic
   }
