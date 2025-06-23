@@ -3,7 +3,7 @@
 # Authors: Roy Oelen
 # Name: mo_annotate_overlapping_qtls_with_cres.R
 # Function: annotate QTL outputs with DAR or CRE outputs
-# Example: Rscript mo_annotate_overlapping_qtls_with_cres.R \
+# Example: Rscript ./mo_annotate_overlapping_qtls_with_cres.R \
 # --in /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl_caqtl_overlap/combined/L1/all/eqtl_caqtl_overlapping_variants.tsv.gz \
 # --out /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl_caqtl_overlap/combined/L1/all/eqtl_caqtl_overlapping_variants_credar.tsv.gz
 #
@@ -54,7 +54,7 @@ openness_append <- '.bed'
 # and the openness cell types
 openness_cell_types <- c('B', 'CD4T', 'CD8T', 'DC', 'monocyte', 'NK')
 # scenic columns to add
-scenic_columns_to_keep <- c('eRegulon_name', 'Gene_signature_name', 'Region_signature_name', 'Gene_signature_direction', 'Region_signature_direction')
+scenic_columns_to_keep <- c('eRegulon_name', 'Gene_signature_name', 'Region_signature_name', 'Gene_signature_direction', 'Region_signature_direction', 'rho_R2G')
 
 # make command line options
 option_list <- list(
@@ -62,9 +62,9 @@ option_list <- list(
               help="input QTL file to add information to", metavar="character"),
   make_option(c("-o", "--out"), type="character", default=NULL, 
               help="output QTL file to save", metavar="character"), 
-  make_option(c("-r", "--region_column"), type="character", default='snp_id', 
+  make_option(c("-r", "--region_column"), type="character", default='feature_caqtl', 
               help="column denoting the variant [default: %default]", metavar="character"),
-  make_option(c("-f", "--feature_column"), type="character", default='feature_id', 
+  make_option(c("-f", "--feature_column"), type="character", default='feature_eqtl', 
               help="column denoting the feature [default: %default]", metavar="character"), 
   make_option(c("-e", "--remove_non_overlaps"), action="store_true", default=FALSE,
               help="remove QTL entries that show no overlap with DARs or CREs [default: %default]")
@@ -156,6 +156,7 @@ qtl_data[['region_to_gene']] <- paste(qtl_data[[region_column]], qtl_data[[featu
 
 # subset scenic to the columns I think are important
 scenic <- scenic[, c('region_to_gene', ..scenic_columns_to_keep)]
+
 # merge onto the QTL data
 qtl_data <- merge(x = qtl_data, y = scenic, by = 'region_to_gene', all.x = T, all.y = F, allow.cartesian=TRUE)
 
