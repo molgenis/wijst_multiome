@@ -822,11 +822,11 @@ for (ct in intersect(names(eqtl_outputs_filtered), names(caqtl_outputs_filtered)
   # extract the eqtl
   caqtl_output_ct <- caqtl_outputs_filtered[[ct]]
   # subset to just the variant and feature
-  eqtl_output_ct <- eqtl_output_ct[, c('snp_id', 'feature_id')]
-  caqtl_output_ct <- caqtl_output_ct[, c('snp_id', 'feature_id')]
+  eqtl_output_ct <- eqtl_output_ct[, c('snp_id', 'feature_id', 'assessed_allele', 'beta', 'beta_se', 'p_value')]
+  caqtl_output_ct <- caqtl_output_ct[, c('snp_id', 'feature_id', 'assessed_allele', 'beta', 'beta_se', 'p_value')]
   # rename the columns
-  colnames(eqtl_output_ct) <- c('snp_id', 'feature_eqtl')
-  colnames(caqtl_output_ct) <- c('snp_id', 'feature_caqtl')
+  colnames(eqtl_output_ct) <- c('snp_id', 'feature_eqtl', 'aa_eqtl', 'beta_eqtl', 'se_eqtl', 'p_value_eqtl')
+  colnames(caqtl_output_ct) <- c('snp_id', 'feature_caqtl', 'aa_caqtl', 'beta_caqtl', 'se_caqtl', 'p_value_caqtl')
   # merge them
   qtl_output_ct_overlapping <- merge(caqtl_output_ct, eqtl_output_ct, on = 'snp_id')
   # put back into list
