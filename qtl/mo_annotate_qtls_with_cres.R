@@ -347,7 +347,7 @@ if (debug) {
   # qtl_in_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/sc-eqtlgen/output/L1/combined/monocyte/qtl_results_all_qval_allchroms_fdr005_significant.txt.gz'
   # qtl_out_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/sc-eqtlgen/output/L1/combined/monocyte/qtl_results_all_qval_allchroms_fdr005_significant_credar.txt.gz'
   qtl_in_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/eqtlgen_replications/cisonly_vs_transacting/qtl_tables/independent_variants_filtered_lbf2_mlog10p5_annotated_20250509_filtered-maxR2_0.9-noHla-noCrossmapping.txt'
-  qtl_out_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/eqtlgen_replications/cisonly_vs_transacting/qtl_tables/independent_variants_filtered_lbf2_mlog10p5_annotated_20250509_filtered-maxR2_0.9-noHla-noCrossmapping_credar.txt.gz'
+  qtl_out_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/eqtlgen_replications/cisonly_vs_transacting/qtl_tables/independent_variants_filtered_lbf2_mlog10p5_annotated_20250509_filtered-maxR2_0.9-noHla-noCrossmapping_credarnowindow.txt.gz'
   # variant_column <- 'snp_id'
   variant_column <- 'variant'
   # feature_column <- 'feature_id'
@@ -359,8 +359,8 @@ if (debug) {
   add_chrom <- 'chr'
   gene_chunk_size <- 100
   remove_non_overlaps <- T
-  # variant_window_size <- 0
-  variant_window_size <- 1000
+  variant_window_size <- 0
+  # variant_window_size <- 1000
   # let user know we are in debug mode
   warning('running in debug mode! parameters supplied will have no effect!')
 } else {
