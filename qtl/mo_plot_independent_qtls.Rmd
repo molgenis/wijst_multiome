@@ -275,7 +275,7 @@ split_strings_with_max_length <- function(strings, max_length=15) {
 #' @param gene_column which column to use as the gene identifier
 #' @returns a list with the output tables per cell type
 #' 
-get_output_per_celltype_limix <- function(qtl_output_loc, output_file='qtl_results_all_qval_allchroms_fdr005_significant_cs.tsv.gz', gene_column='feature_id', significance_column='feature_q_value', significance_cutoff=0.05, verbose=T) {
+get_output_per_celltype_limix <- function(qtl_output_loc, output_file='qtl_results_all_qval_allchroms_fdr005_significant_cs.tsv.gz', gene_column='feature_id', significance_column='feature_q_value', significance_cutoff=0.05, verbose=T, add_nominal_cutoff=T, nominal_p_value_column='p_value') {
   # get the folders in the directory, which should be the cell types
   cell_types <- list.dirs(qtl_output_loc, full.names = F, recursive = F)
   # we will store the results in a list for now
@@ -304,6 +304,13 @@ get_output_per_celltype_limix <- function(qtl_output_loc, output_file='qtl_resul
       if (verbose) {
         print(paste('variant+phenotype after filtering', nrow(cell_type_output)))
       }
+      # add nominal cutoff by first getting the top effects
+      cell_type_output_top <- cell_type_output[order(cell_type_output[[nominal_p_value_column]]), ]
+      cell_type_output_top <- cell_type_output_top[!duplicated(cell_type_output_top[[gene_column]]), ]
+      # get the highest still significant p value
+      max_sig_p <- max(cell_type_output_top[[nominal_p_value_column]])
+      # and add that to the output
+      cell_type_output[['nominal_p_value_cutoff']] <- max_sig_p
     }
     # add to the list
     egenes_per_celltype[[cell_type]] <- cell_type_output
@@ -796,7 +803,7 @@ for (ct in names(eqtl_outputs)) {
   # extract for that cell type
   eqtl_output_ct <- eqtl_outputs[[ct]]
   # filter on nominal threshold
-  #eqtl_output_ct <- eqtl_output_ct[eqtl_output_ct[['p_value']] < eqtl_output_ct[['pval_nominal_threshold_global']], ]
+  eqtl_output_ct <- eqtl_output_ct[eqtl_output_ct[['p_value']] <= eqtl_output_ct[['nominal_p_value_cutoff']], ]
   eqtl_output_ct[eqtl_output_ct[['empirical_feature_p_value']] < 0.05, ]
   # put back into the list
   eqtl_outputs_filtered[[ct]] <- eqtl_output_ct
@@ -808,7 +815,7 @@ for (ct in names(caqtl_outputs)) {
   # extract for that cell type
   caqtl_output_ct <- caqtl_outputs[[ct]]
   # filter on nominal threshold
-  # caqtl_output_ct <- caqtl_output_ct[eqtl_output_ct[['p_value']] < caqtl_output_ct[['pval_nominal_threshold_global']], ]
+  caqtl_output_ct <- caqtl_output_ct[caqtl_output_ct[['p_value']] <= caqtl_output_ct[['nominal_p_value_cutoff']], ]
   caqtl_output_ct[caqtl_output_ct[['empirical_feature_p_value']] < 0.05, ]
   # put back into the list
   caqtl_outputs_filtered[[ct]] <- caqtl_output_ct
