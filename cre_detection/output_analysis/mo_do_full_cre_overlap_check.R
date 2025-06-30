@@ -14,6 +14,8 @@ library(data.table)
 library(mdfiver)
 library(ggplot2)
 library(cowplot)
+library(UpSetR)
+library(roycols)
 
 
 ####################
@@ -119,6 +121,215 @@ plot_concondance <- function(dataset_to_compare, d1_effect_column='d1_zscore', d
 }
 
 
+get_color_coding_dict <- function() {
+  # medhigh
+  color_coding_dict <- list()
+  color_coding_dict[["B"]] <- "#71BC4B"
+  #color_coding_dict[['CD4_T_cells']] <- '#7FC97F'
+  color_coding_dict[['CD4_T_cells']] <- '#153057'
+  color_coding_dict[['CD4T']] <- '#153057'
+  #color_coding_dict[['CD8_T_cells']] <- '#BEAED4'
+  color_coding_dict[['CD8_T_cells']] <- '#009DDB'
+  color_coding_dict[['CD8T']] <- '#009DDB'
+  #color_coding_dict[['Dendritic_cells']] <- '#FDC086'
+  color_coding_dict[['Dendritic_cells']] <- '#965EC8'
+  color_coding_dict[['DC']] <- '#965EC8'
+  color_coding_dict[['Endothelial_cells']] <- '#FFFFB3'
+  color_coding_dict[['Fibroblasts']] <- '#386CB0'
+  color_coding_dict[['Glia_cells']] <- '#F0027F'
+  color_coding_dict[['Mast_cells']] <- '#BF5B17'
+  color_coding_dict[['Mature_absorptive_enterocytes']] <- '#A6CEE3'
+  color_coding_dict[['Mature_secretory_enterocytes']] <- '#1B9E77'
+  color_coding_dict[['Memory_B']] <- '#D95F02'
+  color_coding_dict[['Microfold_cell']] <- '#BEAED4'
+  #color_coding_dict[['Monocytes']] <- '#7570B3'
+  color_coding_dict[['Monocyte']] <- '#EDBA1B'
+  color_coding_dict[['Naive_B_cells']] <- '#FDC086'
+  color_coding_dict[['NK']] <- '#E64B50'
+  #color_coding_dict[['Plasma_cells']] <- '#E7298A'
+  color_coding_dict[['Plasma_cells']] <- '#DB8E00'
+  color_coding_dict[['Stem_cells']] <- '#66A61E'
+  color_coding_dict[['Stromal_cells']] <- '#8DD3C7'
+  #color_coding_dict[['T_others']] <- '#A6761D'
+  color_coding_dict[['T_others']] <- '#FF63B6'
+  color_coding_dict[['Transit_amplifying_cells']] <- '#FF7F00'
+  color_coding_dict[['disconcordant']] <- 'gray'
+  #color_coding_dict[['CD4+ T cells']] <- '#7FC97F'
+  color_coding_dict[['CD4+ T cells']] <- '#153057'
+  color_coding_dict[['CD4+ T']] <- '#153057'
+  #color_coding_dict[['CD8+ T cells']] <- '#BEAED4'
+  color_coding_dict[['CD8+ T cells']] <- '#009DDB'
+  color_coding_dict[['CD8+ T']] <- '#009DDB'
+  #color_coding_dict[['Dendritic cells']] <- '#FDC086'
+  color_coding_dict[['Dendritic cells']] <- '#965EC8'
+  color_coding_dict[['Endothelial cells']] <- '#FFFFB3'
+  color_coding_dict[['Endothelial\ncells']] <- '#FFFFB3'
+  color_coding_dict[['Fibroblasts']] <- '#386CB0'
+  color_coding_dict[['Glia cells']] <- '#F0027F'
+  color_coding_dict[['MAST cells']] <- '#BF5B17'
+  color_coding_dict[['Mature absorptive enterocytes']] <- '#A6CEE3'
+  color_coding_dict[['Mature\nabsorptive\nenterocytes']] <- '#A6CEE3'
+  color_coding_dict[['Mature secretory enterocytes']] <- '#1B9E77'
+  color_coding_dict[['Mature secretory\nenterocytes']] <- '#1B9E77'
+  color_coding_dict[['Memory B cells']] <- '#D95F02'
+  #color_coding_dict[['Monocytes']] <- '#7570B3'
+  color_coding_dict[['Microfold cells']] <- '#BEAED4'
+  color_coding_dict[['Monocytes']] <- '#EDBA1B'
+  color_coding_dict[['Naive B cells']] <- '#FDC086'
+  #color_coding_dict[['Plasma cells']] <- '#E7298A'
+  color_coding_dict[['Plasma cells']] <- '#DB8E00'
+  color_coding_dict[['Stem cells']] <- '#66A61E'
+  color_coding_dict[['Stromal cells']] <- '#8DD3C7'
+  #color_coding_dict[['other T cells']] <- '#A6761D'
+  color_coding_dict[['other T cells']] <- '#FF63B6'
+  color_coding_dict[['Transit amplifying cells']] <- '#FF7F00'
+  color_coding_dict[['Transit\namplifying cells']] <- '#FF7F00'
+  color_coding_dict[['disconcordant']] <- 'gray'
+  # up and down regulation will be added to, we need a whitening percentage
+  pct_whitening <- 40
+  # then we will check each cell type
+  for (cell_type in names(color_coding_dict)) {
+    # the up color is the same as the regular one
+    color_coding_dict[[paste(cell_type, 'up')]] <- color_coding_dict[[cell_type]]
+    # but the down one will have a more faded colour
+    color_coding_dict[[paste(cell_type, 'down')]] <- colorRampPalette(c(color_coding_dict[[cell_type]], "white"))(100)[pct_whitening]
+    # we'll do something similiar when we have multiple conditions
+    color_coding_dict[[paste(cell_type, 'combined')]] <- color_coding_dict[[cell_type]]
+    color_coding_dict[[paste(cell_type, 'UT')]] <- colorRampPalette(c(color_coding_dict[[cell_type]], "white"))(100)[pct_whitening]
+    color_coding_dict[[paste(cell_type, '24hCA')]] <- colorRampPalette(c(color_coding_dict[[cell_type]], "black"))(100)[pct_whitening]
+  }
+  # general
+  color_coding_dict[['AI']] <- 'darkblue'
+  color_coding_dict[['NI']] <- 'darkred'
+  color_coding_dict[['Actively Inflamed']] <- 'darkblue'
+  color_coding_dict[['Non-Inflamed']] <- 'darkred'
+  return(color_coding_dict)
+}
+
+
+#' Plot Sharing of  Genes per Cell Type
+#'
+#' This function plots the sharing of differentially genes across cell types using an UpSet plot. It allows the use of custom label and color dictionaries.
+#'
+#' @param genes_per_ct list with the genes for each cell type
+#' @param use_label_dict A logical value indicating whether to use a custom label dictionary for renaming cell types. Default is TRUE.
+#' @param use_color_dict A logical value indicating whether to use a custom color dictionary for cell types. Default is TRUE.
+#' @param n_intersects value describing how many intersections to plot, default is all
+#' @return An UpSet plot showing the sharing of DE genes across cell types.
+#'
+plot_sharing_per_celltype <- function(genes_per_ct, use_label_dict=T, use_color_dict=T, n_intersects=NA){
+  # get the total overlap
+  total_overlap <- fromList(genes_per_ct)
+  # count how many in each overlap
+  combination_to_overlap <- list()
+  apply(total_overlap, 1, function(x){
+    # get which ones have a number
+    positions_1 <- x > 0
+    # get which these are, and paste together
+    cols_1 <- paste(colnames(total_overlap)[positions_1], collapse = ',')
+    # add to list if does not exist
+    if (cols_1 %in% c(names(combination_to_overlap))) {
+      combination_to_overlap[[cols_1]] <<- combination_to_overlap[[cols_1]] + 1
+    }
+    else{
+      combination_to_overlap[[cols_1]] <<- 1
+    }
+  })
+  # make into an ordered df
+  combination_numbers <- data.frame('combination' = names(combination_to_overlap), 'nr' = as.vector(unlist(combination_to_overlap)))
+  combination_numbers <- combination_numbers[order(combination_numbers[['nr']], combination_numbers[['combination']], decreasing = T), ]
+  # get lowest number we have for the sets
+  intersect_size_smallest <- 0
+  if (is.na(n_intersects)) {
+    intersect_size_smallest <- min(combination_numbers[['nr']])
+  }
+  else {
+    intersect_size_smallest <- combination_numbers[n_intersects, 'nr']
+  }
+  # set queries and colours
+  queries <- list()
+  sets.bar.color <- 'black'
+  if(use_color_dict){
+    # create df to store the number of each set, so we know how to order
+    nrs_df <- NULL
+    # get the cell types we have
+    cell_types <- names(genes_per_ct)
+    # get colour codes for the cell types
+    cell_type_colours <- get_color_coding_dict()
+    # also get colours for the cell types we don't have colours for
+    cell_type_colours_missing <- roycols::get_color_list(setdiff(cell_types, names(cell_type_colours)))
+    # and merge them
+    cell_type_colours <- c(cell_type_colours, cell_type_colours_missing)
+    # add the colors for the cell types
+    i <- 1
+    for(cell_type in cell_types){
+      # check if there is a singleton for this cell type, so this celltype is 1, but the total of the row is also 1
+      n_singletons <- nrow(total_overlap[total_overlap[[cell_type]] == 1 & rowSums(total_overlap) == 1, ])
+      # if we have singletons, colour it
+      if (n_singletons > 0 & n_singletons >= intersect_size_smallest) {
+        # add for the singles in the intersection sizes
+        ct_list <- list(
+          query = intersects,
+          params = list(cell_type),
+          color = cell_type_colours[[cell_type]],
+          active = T)
+        queries[[i]] <- ct_list
+        i <- i + 1
+      }
+      # add for the DF to order the set sizes
+      numbers_row <- data.frame(ct=c(cell_type), nr=c(length(genes_per_ct[[cell_type]])), stringsAsFactors = F)
+      if(is.null(nrs_df)){
+        nrs_df <- numbers_row
+      }
+      else{
+        nrs_df <- rbind(nrs_df, numbers_row)
+      }
+    }
+    # get the order of the sets
+    ordered_cts <- nrs_df[order(nrs_df$nr, decreasing = T), 'ct']
+    # add the colors for the sets
+    sets.bar.color <- unlist(cell_type_colours[ordered_cts])
+    # make the plot
+    upset(total_overlap, order.by = 'freq', nsets = length(genes_per_ct), queries = queries, sets.bar.color=sets.bar.color, nintersects = n_intersects)
+  }
+  else {
+    upset(total_overlap, order.by = 'freq', nsets = length(genes_per_ct), nintersects = n_intersects)
+  }
+  
+  #return(DE_genes_per_ct)
+}
+
+create_confusion_matrix <- function(assignment_table, truth_column, prediction_column, truth_column_label=NULL, prediction_column_label=NULL, angle_labels=T, premade_table=F, freq_column='freq'){
+  confusion_table <- NULL
+  if (!premade_table) {
+    confusion_table <- create_confusion_table(assignment_table, truth_column, prediction_column)
+    # round the frequency off to a sensible cutoff
+    confusion_table$freq <- round(confusion_table$freq, digits=2)
+  }
+  else {
+    confusion_table <- data.frame(
+      'truth' = assignment_table[[truth_column]], 
+      'prediction' = assignment_table[[prediction_column]], 
+      'freq' = assignment_table[[freq_column]]
+    )
+  }
+
+  # turn into plot
+  p <- ggplot(data=confusion_table, aes(x=truth, y=prediction, fill=freq)) + geom_tile() + scale_fill_gradient(low='blue', high='red') + geom_text(aes(label=freq))
+  # some options
+  if(!is.null(truth_column_label)){
+    p <- p + xlab(truth_column_label)
+  }
+  if(!is.null(prediction_column_label)){
+    p <- p + ylab(prediction_column_label)
+  }
+  if (angle_labels) {
+    p <- p + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+  }
+  return(p)
+}
+
+
 ####################
 # Settings         #
 ####################
@@ -177,11 +388,45 @@ binomial_output <- binomial_output[order(abs(binomial_output[['meta_z']])), ]
 scenic_output <- scenic_output[order(scenic_output[['rho_R2G']]), ]
 qtl_overlap <- qtl_overlap[order(qtl_overlap[['z_eqtl']], qtl_overlap[['z_caqtl']]), ]
 
+# remove the entries that are more likely to be false positives
+scenic_output_unique <- scenic_output[scenic_output[['Gene_signature_direction']] %in% c('+/+', '-/+'), ]
+
 # get unique ones
 pseudobulk_output_unique <- pseudobulk_output[!duplicated(paste(pseudobulk_output[['snp_id']], pseudobulk_output[['feature_id']])), ]
 binomial_output_unique <- binomial_output[!duplicated(paste(binomial_output[['region']], binomial_output[['gene']])), ]
-scenic_output_unique <- scenic_output[!duplicated(paste(scenic_output[['Region']], scenic_output[['Gene']])), ]
+scenic_output_unique <- scenic_output_unique[!duplicated(paste(scenic_output_unique[['Region']], scenic_output_unique[['Gene']])), ]
+scenic_output_unique_unfiltered <- scenic_output[!duplicated(paste(scenic_output[['Region']], scenic_output[['Gene']])), ]
 qtl_overlap_unique <- qtl_overlap[!duplicated(paste(qtl_overlap[['feature_caqtl']], qtl_overlap[['feature_eqtl']])), ]
+
+# show how many we have in each set
+nrow(binomial_output_unique)
+# [1] 12710
+nrow(scenic_output_unique_unfiltered)
+# [1] 80440
+nrow(scenic_output_unique)
+# [1] 53796
+nrow(pseudobulk_output_unique)
+# [1] 121935
+nrow(qtl_overlap_unique)
+# [1] 7677
+
+# add region to gene column
+pseudobulk_output_unique[['r2g']] <- paste(pseudobulk_output_unique[['snp_id']], pseudobulk_output_unique[['feature_id']])
+binomial_output_unique[['r2g']] <- paste(binomial_output_unique[['region']], binomial_output_unique[['gene']])
+scenic_output_unique[['r2g']] <- paste(gsub(':', '-', scenic_output_unique[['Region']]), scenic_output_unique[['Gene']])
+scenic_output_unique_unfiltered[['r2g']] <- paste(gsub(':', '-', scenic_output_unique_unfiltered[['Region']]), scenic_output_unique_unfiltered[['Gene']])
+qtl_overlap_unique[['r2g']] <- paste(qtl_overlap_unique[['feature_caqtl']], qtl_overlap_unique[['feature_eqtl']])
+
+# plot these numbers
+plot_sharing_per_celltype(
+  list('pseudobulk' = pseudobulk_output_unique[['r2g']], 
+       'binomial' = binomial_output_unique[['r2g']], 
+       'scenic' = scenic_output_unique[['r2g']], 
+       'scenic unfiltered' = scenic_output_unique_unfiltered[['r2g']],
+       'qtl' = qtl_overlap_unique[['r2g']]), 
+  use_label_dict=F, use_color_dict=T
+)
+
 
 # get the percentage positive
 nrow(pseudobulk_output_unique[sign(pseudobulk_output_unique[['zscore']]) == 1, ]) / nrow(pseudobulk_output_unique)
@@ -189,16 +434,23 @@ nrow(pseudobulk_output_unique[sign(pseudobulk_output_unique[['zscore']]) == 1, ]
 nrow(binomial_output_unique[sign(binomial_output_unique[['meta_z']]) == 1, ]) / nrow(binomial_output_unique)
 # [1] 0.9983478
 nrow(scenic_output_unique[sign(scenic_output_unique[['rho_R2G']]) == 1, ]) / nrow(scenic_output_unique)
-# [1] 0.6687718
+# [1] 0.6687718 / 1
 nrow(qtl_overlap_unique[sign(qtl_overlap_unique[['sign']]) == 1, ]) / nrow(qtl_overlap_unique)
 # [1] 0.7630585
 
-# add region to gene column
-pseudobulk_output_unique[['r2g']] <- paste(pseudobulk_output_unique[['snp_id']], pseudobulk_output_unique[['feature_id']])
-binomial_output_unique[['r2g']] <- paste(binomial_output_unique[['region']], binomial_output_unique[['gene']])
-scenic_output_unique[['r2g']] <- paste(gsub(':', '-', scenic_output_unique[['Region']]), scenic_output_unique[['Gene']])
-qtl_overlap_unique[['r2g']] <- paste(qtl_overlap_unique[['feature_caqtl']], qtl_overlap_unique[['feature_eqtl']])
-
+# plot these numbers
+n_pos_tbl <- data.frame(
+  'method' = c('pseudobulk', 'binomial', 'scenic', 'QTL', 'pseudobulk', 'binomial', 'scenic', 'QTL'), 
+  'direction' = c('positive', 'positive', 'positive', 'positive', 'negative', 'negative', 'negative', 'negative'), 
+  'n' = c(0.8557264, 0.9983478, 0.6687718, 0.7630585, 1-0.8557264, 1-0.9983478, 1-0.6687718, 1-0.7630585)
+)
+ggplot(data = n_pos_tbl, mapping = aes(x = method, y = n, fill = direction)) + 
+  geom_bar(stat = 'identity', position = 'stack') +
+  xlab('CRE detection method') +
+  ylab('fraction') +
+  ggtitle('CRE method result directions') +
+  scale_fill_manual(values = list('positive' = 'darkblue', 'negative' = 'darkred')) + 
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
 
 # merge pseudobulk and binominal
 pseudobulk_vs_binomial <- merge(x = pseudobulk_output_unique, y = binomial_output_unique, by = 'r2g')
@@ -222,33 +474,42 @@ nrow(pseudobulk_vs_scenic[sign(pseudobulk_vs_scenic[['zscore']]) == sign(pseudob
 nrow(pseudobulk_vs_qtl[sign(pseudobulk_vs_qtl[['zscore']]) == sign(pseudobulk_vs_qtl[['sign']]), ]) / nrow(pseudobulk_vs_qtl)
 # [1] 0.9856528
 nrow(scenic_vs_binomial[sign(scenic_vs_binomial[['meta_z']]) == sign(scenic_vs_binomial[['rho_R2G']]), ]) / nrow(scenic_vs_binomial)
-# [1] 0.8156997
+# [1] 0.8156997 / 1
 nrow(scenic_vs_qtl[sign(scenic_vs_qtl[['sign']]) == sign(scenic_vs_qtl[['rho_R2G']]), ]) / nrow(scenic_vs_qtl)
-# [1] 0.7747748
+# [1] 0.7747748 / 0.8636364
 nrow(binomial_vs_qtl[sign(binomial_vs_qtl[['meta_z']]) == sign(binomial_vs_qtl[['sign']]), ]) / nrow(binomial_vs_qtl)
 # [1] 0.7746358
+
+# in a pairwise table
+pairwise_correlation_table <- data.frame(
+  'method1' = c('pseudobulk', 'pseudobulk', 'pseudobulk', 'pseudobulk', 
+                'scenic', 'scenic', 'scenic', 'scenic', 
+                'binomial', 'binomial', 'binomial', 'binomial',
+                'QTL', 'QTL', 'QTL', 'QTL'), 
+  'method2' = c('pseudobulk', 'scenic', 'binomial', 'QTL', 
+                'pseudobulk', 'scenic', 'binomial', 'QTL', 
+                'pseudobulk', 'scenic', 'binomial', 'QTL', 
+                'pseudobulk', 'scenic', 'binomial', 'QTL'), 
+  'correlation' = c(1, 0.85, 0.82, 0.99, 
+                    0.85, 1, 0.81, 0.77, 
+                    0.95, 0.81, 1, 0.77, 
+                    0.99, 0.77, 0.77, 1)
+)
+create_confusion_matrix(pairwise_correlation_table, truth_column = 'method1', prediction_column = 'method2', freq_column = 'correlation', premade_table = T, truth_column_label = 'method 1', prediction_column_label = 'method 2') +
+  ggtitle('correlations of effect sizes\nin CRE detection methods')
 
 nrow(pseudobulk_vs_binomial)
 # [1] 960
 nrow(pseudobulk_vs_scenic)
-# [1] 1755
+# [1] 1755 / 1509
 nrow(pseudobulk_vs_qtl)
 # [1] 1394
 nrow(scenic_vs_binomial)
-# [1] 586
+# [1] 586 / 478
 nrow(scenic_vs_qtl)
-# [1] 666
+# [1] 666 / 572
 nrow(binomial_vs_qtl)
 # [1] 3501
-
-nrow(binomial_output_unique)
-# [1] 12710
-nrow(scenic_output_unique)
-# [1] 80440
-nrow(pseudobulk_output_unique)
-# [1] 121935
-nrow(qtl_overlap_unique)
-# [1] 7677
 
 # plot them as well
 plot_grid(
