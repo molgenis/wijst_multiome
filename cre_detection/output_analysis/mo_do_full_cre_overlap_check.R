@@ -330,6 +330,43 @@ create_confusion_matrix <- function(assignment_table, truth_column, prediction_c
 }
 
 
+get_closest_flanks <- function(position_table, left_flank_column1, right_flank_column1, left_flank_column2, right_flank_column2) {
+  # get the distance between left flanks
+  dist_left_flank1_to_left_flank2 <- position_table[[left_flank_column1]] - position_table[[left_flank_column2]]
+  # distance between the right flanks
+  dist_right_flank1_to_right_flank2 <- position_table[[right_flank_column1]] - position_table[[right_flank_column2]]
+  # distance between left flank 1 and right flank 2
+  dist_left_flank1_to_right_flank2 <- position_table[[left_flank_column1]] - position_table[[right_flank_column2]]
+  # distance between right flank 1 and left flank 2
+  dist_right_flank1_to_left_flank2 <- position_table[[right_flank_column1]] - position_table[[left_flank_column2]]
+  # put in a table for convenience sake
+  distances_tbl <- data.table(
+    'lf1_to_lf2' = dist_left_flank1_to_left_flank2, 
+    'rf1_to_rf2' = dist_right_flank1_to_right_flank2, 
+    'lf1_to_rf2' = dist_left_flank1_to_right_flank2, 
+    'rf1_to_lf2' = dist_right_flank1_to_left_flank2
+  )
+  # add the minimum absolute distance
+  distances_tbl[['min_dist']] <- apply(distances_tbl, 1, function(x) {
+    return(min(abs(x)))
+  })
+  # but set this to zero if any of the flanks end in the bodies
+  #              -----
+  #                 ++++
+  distances_tbl[(distances_tbl[['lf1_to_lf2']] < 0 & distances_tbl[['lf1_to_rf2']] > 0) |
+  #                   ----
+  #                 ++++
+                  (distances_tbl[['rf1_to_lf2']] > 0 & distances_tbl[['lf1_to_rf2']] < 0) |
+  #                   ----
+  #                 +++++++++
+                  (distances_tbl[['lf1_to_lf2']] > 0 & distances_tbl[['rf1_to_rf2']] < 0) |
+  #                 ---------
+  #                   ++++
+                  (distances_tbl[['lf1_to_lf2']] < 0 & distances_tbl[['rf1_to_rf2']] > 0)
+                  , 'min_dist'] <- 0
+  return(distances_tbl)
+}
+
 ####################
 # Settings         #
 ####################
@@ -368,6 +405,30 @@ pseudobulk_output_24hca[['condition']] <- '24hCA'
 # merge them
 pseudobulk_output <- do.call('rbind', list(pseudobulk_output_ut, pseudobulk_output_24hca))
 
+# read the cpeaks annotation
+cpeaks_anno_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/cPeaks/cPeaks_info.tsv'
+cpeaks_anno <- fread(cpeaks_anno_loc, header = T, sep = ' ')
+# add the Signac style name
+cpeaks_anno[['signac_hg38']] <- paste(cpeaks_anno[['chr_hg38']], cpeaks_anno[['start_hg38']], cpeaks_anno[['end_hg38']], sep = '-')
+# as well as the SCENIC+ style name
+cpeaks_anno[['scenic_hg38']] <- paste0(cpeaks_anno[['chr_hg38']], ':', cpeaks_anno[['start_hg38']], '-', cpeaks_anno[['end_hg38']])
+
+# read the location of the genes
+gene_anno_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/annotations/cellranger_arc_gene_annotations.tsv.gz'
+gene_anno <- fread(gene_anno_loc, header = F, sep = '\t')
+# add columns
+colnames(gene_anno) <- c('ens', 'gs', 'modality', 'chrom', 'start', 'end')
+
+# add the location to the pseudobulk info
+pseudobulk_output <- cbind(pseudobulk_output, cpeaks_anno[match(pseudobulk_output[['snp_id']], cpeaks_anno[['signac_hg38']]), c('chr_hg38', 'start_hg38', 'end_hg38')])
+
+# get the distances
+pseudobulk_distances <- get_closest_flanks(pseudobulk_output, 'start_hg38', 'end_hg38', 'feature_start', 'feature_end')
+# add those distances
+pseudobulk_output[['distance']] <- pseudobulk_distances[['min_dist']]
+# and category
+pseudobulk_output[['category']] <- 'pseudobulk'
+
 # read the binomial results
 binomial_output_list <- read_binomial_output_per_celltype(binomial_output_loc)
 # merge them
@@ -380,6 +441,28 @@ qtl_overlap[['z_caqtl']] <- qtl_overlap[['beta_caqtl']] / qtl_overlap[['se_caqtl
 qtl_overlap[['z_eqtl']] <- qtl_overlap[['beta_eqtl']] / qtl_overlap[['se_eqtl']]
 # get the sign overlap
 qtl_overlap[['sign']] <- sign(qtl_overlap[['z_caqtl']]) * sign(qtl_overlap[['z_eqtl']])
+
+# add the location of the caQTL here as well
+qtl_overlap <- cbind(qtl_overlap, cpeaks_anno[match(qtl_overlap[['feature_caqtl']], cpeaks_anno[['signac_hg38']]), c('chr_hg38', 'start_hg38', 'end_hg38')])
+# and the locations of the genes
+qtl_overlap <- cbind(qtl_overlap, gene_anno[match(qtl_overlap[['feature_eqtl']], gene_anno[['gs']]), c('chrom', 'start', 'end')])
+# get the distances
+qtl_distances <- get_closest_flanks(qtl_overlap, 'start_hg38', 'end_hg38', 'start', 'end')
+# add that to the original table
+qtl_overlap[['distance']] <- qtl_distances[['min_dist']]
+# and category
+qtl_overlap[['category']] <- 'qtl_overlap'
+
+# add location for the binomial table
+binomial_output <- cbind(binomial_output, cpeaks_anno[match(binomial_output[['region']], cpeaks_anno[['signac_hg38']]), c('chr_hg38', 'start_hg38', 'end_hg38')])
+# and the locations of the genes
+binomial_output <- cbind(binomial_output, gene_anno[match(binomial_output[['gene']], gene_anno[['gs']]), c('chrom', 'start', 'end')])
+# get the distances
+binomial_distances <- get_closest_flanks(binomial_output, 'start_hg38', 'end_hg38', 'start', 'end')
+# add that to the original table
+binomial_output[['distance']] <- binomial_distances[['min_dist']]
+# and category
+binomial_output[['category']] <- 'binomial'
 
 
 # sort all of them by the Z
@@ -409,6 +492,22 @@ nrow(pseudobulk_output_unique)
 # [1] 121935
 nrow(qtl_overlap_unique)
 # [1] 7677
+
+# make the unique region-gene numbers into a table
+n_effects_region_gene <- data.frame(
+  'category' = c('binomial', 'SCENIC+ filtered', 'SCENIC+ unfiltered', 'pseudobulk', 'QTL overlap'), 
+  'neffects' = c(nrow(binomial_output_unique), nrow(scenic_output_unique), nrow(scenic_output_unique_unfiltered), nrow(pseudobulk_output_unique), nrow(qtl_overlap_unique))
+)
+# and make into a plot
+ggplot(data = n_effects_region_gene, mapping = aes(x = category, y = neffects, fill = category)) + 
+  geom_bar(stat = 'identity') +
+  xlab('CRE detection method') +
+  ylab('Number of region-gene pairs') +
+  ggtitle('Number of detected CRE-gene pairs across methods') +
+  scale_fill_manual(values = list('binomial' = '#BEAED4', 'pseudobulk' = '#7FC97F', 'QTL overlap' = '#386CB0', 'SCENIC+ unfiltered' = '#FFFF99', 'SCENIC+ filtered' = '#FDC086')) + 
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+  theme(legend.position="none")
+
 
 # add region to gene column
 pseudobulk_output_unique[['r2g']] <- paste(pseudobulk_output_unique[['snp_id']], pseudobulk_output_unique[['feature_id']])
@@ -452,6 +551,27 @@ ggplot(data = n_pos_tbl, mapping = aes(x = method, y = n, fill = direction)) +
   scale_fill_manual(values = list('positive' = 'darkblue', 'negative' = 'darkred')) + 
   theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
 
+# show the distances in a density plot
+p_region_direction_distances <- ggplot(
+  data = rbind(
+    pseudobulk_output_unique[, c('distance', 'category'), ], 
+    binomial_output_unique[, c('distance', 'category'), ], 
+    qtl_overlap_unique[, c('distance', 'category'), ]), 
+  mapping = aes(
+    x = distance, 
+    fill = category
+  )
+) + 
+  geom_density(alpha = 0.5) +
+  xlab('Distance between region and gene') + 
+  ylab('Density') + 
+  ggtitle('Distance between region and gene\nacross different methods') + 
+  scale_fill_manual(values = list('binomial' = '#BEAED4', 'pseudobulk' = '#7FC97F', 'qtl_overlap' = '#386CB0')) + 
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+# show plot
+p_region_direction_distances
+
+
 # merge pseudobulk and binominal
 pseudobulk_vs_binomial <- merge(x = pseudobulk_output_unique, y = binomial_output_unique, by = 'r2g')
 # check pseudobulk and scenic
@@ -490,13 +610,13 @@ pairwise_correlation_table <- data.frame(
                 'pseudobulk', 'scenic', 'binomial', 'QTL', 
                 'pseudobulk', 'scenic', 'binomial', 'QTL', 
                 'pseudobulk', 'scenic', 'binomial', 'QTL'), 
-  'correlation' = c(1, 0.85, 0.82, 0.99, 
+  'correlation' = c(1, 0.85, 0.95, 0.99, 
                     0.85, 1, 0.81, 0.77, 
                     0.95, 0.81, 1, 0.77, 
                     0.99, 0.77, 0.77, 1)
 )
 create_confusion_matrix(pairwise_correlation_table, truth_column = 'method1', prediction_column = 'method2', freq_column = 'correlation', premade_table = T, truth_column_label = 'method 1', prediction_column_label = 'method 2') +
-  ggtitle('correlations of effect sizes\nin CRE detection methods')
+  ggtitle('concordance of effect sizes\nin CRE detection methods')
 
 nrow(pseudobulk_vs_binomial)
 # [1] 960
@@ -510,6 +630,26 @@ nrow(scenic_vs_qtl)
 # [1] 666 / 572
 nrow(binomial_vs_qtl)
 # [1] 3501
+
+# make overlap into a table
+pairwise_overlap_table <- data.frame(
+  'method1' = c('pseudobulk', 'pseudobulk', 'pseudobulk', 'pseudobulk', 
+                'scenic', 'scenic', 'scenic', 'scenic', 
+                'binomial', 'binomial', 'binomial', 'binomial',
+                'QTL', 'QTL', 'QTL', 'QTL'), 
+  'method2' = c('pseudobulk', 'scenic', 'binomial', 'QTL', 
+                'pseudobulk', 'scenic', 'binomial', 'QTL', 
+                'pseudobulk', 'scenic', 'binomial', 'QTL', 
+                'pseudobulk', 'scenic', 'binomial', 'QTL'), 
+  'overlapping' = c(nrow(pseudobulk_output_unique), nrow(pseudobulk_vs_scenic), nrow(pseudobulk_vs_binomial), nrow(pseudobulk_vs_qtl), 
+                    nrow(pseudobulk_vs_scenic), nrow(scenic_output_unique), nrow(scenic_vs_binomial), nrow(scenic_vs_qtl),  
+                    nrow(pseudobulk_vs_binomial), nrow(scenic_vs_binomial), nrow(binomial_output_unique), nrow(binomial_vs_qtl), 
+                    nrow(pseudobulk_vs_qtl), nrow(scenic_vs_qtl), nrow(binomial_vs_qtl), nrow(qtl_overlap_unique))
+)
+# make into confusion matrix
+create_confusion_matrix(pairwise_overlap_table, truth_column = 'method1', prediction_column = 'method2', freq_column = 'overlapping', premade_table = T, truth_column_label = 'method 1', prediction_column_label = 'method 2') +
+  ggtitle('Overlapping region-gene pairs\nin CRE detection methods')
+
 
 # plot them as well
 plot_grid(
