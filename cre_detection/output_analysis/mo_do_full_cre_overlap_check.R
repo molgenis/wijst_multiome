@@ -16,14 +16,77 @@ library(ggplot2)
 library(cowplot)
 library(UpSetR)
 library(roycols)
+library(qvalue)
 
 
 ####################
 # Functions        #
 ####################
 
+#' Calculate Nominal Thresholds
+#'
+#' This function calculates nominal thresholds for p-values based on a given false discovery rate (FDR).
+#'
+#' @param res_df A data frame containing the results with p-values and other relevant columns.
+#' @param fdr A numeric value specifying the false discovery rate threshold. Default is 0.05.
+#' @param pval_col A character string specifying the name of the column with p-values. Default is 'p_value'.
+#' @param nominal_threshold_column A character string specifying the name of the column to store the nominal thresholds. Default is 'pval_nominal_threshold'.
+#' @param cutoff_column A character string specifying the name of the column with feature q-values. Default is 'feature_q_value'.
+#' @param alpha_column A character string specifying the name of the column with alpha parameters for the beta distribution. Default is 'alpha_param'.
+#' @param beta_column A character string specifying the name of the column with beta parameters for the beta distribution. Default is 'beta_param'.
+#'
+#' @return A data frame with an additional column for nominal thresholds.
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#'   res_df <- data.frame(
+#'     p_value = runif(100),
+#'     feature_q_value = runif(100),
+#'     alpha_param = rep(1, 100),
+#'     beta_param = rep(1, 100)
+#'   )
+#'   calculate_nominal_thresholds(res_df)
+#' }
+calculate_nominal_thresholds <- function(res_df, fdr=0.05, pval_col='p_value', nominal_threshold_column='pval_nominal_threshold', cutoff_column='feature_q_value', alpha_column='alpha_param', beta_column='beta_param') {
+  # get the lowerbound p values, so the ones that are smaller than the FDR
+  indices_lb <- res_df[[cutoff_column]] < fdr
+  lb <- as.vector(res_df[indices_lb, ][[pval_col]])
+  # put then in ascending order
+  lb <- lb[order(lb)]
+  # get the upperbound p values, so the ones that are bigger than the FDR
+  indices_ub <- res_df[[cutoff_column]] > fdr
+  ub <- as.vector(res_df[indices_ub, ][[pval_col]])
+  # and order them
+  ub <- ub[order(ub)]
+  
+  # if we have any significant effects, we can get a cutoff
+  if (length(lb) > 0) {
+    # get the highest (p) significant value
+    highest_in_lb <- tail(lb, 1)
+    # if there are any non significant effects
+    if (length(ub) > 0) {
+      # get the lowest (p) non-significant value
+      lowest_in_ub <- head(ub, 1)
+      # and calculate the threshold
+      pthreshold <- (highest_in_lb + lowest_in_ub) / 2
+    } else {
+      # otherwise the highest effect will just be the cutoff
+      pthreshold <- highest_in_lb
+    }
+    # ge the threshold, based on the shapes of the beta distribution and the significance threshold
+    res_df[[nominal_threshold_column]] <- stats::qbeta(pthreshold, as.vector(res_df[[alpha_column]]), as.vector(res_df[[beta_column]]))
+  }
+  else {
+    # otherwise it would have to be zero
+    res_df[[nominal_threshold_column]] <- 0
+  }
+  return(res_df)
+}
 
-read_pseudobulk_cre_output_per_celltype <- function(pseudobulk_output_folder, cell_types=NULL, filename_output='qtl_results_all.txt.gz', significance_column='empirical_feature_p_value', significance_cutoff=0.05) {
+
+
+read_pseudobulk_cre_output_per_celltype <- function(pseudobulk_output_folder, cell_types=NULL, filename_output='qtl_results_all.txt.gz', significance_column='empirical_feature_p_value', significance_cutoff=0.05, add_mtc=T, mtc_column='empirical_feature_p_value', feature_mtc_column='feature_id', mtc_column_to_add='feature_q_value', add_global_nominal_threshold=F, add_local_nominal_threshold=F, global_nominal_threshold_column_to_add='pval_nominal_threshold_global', local_nominal_threshold_column_to_add='pval_nominal_threshold_local', alpha_column='alpha_param', beta_column='beta_param', nominal_p_column='p_value', filter_alpha=T) {
   # list all the files in the directory
   cell_type_folders <- list.dirs(pseudobulk_output_folder, full.names = F, recursive = F)
   # intersect the cell type folders with the cell types we are interested in
@@ -38,6 +101,50 @@ read_pseudobulk_cre_output_per_celltype <- function(pseudobulk_output_folder, ce
     cell_type_output_loc <- paste(pseudobulk_output_folder, cell_type, filename_output, sep = '/')
     # read this file
     cell_type_output <- fread(cell_type_output_loc, header = T, sep = '\t')
+    # filter on alpha if requested
+    if (filter_alpha) {
+      cell_type_output <- cell_type_output[!(cell_type_output[[alpha_column]] > 5 | cell_type_output[[alpha_column]] < .2), ]
+    }
+    
+    # get the features and the emperical p value
+    if (add_mtc) {
+      # subset to what we need
+      cell_type_output_features <- NULL
+      # which is a bit if we care about the nominal threshold
+      if (add_global_nominal_threshold) {
+        cell_type_output_features <- cell_type_output[, c(..feature_mtc_column, ..mtc_column, ..nominal_p_column, ..alpha_column, ..beta_column), with = F]
+      }
+      # even less if we don't try to get the nominal threshold as well
+      else {
+        cell_type_output_features <- cell_type_output[, c(..feature_mtc_column, ..mtc_column), with = F]
+      }
+      # remove the wherever we dont have our significance
+      cell_type_output_features <- cell_type_output_features[!is.na(cell_type_output_features[[significance_column]]) & cell_type_output_features[[significance_column]] >= 0, ]
+      # order by significance
+      cell_type_output_features <- cell_type_output_features[order(cell_type_output_features[[mtc_column]]), ]
+      # keep only the first entry
+      cell_type_output_features[!duplicated(cell_type_output_features[[feature_mtc_column]]), ]
+      # set the values that are larger than 1, to be 1, problem with precision
+      cell_type_output_features[cell_type_output_features[[mtc_column]] > 1, mtc_column] <- 1
+      # add multiple testing correction
+      cell_type_output_features[['qvalue']] <- qvalue(cell_type_output_features[[mtc_column]])$qvalues
+      # now add back to the original table
+      cell_type_output[[mtc_column_to_add]] <- cell_type_output_features[match(cell_type_output[[feature_mtc_column]], cell_type_output_features[[feature_mtc_column]]), 'qvalue'][['qvalue']]
+      # based on this MTC column, we can now also add a cuttoff
+      if (add_local_nominal_threshold) {
+        cell_type_output_local_threshold <- calculate_nominal_thresholds(cell_type_output_features, fdr=significance_cutoff, pval_col=nominal_p_column, nominal_threshold_column='nomthres', cutoff_column = 'qvalue', alpha_column = alpha_column, beta_column = beta_column)
+        # now add the nominal threshold to the full table
+        cell_type_output[[local_nominal_threshold_column_to_add]] <- cell_type_output_local_threshold[match(cell_type_output[[feature_mtc_column]], cell_type_output_local_threshold[[feature_mtc_column]]), 'nomthres'][['nomthres']]
+      }
+      if(add_global_nominal_threshold) {
+        # filter the output to significant MTC hits
+        cell_type_output_features_significant <- cell_type_output_features[cell_type_output_features[['qvalue']] < significance_cutoff, ]
+        # and get the maximum significant nominal value
+        global_p_cutoff <- max(cell_type_output_features_significant[[nominal_p_column]])
+        # add that to the table
+        cell_type_output[[global_nominal_threshold_column_to_add]] <- global_p_cutoff
+      }
+    }
     # filter the file if requested
     if (!is.null(significance_column)) {
       cell_type_output <- cell_type_output[
@@ -55,7 +162,7 @@ read_pseudobulk_cre_output_per_celltype <- function(pseudobulk_output_folder, ce
 
 read_binomial_output_per_celltype <- function(binomial_output_folder, cell_types=NULL, filename_output='meta_result.tsv.gz', significance_column='meta_q', significance_cutoff=0.05) {
   # just use the pseudobulk function
-  output_per_celltype <- read_pseudobulk_cre_output_per_celltype(binomial_output_folder, cell_types = cell_types, filename_output = filename_output, significance_column = significance_column, significance_cutoff = significance_cutoff)
+  output_per_celltype <- read_pseudobulk_cre_output_per_celltype(binomial_output_folder, cell_types = cell_types, filename_output = filename_output, significance_column = significance_column, significance_cutoff = significance_cutoff, add_mtc = F, add_global_nominal_threshold = F, add_local_nominal_threshold = F, filter_alpha = F)
   return(output_per_celltype)
 }
 
@@ -367,6 +474,7 @@ get_closest_flanks <- function(position_table, left_flank_column1, right_flank_c
   return(distances_tbl)
 }
 
+
 ####################
 # Settings         #
 ####################
@@ -388,22 +496,28 @@ pseudobulk_output_folder <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/o
 # location of the binomial method
 binomial_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/cre_eqtl/eqtl_caqtl_overlap/combined/betas_ps/'
 
-# read the scenic output
-scenic_output <- fread(scenic_output_loc, header = T, sep = '\t')
-# read the qtl overlap
-qtl_overlap <- fread(qtl_overlap_loc, header = T, sep = '\t')
-
 # read the pseudobulk outputs
-pseudobulk_output_ut_list <- read_pseudobulk_cre_output_per_celltype(paste(pseudobulk_output_folder, 'UT', sep = '/'))
-pseudobulk_output_24hca_list <- read_pseudobulk_cre_output_per_celltype(paste(pseudobulk_output_folder, '24hCA', sep = '/'))
+pseudobulk_output_ut_list <- read_pseudobulk_cre_output_per_celltype(paste(pseudobulk_output_folder, 'UT', sep = '/'), add_mtc = T, filter_alpha = T, add_global_nominal_threshold = T, add_local_nominal_threshold = T)
+pseudobulk_output_24hca_list <- read_pseudobulk_cre_output_per_celltype(paste(pseudobulk_output_folder, '24hCA', sep = '/'), add_mtc = T, filter_alpha = T, add_global_nominal_threshold = T, add_local_nominal_threshold = T)
 # merge the cell types
 pseudobulk_output_ut <- do.call('rbind', pseudobulk_output_ut_list)
 pseudobulk_output_24hca <- do.call('rbind', pseudobulk_output_24hca_list)
 # add the condition
 pseudobulk_output_ut[['condition']] <- 'UT'
 pseudobulk_output_24hca[['condition']] <- '24hCA'
+# add z score
+pseudobulk_output_ut[['zscore']] <- pseudobulk_output_ut[['beta']] / pseudobulk_output_ut[['beta_se']]
+pseudobulk_output_24hca[['zscore']] <- pseudobulk_output_24hca[['beta']] / pseudobulk_output_24hca[['beta_se']]
+# add a correlation based on the Z score, taking sample size and removing 2 + 10 PCs to get the degrees of freedom
+pseudobulk_output_ut[['r']] <- pseudobulk_output_ut[['zscore']] / sqrt(pseudobulk_output_ut[['zscore']]^2 + (pseudobulk_output_ut[['n_samples']][1] - 12))
+pseudobulk_output_24hca[['r']] <- pseudobulk_output_24hca[['zscore']] / sqrt(pseudobulk_output_24hca[['zscore']]^2 + (pseudobulk_output_24hca[['n_samples']][1] - 12))
 # merge them
 pseudobulk_output <- do.call('rbind', list(pseudobulk_output_ut, pseudobulk_output_24hca))
+
+# read the scenic output
+scenic_output <- fread(scenic_output_loc, header = T, sep = '\t')
+# read the qtl overlap
+qtl_overlap <- fread(qtl_overlap_loc, header = T, sep = '\t')
 
 # read the cpeaks annotation
 cpeaks_anno_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/cPeaks/cPeaks_info.tsv'
@@ -433,9 +547,9 @@ pseudobulk_output[['category']] <- 'pseudobulk'
 binomial_output_list <- read_binomial_output_per_celltype(binomial_output_loc)
 # merge them
 binomial_output <- do.call('rbind', binomial_output_list)
+# add a correlation based on the Z score, taking sample size and removing 2 + 10 PCs to get the degrees of freedom
+binomial_output[['r']] <- binomial_output[['meta_z']] / sqrt(binomial_output[['meta_z']]^2 + (binomial_output[['n_sample']][1] - 2))
 
-# add the Z to the pseudobulk analysis
-pseudobulk_output[['zscore']] <- pseudobulk_output[['beta']] / pseudobulk_output[['beta_se']]
 # and the qtl overlap
 qtl_overlap[['z_caqtl']] <- qtl_overlap[['beta_caqtl']] / qtl_overlap[['se_caqtl']]
 qtl_overlap[['z_eqtl']] <- qtl_overlap[['beta_eqtl']] / qtl_overlap[['se_eqtl']]
@@ -464,21 +578,66 @@ binomial_output[['distance']] <- binomial_distances[['min_dist']]
 # and category
 binomial_output[['category']] <- 'binomial'
 
+# add location for the binomial table
+scenic_output <- cbind(scenic_output, cpeaks_anno[match(scenic_output[['Region']], cpeaks_anno[['scenic_hg38']]), c('chr_hg38', 'start_hg38', 'end_hg38')])
+# and the locations of the genes
+scenic_output <- cbind(scenic_output, gene_anno[match(scenic_output[['Gene']], gene_anno[['gs']]), c('chrom', 'start', 'end')])
+# get the distances again
+scenic_distances <- get_closest_flanks(scenic_output, 'start_hg38', 'end_hg38', 'start', 'end')
+# add that to the original table
+scenic_output[['distance']] <- scenic_distances[['min_dist']]
+# and category
+scenic_output[['category']] <- 'scenic'
+
+
+# add region to gene column
+pseudobulk_output[['r2g']] <- paste(pseudobulk_output[['snp_id']], pseudobulk_output[['feature_id']])
+binomial_output[['r2g']] <- paste(binomial_output[['region']], binomial_output[['gene']])
+scenic_output[['r2g']] <- paste(gsub(':', '-', scenic_output[['Region']]), scenic_output[['Gene']])
+qtl_overlap[['r2g']] <- paste(qtl_overlap[['feature_caqtl']], qtl_overlap[['feature_eqtl']])
 
 # sort all of them by the Z
-pseudobulk_output <- pseudobulk_output[order(abs(pseudobulk_output[['zscore']])), ]
-binomial_output <- binomial_output[order(abs(binomial_output[['meta_z']])), ]
-scenic_output <- scenic_output[order(scenic_output[['rho_R2G']]), ]
-qtl_overlap <- qtl_overlap[order(qtl_overlap[['z_eqtl']], qtl_overlap[['z_caqtl']]), ]
+pseudobulk_output <- pseudobulk_output[order(abs(pseudobulk_output[['zscore']]), decreasing = T), ]
+binomial_output <- binomial_output[order(abs(binomial_output[['meta_z']]), decreasing = T), ]
+scenic_output <- scenic_output[order(abs(scenic_output[['rho_R2G']]), decreasing = T), ]
+qtl_overlap <- qtl_overlap[order(abs(qtl_overlap[['z_eqtl']]), abs(qtl_overlap[['z_caqtl']]), decreasing = T), ]
+
+# filter on theshold
+pseudobulk_output_unfiltered <- pseudobulk_output
+# check significance threshold
+pseudobulk_output <- pseudobulk_output[pseudobulk_output[['p_value']] < pseudobulk_output[['pval_nominal_threshold_global']], ]
+# check minimal correlation
+pseudobulk_output <- pseudobulk_output[abs(pseudobulk_output[['r']]) >= .25 , ]
+# check that the region and gene do not overlap
+pseudobulk_output <- pseudobulk_output[pseudobulk_output[['distance']] > 0 , ]
+
 
 # remove the entries that are more likely to be false positives
-scenic_output_unique <- scenic_output[scenic_output[['Gene_signature_direction']] %in% c('+/+', '-/+'), ]
+scenic_output_unfiltered <- scenic_output
+scenic_output <- scenic_output_unfiltered[scenic_output_unfiltered[['Gene_signature_direction']] %in% c('+/+', '-/+'), ]
+# and region-gene overlaps
+scenic_output <- scenic_output[scenic_output[['distance']] > 0, ]
+
+# filter also on correlation for the binomial output
+binomial_output_unfiltered <- binomial_output
+binomial_output <- binomial_output[abs(binomial_output[['r']]) >= .25, ]
+# and remove region-gene overlaps
+binomial_output <- binomial_output[abs(binomial_output[['distance']]) > 0, ]
+
+
+# export
+# pseudo_ext <- pseudobulk_output[pseudobulk_output$p_value >= 0 & pseudobulk_output$empirical_feature_p_value < 0.05, ]
+# pseudo_ext <- pseudo_ext[, c('snp_id', 'feature_id', 'p_value', 'zscore', 'condition', 'cell_type', 'chr_hg38', 'start_hg38', 'end_hg38', 'feature_chromosome', 'feature_start', 'feature_end', 'distance')]
+# colnames(pseudo_ext) <- c('region', 'gene', 'p_value', 'zscore', 'condition', 'cell_type', 'chr_region', 'start_region', 'end_region', 'chr_gene', 'gene_start', 'gene_end', 'distance')
+# pseudo_ext[['chr_gene']] <- paste0('chr', pseudo_ext[['chr_gene']])
+# pseudo_ext <- pseudo_ext[order(abs(pseudo_ext[['zscore']]), decreasing = T), ]
+# write.table(pseudo_ext, gzfile('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eQTA/export/mo_pseudobulk_export.tsv.gz'), row.names = F, col.names = T, sep = '\t', quote = F)
 
 # get unique ones
 pseudobulk_output_unique <- pseudobulk_output[!duplicated(paste(pseudobulk_output[['snp_id']], pseudobulk_output[['feature_id']])), ]
 binomial_output_unique <- binomial_output[!duplicated(paste(binomial_output[['region']], binomial_output[['gene']])), ]
-scenic_output_unique <- scenic_output_unique[!duplicated(paste(scenic_output_unique[['Region']], scenic_output_unique[['Gene']])), ]
-scenic_output_unique_unfiltered <- scenic_output[!duplicated(paste(scenic_output[['Region']], scenic_output[['Gene']])), ]
+scenic_output_unique <- scenic_output[!duplicated(paste(scenic_output[['Region']], scenic_output[['Gene']])), ]
+scenic_output_unique_unfiltered <- scenic_output_unfiltered[!duplicated(paste(scenic_output_unfiltered[['Region']], scenic_output_unfiltered[['Gene']])), ]
 qtl_overlap_unique <- qtl_overlap[!duplicated(paste(qtl_overlap[['feature_caqtl']], qtl_overlap[['feature_eqtl']])), ]
 
 # show how many we have in each set
@@ -489,7 +648,7 @@ nrow(scenic_output_unique_unfiltered)
 nrow(scenic_output_unique)
 # [1] 53796
 nrow(pseudobulk_output_unique)
-# [1] 121935
+# [1] 89654
 nrow(qtl_overlap_unique)
 # [1] 7677
 
@@ -528,28 +687,31 @@ plot_sharing_per_celltype(
 
 
 # get the percentage positive
-nrow(pseudobulk_output_unique[sign(pseudobulk_output_unique[['zscore']]) == 1, ]) / nrow(pseudobulk_output_unique)
-# [1] 0.8557264
-nrow(binomial_output_unique[sign(binomial_output_unique[['meta_z']]) == 1, ]) / nrow(binomial_output_unique)
+frac_pos_pseudobulk_output_unique <- nrow(pseudobulk_output_unique[sign(pseudobulk_output_unique[['zscore']]) == 1, ]) / nrow(pseudobulk_output_unique)
+# [1] 0.8462757
+frac_pos_binomial_output_unique <- nrow(binomial_output_unique[sign(binomial_output_unique[['meta_z']]) == 1, ]) / nrow(binomial_output_unique)
 # [1] 0.9983478
-nrow(scenic_output_unique[sign(scenic_output_unique[['rho_R2G']]) == 1, ]) / nrow(scenic_output_unique)
-# [1] 0.6687718 / 1
-nrow(qtl_overlap_unique[sign(qtl_overlap_unique[['sign']]) == 1, ]) / nrow(qtl_overlap_unique)
-# [1] 0.7630585
+frac_pos_scenic_output_unique <- nrow(scenic_output_unique[sign(scenic_output_unique[['rho_R2G']]) == 1, ]) / nrow(scenic_output_unique)
+# [1] 1
+frac_pos_scenic_output_unfiltered_unique <- nrow(scenic_output_unique_unfiltered[sign(scenic_output_unique_unfiltered[['rho_R2G']]) == 1, ]) / nrow(scenic_output_unique_unfiltered)
+# [1] 0.6687718
+frac_pos_qtl_overlap_unique <- nrow(qtl_overlap_unique[sign(qtl_overlap_unique[['sign']]) == 1, ]) / nrow(qtl_overlap_unique)
+# [1] 0.767357
 
 # plot these numbers
 n_pos_tbl <- data.frame(
-  'method' = c('pseudobulk', 'binomial', 'scenic', 'QTL', 'pseudobulk', 'binomial', 'scenic', 'QTL'), 
-  'direction' = c('positive', 'positive', 'positive', 'positive', 'negative', 'negative', 'negative', 'negative'), 
-  'n' = c(0.8557264, 0.9983478, 0.6687718, 0.7630585, 1-0.8557264, 1-0.9983478, 1-0.6687718, 1-0.7630585)
+  'method' = c('pseudobulk', 'binomial', 'scenic', 'scenic uf', 'QTL', 'pseudobulk', 'binomial', 'scenic', 'scenic uf', 'QTL'), 
+  'direction' = c('positive', 'positive', 'positive', 'positive', 'positive', 'negative', 'negative', 'negative', 'negative', 'negative'), 
+  'n' = c(frac_pos_pseudobulk_output_unique, frac_pos_binomial_output_unique, frac_pos_scenic_output_unique, frac_pos_scenic_output_unfiltered_unique, frac_pos_qtl_overlap_unique, 1-frac_pos_pseudobulk_output_unique, 1-frac_pos_binomial_output_unique, 1-frac_pos_scenic_output_unique, 1-frac_pos_scenic_output_unfiltered_unique, 1-frac_pos_qtl_overlap_unique)
 )
-ggplot(data = n_pos_tbl, mapping = aes(x = method, y = n, fill = direction)) + 
+p_directions <- ggplot(data = n_pos_tbl, mapping = aes(x = method, y = n, fill = direction)) + 
   geom_bar(stat = 'identity', position = 'stack') +
   xlab('CRE detection method') +
   ylab('fraction') +
   ggtitle('CRE method result directions') +
   scale_fill_manual(values = list('positive' = 'darkblue', 'negative' = 'darkred')) + 
   theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+p_directions
 
 # show the distances in a density plot
 p_region_direction_distances <- ggplot(
@@ -570,86 +732,152 @@ p_region_direction_distances <- ggplot(
   theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
 # show plot
 p_region_direction_distances
+# do same for positive direction
+p_region_direction_distances_pos <- ggplot(
+  data = rbind(
+    pseudobulk_output_unique[pseudobulk_output_unique[['r']] > 0, c('distance', 'category'), ], 
+    binomial_output_unique[binomial_output_unique[['r']] > 0, c('distance', 'category'), ], 
+    qtl_overlap_unique[qtl_overlap_unique[['sign']] > 0, c('distance', 'category'), ]), 
+  mapping = aes(
+    x = distance, 
+    fill = category
+  )
+) + 
+  geom_density(alpha = 0.5) +
+  xlab('Distance between region and gene') + 
+  ylab('Density') + 
+  ggtitle('Distance between region and gene\nacross different methods\nfor positive associations') + 
+  scale_fill_manual(values = list('binomial' = '#BEAED4', 'pseudobulk' = '#7FC97F', 'qtl_overlap' = '#386CB0')) + 
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+p_region_direction_distances_pos
+# finally for negative direction
+p_region_direction_distances_neg <- ggplot(
+  data = rbind(
+    pseudobulk_output_unique[pseudobulk_output_unique[['r']] < 0, c('distance', 'category'), ], 
+    binomial_output_unique[binomial_output_unique[['r']] < 0, c('distance', 'category'), ], 
+    qtl_overlap_unique[qtl_overlap_unique[['sign']] < 0, c('distance', 'category'), ]), 
+  mapping = aes(
+    x = distance, 
+    fill = category
+  )
+) + 
+  geom_density(alpha = 0.5) +
+  xlab('Distance between region and gene') + 
+  ylab('Density') + 
+  ggtitle('Distance between region and gene\nacross different methods\nfor negative associations') + 
+  scale_fill_manual(values = list('binomial' = '#BEAED4', 'pseudobulk' = '#7FC97F', 'qtl_overlap' = '#386CB0')) + 
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+p_region_direction_distances_neg
 
 
 # merge pseudobulk and binominal
 pseudobulk_vs_binomial <- merge(x = pseudobulk_output_unique, y = binomial_output_unique, by = 'r2g')
 # check pseudobulk and scenic
+pseudobulk_vs_scenic_unfiltered <- merge(x = pseudobulk_output_unique, y = scenic_output_unique_unfiltered, by = 'r2g')
 pseudobulk_vs_scenic <- merge(x = pseudobulk_output_unique, y = scenic_output_unique, by = 'r2g')
 # check pseudobulk and qtls
 pseudobulk_vs_qtl <- merge(x = pseudobulk_output_unique, y = qtl_overlap_unique, by = 'r2g')
 # and binomial vs scenic
+scenic_unfiltered_vs_binomial <- merge(x = scenic_output_unique_unfiltered, y = binomial_output_unique, by = 'r2g')
 scenic_vs_binomial <- merge(x = scenic_output_unique, y = binomial_output_unique, by = 'r2g')
 # scenic vs qtl
+scenic_unfiltered_vs_qtl <- merge(x = scenic_output_unique_unfiltered, y = qtl_overlap_unique, by = 'r2g')
 scenic_vs_qtl <- merge(x = scenic_output_unique, y = qtl_overlap_unique, by = 'r2g')
 # binomial vs qtl
 binomial_vs_qtl <- merge(x = binomial_output_unique, y = qtl_overlap_unique, by = 'r2g')
-
+# filtered vs unfiltered scenic
+scenic_unfiltered_vs_scenic_filtered <- merge(x = scenic_output_unique, y = scenic_output_unique_unfiltered, by = 'r2g')
 
 # get the concordances
-nrow(pseudobulk_vs_binomial[sign(pseudobulk_vs_binomial[['zscore']]) == sign(pseudobulk_vs_binomial[['meta_z']]), ]) / nrow(pseudobulk_vs_binomial)
-# [1] 0.9458333
-nrow(pseudobulk_vs_scenic[sign(pseudobulk_vs_scenic[['zscore']]) == sign(pseudobulk_vs_scenic[['rho_R2G']]), ]) / nrow(pseudobulk_vs_scenic)
-# [1] 0.8541311
-nrow(pseudobulk_vs_qtl[sign(pseudobulk_vs_qtl[['zscore']]) == sign(pseudobulk_vs_qtl[['sign']]), ]) / nrow(pseudobulk_vs_qtl)
-# [1] 0.9856528
-nrow(scenic_vs_binomial[sign(scenic_vs_binomial[['meta_z']]) == sign(scenic_vs_binomial[['rho_R2G']]), ]) / nrow(scenic_vs_binomial)
-# [1] 0.8156997 / 1
-nrow(scenic_vs_qtl[sign(scenic_vs_qtl[['sign']]) == sign(scenic_vs_qtl[['rho_R2G']]), ]) / nrow(scenic_vs_qtl)
-# [1] 0.7747748 / 0.8636364
-nrow(binomial_vs_qtl[sign(binomial_vs_qtl[['meta_z']]) == sign(binomial_vs_qtl[['sign']]), ]) / nrow(binomial_vs_qtl)
-# [1] 0.7746358
+con_pseudo_bino <- nrow(pseudobulk_vs_binomial[sign(pseudobulk_vs_binomial[['zscore']]) == sign(pseudobulk_vs_binomial[['meta_z']]), ]) / nrow(pseudobulk_vs_binomial)
+# [1] 0.9469027
+con_pseudo_sce <- nrow(pseudobulk_vs_scenic[sign(pseudobulk_vs_scenic[['zscore']]) == sign(pseudobulk_vs_scenic[['rho_R2G']]), ]) / nrow(pseudobulk_vs_scenic)
+# [1] 0.9518248
+con_pseudo_sceun <- nrow(pseudobulk_vs_scenic_unfiltered[sign(pseudobulk_vs_scenic_unfiltered[['zscore']]) == sign(pseudobulk_vs_scenic_unfiltered[['rho_R2G']]), ]) / nrow(pseudobulk_vs_scenic_unfiltered)
+# [1] 0.8525721
+con_pseudo_qtl <- nrow(pseudobulk_vs_qtl[sign(pseudobulk_vs_qtl[['zscore']]) == sign(pseudobulk_vs_qtl[['sign']]), ]) / nrow(pseudobulk_vs_qtl)
+# [1] 0.9861751
+con_sceun_bino <- nrow(scenic_unfiltered_vs_binomial[sign(scenic_unfiltered_vs_binomial[['meta_z']]) == sign(scenic_unfiltered_vs_binomial[['rho_R2G']]), ]) / nrow(scenic_unfiltered_vs_binomial)
+# [1] 0.8156997
+con_sce_bino <- nrow(scenic_vs_binomial[sign(scenic_vs_binomial[['meta_z']]) == sign(scenic_vs_binomial[['rho_R2G']]), ]) / nrow(scenic_vs_binomial)
+# [1] 1
+con_sce_qtl <- nrow(scenic_vs_qtl[sign(scenic_vs_qtl[['sign']]) == sign(scenic_vs_qtl[['rho_R2G']]), ]) / nrow(scenic_vs_qtl)
+# [1] 0.8723776
+con_sceun_qtl <- nrow(scenic_unfiltered_vs_qtl[sign(scenic_unfiltered_vs_qtl[['sign']]) == sign(scenic_unfiltered_vs_qtl[['rho_R2G']]), ]) / nrow(scenic_unfiltered_vs_qtl)
+# [1] 0.7822823
+con_bino_qtl <- nrow(binomial_vs_qtl[sign(binomial_vs_qtl[['meta_z']]) == sign(binomial_vs_qtl[['sign']]), ]) / nrow(binomial_vs_qtl)
+# [1] 0.7777778
+con_sce_sceun <- nrow(scenic_unfiltered_vs_scenic_filtered[sign(scenic_unfiltered_vs_scenic_filtered[['rho_R2G.x']]) == sign(scenic_unfiltered_vs_scenic_filtered[['rho_R2G.y']]), ]) / nrow(scenic_unfiltered_vs_scenic_filtered)
+# [1] 1
 
 # in a pairwise table
 pairwise_correlation_table <- data.frame(
-  'method1' = c('pseudobulk', 'pseudobulk', 'pseudobulk', 'pseudobulk', 
-                'scenic', 'scenic', 'scenic', 'scenic', 
-                'binomial', 'binomial', 'binomial', 'binomial',
-                'QTL', 'QTL', 'QTL', 'QTL'), 
-  'method2' = c('pseudobulk', 'scenic', 'binomial', 'QTL', 
-                'pseudobulk', 'scenic', 'binomial', 'QTL', 
-                'pseudobulk', 'scenic', 'binomial', 'QTL', 
-                'pseudobulk', 'scenic', 'binomial', 'QTL'), 
-  'correlation' = c(1, 0.85, 0.95, 0.99, 
-                    0.85, 1, 0.81, 0.77, 
-                    0.95, 0.81, 1, 0.77, 
-                    0.99, 0.77, 0.77, 1)
+  'method1' = c('pseudobulk', 'pseudobulk', 'pseudobulk', 'pseudobulk', 'pseudobulk',
+                'scenic', 'scenic', 'scenic', 'scenic', 'scenic', 
+                'binomial', 'binomial', 'binomial', 'binomial', 'binomial',
+                'QTL', 'QTL', 'QTL', 'QTL', 'QTL', 
+                'scenic uf', 'scenic uf', 'scenic uf', 'scenic uf', 'scenic uf'), 
+  'method2' = c('pseudobulk', 'scenic', 'binomial', 'QTL', 'scenic uf', 
+                'pseudobulk', 'scenic', 'binomial', 'QTL', 'scenic uf', 
+                'pseudobulk', 'scenic', 'binomial', 'QTL', 'scenic uf', 
+                'pseudobulk', 'scenic', 'binomial', 'QTL', 'scenic uf', 
+                'pseudobulk', 'scenic', 'binomial', 'QTL', 'scenic uf'), 
+  'concordance' = c(1, con_pseudo_sce, con_pseudo_bino, con_pseudo_qtl, con_pseudo_sceun, 
+                    con_pseudo_sce, 1, con_sce_bino, con_sce_qtl, con_sce_sceun, 
+                    con_pseudo_bino, con_sce_bino, 1, con_bino_qtl, con_sceun_bino, 
+                    con_pseudo_qtl, con_sce_qtl, con_bino_qtl, 1, con_sceun_qtl, 
+                    con_pseudo_sceun, con_sce_sceun, con_sceun_bino, con_sceun_qtl, 1)
 )
-create_confusion_matrix(pairwise_correlation_table, truth_column = 'method1', prediction_column = 'method2', freq_column = 'correlation', premade_table = T, truth_column_label = 'method 1', prediction_column_label = 'method 2') +
+# round so it stays readable
+pairwise_correlation_table[['concordance']] <- round(pairwise_correlation_table[['concordance']], digits = 2)
+# make plot
+p_con <- create_confusion_matrix(pairwise_correlation_table, truth_column = 'method1', prediction_column = 'method2', freq_column = 'concordance', premade_table = T, truth_column_label = 'method 1', prediction_column_label = 'method 2') +
   ggtitle('concordance of effect sizes\nin CRE detection methods')
+p_con + theme(legend.position="none")
 
 nrow(pseudobulk_vs_binomial)
-# [1] 960
+# [1] 904
 nrow(pseudobulk_vs_scenic)
-# [1] 1755 / 1509
+# [1] 1370
 nrow(pseudobulk_vs_qtl)
-# [1] 1394
+# [1] 1302
 nrow(scenic_vs_binomial)
-# [1] 586 / 478
+# [1] 478
 nrow(scenic_vs_qtl)
-# [1] 666 / 572
+# [1] 572
 nrow(binomial_vs_qtl)
 # [1] 3501
+nrow(pseudobulk_vs_scenic_unfiltered)
+# [1] 1594
+nrow(scenic_unfiltered_vs_scenic_filtered)
+# [1] 53796
+nrow(scenic_unfiltered_vs_binomial)
+# [1] 586
+nrow(scenic_unfiltered_vs_qtl)
+# [1] 666
 
 # make overlap into a table
 pairwise_overlap_table <- data.frame(
-  'method1' = c('pseudobulk', 'pseudobulk', 'pseudobulk', 'pseudobulk', 
-                'scenic', 'scenic', 'scenic', 'scenic', 
-                'binomial', 'binomial', 'binomial', 'binomial',
-                'QTL', 'QTL', 'QTL', 'QTL'), 
-  'method2' = c('pseudobulk', 'scenic', 'binomial', 'QTL', 
-                'pseudobulk', 'scenic', 'binomial', 'QTL', 
-                'pseudobulk', 'scenic', 'binomial', 'QTL', 
-                'pseudobulk', 'scenic', 'binomial', 'QTL'), 
-  'overlapping' = c(nrow(pseudobulk_output_unique), nrow(pseudobulk_vs_scenic), nrow(pseudobulk_vs_binomial), nrow(pseudobulk_vs_qtl), 
-                    nrow(pseudobulk_vs_scenic), nrow(scenic_output_unique), nrow(scenic_vs_binomial), nrow(scenic_vs_qtl),  
-                    nrow(pseudobulk_vs_binomial), nrow(scenic_vs_binomial), nrow(binomial_output_unique), nrow(binomial_vs_qtl), 
-                    nrow(pseudobulk_vs_qtl), nrow(scenic_vs_qtl), nrow(binomial_vs_qtl), nrow(qtl_overlap_unique))
+  'method1' = c('pseudobulk', 'pseudobulk', 'pseudobulk', 'pseudobulk', 'pseudobulk',
+                'scenic', 'scenic', 'scenic', 'scenic', 'scenic', 
+                'binomial', 'binomial', 'binomial', 'binomial', 'binomial',
+                'QTL', 'QTL', 'QTL', 'QTL', 'QTL', 
+                'scenic uf', 'scenic uf', 'scenic uf', 'scenic uf', 'scenic uf'), 
+  'method2' = c('pseudobulk', 'scenic', 'binomial', 'QTL', 'scenic uf', 
+                'pseudobulk', 'scenic', 'binomial', 'QTL', 'scenic uf', 
+                'pseudobulk', 'scenic', 'binomial', 'QTL', 'scenic uf', 
+                'pseudobulk', 'scenic', 'binomial', 'QTL', 'scenic uf', 
+                'pseudobulk', 'scenic', 'binomial', 'QTL', 'scenic uf'), 
+  'overlapping' = c(nrow(pseudobulk_output_unique), nrow(pseudobulk_vs_scenic), nrow(pseudobulk_vs_binomial), nrow(pseudobulk_vs_qtl), nrow(pseudobulk_vs_scenic_unfiltered), 
+                    nrow(pseudobulk_vs_scenic), nrow(scenic_output_unique), nrow(scenic_vs_binomial), nrow(scenic_vs_qtl), nrow(scenic_unfiltered_vs_scenic_filtered),  
+                    nrow(pseudobulk_vs_binomial), nrow(scenic_vs_binomial), nrow(binomial_output_unique), nrow(binomial_vs_qtl), nrow(scenic_unfiltered_vs_binomial), 
+                    nrow(pseudobulk_vs_qtl), nrow(scenic_vs_qtl), nrow(binomial_vs_qtl), nrow(qtl_overlap_unique), nrow(scenic_unfiltered_vs_qtl), 
+                    nrow(pseudobulk_vs_scenic_unfiltered), nrow(scenic_unfiltered_vs_scenic_filtered), nrow(scenic_unfiltered_vs_binomial), nrow(scenic_unfiltered_vs_qtl), nrow(scenic_output_unique_unfiltered))
 )
 # make into confusion matrix
-create_confusion_matrix(pairwise_overlap_table, truth_column = 'method1', prediction_column = 'method2', freq_column = 'overlapping', premade_table = T, truth_column_label = 'method 1', prediction_column_label = 'method 2') +
+p_n_overlaps <- create_confusion_matrix(pairwise_overlap_table, truth_column = 'method1', prediction_column = 'method2', freq_column = 'overlapping', premade_table = T, truth_column_label = 'method 1', prediction_column_label = 'method 2') +
   ggtitle('Overlapping region-gene pairs\nin CRE detection methods')
-
+p_n_overlaps + theme(legend.position="none")
 
 # plot them as well
 plot_grid(
@@ -658,3 +886,8 @@ plot_grid(
   plot_concondance(scenic_vs_binomial, 'rho_R2G', 'meta_z') + ggtitle('Effects of SCENIC+ vs binomial\nCRE detection') + xlab('SCENIC+ R2G Rho') + ylab('Binomial model Z-score')
 )
 
+plot_grid(
+  plot_concondance(pseudobulk_vs_binomial, 'zscore', 'meta_z') + ggtitle('Effects of pseudobulk vs binomial\nCRE detection') + xlab('Pseudobulk Z-score') + ylab('Binomial model Z-score'), 
+  plot_concondance(pseudobulk_vs_scenic_unfiltered, 'zscore', 'rho_R2G') + ggtitle('Effects of pseudobulk vs SCENIC+ CRE\ndetection') + xlab('Pseudobulk Z-score') + ylab('SCENIC+ R2G Rho'), 
+  plot_concondance(scenic_vs_binomial, 'rho_R2G', 'meta_z') + ggtitle('Effects of SCENIC+ vs binomial\nCRE detection') + xlab('SCENIC+ R2G Rho') + ylab('Binomial model Z-score')
+)
