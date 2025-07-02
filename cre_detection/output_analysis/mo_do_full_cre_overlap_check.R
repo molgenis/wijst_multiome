@@ -511,6 +511,17 @@ pseudobulk_output_24hca[['zscore']] <- pseudobulk_output_24hca[['beta']] / pseud
 # add a correlation based on the Z score, taking sample size and removing 2 + 10 PCs to get the degrees of freedom
 pseudobulk_output_ut[['r']] <- pseudobulk_output_ut[['zscore']] / sqrt(pseudobulk_output_ut[['zscore']]^2 + (pseudobulk_output_ut[['n_samples']][1] - 12))
 pseudobulk_output_24hca[['r']] <- pseudobulk_output_24hca[['zscore']] / sqrt(pseudobulk_output_24hca[['zscore']]^2 + (pseudobulk_output_24hca[['n_samples']][1] - 12))
+# add a p based z
+pseudobulk_output_ut[['z_from_p']] <- qnorm(1 - pseudobulk_output_ut[['p_value']] / 2) * sign(pseudobulk_output_ut[['beta']])
+pseudobulk_output_24hca[['z_from_p']] <- qnorm(1 - pseudobulk_output_24hca[['p_value']] / 2) * sign(pseudobulk_output_24hca[['beta']])
+# and a clipped z from p
+pseudobulk_output_ut_p_for_z <- pseudobulk_output_ut[['p_value']] / 2
+pseudobulk_output_ut_p_for_z[pseudobulk_output_ut_p_for_z < 1e-16] <- 1e-16
+pseudobulk_output_ut[['z_from_p_clipped']] <- qnorm(1 - pseudobulk_output_ut_p_for_z) * sign(pseudobulk_output_ut[['beta']])
+pseudobulk_output_24hca_p_for_z <- pseudobulk_output_24hca[['p_value']] / 2
+pseudobulk_output_24hca_p_for_z[pseudobulk_output_24hca_p_for_z < 1e-16] <- 1e-16
+pseudobulk_output_24hca[['z_from_p_clipped']] <- qnorm(1 - pseudobulk_output_24hca_p_for_z) * sign(pseudobulk_output_24hca[['beta']])
+
 # merge them
 pseudobulk_output <- do.call('rbind', list(pseudobulk_output_ut, pseudobulk_output_24hca))
 
@@ -606,11 +617,17 @@ qtl_overlap <- qtl_overlap[order(abs(qtl_overlap[['z_eqtl']]), abs(qtl_overlap[[
 pseudobulk_output_unfiltered <- pseudobulk_output
 # check significance threshold
 pseudobulk_output <- pseudobulk_output[pseudobulk_output[['p_value']] < pseudobulk_output[['pval_nominal_threshold_global']], ]
+# export
+# pseudo_ext <- pseudobulk_output[pseudobulk_output$p_value >= 0 & pseudobulk_output$empirical_feature_p_value < 0.05, ]
+# pseudo_ext <- pseudo_ext[, c('snp_id', 'feature_id', 'p_value', 'zscore', 'z_from_p', 'z_from_p_clipped', 'condition', 'cell_type', 'chr_hg38', 'start_hg38', 'end_hg38', 'feature_chromosome', 'feature_start', 'feature_end', 'distance')]
+# colnames(pseudo_ext) <- c('region', 'gene', 'p_value', 'zscore', 'z_from_p', 'z_from_p_clipped', 'condition', 'cell_type', 'chr_region', 'start_region', 'end_region', 'chr_gene', 'gene_start', 'gene_end', 'distance')
+# pseudo_ext[['chr_gene']] <- paste0('chr', pseudo_ext[['chr_gene']])
+# pseudo_ext <- pseudo_ext[order(abs(pseudo_ext[['z_from_p_clipped']]), decreasing = T), ]
+# write.table(pseudo_ext, gzfile('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eQTA/export/mo_pseudobulk_export.tsv.gz'), row.names = F, col.names = T, sep = '\t', quote = F)
 # check minimal correlation
 pseudobulk_output <- pseudobulk_output[abs(pseudobulk_output[['r']]) >= .25 , ]
 # check that the region and gene do not overlap
 pseudobulk_output <- pseudobulk_output[pseudobulk_output[['distance']] > 0 , ]
-
 
 # remove the entries that are more likely to be false positives
 scenic_output_unfiltered <- scenic_output
@@ -623,15 +640,6 @@ binomial_output_unfiltered <- binomial_output
 binomial_output <- binomial_output[abs(binomial_output[['r']]) >= .25, ]
 # and remove region-gene overlaps
 binomial_output <- binomial_output[abs(binomial_output[['distance']]) > 0, ]
-
-
-# export
-# pseudo_ext <- pseudobulk_output[pseudobulk_output$p_value >= 0 & pseudobulk_output$empirical_feature_p_value < 0.05, ]
-# pseudo_ext <- pseudo_ext[, c('snp_id', 'feature_id', 'p_value', 'zscore', 'condition', 'cell_type', 'chr_hg38', 'start_hg38', 'end_hg38', 'feature_chromosome', 'feature_start', 'feature_end', 'distance')]
-# colnames(pseudo_ext) <- c('region', 'gene', 'p_value', 'zscore', 'condition', 'cell_type', 'chr_region', 'start_region', 'end_region', 'chr_gene', 'gene_start', 'gene_end', 'distance')
-# pseudo_ext[['chr_gene']] <- paste0('chr', pseudo_ext[['chr_gene']])
-# pseudo_ext <- pseudo_ext[order(abs(pseudo_ext[['zscore']]), decreasing = T), ]
-# write.table(pseudo_ext, gzfile('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eQTA/export/mo_pseudobulk_export.tsv.gz'), row.names = F, col.names = T, sep = '\t', quote = F)
 
 # get unique ones
 pseudobulk_output_unique <- pseudobulk_output[!duplicated(paste(pseudobulk_output[['snp_id']], pseudobulk_output[['feature_id']])), ]
