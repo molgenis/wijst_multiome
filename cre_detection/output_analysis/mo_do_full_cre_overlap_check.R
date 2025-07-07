@@ -492,7 +492,7 @@ scenic_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/
 # location of the overlapping caQTLs and eQTLs
 qtl_overlap_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl_caqtl_overlap/combined/L1/all/eqtl_caqtl_overlapping_variants.tsv.gz'
 # location of the pseudobulk CRE mapping
-pseudobulk_output_folder <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eQTA/eQTA/L1/'
+pseudobulk_output_folder <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eQTA/eQTA_v2/L1/'
 # location of the binomial method
 binomial_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/cre_eqtl/eqtl_caqtl_overlap/combined/betas_ps/'
 
@@ -514,13 +514,15 @@ pseudobulk_output_24hca[['r']] <- pseudobulk_output_24hca[['zscore']] / sqrt(pse
 # add a p based z
 pseudobulk_output_ut[['z_from_p']] <- qnorm(1 - pseudobulk_output_ut[['p_value']] / 2) * sign(pseudobulk_output_ut[['beta']])
 pseudobulk_output_24hca[['z_from_p']] <- qnorm(1 - pseudobulk_output_24hca[['p_value']] / 2) * sign(pseudobulk_output_24hca[['beta']])
+pseudobulk_output_ut[['z_from_p']] <- qnorm(pseudobulk_output_ut[['p_value']] / 2) * -1 * sign(pseudobulk_output_ut[['beta']])
+pseudobulk_output_24hca[['z_from_p']] <- qnorm(pseudobulk_output_24hca[['p_value']] / 2) * -1 * sign(pseudobulk_output_24hca[['beta']])
 # and a clipped z from p
-pseudobulk_output_ut_p_for_z <- pseudobulk_output_ut[['p_value']] / 2
-pseudobulk_output_ut_p_for_z[pseudobulk_output_ut_p_for_z < 1e-16] <- 1e-16
-pseudobulk_output_ut[['z_from_p_clipped']] <- qnorm(1 - pseudobulk_output_ut_p_for_z) * sign(pseudobulk_output_ut[['beta']])
-pseudobulk_output_24hca_p_for_z <- pseudobulk_output_24hca[['p_value']] / 2
-pseudobulk_output_24hca_p_for_z[pseudobulk_output_24hca_p_for_z < 1e-16] <- 1e-16
-pseudobulk_output_24hca[['z_from_p_clipped']] <- qnorm(1 - pseudobulk_output_24hca_p_for_z) * sign(pseudobulk_output_24hca[['beta']])
+# pseudobulk_output_ut_p_for_z <- pseudobulk_output_ut[['p_value']] / 2
+# pseudobulk_output_ut_p_for_z[pseudobulk_output_ut_p_for_z < 1e-16] <- 1e-16
+# pseudobulk_output_ut[['z_from_p_clipped']] <- qnorm(1 - pseudobulk_output_ut_p_for_z) * sign(pseudobulk_output_ut[['beta']])
+# pseudobulk_output_24hca_p_for_z <- pseudobulk_output_24hca[['p_value']] / 2
+# pseudobulk_output_24hca_p_for_z[pseudobulk_output_24hca_p_for_z < 1e-16] <- 1e-16
+# pseudobulk_output_24hca[['z_from_p_clipped']] <- qnorm(1 - pseudobulk_output_24hca_p_for_z) * sign(pseudobulk_output_24hca[['beta']])
 
 # merge them
 pseudobulk_output <- do.call('rbind', list(pseudobulk_output_ut, pseudobulk_output_24hca))
@@ -553,6 +555,12 @@ pseudobulk_distances <- get_closest_flanks(pseudobulk_output, 'start_hg38', 'end
 pseudobulk_output[['distance']] <- pseudobulk_distances[['min_dist']]
 # and category
 pseudobulk_output[['category']] <- 'pseudobulk'
+
+# get extra annotations for the pseudobulk output
+strand_information_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eQTA/LimixExpAnnotationFile.incStrand.txt'
+strand_information <- fread(strand_information_loc, header = T, sep = '\t')
+# add to the pseudobulk
+pseudobulk_output[['strand']] <- strand_information[match(pseudobulk_output[['feature_id']], strand_information[['feature_id']]), ][['strand']]
 
 # read the binomial results
 binomial_output_list <- read_binomial_output_per_celltype(binomial_output_loc)
@@ -616,18 +624,22 @@ qtl_overlap <- qtl_overlap[order(abs(qtl_overlap[['z_eqtl']]), abs(qtl_overlap[[
 # filter on theshold
 pseudobulk_output_unfiltered <- pseudobulk_output
 # check significance threshold
-pseudobulk_output <- pseudobulk_output[pseudobulk_output[['p_value']] < pseudobulk_output[['pval_nominal_threshold_global']], ]
+pseudobulk_output <- pseudobulk_output[
+  !is.na(pseudobulk_output[['p_value']]) & !is.na(pseudobulk_output[['pval_nominal_threshold_global']]) & 
+  pseudobulk_output[['p_value']] < pseudobulk_output[['pval_nominal_threshold_global']] &
+  !is.na(pseudobulk_output[['feature_q_value']]) & pseudobulk_output[['feature_q_value']] < 0.05 , ]
+
 # export
-# pseudo_ext <- pseudobulk_output[pseudobulk_output$p_value >= 0 & pseudobulk_output$empirical_feature_p_value < 0.05, ]
-# pseudo_ext <- pseudo_ext[, c('snp_id', 'feature_id', 'p_value', 'zscore', 'z_from_p', 'z_from_p_clipped', 'condition', 'cell_type', 'chr_hg38', 'start_hg38', 'end_hg38', 'feature_chromosome', 'feature_start', 'feature_end', 'distance')]
-# colnames(pseudo_ext) <- c('region', 'gene', 'p_value', 'zscore', 'z_from_p', 'z_from_p_clipped', 'condition', 'cell_type', 'chr_region', 'start_region', 'end_region', 'chr_gene', 'gene_start', 'gene_end', 'distance')
-# pseudo_ext[['chr_gene']] <- paste0('chr', pseudo_ext[['chr_gene']])
-# pseudo_ext <- pseudo_ext[order(abs(pseudo_ext[['z_from_p_clipped']]), decreasing = T), ]
-# write.table(pseudo_ext, gzfile('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eQTA/export/mo_pseudobulk_export.tsv.gz'), row.names = F, col.names = T, sep = '\t', quote = F)
+pseudo_ext <- pseudobulk_output[pseudobulk_output[['p_value']] >= 0 & pseudobulk_output[['empirical_feature_p_value']] < 0.05, ]
+pseudo_ext <- pseudo_ext[, c('snp_id', 'feature_id', 'p_value', 'zscore', 'z_from_p', 'condition', 'cell_type', 'chr_hg38', 'start_hg38', 'end_hg38', 'feature_chromosome', 'feature_start', 'feature_end', 'distance', 'strand')]
+colnames(pseudo_ext) <- c('region', 'gene', 'p_value', 'zscore', 'z_from_p', 'condition', 'cell_type', 'chr_region', 'start_region', 'end_region', 'chr_gene', 'gene_start', 'gene_end', 'distance', 'strand')
+pseudo_ext[['chr_gene']] <- paste0('chr', pseudo_ext[['chr_gene']])
+pseudo_ext <- pseudo_ext[order(abs(pseudo_ext[['z_from_p']]), decreasing = T), ]
+write.table(pseudo_ext, gzfile('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eQTA/export/mo_pseudobulk_export.tsv.gz'), row.names = F, col.names = T, sep = '\t', quote = F)
 # check minimal correlation
 pseudobulk_output <- pseudobulk_output[abs(pseudobulk_output[['r']]) >= .25 , ]
 # check that the region and gene do not overlap
-pseudobulk_output <- pseudobulk_output[pseudobulk_output[['distance']] > 0 , ]
+#pseudobulk_output <- pseudobulk_output[pseudobulk_output[['distance']] > 0 , ]
 
 # remove the entries that are more likely to be false positives
 scenic_output_unfiltered <- scenic_output
@@ -637,7 +649,7 @@ scenic_output <- scenic_output[scenic_output[['distance']] > 0, ]
 
 # filter also on correlation for the binomial output
 binomial_output_unfiltered <- binomial_output
-binomial_output <- binomial_output[abs(binomial_output[['r']]) >= .25, ]
+#binomial_output <- binomial_output[abs(binomial_output[['r']]) >= .25, ]
 # and remove region-gene overlaps
 binomial_output <- binomial_output[abs(binomial_output[['distance']]) > 0, ]
 
@@ -650,7 +662,7 @@ qtl_overlap_unique <- qtl_overlap[!duplicated(paste(qtl_overlap[['feature_caqtl'
 
 # show how many we have in each set
 nrow(binomial_output_unique)
-# [1] 12710
+# [1] 12052
 nrow(scenic_output_unique_unfiltered)
 # [1] 80440
 nrow(scenic_output_unique)
@@ -882,6 +894,28 @@ pairwise_overlap_table <- data.frame(
                     nrow(pseudobulk_vs_qtl), nrow(scenic_vs_qtl), nrow(binomial_vs_qtl), nrow(qtl_overlap_unique), nrow(scenic_unfiltered_vs_qtl), 
                     nrow(pseudobulk_vs_scenic_unfiltered), nrow(scenic_unfiltered_vs_scenic_filtered), nrow(scenic_unfiltered_vs_binomial), nrow(scenic_unfiltered_vs_qtl), nrow(scenic_output_unique_unfiltered))
 )
+
+# write these tables
+write.table(pseudobulk_vs_scenic, gzfile('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/overlaps/pseudobulk_vs_scenic.tsv.gz'), row.names = F, col.names = T, sep = '\t', quote = F)
+write.table(pseudobulk_vs_binomial, gzfile('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/overlaps/pseudobulk_vs_binomial.tsv.gz'), row.names = F, col.names = T, sep = '\t', quote = F)
+write.table(pseudobulk_vs_qtl, gzfile('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/overlaps/pseudobulk_vs_qtl.tsv.gz'), row.names = F, col.names = T, sep = '\t', quote = F)
+write.table(pseudobulk_vs_scenic_unfiltered, gzfile('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/overlaps/pseudobulk_vs_scenic_unfiltered.tsv.gz'), row.names = F, col.names = T, sep = '\t', quote = F)
+write.table(scenic_vs_binomial, gzfile('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/overlaps/scenic_vs_binomial.tsv.gz'), row.names = F, col.names = T, sep = '\t', quote = F)
+write.table(scenic_vs_qtl, gzfile('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/overlaps/scenic_vs_qtl.tsv.gz'), row.names = F, col.names = T, sep = '\t', quote = F)
+write.table(binomial_vs_qtl, gzfile('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/overlaps/binomial_vs_qtl.tsv.gz'), row.names = F, col.names = T, sep = '\t', quote = F)
+write.table(scenic_unfiltered_vs_binomial, gzfile('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/overlaps/scenic_unfiltered_vs_binomial.tsv.gz'), row.names = F, col.names = T, sep = '\t', quote = F)
+write.table(scenic_unfiltered_vs_qtl, gzfile('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/overlaps/scenic_unfiltered_vs_qtl.tsv.gz'), row.names = F, col.names = T, sep = '\t', quote = F)
+# make checksums
+mdfiver::create_md5_for_file('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/overlaps/pseudobulk_vs_scenic.tsv.gz')
+mdfiver::create_md5_for_file('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/overlaps/pseudobulk_vs_binomial.tsv.gz')
+mdfiver::create_md5_for_file('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/overlaps/pseudobulk_vs_qtl.tsv.gz')
+mdfiver::create_md5_for_file('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/overlaps/pseudobulk_vs_scenic_unfiltered.tsv.gz')
+mdfiver::create_md5_for_file('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/overlaps/scenic_vs_binomial.tsv.gz')
+mdfiver::create_md5_for_file('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/overlaps/scenic_vs_qtl.tsv.gz')
+mdfiver::create_md5_for_file('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/overlaps/binomial_vs_qtl.tsv.gz')
+mdfiver::create_md5_for_file('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/overlaps/scenic_unfiltered_vs_binomial.tsv.gz')
+mdfiver::create_md5_for_file('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/overlaps/scenic_unfiltered_vs_qtl.tsv.gz')
+
 # make into confusion matrix
 p_n_overlaps <- create_confusion_matrix(pairwise_overlap_table, truth_column = 'method1', prediction_column = 'method2', freq_column = 'overlapping', premade_table = T, truth_column_label = 'method 1', prediction_column_label = 'method 2') +
   ggtitle('Overlapping region-gene pairs\nin CRE detection methods')

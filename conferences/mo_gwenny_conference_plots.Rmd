@@ -1,0 +1,114 @@
+---
+title: "mo_gwenny_conference_plots"
+author: "Roy Oelen"
+date: "2025-07-07"
+output: html_document
+---
+
+```{r header, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+#!/usr/bin/env Rscript
+############################################################################################################################
+# Authors: Roy Oelen
+# Name: mo_gwenny_conference_plots.Rmd
+# Function: plot QTL output
+############################################################################################################################
+```
+
+```{r libraries, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+####################
+# libraries        #
+####################
+
+library(data.table)
+library(ggplot2)
+library(roycols)
+library(cowplot)
+
+
+```
+
+```{r functions, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+####################
+# Functions        #
+####################
+
+```
+
+```{r settings, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+####################
+# Settings         #
+####################
+
+```
+
+```{r path_setup, include=TRUE, fig.height=5, fig.width=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+####################
+# Main Code        #
+####################
+
+# cre-QTL example
+tbl <- read.table('/groups/umcg-franke-scrna/tmp04/users/umcg-roelen/singularity/rstudio-server/simulated_home/tables/gwenny_interaction_table.tsv.gz', header = T, sep = '\t')
+# add the alleles
+tbl[['alleles']] <- as.vector(unlist(list('0' = 'TT', '1' = 'CT', '2' = 'CC')[as.character(tbl[['genotype']])]))
+
+# interaction plot
+p_interaction <- ggplot(data = tbl[tbl$ATAC > -.971, ], 
+       mapping = aes(
+         x = ATAC, 
+         y = RNA, 
+         col = alleles)
+       ) + 
+  geom_point() + 
+  stat_smooth(method = "lm", 
+              formula = y ~ x, 
+              geom = "smooth", 
+              se = F) +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) +
+  scale_colour_manual(values = list('TT' = 'darkblue', 'CT' = 'darkorange', 'CC' = 'darkgreen'), name = 'genotype') +
+  xlab('Chr10-112,389,126-112,390,073\naccessibility') +
+  ylab('AL157786.1\nexpression') + 
+  labs(colour = '10:112347540:T:C\ngenotype')
+
+# eQTL example
+p_eqtl <- ggplot(data = tbl, 
+       mapping = aes(
+         x = alleles, 
+         y = RNA, 
+         fill = alleles)
+) + 
+  geom_boxplot(outlier.shape = NA) + 
+  geom_jitter(size = 0.5, alpha = 0.5) + 
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) +
+  scale_fill_manual(values = list('TT' = 'darkblue', 'CT' = 'darkorange', 'CC' = 'darkgreen'), name = 'genotype') +
+  xlab('10:112347540:T:C\ngenotype') +
+  ylab('AL157786.1\nexpression')
+
+# caQTL example
+p_caqtl <- ggplot(data = tbl[tbl$ATAC > -.971, ], 
+       mapping = aes(
+         x = alleles, 
+         y = ATAC, 
+         fill = alleles)
+) + 
+  geom_boxplot(outlier.shape = NA) + 
+  geom_jitter(size = 0.5, alpha = 0.5) + 
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) +
+  scale_fill_manual(values = list('TT' = 'darkblue', 'CT' = 'darkorange', 'CC' = 'darkgreen'), name = 'genotype') +
+  xlab('10:112347540:T:C\ngenotype') +
+  ylab('Chr10-112,389,126-112,390,073\naccessibility')
+
+# show the plots
+p_interaction
+p_caqtl
+p_eqtl
+
+```
+
