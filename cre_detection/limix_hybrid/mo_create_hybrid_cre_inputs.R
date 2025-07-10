@@ -2,8 +2,14 @@
 ############################################################################################################################
 # Authors: Roy Oelen
 # Name: mo_create_hybrid_cre_inputs.R
-# Function: 
-#
+# Function: create single-cell LIMIX input files
+# Example: 
+# Rscript mo_create_hybrid_cre_inputs.R \
+# --in /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/seurat_preprocess_samples/objects/mo_multimodal_b_1_80_20240521.rds \
+# --out /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/B/ \
+# --confinement /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eQTA/featureVariantFile.w150k.filtered0.0001_cts.txt \
+# --gene_annotation_file /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/annotations/cellranger_arc_gene_annotations.tsv.gz \
+# --donor_annotation_column sample_final
 ############################################################################################################################
 
 ####################
@@ -13,7 +19,7 @@
 library(Seurat)
 library(Signac)
 library(data.table)
-
+library(optparse)
 
 ####################
 # Functions        #
@@ -127,7 +133,7 @@ normalize_mj <- function(seurat_object) {
 }
 
 
-write_matrix_slices <- function(multimodal_object, output_loc, chromosome, gene_anno, region_anno, confinement, gene_anno_gene_column='gs', gene_anno_chrom_column='chrom', gene_anno_start_column='start', gene_anno_end_column='end', confinement_gene_column='feature_id', confinement_region_column='snp_id', gene_chunk_size=100, assay_expression='data', layer_expression='data', assay_accessibility='peaks', layer_accessibility='counts', binarize_chromatin_matrix=T) {
+write_matrix_slices <- function(multimodal_object, output_loc, chromosome, gene_anno, confinement, gene_anno_gene_column='gs', gene_anno_chrom_column='chrom', gene_anno_start_column='start', gene_anno_end_column='end', confinement_gene_column='feature_id', confinement_region_column='snp_id', gene_chunk_size=100, assay_expression='data', layer_expression='data', assay_accessibility='peaks', layer_accessibility='counts', binarize_chromatin_matrix=T) {
   # get expression assay
   expression <- GetAssayData(multimodal_object, layer = layer_expression, assay = assay_expression)
   accessibility <- GetAssayData(multimodal_object, layer = layer_accessibility, assay = assay_accessibility)
@@ -209,50 +215,114 @@ write_matrix_slices <- function(multimodal_object, output_loc, chromosome, gene_
 }
 
 
+####################
+# Settings         #
+####################
+
+# luck seed
+set.seed(7777)
+# whether we are in debug mode
+debug <- F
+
 
 ####################
 # Main code        #
 ####################
 
-# location of the region-to-gene files
-region_to_gene_confinement_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eQTA/featureVariantFile.w150k.filtered0.0001_cts.txt'
+# make command line options
+option_list <- list(
+  make_option(c("-i", "--in"), type="character", default=NULL, 
+              help="input Seurat object to generate matrices for", metavar="character"),
+  make_option(c("-o", "--out"), type="character", default=NULL, 
+              help="output directory", metavar="character"), 
+  make_option(c("-c", "--confinement"), type="character", default=NULL, 
+              help="confinement file of region-gene pairs to test", metavar="character"),
+  make_option(c("-g", "--gene_annotation_file"), type="character", default=NULL, 
+              help="gene annotation file", metavar="character"), 
+  make_option(c("-s", "--donor_annotation_column"), type="character", default='sample_final', 
+              help="gene annotation file", metavar="character")
+)
+
+
+# initialize optparser
+opt_parser <- OptionParser(option_list=option_list)
+opt <- parse_args(opt_parser)
+
+if (debug) {
+  # location of the region-to-gene files
+  region_to_gene_confinement_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eQTA/featureVariantFile.w150k.filtered0.0001_cts.txt'
+  
+  # read the location of the genes
+  gene_anno_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/annotations/cellranger_arc_gene_annotations.tsv.gz'
+  
+  # location of the cell type object
+  ct_object_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/seurat_preprocess_samples/objects/mo_multimodal_cd4t_1_80_20240521.rds'
+  
+  # location of the output
+  output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/CD4T/'
+  
+  # donor annotation column
+  donor_annotation_column <- 'sample_final'
+} else {
+  # there are some things we cannot allow
+  if (is.null(opt[['confinement']])) {
+    stop('confinement must be supplied')
+  } else {
+    # location of the region-to-gene files
+    region_to_gene_confinement_loc <- opt[['confinement']]
+  }
+  if (is.null(opt[['gene_annotation_file']])) {
+    stop('gene annotation must be supplied')
+  } else {
+    # read the location of the genes
+    gene_anno_loc <- opt[['gene_annotation_file']]
+  }
+  if (is.null(opt[['in']])) {
+    stop('seurat file must be supplied')
+  } else {
+    # location of the cell type object
+    ct_object_loc <- opt[['in']]
+  }
+  if (is.null(opt[['out']])) {
+    stop('output directory must be supplied')
+  } else {
+    # location of the output
+    output_loc <- opt[['out']]
+  }
+  # donor annotation column
+  donor_annotation_column <- opt[['donor_annotation_column']]
+}
+
 # read that file
 region_to_gene_confinement <- fread(region_to_gene_confinement_loc, header = T, sep = '\t')
 
-# read the cpeaks annotation
-cpeaks_anno_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/cPeaks/cPeaks_info.tsv'
-cpeaks_anno <- fread(cpeaks_anno_loc, header = T, sep = ' ')
-# add the Signac style name
-cpeaks_anno[['signac_hg38']] <- paste(cpeaks_anno[['chr_hg38']], cpeaks_anno[['start_hg38']], cpeaks_anno[['end_hg38']], sep = '-')
-# as well as the SCENIC+ style name
-cpeaks_anno[['scenic_hg38']] <- paste0(cpeaks_anno[['chr_hg38']], ':', cpeaks_anno[['start_hg38']], '-', cpeaks_anno[['end_hg38']])
+## read the cpeaks annotation
+#cpeaks_anno_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/cPeaks/cPeaks_info.tsv'
+#cpeaks_anno <- fread(cpeaks_anno_loc, header = T, sep = ' ')
+## add the Signac style name
+#cpeaks_anno[['signac_hg38']] <- paste(cpeaks_anno[['chr_hg38']], cpeaks_anno[['start_hg38']], cpeaks_anno[['end_hg38']], sep = '-')
+## as well as the SCENIC+ style name
+#cpeaks_anno[['scenic_hg38']] <- paste0(cpeaks_anno[['chr_hg38']], ':', cpeaks_anno[['start_hg38']], '-', cpeaks_anno[['end_hg38']])
 
-# read the location of the genes
-gene_anno_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/annotations/cellranger_arc_gene_annotations.tsv.gz'
+# read the gene annotation
 gene_anno <- fread(gene_anno_loc, header = F, sep = '\t')
 # add columns
 colnames(gene_anno) <- c('ens', 'gs', 'modality', 'chrom', 'start', 'end')
 
-# location of the cell type object
-mono_object_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/seurat_preprocess_samples/objects/mo_multimodal_monocyte_1_80_20240521.rds'
-
-# location of the output
-output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/monocyte/'
-
-# donor annotation column
-donor_annotation_column <- 'sample_final'
 
 # test monocyte for now
-mono_object <- readRDS(mono_object_loc)
+ct_object <- readRDS(ct_object_loc)
 
 # add pflogpf
-mono_object <- normalize_mj(mono_object)
+ct_object <- normalize_mj(ct_object)
 
-# write the slices
-write_matrix_slices(mono_object, output_loc, 'chr17', gene_anno, cpeaks_anno, region_to_gene_confinement)
+for (i in 1:22) {
+  # write the slices
+  write_matrix_slices(ct_object, output_loc, paste0('chr', i), gene_anno, region_to_gene_confinement)
+}
 
 # get a cell barcode to sample
-smf <- data.frame(genotype_id = mono_object@meta.data[[donor_annotation_column]], phenotype_id = rownames(mono_object@meta.data))
+smf <- data.frame(genotype_id = ct_object@meta.data[[donor_annotation_column]], phenotype_id = rownames(ct_object@meta.data))
 # location of the smf
 smf_output_loc <- paste0(output_loc, '/smf.tsv.gz')
 # write the result
