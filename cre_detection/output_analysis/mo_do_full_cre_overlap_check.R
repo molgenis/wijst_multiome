@@ -477,6 +477,42 @@ get_closest_flanks <- function(position_table, left_flank_column1, right_flank_c
 }
 
 
+get_group_proportions <- function(named_list_of_dfs, column_to_get_proportions_from='screen', specific_trait_expression=NULL, specific_trait_name=NULL) {
+  # we'll save per df
+  results_per_group <- list()
+  # we'll check each df
+  for (group_name in names(named_list_of_dfs)) {
+    # we'll need the numbers for the traits
+    group_totals <- NULL
+    # check a specific trait if requested
+    if (!is.null(specific_trait_name) & !is.null(specific_trait_expression)) {
+      # get true/false vector for that expression
+      is_of_trait <- grepl(specific_trait_expression, named_list_of_dfs[[group_name]][[column_to_get_proportions_from]])
+      # turn into a string
+      is_trait_string <- ifelse (is_of_trait, paste('is', specific_trait_name), paste('is not', specific_trait_name))
+      # make factor
+      is_trait_factor <- factor(is_trait_string, levels = c(paste('is', specific_trait_name), paste('is not', specific_trait_name)))
+      # get the totals from that
+      group_totals <- data.frame(table(is_trait_string))
+    }
+    else {
+      # otherwise get the totals of each group
+      group_totals <- data.frame(table(named_list_of_dfs[[group_name]][[column_to_get_proportions_from]]))
+    }
+    # rename the columns
+    colnames(group_totals) <- c('category', 'n')
+    # add the fraction now as well
+    group_totals[['frac']] <- group_totals[['n']] / sum(group_totals[['n']])
+    # finally add the group as well
+    group_totals[['group']] <- group_name
+    # place in the list
+    results_per_group[[group_name]] <- group_totals
+  }
+  # merge all the tables
+  results_all <- do.call('rbind', results_per_group)
+  return(results_all)
+}
+
 ####################
 # Settings         #
 ####################
@@ -550,8 +586,8 @@ scenic_output <- fread(scenic_output_loc, header = T, sep = '\t')
 qtl_overlap <- fread(qtl_overlap_loc, header = T, sep = '\t')
 
 # read the cpeaks annotation
-cpeaks_anno_loc <- '/groups/umcg-franke-scrna/tmp02/external_datasets/cPeaks/cPeaks_info.tsv'
-cpeaks_anno <- fread(cpeaks_anno_loc, header = T, sep = ' ')
+cpeaks_anno_loc <- '/groups/umcg-franke-scrna/tmp02/external_datasets/cPeaks/cPeaks_wscreenv4.tsv.gz'
+cpeaks_anno <- fread(cpeaks_anno_loc, header = T, sep = '\t')
 # add the Signac style name
 cpeaks_anno[['signac_hg38']] <- paste(cpeaks_anno[['chr_hg38']], cpeaks_anno[['start_hg38']], cpeaks_anno[['end_hg38']], sep = '-')
 # as well as the SCENIC+ style name
@@ -571,12 +607,15 @@ pseudobulk_distances <- get_closest_flanks(pseudobulk_output, 'start_hg38', 'end
 pseudobulk_output[['distance']] <- pseudobulk_distances[['min_dist']]
 # and category
 pseudobulk_output[['category']] <- 'pseudobulk'
+# add the screen annotation as well
+pseudobulk_output[['screen']] <- cpeaks_anno[match(pseudobulk_output[['snp_id']], cpeaks_anno[['signac_hg38']]), ][['screen_all']]
 
 # and to the hybrid method
 hybrid_output <- cbind(hybrid_output, cpeaks_anno[match(hybrid_output[['snp_id']], cpeaks_anno[['signac_hg38']]), c('chr_hg38', 'start_hg38', 'end_hg38')])
 hybrid_distances <- get_closest_flanks(hybrid_output, 'start_hg38', 'end_hg38', 'feature_start', 'feature_end')
 hybrid_output[['distance']] <- hybrid_distances[['min_dist']]
 hybrid_output[['category']] <- 'hybrid'
+hybrid_output[['screen']] <- cpeaks_anno[match(hybrid_output[['snp_id']], cpeaks_anno[['signac_hg38']]), ][['screen_all']]
 
 
 # get extra annotations for the pseudobulk output
@@ -612,6 +651,8 @@ qtl_distances <- get_closest_flanks(qtl_overlap, 'start_hg38', 'end_hg38', 'star
 qtl_overlap[['distance']] <- qtl_distances[['min_dist']]
 # and category
 qtl_overlap[['category']] <- 'qtl_overlap'
+# add the screen annotation as well
+qtl_overlap[['screen']] <- cpeaks_anno[match(qtl_overlap[['feature_caqtl']], cpeaks_anno[['signac_hg38']]), ][['screen_all']]
 
 # add location for the binomial table
 binomial_output <- cbind(binomial_output, cpeaks_anno[match(binomial_output[['region']], cpeaks_anno[['signac_hg38']]), c('chr_hg38', 'start_hg38', 'end_hg38')])
@@ -623,6 +664,9 @@ binomial_distances <- get_closest_flanks(binomial_output, 'start_hg38', 'end_hg3
 binomial_output[['distance']] <- binomial_distances[['min_dist']]
 # and category
 binomial_output[['category']] <- 'binomial'
+# add the screen annotation as well
+binomial_output[['screen']] <- cpeaks_anno[match(binomial_output[['region']], cpeaks_anno[['signac_hg38']]), ][['screen_all']]
+
 
 # add location for the binomial table
 scenic_output <- cbind(scenic_output, cpeaks_anno[match(scenic_output[['Region']], cpeaks_anno[['scenic_hg38']]), c('chr_hg38', 'start_hg38', 'end_hg38')])
@@ -634,6 +678,8 @@ scenic_distances <- get_closest_flanks(scenic_output, 'start_hg38', 'end_hg38', 
 scenic_output[['distance']] <- scenic_distances[['min_dist']]
 # and category
 scenic_output[['category']] <- 'scenic'
+# add the screen annotation as well
+scenic_output[['screen']] <- cpeaks_anno[match(scenic_output[['Region']], cpeaks_anno[['scenic_hg38']]), ][['screen_all']]
 
 
 # add region to gene column
@@ -838,6 +884,119 @@ p_region_direction_distances_neg <- ggplot(
   theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
 p_region_direction_distances_neg
 
+# add simple column to cpeaks
+cpeaks_anno[['screen']] <- cpeaks_anno[['screen_all']]
+# get the percentage of each screen group
+fracs_screen <- get_group_proportions(list('pseudobulk' = pseudobulk_output_unique, 'hybrid' = hybrid_output_unique, 'qtl_overlap' = qtl_overlap_unique, 'scenic' = scenic_output_unique, 'scenic_unfiltered' = scenic_output_unique_unfiltered, 'binomial' = binomial_output_unique, 'cPeaks' = cpeaks_anno))
+# make into a plot
+p_screen_fractions <- ggplot(data = fracs_screen, mapping = aes(x = group, y = frac, fill = category)) + 
+  geom_bar(stat = 'identity', position = 'stack') +
+  xlab('CRE detection method') +
+  ylab('fraction in screen categories') +
+  ggtitle('CRE method result screen categories') +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+p_screen_fractions
+# get the percentage of each screen group
+fracs_screen_is_ca <- get_group_proportions(list('pseudobulk' = pseudobulk_output_unique, 'hybrid' = hybrid_output_unique, 'qtl_overlap' = qtl_overlap_unique, 'scenic' = scenic_output_unique, 'scenic_unfiltered' = scenic_output_unique_unfiltered, 'binomial' = binomial_output_unique, 'cPeaks' = cpeaks_anno), specific_trait_expression = 'CA', specific_trait_name = 'CA')
+# make into a plot
+p_screen_fractions_ca <- ggplot(data = fracs_screen_is_ca, mapping = aes(x = group, y = frac, fill = category)) + 
+  geom_bar(stat = 'identity', position = 'stack') +
+  xlab('CRE detection method') +
+  ylab('fraction of CA screen regions') +
+  ggtitle('CRE method result CA screen regions') +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) +
+  scale_fill_manual(values = roycols::get_color_list(c('is CA', 'is not CA')))
+p_screen_fractions_ca
+# get the percentage of each screen group
+fracs_screen_is_tf <- get_group_proportions(list('pseudobulk' = pseudobulk_output_unique, 'hybrid' = hybrid_output_unique, 'qtl_overlap' = qtl_overlap_unique, 'scenic' = scenic_output_unique, 'scenic_unfiltered' = scenic_output_unique_unfiltered, 'binomial' = binomial_output_unique, 'cPeaks' = cpeaks_anno), specific_trait_expression = 'TF', specific_trait_name = 'TF')
+# make into a plot
+p_screen_fractions_tf <- ggplot(data = fracs_screen_is_tf, mapping = aes(x = group, y = frac, fill = category)) + 
+  geom_bar(stat = 'identity', position = 'stack') +
+  xlab('CRE detection method') +
+  ylab('fraction of TF screen regions') +
+  ggtitle('CRE method result TF screen regions') +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) +
+  scale_fill_manual(values = roycols::get_color_list(c('is TF', 'is not TF')))
+p_screen_fractions_tf
+# get the percentage of each screen group
+fracs_screen_is_ctcf <- get_group_proportions(list('pseudobulk' = pseudobulk_output_unique, 'hybrid' = hybrid_output_unique, 'qtl_overlap' = qtl_overlap_unique, 'scenic' = scenic_output_unique, 'scenic_unfiltered' = scenic_output_unique_unfiltered, 'binomial' = binomial_output_unique, 'cPeaks' = cpeaks_anno), specific_trait_expression = 'CTCF', specific_trait_name = 'CTCF')
+# make into a plot
+p_screen_fractions_ctcf <- ggplot(data = fracs_screen_is_ctcf, mapping = aes(x = group, y = frac, fill = category)) + 
+  geom_bar(stat = 'identity', position = 'stack') +
+  xlab('CRE detection method') +
+  ylab('fraction of CTCF screen regions') +
+  ggtitle('CRE method result CTCF screen regions') +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) +
+  scale_fill_manual(values = roycols::get_color_list(c('is CTCF', 'is not CTCF')))
+p_screen_fractions_ctcf
+# get the percentage of each screen group
+fracs_screen_is_ctcf <- get_group_proportions(list('pseudobulk' = pseudobulk_output_unique, 'hybrid' = hybrid_output_unique, 'qtl_overlap' = qtl_overlap_unique, 'scenic' = scenic_output_unique, 'scenic_unfiltered' = scenic_output_unique_unfiltered, 'binomial' = binomial_output_unique, 'cPeaks' = cpeaks_anno), specific_trait_expression = 'CTCF', specific_trait_name = 'CTCF')
+# make into a plot
+p_screen_fractions_ctcf <- ggplot(data = fracs_screen_is_ctcf, mapping = aes(x = group, y = frac, fill = category)) + 
+  geom_bar(stat = 'identity', position = 'stack') +
+  xlab('CRE detection method') +
+  ylab('fraction of CTCF screen regions') +
+  ggtitle('CRE method result CTCF screen regions') +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) +
+  scale_fill_manual(values = roycols::get_color_list(c('is CTCF', 'is not CTCF')))
+p_screen_fractions_ctcf
+# get the percentage of each screen group
+fracs_screen_is_pls <- get_group_proportions(list('pseudobulk' = pseudobulk_output_unique, 'hybrid' = hybrid_output_unique, 'qtl_overlap' = qtl_overlap_unique, 'scenic' = scenic_output_unique, 'scenic_unfiltered' = scenic_output_unique_unfiltered, 'binomial' = binomial_output_unique, 'cPeaks' = cpeaks_anno), specific_trait_expression = 'PLS', specific_trait_name = 'PLS')
+# make into a plot
+p_screen_fractions_pls <- ggplot(data = fracs_screen_is_pls, mapping = aes(x = group, y = frac, fill = category)) + 
+  geom_bar(stat = 'identity', position = 'stack') +
+  xlab('CRE detection method') +
+  ylab('fraction of PLS screen regions') +
+  ggtitle('CRE method result PLS screen regions') +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) +
+  scale_fill_manual(values = roycols::get_color_list(c('is PLS', 'is not PLS')))
+p_screen_fractions_pls
+# get the percentage of each screen group
+fracs_screen_is_els <- get_group_proportions(list('pseudobulk' = pseudobulk_output_unique, 'hybrid' = hybrid_output_unique, 'qtl_overlap' = qtl_overlap_unique, 'scenic' = scenic_output_unique, 'scenic_unfiltered' = scenic_output_unique_unfiltered, 'binomial' = binomial_output_unique, 'cPeaks' = cpeaks_anno), specific_trait_expression = 'ELS', specific_trait_name = 'ELS')
+# make into a plot
+p_screen_fractions_els <- ggplot(data = fracs_screen_is_els, mapping = aes(x = group, y = frac, fill = category)) + 
+  geom_bar(stat = 'identity', position = 'stack') +
+  xlab('CRE detection method') +
+  ylab('fraction of ELS screen regions') +
+  ggtitle('CRE method result ELS screen regions') +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) +
+  scale_fill_manual(values = roycols::get_color_list(c('is ELS', 'is not ELS')))
+p_screen_fractions_els
+# get the percentage of each screen group
+fracs_screen_is_pels <- get_group_proportions(list('pseudobulk' = pseudobulk_output_unique, 'hybrid' = hybrid_output_unique, 'qtl_overlap' = qtl_overlap_unique, 'scenic' = scenic_output_unique, 'scenic_unfiltered' = scenic_output_unique_unfiltered, 'binomial' = binomial_output_unique, 'cPeaks' = cpeaks_anno), specific_trait_expression = 'pELS', specific_trait_name = 'pELS')
+# make into a plot
+p_screen_fractions_pels <- ggplot(data = fracs_screen_is_pels, mapping = aes(x = group, y = frac, fill = category)) + 
+  geom_bar(stat = 'identity', position = 'stack') +
+  xlab('CRE detection method') +
+  ylab('fraction of pELS screen regions') +
+  ggtitle('CRE method result pELS screen regions') +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) +
+  scale_fill_manual(values = roycols::get_color_list(c('is pELS', 'is not pELS')))
+p_screen_fractions_pels
+# get the percentage of each screen group
+fracs_screen_is_dels <- get_group_proportions(list('pseudobulk' = pseudobulk_output_unique, 'hybrid' = hybrid_output_unique, 'qtl_overlap' = qtl_overlap_unique, 'scenic' = scenic_output_unique, 'scenic_unfiltered' = scenic_output_unique_unfiltered, 'binomial' = binomial_output_unique, 'cPeaks' = cpeaks_anno), specific_trait_expression = 'dELS', specific_trait_name = 'dELS')
+# make into a plot
+p_screen_fractions_dels <- ggplot(data = fracs_screen_is_dels, mapping = aes(x = group, y = frac, fill = category)) + 
+  geom_bar(stat = 'identity', position = 'stack') +
+  xlab('CRE detection method') +
+  ylab('fraction of dELS screen regions') +
+  ggtitle('CRE method result dELS screen regions') +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) +
+  scale_fill_manual(values = roycols::get_color_list(c('is dELS', 'is not dELS')))
+p_screen_fractions_dels
+# show in one plot
+plot_grid(
+  p_screen_fractions_ca, 
+  p_screen_fractions_tf, 
+  p_screen_fractions_ctcf, 
+  p_screen_fractions_pls, 
+  p_screen_fractions_els, 
+  p_screen_fractions_pels, 
+  p_screen_fractions_dels, 
+  nrow = 3, 
+  ncol = 3
+)
+
 
 # merge pseudobulk and binominal
 pseudobulk_vs_binomial <- merge(x = pseudobulk_output_unique, y = binomial_output_unique, by = 'r2g')
@@ -962,11 +1121,11 @@ pairwise_overlap_table <- data.frame(
                 'pseudobulk', 'scenic', 'binomial', 'QTL', 'scenic uf', 'hybrid', 
                 'pseudobulk', 'scenic', 'binomial', 'QTL', 'scenic uf', 'hybrid'), 
   'overlapping' = c(nrow(pseudobulk_output_unique), nrow(pseudobulk_vs_scenic), nrow(pseudobulk_vs_binomial), nrow(pseudobulk_vs_qtl), nrow(pseudobulk_vs_scenic_unfiltered), nrow(pseudobulk_vs_hybrid), 
-                    nrow(pseudobulk_vs_scenic), nrow(scenic_output_unique), nrow(scenic_vs_binomial), nrow(scenic_vs_qtl), nrow(scenic_unfiltered_vs_scenic_filtered), nrow(hybrid_output_unique),  
+                    nrow(pseudobulk_vs_scenic), nrow(scenic_output_unique), nrow(scenic_vs_binomial), nrow(scenic_vs_qtl), nrow(scenic_unfiltered_vs_scenic_filtered), nrow(hybrid_vs_scenic),  
                     nrow(pseudobulk_vs_binomial), nrow(scenic_vs_binomial), nrow(binomial_output_unique), nrow(binomial_vs_qtl), nrow(scenic_unfiltered_vs_binomial), nrow(hybrid_vs_binomial), 
                     nrow(pseudobulk_vs_qtl), nrow(scenic_vs_qtl), nrow(binomial_vs_qtl), nrow(qtl_overlap_unique), nrow(scenic_unfiltered_vs_qtl), nrow(hybrid_vs_qtl),  
                     nrow(pseudobulk_vs_scenic_unfiltered), nrow(scenic_unfiltered_vs_scenic_filtered), nrow(scenic_unfiltered_vs_binomial), nrow(scenic_unfiltered_vs_qtl), nrow(scenic_output_unique_unfiltered), nrow(hybrid_vs_scenic_unfiltered), 
-                    nrow(pseudobulk_vs_hybrid), nrow(hybrid_output_unique), nrow(hybrid_vs_binomial), nrow(hybrid_vs_qtl), nrow(hybrid_vs_scenic_unfiltered), nrow(hybrid_output_unique))
+                    nrow(pseudobulk_vs_hybrid), nrow(hybrid_vs_scenic), nrow(hybrid_vs_binomial), nrow(hybrid_vs_qtl), nrow(hybrid_vs_scenic_unfiltered), nrow(hybrid_output_unique))
 )
 
 # write these tables
