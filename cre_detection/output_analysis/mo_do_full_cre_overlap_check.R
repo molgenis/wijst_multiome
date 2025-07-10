@@ -535,6 +535,9 @@ pseudobulk_output_folder <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/o
 binomial_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/cre_eqtl/eqtl_caqtl_overlap/combined/betas_ps/'
 # location of the hybrid method
 hybrid_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/'
+# get the screen region to gene links
+screen_r2g_loc <- '/groups/umcg-franke-scrna/tmp02/external_datasets/cPeaks/cpeaks_to_screenv4_hic.tsv.gz'
+
 
 # read the pseudobulk outputs
 pseudobulk_output_ut_list <- read_pseudobulk_cre_output_per_celltype(paste(pseudobulk_output_folder, 'UT', sep = '/'), add_mtc = T, filter_alpha = T, add_global_nominal_threshold = T, add_local_nominal_threshold = T)
@@ -584,6 +587,8 @@ hybrid_output[['z_from_p']] <- qnorm(hybrid_output[['p_value']] / 2) * -1 * sign
 scenic_output <- fread(scenic_output_loc, header = T, sep = '\t')
 # read the qtl overlap
 qtl_overlap <- fread(qtl_overlap_loc, header = T, sep = '\t')
+# read the screen r2g
+screen_r2g <- fread(screen_r2g_loc, header = T, sep = '\t')
 
 # read the cpeaks annotation
 cpeaks_anno_loc <- '/groups/umcg-franke-scrna/tmp02/external_datasets/cPeaks/cPeaks_wscreenv4.tsv.gz'
@@ -626,6 +631,9 @@ pseudobulk_output[['strand']] <- strand_information[match(pseudobulk_output[['fe
 
 # add strand info to the hybrid output as well
 hybrid_output[['strand']] <- strand_information[match(hybrid_output[['feature_id']], strand_information[['feature_id']]), ][['strand']]
+
+# and to the scenic data
+scenic_output[['strand']] <- strand_information[match(scenic_output[['Gene']], strand_information[['feature_id']]), ][['strand']]
 
 
 # read the binomial results
@@ -688,6 +696,7 @@ binomial_output[['r2g']] <- paste(binomial_output[['region']], binomial_output[[
 scenic_output[['r2g']] <- paste(gsub(':', '-', scenic_output[['Region']]), scenic_output[['Gene']])
 qtl_overlap[['r2g']] <- paste(qtl_overlap[['feature_caqtl']], qtl_overlap[['feature_eqtl']])
 hybrid_output[['r2g']] <- paste(hybrid_output[['snp_id']], hybrid_output[['feature_id']])
+screen_r2g[['r2g']] <- paste(screen_r2g[['region']], screen_r2g[['gene']])
 
 # sort all of them by the Z
 pseudobulk_output <- pseudobulk_output[order(abs(pseudobulk_output[['zscore']]), decreasing = T), ]
@@ -774,15 +783,6 @@ ggplot(data = n_effects_region_gene, mapping = aes(x = category, y = neffects, f
   theme(legend.position="none")
 
 
-# add region to gene column
-pseudobulk_output_unique[['r2g']] <- paste(pseudobulk_output_unique[['snp_id']], pseudobulk_output_unique[['feature_id']])
-binomial_output_unique[['r2g']] <- paste(binomial_output_unique[['region']], binomial_output_unique[['gene']])
-scenic_output_unique[['r2g']] <- paste(gsub(':', '-', scenic_output_unique[['Region']]), scenic_output_unique[['Gene']])
-scenic_output_unique_unfiltered[['r2g']] <- paste(gsub(':', '-', scenic_output_unique_unfiltered[['Region']]), scenic_output_unique_unfiltered[['Gene']])
-qtl_overlap_unique[['r2g']] <- paste(qtl_overlap_unique[['feature_caqtl']], qtl_overlap_unique[['feature_eqtl']])
-hybrid_output_unique[['r2g']] <- paste(hybrid_output_unique[['snp_id']], hybrid_output_unique[['feature_id']])
-
-
 # plot these numbers
 plot_sharing_per_celltype(
   list('pseudobulk' = pseudobulk_output_unique[['r2g']], 
@@ -791,6 +791,16 @@ plot_sharing_per_celltype(
        'scenic unfiltered' = scenic_output_unique_unfiltered[['r2g']],
        'qtl' = qtl_overlap_unique[['r2g']], 
        'hybrid' = hybrid_output_unique[['r2g']]), 
+  use_label_dict=F, use_color_dict=T
+)
+plot_sharing_per_celltype(
+  list('pseudobulk' = pseudobulk_output_unique[['r2g']], 
+       'binomial' = binomial_output_unique[['r2g']], 
+       'scenic' = scenic_output_unique[['r2g']], 
+       'scenic unfiltered' = scenic_output_unique_unfiltered[['r2g']],
+       'qtl' = qtl_overlap_unique[['r2g']], 
+       'hybrid' = hybrid_output_unique[['r2g']], 
+       'screen_hic' = screen_r2g[['r2g']]), 
   use_label_dict=F, use_color_dict=T
 )
 
