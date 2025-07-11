@@ -845,6 +845,9 @@ binomial_output_unfiltered <- binomial_output
 # and remove region-gene overlaps
 binomial_output <- binomial_output[abs(binomial_output[['distance']]) > 0, ]
 
+# check pseudobulk vs the hi-C data
+plot_sharing_per_celltype(list('B' = pseudobulk_output[pseudobulk_output$cell_type == 'B', ][['r2g']], 'CD4T' = pseudobulk_output[pseudobulk_output$cell_type == 'CD4T', ][['r2g']], 'CD8T' = pseudobulk_output[pseudobulk_output$cell_type == 'CD8T', ][['r2g']], 'DC' = pseudobulk_output[pseudobulk_output$cell_type == 'DC', ][['r2g']], 'monocyte' = pseudobulk_output[pseudobulk_output$cell_type == 'monocyte', ][['r2g']], 'NK' = pseudobulk_output[pseudobulk_output$cell_type == 'NK', ][['r2g']], 'HiC' = screen_r2g[['r2g']]), use_label_dict = T, use_color_dict = T)
+
 # get unique ones
 pseudobulk_output_unique <- pseudobulk_output[!duplicated(paste(pseudobulk_output[['snp_id']], pseudobulk_output[['feature_id']])), ]
 binomial_output_unique <- binomial_output[!duplicated(paste(binomial_output[['region']], binomial_output[['gene']])), ]
