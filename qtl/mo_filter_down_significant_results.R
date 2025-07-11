@@ -96,6 +96,8 @@ calculate_nominal_thresholds <- function(res_df, fdr=0.05, pval_col='p_value', n
 #' @param mtc_column_to_add A character string specifying the name of the column to store the MTC values. Default is 'feature_q_value'.
 #' @param add_global_nominal_threshold A logical value indicating whether to add global nominal thresholds. Default is FALSE.
 #' @param global_nominal_threshold_column_to_add A character string specifying the name of the column to store global nominal thresholds. Default is 'pval_nominal_threshold_global'.
+#' @param add_local_nominal_threshold A logical value indicating whether to add global nominal thresholds. Default is FALSE.
+#' @param global_local_threshold_column_to_add A character string specifying the name of the column to store global nominal thresholds. Default is 'pval_nominal_threshold_global'.
 #' @param alpha_column A character string specifying the name of the column with alpha parameters for the beta distribution. Default is 'alpha_param'.
 #' @param beta_column A character string specifying the name of the column with beta parameters for the beta distribution. Default is 'beta_param'.
 #'
@@ -120,7 +122,7 @@ calculate_nominal_thresholds <- function(res_df, fdr=0.05, pval_col='p_value', n
 #'     beta_column = 'beta_param'
 #'   )
 #' }
-filter_file_by_significance <- function(input_loc, output_loc, significance_column='p_value', significance_cutoff=0.05, verbose=T, add_mtc=T, mtc_column='empirical_feature_p_value', feature_mtc_column='feature_id', mtc_column_to_add='feature_q_value', add_global_nominal_threshold=F, global_nominal_threshold_column_to_add='pval_nominal_threshold_global', alpha_column='alpha_param', beta_column='beta_param') {
+filter_file_by_significance <- function(input_loc, output_loc, significance_column='p_value', significance_cutoff=0.05, verbose=T, add_mtc=T, mtc_column='empirical_feature_p_value', feature_mtc_column='feature_id', mtc_column_to_add='feature_q_value', add_global_nominal_threshold=T, global_nominal_threshold_column_to_add='pval_nominal_threshold_global', add_local_nominal_threshold=T, local_nominal_threshold_column_to_add='pval_nominal_threshold_local', alpha_column='alpha_param', beta_column='beta_param') {
   # paste together the full path
   full_cell_type_path <- input_loc
   # log if requested
@@ -145,11 +147,16 @@ filter_file_by_significance <- function(input_loc, output_loc, significance_colu
     # now add back to the original table
     cell_type_output[[mtc_column_to_add]] <- cell_type_output_features[match(cell_type_output[[feature_mtc_column]], cell_type_output_features[[feature_mtc_column]]), 'qvalue'][['qvalue']]
     # based on this MTC column, we can now also add a cuttoff
-    if (add_global_nominal_threshold) {
-      cell_type_output_global_threshold <- calculate_nominal_thresholds(cell_type_output_features, fdr=significance_cutoff, pval_col=significance_column, nominal_threshold_column='nomthres', cutoff_column=mtc_column_to_add, alpha_column = alpha_column, beta_column = beta_column)
-      print(head(cell_type_output_global_threshold))
+    if (add_local_nominal_threshold) {
+      cell_type_output_local_threshold <- calculate_nominal_thresholds(cell_type_output_features, fdr=significance_cutoff, pval_col=significance_column, nominal_threshold_column='nomthres', cutoff_column=mtc_column_to_add, alpha_column = alpha_column, beta_column = beta_column)
       # now add the nominal threshold to the full table
-      cell_type_output[[global_nominal_threshold_column_to_add]] <- cell_type_output_global_threshold[match(cell_type_output[[feature_mtc_column]], cell_type_output_global_threshold[[feature_mtc_column]]), 'nomthres'][['nomthres']]
+      cell_type_output[[local_nominal_threshold_column_to_add]] <- cell_type_output_local_threshold[match(cell_type_output[[feature_mtc_column]], cell_type_output_local_threshold[[feature_mtc_column]]), 'nomthres'][['nomthres']]
+    }
+    if (add_global_nominal_threshold) {
+      # the the max p value where the qvalue was still significant
+      nominal_p_cutoff_global <- max(cell_type_output_features[cell_type_output_features[['qvalue']] < significance_cutoff, ][[significance_column]])
+      # add that to the table
+      cell_type_output[[global_nominal_threshold_column_to_add]] <- nominal_p_cutoff_global
     }
   }
   
@@ -191,13 +198,17 @@ filter_file_by_significance <- function(input_loc, output_loc, significance_colu
 #' @param mtc_column the column of values to apply multiple testing on
 #' @param feature_mtc_column the column that has the feature group to perform the multiple testing on
 #' @param mtc_column_to_add the name of the column that has the mtc-corrected values
+#' @param add_global_nominal_threshold A logical value indicating whether to add global nominal thresholds. Default is FALSE.
+#' @param global_nominal_threshold_column_to_add A character string specifying the name of the column to store global nominal thresholds. Default is 'pval_nominal_threshold_global'.
+#' @param add_local_nominal_threshold A logical value indicating whether to add global nominal thresholds. Default is FALSE.
+#' @param global_local_threshold_column_to_add A character string specifying the name of the column to store global nominal thresholds. Default is 'pval_nominal_threshold_global'.
 #' @param filter_alpha remove entries that have an abhorrant alpha param
 #' @param verbose print progress
 #' @param folders vector of folders to consider. optional, if not supplied, all folders will be considered
 #' @param sep value separator in table
 #' @returns 0 if success
 #' 
-split_output_by_column <- function(input_dir, input_file='qtl_results_all.txt.gz', output_dir=NULL, output_file_prepend='qtl_results_all_qval_', output_file_append='.txt.gz', significance_cutoff=0.05, split_column='feature_chromosome', add_mtc=T, mtc_column='empirical_feature_p_value', feature_mtc_column='feature_id', mtc_column_to_add='feature_q_value', add_global_nominal_threshold=T, global_nominal_threshold_column_to_add='pval_nominal_threshold_global', alpha_column='alpha_param', beta_column='beta_param', nominal_p_column='p_value', verbose=T, filter_alpha=T, folders=NULL, sep='\t') {
+split_output_by_column <- function(input_dir, input_file='qtl_results_all.txt.gz', output_dir=NULL, output_file_prepend='qtl_results_all_qval_', output_file_append='.txt.gz', significance_cutoff=0.05, split_column='feature_chromosome', add_mtc=T, mtc_column='empirical_feature_p_value', feature_mtc_column='feature_id', mtc_column_to_add='feature_q_value', add_global_nominal_threshold=T, global_nominal_threshold_column_to_add='pval_nominal_threshold_global', add_local_nominal_threshold=T, local_nominal_threshold_column_to_add='pval_nominal_threshold_local', alpha_column='alpha_param', beta_column='beta_param', nominal_p_column='p_value', verbose=T, filter_alpha=T, folders=NULL, sep='\t') {
   # get the folders in the directory, which should be the cell types
   cell_types <- list.dirs(input_dir, full.names = F, recursive = F)
   # subset if a set of folders was supplied
@@ -265,10 +276,19 @@ split_output_by_column <- function(input_dir, input_file='qtl_results_all.txt.gz
         if (verbose) {
           print(paste('adding global nominal p-value cutoff to', full_cell_type_path))
         }
+        # the the max p value where the qvalue was still significant
+        nominal_p_cutoff_global <- max(cell_type_output_features[cell_type_output_features[['qvalue']] < significance_cutoff, ][[nominal_p_column]])
+        # add that to the table
+        cell_type_output[[global_nominal_threshold_column_to_add]] <- nominal_p_cutoff_global
+      }
+      if (add_global_nominal_threshold) {
+        if (verbose) {
+          print(paste('adding local nominal p-value cutoff to', full_cell_type_path))
+        }
         # get the nominal p value cutoff based on the p values and the beta distribution
-        cell_type_output_global_threshold <- calculate_nominal_thresholds(cell_type_output_features, fdr=significance_cutoff, pval_col=nominal_p_column, nominal_threshold_column='nomthres', cutoff_column='qvalue', alpha_column = alpha_column, beta_column = beta_column)
+        cell_type_output_local_threshold <- calculate_nominal_thresholds(cell_type_output_features, fdr=significance_cutoff, pval_col=nominal_p_column, nominal_threshold_column='nomthres', cutoff_column='qvalue', alpha_column = alpha_column, beta_column = beta_column)
         # now add the nominal threshold to the full table
-        cell_type_output[[global_nominal_threshold_column_to_add]] <- cell_type_output_global_threshold[match(cell_type_output[[feature_mtc_column]], cell_type_output_global_threshold[[feature_mtc_column]]), ][['nomthres']]
+        cell_type_output[[local_nominal_threshold_column_to_add]] <- cell_type_output_local_threshold[match(cell_type_output[[feature_mtc_column]], cell_type_output_local_threshold[[feature_mtc_column]]), ][['nomthres']]
       }
     }
     

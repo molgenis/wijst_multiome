@@ -99,64 +99,70 @@ read_pseudobulk_cre_output_per_celltype <- function(pseudobulk_output_folder, ce
   for (cell_type in cell_type_folders) {
     # paste together the full file path
     cell_type_output_loc <- paste(pseudobulk_output_folder, cell_type, filename_output, sep = '/')
-    # read this file
-    cell_type_output <- fread(cell_type_output_loc, header = T, sep = '\t')
-    # make sure there are no duplicates
-    cell_type_output <- unique(cell_type_output)
-    # filter on alpha if requested
-    if (filter_alpha) {
-      cell_type_output <- cell_type_output[!(cell_type_output[[alpha_column]] > alpha_max | cell_type_output[[alpha_column]] < alpha_min), ]
+    # check if the file exists
+    if (file.exists(cell_type_output_loc)) {
+      # read this file
+      cell_type_output <- fread(cell_type_output_loc, header = T, sep = '\t')
+      # make sure there are no duplicates
+      cell_type_output <- unique(cell_type_output)
+      # filter on alpha if requested
+      if (filter_alpha) {
+        cell_type_output <- cell_type_output[!(cell_type_output[[alpha_column]] > alpha_max | cell_type_output[[alpha_column]] < alpha_min), ]
+      }
+      
+      # get the features and the emperical p value
+      if (add_mtc) {
+        # subset to what we need
+        cell_type_output_features <- NULL
+        # which is a bit if we care about the nominal threshold
+        if (add_global_nominal_threshold) {
+          cell_type_output_features <- cell_type_output[, c(..feature_mtc_column, ..mtc_column, ..nominal_p_column, ..alpha_column, ..beta_column), with = F]
+        }
+        # even less if we don't try to get the nominal threshold as well
+        else {
+          cell_type_output_features <- cell_type_output[, c(..feature_mtc_column, ..mtc_column), with = F]
+        }
+        # remove the wherever we dont have our significance
+        cell_type_output_features <- cell_type_output_features[!is.na(cell_type_output_features[[significance_column]]) & cell_type_output_features[[significance_column]] >= 0, ]
+        # order by significance
+        cell_type_output_features <- cell_type_output_features[order(cell_type_output_features[[mtc_column]]), ]
+        # keep only the first entry
+        cell_type_output_features[!duplicated(cell_type_output_features[[feature_mtc_column]]), ]
+        # set the values that are larger than 1, to be 1, problem with precision
+        cell_type_output_features[cell_type_output_features[[mtc_column]] > 1, mtc_column] <- 1
+        # add multiple testing correction
+        cell_type_output_features[['qvalue']] <- qvalue(cell_type_output_features[[mtc_column]])$qvalues
+        # now add back to the original table
+        cell_type_output[[mtc_column_to_add]] <- cell_type_output_features[match(cell_type_output[[feature_mtc_column]], cell_type_output_features[[feature_mtc_column]]), 'qvalue'][['qvalue']]
+        # based on this MTC column, we can now also add a cuttoff
+        if (add_local_nominal_threshold) {
+          cell_type_output_local_threshold <- calculate_nominal_thresholds(cell_type_output_features, fdr=significance_cutoff, pval_col=nominal_p_column, nominal_threshold_column='nomthres', cutoff_column = 'qvalue', alpha_column = alpha_column, beta_column = beta_column)
+          # now add the nominal threshold to the full table
+          cell_type_output[[local_nominal_threshold_column_to_add]] <- cell_type_output_local_threshold[match(cell_type_output[[feature_mtc_column]], cell_type_output_local_threshold[[feature_mtc_column]]), 'nomthres'][['nomthres']]
+        }
+        if(add_global_nominal_threshold) {
+          # filter the output to significant MTC hits
+          cell_type_output_features_significant <- cell_type_output_features[cell_type_output_features[['qvalue']] < significance_cutoff, ]
+          # and get the maximum significant nominal value
+          global_p_cutoff <- max(cell_type_output_features_significant[[nominal_p_column]])
+          # add that to the table
+          cell_type_output[[global_nominal_threshold_column_to_add]] <- global_p_cutoff
+        }
+      }
+      # filter the file if requested
+      if (filter_significance) {
+        cell_type_output <- cell_type_output[
+          cell_type_output[[significance_column]] < significance_cutoff, 
+        ]
+      }
+      # add the cell type
+      cell_type_output[['cell_type']] <- cell_type
+      # put in the list
+      output_per_celltype[[cell_type]] <- cell_type_output
     }
-    
-    # get the features and the emperical p value
-    if (add_mtc) {
-      # subset to what we need
-      cell_type_output_features <- NULL
-      # which is a bit if we care about the nominal threshold
-      if (add_global_nominal_threshold) {
-        cell_type_output_features <- cell_type_output[, c(..feature_mtc_column, ..mtc_column, ..nominal_p_column, ..alpha_column, ..beta_column), with = F]
-      }
-      # even less if we don't try to get the nominal threshold as well
-      else {
-        cell_type_output_features <- cell_type_output[, c(..feature_mtc_column, ..mtc_column), with = F]
-      }
-      # remove the wherever we dont have our significance
-      cell_type_output_features <- cell_type_output_features[!is.na(cell_type_output_features[[significance_column]]) & cell_type_output_features[[significance_column]] >= 0, ]
-      # order by significance
-      cell_type_output_features <- cell_type_output_features[order(cell_type_output_features[[mtc_column]]), ]
-      # keep only the first entry
-      cell_type_output_features[!duplicated(cell_type_output_features[[feature_mtc_column]]), ]
-      # set the values that are larger than 1, to be 1, problem with precision
-      cell_type_output_features[cell_type_output_features[[mtc_column]] > 1, mtc_column] <- 1
-      # add multiple testing correction
-      cell_type_output_features[['qvalue']] <- qvalue(cell_type_output_features[[mtc_column]])$qvalues
-      # now add back to the original table
-      cell_type_output[[mtc_column_to_add]] <- cell_type_output_features[match(cell_type_output[[feature_mtc_column]], cell_type_output_features[[feature_mtc_column]]), 'qvalue'][['qvalue']]
-      # based on this MTC column, we can now also add a cuttoff
-      if (add_local_nominal_threshold) {
-        cell_type_output_local_threshold <- calculate_nominal_thresholds(cell_type_output_features, fdr=significance_cutoff, pval_col=nominal_p_column, nominal_threshold_column='nomthres', cutoff_column = 'qvalue', alpha_column = alpha_column, beta_column = beta_column)
-        # now add the nominal threshold to the full table
-        cell_type_output[[local_nominal_threshold_column_to_add]] <- cell_type_output_local_threshold[match(cell_type_output[[feature_mtc_column]], cell_type_output_local_threshold[[feature_mtc_column]]), 'nomthres'][['nomthres']]
-      }
-      if(add_global_nominal_threshold) {
-        # filter the output to significant MTC hits
-        cell_type_output_features_significant <- cell_type_output_features[cell_type_output_features[['qvalue']] < significance_cutoff, ]
-        # and get the maximum significant nominal value
-        global_p_cutoff <- max(cell_type_output_features_significant[[nominal_p_column]])
-        # add that to the table
-        cell_type_output[[global_nominal_threshold_column_to_add]] <- global_p_cutoff
-      }
+    else {
+      warning(paste('folder exists at', cell_type_output_loc, 'but no file is there'))
     }
-    # filter the file if requested
-    if (filter_significance) {
-      cell_type_output <- cell_type_output[
-        cell_type_output[[significance_column]] < significance_cutoff, 
-      ]
-    }
-    # add the cell type
-    cell_type_output[['cell_type']] <- cell_type
-    # put in the list
-    output_per_celltype[[cell_type]] <- cell_type_output
   }
   return(output_per_celltype)
 }
@@ -626,17 +632,17 @@ set.seed(7777)
 ####################
 
 # location of the CREs identified by SCENIC
-scenic_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eRegulon_both.tsv.gz'
+scenic_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eRegulon_both.tsv.gz'
 # location of the overlapping caQTLs and eQTLs
-qtl_overlap_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/eqtl_caqtl_overlap/combined/L1/all/eqtl_caqtl_overlapping_variants.tsv.gz'
+qtl_overlap_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl_caqtl_overlap/combined/L1/all/eqtl_caqtl_overlapping_variants.tsv.gz'
 # location of the pseudobulk CRE mapping
-pseudobulk_output_folder <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/eQTA/eQTA_v2/L1/'
+pseudobulk_output_folder <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eQTA/eQTA_v2/L1/'
 # location of the binomial method
-binomial_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/cre_eqtl/eqtl_caqtl_overlap/combined/betas_ps/'
+binomial_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/cre_eqtl/eqtl_caqtl_overlap/combined/betas_ps/'
 # location of the hybrid method
-hybrid_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/'
+hybrid_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/'
 # get the screen region to gene links
-screen_r2g_loc <- '/groups/umcg-franke-scrna/tmp02/external_datasets/cPeaks/cpeaks_to_screenv4_hic.tsv.gz'
+screen_r2g_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/cPeaks/cpeaks_to_screenv4_hic.tsv.gz'
 
 
 # read the pseudobulk outputs
@@ -691,7 +697,7 @@ qtl_overlap <- fread(qtl_overlap_loc, header = T, sep = '\t')
 screen_r2g <- fread(screen_r2g_loc, header = T, sep = '\t')
 
 # read the cpeaks annotation
-cpeaks_anno_loc <- '/groups/umcg-franke-scrna/tmp02/external_datasets/cPeaks/cPeaks_wscreenv4.tsv.gz'
+cpeaks_anno_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/cPeaks/cPeaks_wscreenv4.tsv.gz'
 cpeaks_anno <- fread(cpeaks_anno_loc, header = T, sep = '\t')
 # add the Signac style name
 cpeaks_anno[['signac_hg38']] <- paste(cpeaks_anno[['chr_hg38']], cpeaks_anno[['start_hg38']], cpeaks_anno[['end_hg38']], sep = '-')
@@ -699,7 +705,7 @@ cpeaks_anno[['signac_hg38']] <- paste(cpeaks_anno[['chr_hg38']], cpeaks_anno[['s
 cpeaks_anno[['scenic_hg38']] <- paste0(cpeaks_anno[['chr_hg38']], ':', cpeaks_anno[['start_hg38']], '-', cpeaks_anno[['end_hg38']])
 
 # read the location of the genes
-gene_anno_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/eqtl/annotations/cellranger_arc_gene_annotations.tsv.gz'
+gene_anno_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/annotations/cellranger_arc_gene_annotations.tsv.gz'
 gene_anno <- fread(gene_anno_loc, header = F, sep = '\t')
 # add columns
 colnames(gene_anno) <- c('ens', 'gs', 'modality', 'chrom', 'start', 'end')
@@ -724,7 +730,7 @@ hybrid_output[['screen']] <- cpeaks_anno[match(hybrid_output[['snp_id']], cpeaks
 
 
 # get extra annotations for the pseudobulk output
-strand_information_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/eQTA/LimixExpAnnotationFile.incStrand.txt'
+strand_information_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eQTA/LimixExpAnnotationFile.incStrand.txt'
 strand_information <- fread(strand_information_loc, header = T, sep = '\t')
 # add to the pseudobulk
 pseudobulk_output[['strand']] <- strand_information[match(pseudobulk_output[['feature_id']], strand_information[['feature_id']]), ][['strand']]
@@ -819,7 +825,7 @@ pseudo_ext <- pseudo_ext[, c('snp_id', 'feature_id', 'p_value', 'zscore', 'z_fro
 colnames(pseudo_ext) <- c('region', 'gene', 'p_value', 'zscore', 'z_from_p', 'condition', 'cell_type', 'chr_region', 'start_region', 'end_region', 'chr_gene', 'gene_start', 'gene_end', 'distance', 'strand')
 pseudo_ext[['chr_gene']] <- paste0('chr', pseudo_ext[['chr_gene']])
 pseudo_ext <- pseudo_ext[order(abs(pseudo_ext[['z_from_p']]), decreasing = T), ]
-write.table(pseudo_ext, gzfile('/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/eQTA/export/mo_pseudobulk_export.tsv.gz'), row.names = F, col.names = T, sep = '\t', quote = F)
+write.table(pseudo_ext, gzfile('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eQTA/export/mo_pseudobulk_export.tsv.gz'), row.names = F, col.names = T, sep = '\t', quote = F)
 # check minimal correlation
 #pseudobulk_output <- pseudobulk_output[abs(pseudobulk_output[['r']]) >= .25 , ]
 # check that the region and gene do not overlap
@@ -872,7 +878,7 @@ nrow(hybrid_output_unique)
 
 # make the unique region-gene numbers into a table
 n_effects_region_gene <- data.frame(
-  'category' = c('binomial', 'SCENIC+ filtered', 'SCENIC+ unfiltered', 'pseudobulk', 'QTL overlap', 'hybrid (chr17 only)'), 
+  'category' = c('binomial', 'SCENIC+ filtered', 'SCENIC+ unfiltered', 'pseudobulk', 'QTL overlap', 'hybrid (B only)'), 
   'neffects' = c(nrow(binomial_output_unique), nrow(scenic_output_unique), nrow(scenic_output_unique_unfiltered), nrow(pseudobulk_output_unique), nrow(qtl_overlap_unique), nrow(hybrid_output))
 )
 # and make into a plot
@@ -881,7 +887,7 @@ ggplot(data = n_effects_region_gene, mapping = aes(x = category, y = neffects, f
   xlab('CRE detection method') +
   ylab('Number of region-gene pairs') +
   ggtitle('Number of detected CRE-gene pairs across methods') +
-  scale_fill_manual(values = list('binomial' = '#BEAED4', 'pseudobulk' = '#7FC97F', 'QTL overlap' = '#386CB0', 'SCENIC+ unfiltered' = '#FFFF99', 'SCENIC+ filtered' = '#FDC086', 'hybrid (chr17 only)' = '#F0027F')) + 
+  scale_fill_manual(values = list('binomial' = '#BEAED4', 'pseudobulk' = '#7FC97F', 'QTL overlap' = '#386CB0', 'SCENIC+ unfiltered' = '#FFFF99', 'SCENIC+ filtered' = '#FDC086', 'hybrid (B only)' = '#F0027F')) + 
   theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
   theme(legend.position="none")
 
@@ -925,7 +931,7 @@ frac_pos_hybrid_output_unique <- nrow(hybrid_output_unique[sign(hybrid_output_un
 
 # plot these numbers
 n_pos_tbl <- data.frame(
-  'method' = c('pseudobulk', 'binomial', 'scenic', 'scenic uf', 'QTL', 'hybrid (chr17 only)', 'pseudobulk', 'binomial', 'scenic', 'scenic uf', 'QTL', 'hybrid (chr17 only)'), 
+  'method' = c('pseudobulk', 'binomial', 'scenic', 'scenic uf', 'QTL', 'hybrid (B only)', 'pseudobulk', 'binomial', 'scenic', 'scenic uf', 'QTL', 'hybrid (B only)'), 
   'direction' = c('positive', 'positive', 'positive', 'positive', 'positive', 'positive', 'negative', 'negative', 'negative', 'negative', 'negative', 'negative'), 
   'n' = c(frac_pos_pseudobulk_output_unique, frac_pos_binomial_output_unique, frac_pos_scenic_output_unique, frac_pos_scenic_output_unfiltered_unique, frac_pos_qtl_overlap_unique, frac_pos_hybrid_output_unique, 1-frac_pos_pseudobulk_output_unique, 1-frac_pos_binomial_output_unique, 1-frac_pos_scenic_output_unique, 1-frac_pos_scenic_output_unfiltered_unique, 1-frac_pos_qtl_overlap_unique, 1-frac_pos_hybrid_output_unique)
 )
@@ -1242,25 +1248,25 @@ pairwise_overlap_table <- data.frame(
 )
 
 # write these tables
-write.table(pseudobulk_vs_scenic, gzfile('/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/overlaps/pseudobulk_vs_scenic.tsv.gz'), row.names = F, col.names = T, sep = '\t', quote = F)
-write.table(pseudobulk_vs_binomial, gzfile('/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/overlaps/pseudobulk_vs_binomial.tsv.gz'), row.names = F, col.names = T, sep = '\t', quote = F)
-write.table(pseudobulk_vs_qtl, gzfile('/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/overlaps/pseudobulk_vs_qtl.tsv.gz'), row.names = F, col.names = T, sep = '\t', quote = F)
-write.table(pseudobulk_vs_scenic_unfiltered, gzfile('/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/overlaps/pseudobulk_vs_scenic_unfiltered.tsv.gz'), row.names = F, col.names = T, sep = '\t', quote = F)
-write.table(scenic_vs_binomial, gzfile('/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/overlaps/scenic_vs_binomial.tsv.gz'), row.names = F, col.names = T, sep = '\t', quote = F)
-write.table(scenic_vs_qtl, gzfile('/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/overlaps/scenic_vs_qtl.tsv.gz'), row.names = F, col.names = T, sep = '\t', quote = F)
-write.table(binomial_vs_qtl, gzfile('/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/overlaps/binomial_vs_qtl.tsv.gz'), row.names = F, col.names = T, sep = '\t', quote = F)
-write.table(scenic_unfiltered_vs_binomial, gzfile('/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/overlaps/scenic_unfiltered_vs_binomial.tsv.gz'), row.names = F, col.names = T, sep = '\t', quote = F)
-write.table(scenic_unfiltered_vs_qtl, gzfile('/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/overlaps/scenic_unfiltered_vs_qtl.tsv.gz'), row.names = F, col.names = T, sep = '\t', quote = F)
+write.table(pseudobulk_vs_scenic, gzfile('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/overlaps/pseudobulk_vs_scenic.tsv.gz'), row.names = F, col.names = T, sep = '\t', quote = F)
+write.table(pseudobulk_vs_binomial, gzfile('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/overlaps/pseudobulk_vs_binomial.tsv.gz'), row.names = F, col.names = T, sep = '\t', quote = F)
+write.table(pseudobulk_vs_qtl, gzfile('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/overlaps/pseudobulk_vs_qtl.tsv.gz'), row.names = F, col.names = T, sep = '\t', quote = F)
+write.table(pseudobulk_vs_scenic_unfiltered, gzfile('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/overlaps/pseudobulk_vs_scenic_unfiltered.tsv.gz'), row.names = F, col.names = T, sep = '\t', quote = F)
+write.table(scenic_vs_binomial, gzfile('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/overlaps/scenic_vs_binomial.tsv.gz'), row.names = F, col.names = T, sep = '\t', quote = F)
+write.table(scenic_vs_qtl, gzfile('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/overlaps/scenic_vs_qtl.tsv.gz'), row.names = F, col.names = T, sep = '\t', quote = F)
+write.table(binomial_vs_qtl, gzfile('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/overlaps/binomial_vs_qtl.tsv.gz'), row.names = F, col.names = T, sep = '\t', quote = F)
+write.table(scenic_unfiltered_vs_binomial, gzfile('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/overlaps/scenic_unfiltered_vs_binomial.tsv.gz'), row.names = F, col.names = T, sep = '\t', quote = F)
+write.table(scenic_unfiltered_vs_qtl, gzfile('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/overlaps/scenic_unfiltered_vs_qtl.tsv.gz'), row.names = F, col.names = T, sep = '\t', quote = F)
 # make checksums
-mdfiver::create_md5_for_file('/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/overlaps/pseudobulk_vs_scenic.tsv.gz')
-mdfiver::create_md5_for_file('/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/overlaps/pseudobulk_vs_binomial.tsv.gz')
-mdfiver::create_md5_for_file('/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/overlaps/pseudobulk_vs_qtl.tsv.gz')
-mdfiver::create_md5_for_file('/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/overlaps/pseudobulk_vs_scenic_unfiltered.tsv.gz')
-mdfiver::create_md5_for_file('/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/overlaps/scenic_vs_binomial.tsv.gz')
-mdfiver::create_md5_for_file('/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/overlaps/scenic_vs_qtl.tsv.gz')
-mdfiver::create_md5_for_file('/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/overlaps/binomial_vs_qtl.tsv.gz')
-mdfiver::create_md5_for_file('/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/overlaps/scenic_unfiltered_vs_binomial.tsv.gz')
-mdfiver::create_md5_for_file('/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/overlaps/scenic_unfiltered_vs_qtl.tsv.gz')
+mdfiver::create_md5_for_file('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/overlaps/pseudobulk_vs_scenic.tsv.gz')
+mdfiver::create_md5_for_file('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/overlaps/pseudobulk_vs_binomial.tsv.gz')
+mdfiver::create_md5_for_file('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/overlaps/pseudobulk_vs_qtl.tsv.gz')
+mdfiver::create_md5_for_file('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/overlaps/pseudobulk_vs_scenic_unfiltered.tsv.gz')
+mdfiver::create_md5_for_file('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/overlaps/scenic_vs_binomial.tsv.gz')
+mdfiver::create_md5_for_file('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/overlaps/scenic_vs_qtl.tsv.gz')
+mdfiver::create_md5_for_file('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/overlaps/binomial_vs_qtl.tsv.gz')
+mdfiver::create_md5_for_file('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/overlaps/scenic_unfiltered_vs_binomial.tsv.gz')
+mdfiver::create_md5_for_file('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/overlaps/scenic_unfiltered_vs_qtl.tsv.gz')
 
 # make into confusion matrix
 p_n_overlaps <- create_confusion_matrix(pairwise_overlap_table, truth_column = 'method1', prediction_column = 'method2', freq_column = 'overlapping', premade_table = T, truth_column_label = 'method 1', prediction_column_label = 'method 2') +
