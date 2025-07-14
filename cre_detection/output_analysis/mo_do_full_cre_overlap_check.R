@@ -677,7 +677,7 @@ pseudobulk_output_24hca[['z_from_p']] <- qnorm(pseudobulk_output_24hca[['p_value
 pseudobulk_output <- do.call('rbind', list(pseudobulk_output_ut, pseudobulk_output_24hca))
 
 # read hybrid method
-hybrid_output_list <- read_pseudobulk_cre_output_per_celltype(hybrid_output_loc, add_mtc = T, filter_alpha = T, add_global_nominal_threshold = T, add_local_nominal_threshold = T, filename_output = 'qtl_results_all.txt', alpha_min = .8, alpha_max = 1.2)
+hybrid_output_list <- read_pseudobulk_cre_output_per_celltype(hybrid_output_loc, add_mtc = T, filter_alpha = T, add_global_nominal_threshold = T, add_local_nominal_threshold = T, filename_output = 'qtl_results_all.txt', alpha_min = .8, alpha_max = 1.2, cell_types = c('B', 'DC', 'monocyte', 'NK'))
 #hybrid_output_list <- read_pseudobulk_cre_output_per_celltype(hybrid_output_loc, add_mtc = T, filter_alpha = T, add_global_nominal_threshold = T, add_local_nominal_threshold = T, filename_output = 'test_qtl_results_all.txt', alpha_min = .8, alpha_max = 1.2, filter_significance = F)
 # merge them
 hybrid_output <- do.call('rbind', hybrid_output_list)
@@ -794,6 +794,19 @@ scenic_output[['distance']] <- scenic_distances[['min_dist']]
 scenic_output[['category']] <- 'scenic'
 # add the screen annotation as well
 scenic_output[['screen']] <- cpeaks_anno[match(scenic_output[['Region']], cpeaks_anno[['scenic_hg38']]), ][['screen_all']]
+
+# add location for the hi-C table
+screen_r2g <- cbind(screen_r2g, cpeaks_anno[match(screen_r2g[['region']], cpeaks_anno[['signac_hg38']]), c('chr_hg38', 'start_hg38', 'end_hg38')])
+# and the locations of the genes
+screen_r2g <- cbind(screen_r2g, gene_anno[match(screen_r2g[['gene']], gene_anno[['gs']]), c('chrom', 'start', 'end')])
+# get the distances again
+screen_r2g_distances <- get_closest_flanks(screen_r2g, 'start_hg38', 'end_hg38', 'start', 'end')
+# add that to the original table
+screen_r2g[['distance']] <- screen_r2g_distances[['min_dist']]
+# and category
+screen_r2g[['category']] <- 'hiC'
+# add the screen annotation as well
+screen_r2g[['screen']] <- cpeaks_anno[match(screen_r2g[['region']], cpeaks_anno[['signac_hg38']]), ][['screen_all']]
 
 
 # add region to gene column
@@ -950,7 +963,8 @@ p_region_direction_distances <- ggplot(
     pseudobulk_output_unique[pseudobulk_output_unique[['distance']] < 150000 & pseudobulk_output_unique[['distance']] > 0, c('distance', 'category'), ], 
     binomial_output_unique[binomial_output_unique[['distance']] < 150000 & binomial_output_unique[['distance']] > 0, c('distance', 'category'), ], 
     qtl_overlap_unique[qtl_overlap_unique[['distance']] < 150000 & qtl_overlap_unique[['distance']] > 0, c('distance', 'category'), ], 
-    hybrid_output_unique[hybrid_output_unique[['distance']] < 150000 & hybrid_output_unique[['distance']] > 0, c('distance', 'category'), ]), 
+    hybrid_output_unique[hybrid_output_unique[['distance']] < 150000 & hybrid_output_unique[['distance']] > 0, c('distance', 'category'), ], 
+    screen_r2g[screen_r2g[['distance']] < 150000 & screen_r2g[['distance']] > 0, c('distance', 'category'), ]), 
   mapping = aes(
     x = distance, 
     fill = category
@@ -960,7 +974,7 @@ p_region_direction_distances <- ggplot(
   xlab('Distance between region and gene') + 
   ylab('Density') + 
   ggtitle('Distance between region and gene\nacross different methods') + 
-  scale_fill_manual(values = list('binomial' = '#BEAED4', 'pseudobulk' = '#7FC97F', 'qtl_overlap' = '#386CB0', 'hybrid' = '#F0027F' )) + 
+  scale_fill_manual(values = list('binomial' = '#BEAED4', 'pseudobulk' = '#7FC97F', 'qtl_overlap' = '#386CB0', 'hybrid' = '#F0027F', 'hiC' = '#FF7F00')) + 
   theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
 # show plot
 p_region_direction_distances
@@ -970,7 +984,8 @@ p_region_direction_distances_pos <- ggplot(
     pseudobulk_output_unique[pseudobulk_output_unique[['distance']] > 0 & pseudobulk_output_unique[['r']] > 0, c('distance', 'category'), ], 
     binomial_output_unique[binomial_output_unique[['distance']] > 0 & binomial_output_unique[['r']] > 0, c('distance', 'category'), ], 
     qtl_overlap_unique[qtl_overlap_unique[['distance']] > 0 & qtl_overlap_unique[['sign']] > 0, c('distance', 'category'), ], 
-    hybrid_output_unique[hybrid_output_unique[['distance']] > 0 & hybrid_output_unique[['distance']] > 0, c('distance', 'category'), ]), 
+    hybrid_output_unique[hybrid_output_unique[['distance']] > 0 & hybrid_output_unique[['distance']] > 0, c('distance', 'category'), ], 
+    screen_r2g[screen_r2g[['distance']] < 150000 & screen_r2g[['distance']] > 0, c('distance', 'category'), ]), 
   mapping = aes(
     x = distance, 
     fill = category
@@ -980,7 +995,7 @@ p_region_direction_distances_pos <- ggplot(
   xlab('Distance between region and gene') + 
   ylab('Density') + 
   ggtitle('Distance between region and gene\nacross different methods\nfor positive associations') + 
-  scale_fill_manual(values = list('binomial' = '#BEAED4', 'pseudobulk' = '#7FC97F', 'qtl_overlap' = '#386CB0', 'hybrid' = '#F0027F')) + 
+  scale_fill_manual(values = list('binomial' = '#BEAED4', 'pseudobulk' = '#7FC97F', 'qtl_overlap' = '#386CB0', 'hybrid' = '#F0027F', 'hiC' = '#FF7F00')) + 
   theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
 p_region_direction_distances_pos
 # finally for negative direction
@@ -989,7 +1004,8 @@ p_region_direction_distances_neg <- ggplot(
     pseudobulk_output_unique[pseudobulk_output_unique[['distance']] < 150000 & pseudobulk_output_unique[['distance']] > 0 & pseudobulk_output_unique[['r']] < 0, c('distance', 'category'), ], 
     binomial_output_unique[binomial_output_unique[['distance']] < 150000 & binomial_output_unique[['distance']] > 0 & binomial_output_unique[['r']] < 0, c('distance', 'category'), ], 
     qtl_overlap_unique[qtl_overlap_unique[['distance']] < 150000 & qtl_overlap_unique[['distance']] > 0 & qtl_overlap_unique[['sign']] < 0, c('distance', 'category'), ], 
-    hybrid_output_unique[hybrid_output_unique[['distance']] < 150000 & hybrid_output_unique[['distance']] > 0 & hybrid_output_unique[['r']] < 0, c('distance', 'category'), ]), 
+    hybrid_output_unique[hybrid_output_unique[['distance']] < 150000 & hybrid_output_unique[['distance']] > 0 & hybrid_output_unique[['r']] < 0, c('distance', 'category'), ], 
+    screen_r2g[screen_r2g[['distance']] < 150000 & screen_r2g[['distance']] > 0, c('distance', 'category'), ]), 
   mapping = aes(
     x = distance, 
     fill = category
@@ -999,7 +1015,7 @@ p_region_direction_distances_neg <- ggplot(
   xlab('Distance between region and gene') + 
   ylab('Density') + 
   ggtitle('Distance between region and gene\nacross different methods\nfor negative associations') + 
-  scale_fill_manual(values = list('binomial' = '#BEAED4', 'pseudobulk' = '#7FC97F', 'qtl_overlap' = '#386CB0', 'hybrid' = '#F0027F')) + 
+  scale_fill_manual(values = list('binomial' = '#BEAED4', 'pseudobulk' = '#7FC97F', 'qtl_overlap' = '#386CB0', 'hybrid' = '#F0027F', 'hiC' = '#FF7F00')) + 
   theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
 p_region_direction_distances_neg
 
