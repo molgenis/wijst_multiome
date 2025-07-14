@@ -1,0 +1,426 @@
+---
+title: "mo_check_celltype_assignments_ut"
+author: "Roy Oelen"
+date: "2025-07-14"
+output: html_document
+---
+
+```{r header, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+#!/usr/bin/env Rscript
+############################################################################################################################
+# Authors: Roy Oelen
+# Name: mo_check_celltype_assignments_ut.Rmd
+# Function: plot the assignments of cell types
+############################################################################################################################
+```
+
+```{r libraries, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+####################
+# libraries        #
+####################
+
+# and we need to do some plotting
+library(ggplot2)
+library(cowplot)
+
+
+```
+
+```{r functions, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+####################
+# Functions        #
+####################
+
+
+ref10xmo_predictions_to_lower_res_mapping <- function() {
+  high_to_low <- list()
+  high_to_low[['CD4 Naive']] <- 'CD4T'
+  high_to_low[['CD4 TCM']] <- 'CD4T'
+  high_to_low[['CD8 Naive']] <- 'CD8T'
+  high_to_low[['CD16 Mono']] <- 'monocyte'
+  high_to_low[['NK']] <- 'NK'
+  high_to_low[['Treg']] <- 'T_other'
+  high_to_low[['CD14 Mono']] <- 'monocyte'
+  high_to_low[['cDC']] <- 'DC'
+  high_to_low[['CD8 TEM_1']] <- 'CD8T'
+  high_to_low[['Intermediate B']] <- 'B'
+  high_to_low[['Naive B']] <- 'B'
+  high_to_low[['Plasma']] <- 'plasmablast'
+  high_to_low[['CD4 TEM']] <- 'CD4T'
+  high_to_low[['MAIT']] <- 'T_other'
+  high_to_low[['Memory B']] <- 'B'
+  high_to_low[['gdT']] <- 'T_other'
+  high_to_low[['pDC']] <- 'DC'
+  high_to_low[['CD8 TEM_2']] <- 'CD8T'
+  high_to_low[['HSPC']] <- 'hemapoietic_stem'
+  return(high_to_low)
+}
+
+get_color_coding_dict <- function() {
+	# set the condition colors
+  color_coding <- list()
+  # set condition colors
+  color_coding[["HC"]] <- "grey"
+  color_coding[["Control"]] <- "grey"
+  color_coding[["C"]] <- "grey"
+  color_coding[["t0"]] <- "#ff7101"
+  color_coding[["t24h"]] <- "#e12a62"
+  color_coding[["t8w"]] <- "#3B0550"
+  color_coding[["t6-8w"]] <- "#3B0550"
+  color_coding[['UT']] <- 'lightgrey'
+  color_coding[["3hCA"]] <- "darkolivegreen2"
+  color_coding[["24hCA"]] <- "forestgreen"
+  color_coding[["3hMTB"]] <- "lightskyblue"
+  color_coding[["24hMTB"]] <- "deepskyblue3"
+  color_coding[["3hPA"]] <- "sandybrown"
+  color_coding[["24hPA"]] <- "darkorange1"
+  color_coding[["X3hCA"]] <- "darkolivegreen2"
+  color_coding[["X24hCA"]] <- "forestgreen"
+  color_coding[["X3hMTB"]] <- "lightskyblue"
+  color_coding[["X24hMTB"]] <- "deepskyblue3"
+  color_coding[["X3hPA"]] <- "sandybrown"
+  color_coding[["X24hPA"]] <- "darkorange1"
+  # set the cell type colors
+  color_coding[["Bulk"]] <- "black"
+  color_coding[["CD4T"]] <- "#153057"
+  color_coding[["CD4+ T"]] <- "#153057"
+  color_coding[["CD4 T"]] <- "#153057"
+  color_coding[["CD8T"]] <- "#009DDB"
+  color_coding[["CD8+ T"]] <- "#009DDB"
+  color_coding[["CD8 T"]] <- "#009DDB"
+  color_coding[["monocyte"]] <- "#EDBA1B"
+  color_coding[["Mono"]] <- "#EDBA1B"
+  color_coding[["NK"]] <- "#E64B50"
+  color_coding[["B"]] <- "#71BC4B"
+  color_coding[["DC"]] <- "#965EC8"
+  # other cell type colors
+  color_coding[["HSPC"]] <- "#009E94"
+  color_coding[["platelet"]] <- "#9E1C00"
+  color_coding[["plasmablast"]] <- "#DB8E00"
+  color_coding[["other T"]] <- "#FF63B6"
+  color_coding[["T_other"]] <- "#FF63B6"
+  color_coding[["hemapoietic_stem"]] <- "#8B8000"
+  color_coding[["hemapoietic stem"]] <- "#8B8000"
+  color_coding[["other"]] <- "gray"
+  color_coding[["unannotated"]] <- "gray"
+  return(color_coding)
+}
+
+
+get_label_dict <- function() {
+  label_dict <- list()
+  # condition combinations
+  label_dict[['cUTc24hCA']] <- 'UT-24hCA'
+  label_dict[['c24hCAcUT']] <- 'UT-24hCA'
+  # conditions
+  label_dict[['UT']] <- 'untreated'
+  label_dict[['cUT']] <- 'untreated'
+  label_dict[['24hCA']] <- '24h Candida'
+  label_dict[['c24hCA']] <- '24h Candida'
+  # major cell types
+  label_dict[["Bulk"]] <- "bulk-like"
+  label_dict[["CD4T"]] <- "CD4+ T"
+  label_dict[["CD8T"]] <- "CD8+ T"
+  label_dict[["CD4 T"]] <- "CD4+ T"
+  label_dict[["CD8 T"]] <- "CD8+ T"
+  label_dict[["monocyte"]] <- "monocyte"
+  label_dict[["Mono"]] <- "monocyte"
+  label_dict[["NK"]] <- "NK"
+  label_dict[["B"]] <- "B"
+  label_dict[["DC"]] <- "DC"
+  label_dict[["HSPC"]] <- "HSPC"
+  label_dict[["plasmablast"]] <- "plasmablast"
+  label_dict[["platelet"]] <- "platelet"
+  label_dict[["T_other"]] <- "other T"
+  label_dict[["hemapoietic_stem"]] <- "hemapoietic stem"
+  # minor cell types
+  label_dict[["CD4_TCM"]] <- "CD4 TCM"
+  label_dict[["Treg"]] <- "T regulatory"
+  label_dict[["CD4_Naive"]] <- "CD4 naive"
+  label_dict[["CD4_CTL"]] <- "CD4 CTL"
+  label_dict[["CD8_TEM"]] <- "CD8 TEM"
+  label_dict[["cMono"]] <- "cMono"
+  label_dict[["CD8_TCM"]] <- "CD8 TCM"
+  label_dict[["ncMono"]] <- "ncMono"
+  label_dict[["cDC2"]] <- "cDC2"
+  label_dict[["B_intermediate"]] <- "B intermediate"
+  label_dict[["NKdim"]] <- "NK dim"
+  label_dict[["pDC"]] <- "pDC"
+  label_dict[["ASDC"]] <- "ASDC"
+  label_dict[["CD8_Naive"]] <- "CD8 naive"
+  label_dict[["MAIT"]] <- "MAIT"
+  label_dict[["CD8_Proliferating"]] <- "CD8 proliferating"
+  label_dict[["CD4_TEM"]] <- "CD4 TEM"
+  label_dict[["B_memory"]] <- "B memory"
+  label_dict[["NKbright"]] <- "NK bright"
+  label_dict[["B_naive"]] <- "B naive"
+  label_dict[["gdT"]] <- "gamma delta T"
+  label_dict[["CD4_Proliferating"]] <- "CD4 proliferating"
+  label_dict[["NK_Proliferating"]] <- "NK proliferating"
+  label_dict[["cDC1"]] <- "cDC1"
+  label_dict[["ILC"]] <- "ILC"
+  label_dict[["dnT"]] <- "double negative T"
+  return(label_dict)
+}
+
+
+rename_labels <- function(vector_to_rename) {
+  # get the labels that are present
+  label_renaming <- get_label_dict()
+  # convert vector
+  vector_to_rename <- as.character(vector_to_rename)
+  # now check which labels we are missing
+  missing_renames <- setdiff(unique(vector_to_rename), names(label_renaming))
+  # add those renames as not being renames
+  for (missing_rename in missing_renames) {
+    label_renaming[[missing_rename]] <- missing_rename
+  }
+  # now replace each value with the rename
+  renamed_vector <- as.vector(unlist(label_renaming[vector_to_rename]))
+  # and return that
+  return(renamed_vector)
+}
+
+
+#' get a dataframe with the proportons and cell numbers per sample
+#' 
+#' @param metadata the metadata to calculate the cell type numbers and proportions from
+#' @param sample_column the sample denoting the sample
+#' @param cell_type_column the column denoting the cell type
+#' @returns a dataframe with the proportion and number of each cell type per sample
+#' 
+get_celltype_numbers <- function(metadata, sample_column='sample', cell_type_column='cell_type') {
+  # get the numbers in total
+  numbers_totals <- data.frame(table(metadata[, c(sample_column, cell_type_column)]))
+  # init proportion
+  numbers_totals[['prop']] <- 0
+  # now add proportions
+  for (sample_name in unique(metadata[[sample_column]])) {
+    # subset to that sample
+    numbers_sample <- numbers_totals[!is.na(numbers_totals[[sample_column]]) & numbers_totals[[sample_column]] == sample_name, ]
+    # get the total for that sample
+    numbers_sample_total <- sum(numbers_sample[['Freq']])
+    # check each cell type
+    for (cell_type in unique(numbers_sample[[cell_type_column]])) {
+      # get the number
+      numbers_celltype_sample <- numbers_sample[!is.na(numbers_sample[[cell_type_column]]) & numbers_sample[[cell_type_column]] == cell_type, 'Freq']
+      # get the proportion
+      prop_celltype_sample <- numbers_celltype_sample / numbers_sample_total
+      # add to the table
+      numbers_totals[!is.na(numbers_totals[[sample_column]]) & 
+                       numbers_totals[[sample_column]] == sample_name &
+                       !is.na(numbers_totals[[cell_type_column]]) & 
+                       numbers_totals[[cell_type_column]] == cell_type, 'prop'] <- prop_celltype_sample
+    }
+  }
+  # set the column names
+  colnames(numbers_totals) <- c(sample_column, cell_type_column, 'number', 'proportion')
+  return(numbers_totals)
+}
+
+#' get a dataframe with the proportons and cell numbers per sample
+#' 
+#' @param celltype_numbers the metadata to calculate the cell type numbers and proportions from
+#' @param sample_column the sample denoting the sample
+#' @param cell_type_column the column denoting the cell type
+#' @param number_column the column denoting number to plot
+#' @param use_label_dict update labels with nicer ones, using the label dict
+#' @param pointless plot the ticks and names on the x axis
+#' @param legendless plot the legend
+#' @param paper_style use paper style plot, with more whitespace
+#' @param angle_x_labels angle the x label 90 degrees
+#' @param use_colour_coding_dict use colors from the color dict
+#' @returns a plot of cell numbers/proportions per sample
+#' 
+plot_celltype_abundance <- function(celltype_numbers, sample_column='sample', cell_type_column='cell_type', number_column='proportion', use_label_dict=T, pointless=F, legendless=F, paper_style=T, angle_x_labels=F, use_colour_coding_dict=T) {
+  # use some better labels if requested
+  if (use_label_dict) {
+    celltype_numbers[[cell_type_column]] <- rename_labels(as.character(celltype_numbers[[cell_type_column]]))
+  }
+  
+  # init plot
+  p <- ggplot(data = NULL, mapping = aes(x = celltype_numbers[[sample_column]], y = celltype_numbers[[number_column]], fill = celltype_numbers[[cell_type_column]])) +
+    geom_bar(stat = 'identity', position = 'stack') +
+    xlab(sample_column) +
+    ylab(number_column)
+  
+  # add colours if requested
+  if (use_colour_coding_dict) {
+    p <- p + scale_fill_manual(name = cell_type_column, values = get_color_coding_dict())
+  }
+  
+  # all our options
+  if(pointless){
+    p <- p + theme(axis.text.x=element_blank(), 
+                   axis.ticks = element_blank(),
+                   axis.title.x = element_blank())
+  }
+  if(legendless){
+    p <- p + theme(legend.position = 'none')
+  }
+  if(paper_style){
+    p <- p + theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+  }
+  if(angle_x_labels){
+    p <- p + theme(axis.text.x = element_text(angle = 90))
+  }
+  return(p)
+}
+
+
+
+
+```
+
+```{r setup_paths, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+####################
+# Main Code        #
+####################
+
+# get the 10x multiome reference mapping output
+azi_mo_annotation_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cell_type_assignment/azimuth/10x_multiome_PBMCs/mo_azimuth_ct_10xmultiome.tsv'
+# location of output
+souporcell_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/demultiplexing/souporcell/'
+
+```
+
+```{r read_azi, include=TRUE, fig.width=10, fig.height=10}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# read the table
+azi_mo_annotation <- read.table(azi_mo_annotation_loc, header = T, sep = '\t')
+
+```
+
+```{r azi_l1, include=TRUE, fig.width=10, fig.height=10}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# add a lower resolution celltype for the 10x annotation
+azi_mo_annotation[['predicted.mo_10x_cell_type.l1']] <- as.vector(unlist(ref10xmo_predictions_to_lower_res_mapping()[azi_mo_annotation[['predicted.mo_10x_cell_type']]]))
+
+```
+
+
+```{r get_demux_assignments, include=FALSE, fig.width=10, fig.height=10}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# get the assignments
+soup_assignments <- read.table(paste0(souporcell_output_loc, 'assignments/mo_souporcell_gex_corrected_sample_matched_vs_all.tsv'), header = T, sep = '\t')
+
+```
+
+```{r filter_assignments, include=FALSE, fig.width=10, fig.height=10}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# location of the assignments of samples to conditions
+condition_assignment_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/metadata/mo_monocyte_based_condition_numbers.tsv'
+# read the conditions
+condition_assignments <- read.table(condition_assignment_loc, header = T, sep = '\t')
+# make the sample to condition in the sheet
+sheet_lane_sample <- paste(condition_assignments[['lane']], condition_assignments[['sample_final']])
+# and in the demux data as well
+soup_lane_sample <- paste(soup_assignments[['lane']], soup_assignments[['best_match_sample']])
+# now use this to add condition to the assignments
+soup_assignments[['condition']] <- condition_assignments[match(soup_lane_sample, sheet_lane_sample), ][['condition']]
+# add the other study to the soup assignments
+soup_assignments[!is.na(soup_assignments[['condition']]) & soup_assignments[['condition']] == '24hCa', 'best_match_sample'] <- 'other study'
+# where we have no assignment to condition, we'll also state other study
+soup_assignments[is.na(soup_assignments[['condition']]), 'best_match_sample'] <- 'other study'
+
+```
+
+```{r merge_assignments, include=FALSE, fig.width=10, fig.height=10}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# merge soup and cell types
+celltype_to_soup <- merge(azi_mo_annotation, soup_assignments[, c('barcode_lane', 'best_match_sample', 'condition', 'lane')], by.x = 'barcode', by.y = 'barcode_lane')
+
+```
+
+```{r ut_lanes_only, include=FALSE, fig.width=10, fig.height=10}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# and we'll drop lanes where we have no UT samples
+celltype_to_soup_filtered <- list()
+for (lane in unique(celltype_to_soup[['lane']])) {
+  # subset to that lane
+  celltype_to_soup_lane <- celltype_to_soup[!is.na(celltype_to_soup[['lane']]) & celltype_to_soup[['lane']] == lane, ]
+  # we'll count the number of UT entries
+  celltype_to_soup_lane_ut_n <- nrow(celltype_to_soup_lane[!is.na(celltype_to_soup_lane[['condition']]) & celltype_to_soup_lane[['condition']] == 'UT', ])
+  # only if we have any entries, we'll add it to the rest
+  if (celltype_to_soup_lane_ut_n > 0) {
+    celltype_to_soup_filtered[[lane]] <- celltype_to_soup_lane
+  }
+}
+# merge all the filtered results
+celltype_to_soup_filtered <- do.call('rbind', celltype_to_soup_filtered)
+# and the doublet and ambiguous as well
+celltype_to_soup_filtered[!is.na(celltype_to_soup_filtered[['status']]) & celltype_to_soup_filtered[['status']] == 'unassigned', 'best_match_sample'] <- 'ambiguous'
+celltype_to_soup_filtered[!is.na(celltype_to_soup_filtered[['status']]) & celltype_to_soup_filtered[['status']] == 'doublet', 'best_match_sample'] <- 'multiplet'
+
+```
+
+```{r plot_lane_assignments, include=TRUE, fig.width=20, fig.height=10}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# plot lanes with UT
+nr_ct_ut_lane <- get_celltype_numbers(celltype_to_soup_filtered, sample_column = 'lane', cell_type_column = 'predicted.mo_10x_cell_type.l1')
+p_lane_ut_absolute <- plot_celltype_abundance(nr_ct_ut_lane, sample_column = 'lane', cell_type_column = 'predicted.mo_10x_cell_type.l1', number_column = 'number', angle_x_labels = T) + 
+  guides(fill=guide_legend(title='Cell type')) +
+  xlab('10x experimental lane') + 
+  ylab('Number of cells') + 
+  ggtitle('Number of cells recovered per cell type and experiment')
+p_lane_ut_fraction <- plot_celltype_abundance(nr_ct_ut_lane, sample_column = 'lane', cell_type_column = 'predicted.mo_10x_cell_type.l1', number_column = 'proportion', angle_x_labels = T) + 
+  guides(fill=guide_legend(title='Cell type')) + 
+  xlab('10x experimental lane') + 
+  ylab('Fraction of cells') + 
+  ggtitle('Fraction of cells recovered per cell type and experiment')
+
+# save the plots
+ggsave(plot = p_lane_ut_absolute, filename = '~/plots/mo_celltype_absolute_numbers_ut_lane.pdf', width=9, height=9)
+ggsave(plot = p_lane_ut_fraction, filename = '~/plots/mo_celltype_relative_fractions_ut_lane.pdf', width=9, height=9)
+
+# plot
+plot_grid(
+  p_lane_ut_absolute,
+  p_lane_ut_fraction
+)
+
+```
+
+```{r plot_sample_assignments, include=TRUE, fig.width=20, fig.height=10}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# add the sample and lane
+celltype_to_soup_filtered[['sample']] <- paste(celltype_to_soup_filtered[['best_match_sample']], celltype_to_soup_filtered[['lane']], sep = ';')
+# plot samples with UT
+nr_ct_ut_sample <- get_celltype_numbers(celltype_to_soup_filtered[!is.na(celltype_to_soup_filtered[['condition']])& celltype_to_soup_filtered[['condition']] == 'UT', ], sample_column = 'sample', cell_type_column = 'predicted.mo_10x_cell_type.l1')
+p_sample_ut_absolute <- plot_celltype_abundance(nr_ct_ut_sample, sample_column = 'sample', cell_type_column = 'predicted.mo_10x_cell_type.l1', number_column = 'number', pointless = T) + 
+  guides(fill=guide_legend(title='Cell type')) +
+  xlab('10x experimental sample') + 
+  ylab('Number of cells') + 
+  ggtitle('Number of cells recovered per cell type and sample')
+p_sample_ut_fraction <- plot_celltype_abundance(nr_ct_ut_sample, sample_column = 'sample', cell_type_column = 'predicted.mo_10x_cell_type.l1', number_column = 'proportion', pointless = T) + 
+  guides(fill=guide_legend(title='Cell type')) + 
+  xlab('10x experimental sample') + 
+  ylab('Fraction of cells') + 
+  ggtitle('Fraction of cells recovered per cell type and sample')
+
+# save the plots
+ggsave(plot = p_sample_ut_absolute, filename = '~/plots/mo_celltype_absolute_numbers_ut_sample.pdf', width=9, height=9)
+ggsave(plot = p_sample_ut_fraction, filename = '~/plots/mo_celltype_relative_fractions_ut_sample.pdf', width=9, height=9)
+
+# plot
+plot_grid(
+  p_sample_ut_absolute,
+  p_sample_ut_fraction
+)
+
+```
