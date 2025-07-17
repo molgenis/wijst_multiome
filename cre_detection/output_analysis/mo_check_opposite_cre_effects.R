@@ -271,7 +271,6 @@ plot_bino_z_scores <- function(zscore_matrix, region, gene, region_column='regio
   zscores_plot_frame <- data.frame(x = rep('samples', times = length(zscores_region_gene)), y = zscores_region_gene)
   # make into a boxplot
   p <- ggplot(data = zscores_plot_frame, mapping = aes(x = x, y = y, fill = x)) +
-    geom_boxplot() +
     xlab('samples') +
     ylab('Z-score') +
     geom_boxplot(outlier.shape = NA) + 
@@ -295,6 +294,40 @@ plot_bino_z_scores <- function(zscore_matrix, region, gene, region_column='regio
   }
   return(p)
 }
+
+plot_bino_z_scores_violin <- function(zscore_matrix, region, gene, region_column='region', gene_column='gene', pointless=F, legendless=T, ylim=NULL, paper_style=T, angle_labels=F, better_colors=T) {
+  # get the columns that are not the region and gene
+  zscore_matrix_numbers <- zscore_matrix[, -c(..region_column, ..gene_column)]
+  # subset to the region and gene
+  zscores_region_gene <- as.vector(unlist(zscore_matrix_numbers[zscore_matrix[[region_column]] == region & zscore_matrix[[gene_column]] == gene, ]))
+  # make into a table
+  zscores_plot_frame <- data.frame(x = rep('samples', times = length(zscores_region_gene)), y = zscores_region_gene)
+  # make into a boxplot
+  p <- ggplot(data = zscores_plot_frame, mapping = aes(x = x, y = y, fill = x)) +
+    xlab('samples') +
+    ylab('Z-score') +
+    geom_violin() + 
+    # and add jitter
+    geom_jitter(size = 0.5, alpha = 0.5)
+  if(pointless){
+    p <- p + theme(axis.text.x=element_blank(), 
+                   axis.ticks = element_blank())
+  }
+  if(legendless){
+    p <- p + theme(legend.position = 'none')
+  }
+  if (paper_style) {
+    p <- p + theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+  }
+  if (angle_labels) {
+    p <- p + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+  }
+  if (better_colors) {
+    p <- p + scale_fill_manual(values = roycols::get_color_list(zscores_plot_frame[['x']]))
+  }
+  return(p)
+}
+
 
 plot_bino_z_distribution <- function(zscore_matrix, region, gene, region_column='region', gene_column='gene', pointless=F, legendless=T, ylim=NULL, paper_style=T, angle_labels=F) {
   # get the columns that are not the region and gene
@@ -526,28 +559,80 @@ mono_24hca_eqtl_input <- data.table(mono_24hca_eqtl_input)
 mono_ut_caqtl_input <- data.table(mono_ut_caqtl_input)
 mono_24hca_caqtl_input <- data.table(mono_24hca_caqtl_input)
 
+# the location of the files
+cd4t_ut_eqtl_input_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/sc-eqtlgen/input/L1/UT/CD4T.qtlInput.txt.gz'
+cd4t_24hca_eqtl_input_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/sc-eqtlgen/input/L1/24hCA//CD4T.qtlInput.txt.gz'
+cd4t_ut_caqtl_input_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/L1/UT//CD4T.qtlInput.txt.gz'
+cd4t_24hca_caqtl_input_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/L1/24hCA//CD4T.qtlInput.txt.gz'
+# read all of these
+cd4t_ut_eqtl_input <- read.table(cd4t_ut_eqtl_input_loc, header = T, sep = '\t', row.names = 1)
+cd4t_24hca_eqtl_input <- read.table(cd4t_24hca_eqtl_input_loc, header = T, sep = '\t', row.names = 1)
+cd4t_ut_caqtl_input <- read.table(cd4t_ut_caqtl_input_loc, header = T, sep = '\t', row.names = 1)
+cd4t_24hca_caqtl_input <- read.table(cd4t_24hca_caqtl_input_loc, header = T, sep = '\t', row.names = 1)
+# add the features as explicit columns
+cd4t_ut_eqtl_input <- cbind('feature_id' = rownames(cd4t_ut_eqtl_input), cd4t_ut_eqtl_input)
+cd4t_24hca_eqtl_input <- cbind('feature_id' = rownames(cd4t_24hca_eqtl_input), cd4t_24hca_eqtl_input)
+cd4t_ut_caqtl_input <- cbind('feature_id' = rownames(cd4t_ut_caqtl_input), cd4t_ut_caqtl_input)
+cd4t_24hca_caqtl_input <- cbind('feature_id' = rownames(cd4t_24hca_caqtl_input), cd4t_24hca_caqtl_input)
+# that way they can be safely converted to data.table
+cd4t_ut_eqtl_input <- data.table(cd4t_ut_eqtl_input)
+cd4t_24hca_eqtl_input <- data.table(cd4t_24hca_eqtl_input)
+cd4t_ut_caqtl_input <- data.table(cd4t_ut_caqtl_input)
+cd4t_24hca_caqtl_input <- data.table(cd4t_24hca_caqtl_input)
+
+
 
 #########################
 # Plot opposite effects #
 #########################
 
-# plot an effect that is opposite in pseudobulk vs binomial as single cell
-plot_binarized_vs_other(mono_object, 'chr17-45585724-45587049', 'AC126544.2')
+# # plot an effect that is opposite in pseudobulk vs binomial as single cell
+# plot_binarized_vs_other(mono_object, 'chr17-45585724-45587049', 'AC126544.2')
+# # plot the pseudobulk effect
+# plot_grid(
+#   plot_pseudobulk_cre(mono_ut_caqtl_input, mono_ut_eqtl_input, 'chr17-45585724-45587049', 'AC126544.2') + ggtitle('UT'), 
+#   plot_pseudobulk_cre(mono_24hca_caqtl_input, mono_24hca_eqtl_input, 'chr17-45585724-45587049', 'AC126544.2') + ggtitle('24hCA'), 
+#   nrow = 1, 
+#   ncol = 2
+# )
+# # or with genotype
+# plot_grid(
+#   plot_pseudobulk_cre(mono_ut_caqtl_input, mono_ut_eqtl_input, 'chr17-45585724-45587049', 'AC126544.2', smf = smf, genotype_object = genotypes, variant = '17:46108697:C:T') + ggtitle('UT'), 
+#   plot_pseudobulk_cre(mono_24hca_caqtl_input, mono_24hca_eqtl_input, 'chr17-45585724-45587049', 'AC126544.2', smf = smf, genotype_object = genotypes, variant = '17:46108697:C:T') + ggtitle('24hCA'), 
+#   nrow = 1, 
+#   ncol = 2
+# )
+# # plot the z scores from the per-sample binomial model
+# plot_bino_z_scores(mono_zs, 'chr17-45585724-45587049', 'AC126544.2')
+# plot_bino_z_scores_violin(mono_zs, 'chr17-45585724-45587049', 'AC126544.2')
+# # and their distribution
+# plot_bino_z_distribution(mono_zs, 'chr17-45585724-45587049', 'AC126544.2')
+
+
+# location of the Seurat objects
+cd4t_object_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/seurat_preprocess_samples/objects/mo_multimodal_cd4t_1_80_20240521.rds'
+# read the object
+cd4t_object <- readRDS(cd4t_object_loc)
+# add the binarized assay
+cd4t_object <- add_binarized_assay(cd4t_object)
+# add pflogpf
+cd4t_object <- normalize_mj(cd4t_object)
+
+# now let's do that for an effect that is opposite in SCENIC+ vs pseudobulk
+plot_binarized_vs_other(cd4t_object, 'chr16-50335046-50335525', 'ADCY7')
 # plot the pseudobulk effect
 plot_grid(
-  plot_pseudobulk_cre(mono_ut_caqtl_input, mono_ut_eqtl_input, 'chr17-45585724-45587049', 'AC126544.2') + ggtitle('UT'), 
-  plot_pseudobulk_cre(mono_24hca_caqtl_input, mono_24hca_eqtl_input, 'chr17-45585724-45587049', 'AC126544.2') + ggtitle('24hCA'), 
+  plot_pseudobulk_cre(cd4t_ut_caqtl_input, cd4t_ut_eqtl_input, 'chr16-50335046-50335525', 'ADCY7') + ggtitle('UT'), 
+  plot_pseudobulk_cre(cd4t_24hca_caqtl_input, cd4t_24hca_eqtl_input, 'chr16-50335046-50335525', 'ADCY7') + ggtitle('24hCA'), 
   nrow = 1, 
   ncol = 2
 )
-# or with genotype
+# now let's do that for an effect that is opposite in SCENIC+ vs pseudobulk
+plot_binarized_vs_other(cd4t_object, 'chr15-33104057-33104848', 'FMN1')
+# plot the pseudobulk effect
 plot_grid(
-  plot_pseudobulk_cre(mono_ut_caqtl_input, mono_ut_eqtl_input, 'chr17-45585724-45587049', 'AC126544.2', smf = smf, genotype_object = genotypes, variant = '17:46108697:C:T') + ggtitle('UT'), 
-  plot_pseudobulk_cre(mono_24hca_caqtl_input, mono_24hca_eqtl_input, 'chr17-45585724-45587049', 'AC126544.2', smf = smf, genotype_object = genotypes, variant = '17:46108697:C:T') + ggtitle('24hCA'), 
+  plot_pseudobulk_cre(cd4t_ut_caqtl_input, cd4t_ut_eqtl_input, 'chr15-33104057-33104848', 'FMN1') + ggtitle('UT'), 
+  plot_pseudobulk_cre(cd4t_24hca_caqtl_input, cd4t_24hca_eqtl_input, 'chr15-33104057-33104848', 'FMN1') + ggtitle('24hCA'), 
   nrow = 1, 
   ncol = 2
 )
-# plot the z scores from the per-sample binomial model
-plot_bino_z_scores(mono_zs, 'chr17-45585724-45587049', 'AC126544.2')
-# and their distribution
-plot_bino_z_distribution(mono_zs, 'chr17-45585724-45587049', 'AC126544.2')

@@ -710,6 +710,16 @@ gene_anno <- fread(gene_anno_loc, header = F, sep = '\t')
 # add columns
 colnames(gene_anno) <- c('ens', 'gs', 'modality', 'chrom', 'start', 'end')
 
+# # read the location of the UCSC annotations
+# ucsc_anno_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/ucsc_gencode/gencode43.tsv.gz'
+# ucsc_anno <- fread(ucsc_anno_loc, header = F, sep = '\t')
+# # add column names
+# colnames(ucsc_anno) <- c('chrom', 'chromStart', 'chromEnd', 'name', 'score', 'strand', 'thickStart', 'thickEnd', 'itemRgb', 'blockCount', 'blockSizes', 'blockStarts')
+gene_anno_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/genome_annotation.tsv'
+gene_anno <- fread(gene_anno_loc, header = T, sep = '\t')
+# rename columns to be the same as in limix
+colnames(gene_anno) <-c('chrom', 'start', 'end', 'strand', 'gs','Transcription_Start_Site','Transcript_type')
+
 # add the location to the pseudobulk info
 pseudobulk_output <- cbind(pseudobulk_output, cpeaks_anno[match(pseudobulk_output[['snp_id']], cpeaks_anno[['signac_hg38']]), c('chr_hg38', 'start_hg38', 'end_hg38')])
 # get the distances
@@ -1334,6 +1344,10 @@ plot_grid(
   plot_concondance(scenic_vs_binomial, 'rho_R2G', 'meta_z') + ggtitle('Effects of SCENIC+ vs binomial\nCRE detection') + xlab('SCENIC+ R2G Rho') + ylab('Binomial model Z-score')
 )
 
+# also add the correlations
+scenic_output_unfiltered[['r_pseudobulk']] <- pseudobulk_output[match(scenic_output_unfiltered[['r2g']], scenic_output_unfiltered[['r2g']]), ][['r']]
+scenic_output_unfiltered[['r_hybrid']] <- hybrid_output[match(scenic_output_unfiltered[['r2g']], hybrid_output[['r2g']]), ][['r']]
+scenic_output_unfiltered[['sign_qtl']] <- qtl_overlap[match(scenic_output_unfiltered[['r2g']], qtl_overlap[['r2g']]), ][['sign']]
 # take the scenic output, and check if they are found anywhere else
 scenic_output_unfiltered[['in_pseudobulk']] <- scenic_output_unfiltered[['r2g']] %in% pseudobulk_output[['r2g']]
 scenic_output_unfiltered[['in_hybrid']] <- scenic_output_unfiltered[['r2g']] %in% hybrid_output[['r2g']]
@@ -1356,6 +1370,10 @@ scenic_output_unfiltered[['replicates_in']] <- apply(scenic_output_unfiltered, 1
   }
   return(replicating_string)
 })
+# make an export specific one
+scenic_output_unfiltered_export <- scenic_output_unfiltered
+# rename some columns
+colnames(scenic_output_unfiltered_export)[24:29] <- c('region_chromosome', 'region_start', 'region_end', 'gene_chromosome', 'gene_start', 'gene_end')
 # place this somewhere
 write.table(scenic_output_unfiltered, gzfile('~/tables/mo_scenic_annotated_replication.tsv.gz'), row.names = F, col.names = T, sep = '\t', quote = F)
 mdfiver::create_md5_for_file('~/tables/mo_scenic_annotated_replication.tsv.gz')
