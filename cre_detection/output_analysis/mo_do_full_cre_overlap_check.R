@@ -17,6 +17,7 @@ library(cowplot)
 library(UpSetR)
 library(roycols)
 library(qvalue)
+library(grid)
 
 
 ####################
@@ -426,9 +427,10 @@ remap_with_label_dict <- function(vector_of_names) {
 #' @param use_label_dict A logical value indicating whether to use a custom label dictionary for renaming cell types. Default is TRUE.
 #' @param use_color_dict A logical value indicating whether to use a custom color dictionary for cell types. Default is TRUE.
 #' @param n_intersects value describing how many intersections to plot, default is all
+#' @param use_this_color_dict list with colours for each category, if not supplied, environment default is used
 #' @return An UpSet plot showing the sharing of DE genes across cell types.
 #'
-plot_sharing_per_celltype <- function(genes_per_ct, use_label_dict=T, use_color_dict=T, n_intersects=NA){
+plot_sharing_per_celltype <- function(genes_per_ct, use_label_dict=T, use_color_dict=T, n_intersects=NA, use_this_color_dict=NULL){
   # rename labels if requested
   if (use_label_dict) {
     names(genes_per_ct) <- remap_with_label_dict(names(genes_per_ct))
@@ -470,7 +472,16 @@ plot_sharing_per_celltype <- function(genes_per_ct, use_label_dict=T, use_color_
     # get the cell types we have
     cell_types <- names(genes_per_ct)
     # get colour codes for the cell types
-    cell_type_colours <- get_color_coding_dict()
+    cell_type_colours <- NULL
+    # use the supplied colour coding dict
+    if (!is.null(use_this_color_dict)) {
+      cell_type_colours <- use_this_color_dict
+    }
+    # otherwise the default one
+    else {
+      cell_type_colours <- get_color_coding_dict()
+    }
+    
     # also get colours for the cell types we don't have colours for
     cell_type_colours_missing <- roycols::get_color_list(setdiff(cell_types, names(cell_type_colours)))
     # and merge them
@@ -616,6 +627,15 @@ get_group_proportions <- function(named_list_of_dfs, column_to_get_proportions_f
   }
   # merge all the tables
   results_all <- do.call('rbind', results_per_group)
+  # make sure the 'nots' are always last
+  categories <- as.character(unique(results_all[['category']]))
+  # get the ones that have 'not' in their name
+  categories_not <- categories[grep('^is not ', categories)]
+  # and the ones that are not not 'not'
+  categories_other <- setdiff(categories, categories_not)
+  # and make that the order
+  results_all[['category']] <- factor(results_all[['category']], levels=(c(categories_not, categories_other)))
+  results_all <- results_all[order(results_all[['category']]), ]
   return(results_all)
 }
 
@@ -677,7 +697,7 @@ pseudobulk_output_24hca[['z_from_p']] <- qnorm(pseudobulk_output_24hca[['p_value
 pseudobulk_output <- do.call('rbind', list(pseudobulk_output_ut, pseudobulk_output_24hca))
 
 # read hybrid method
-hybrid_output_list <- read_pseudobulk_cre_output_per_celltype(hybrid_output_loc, add_mtc = F, filter_alpha = F, add_global_nominal_threshold = F, add_local_nominal_threshold = F, filename_output = 'qtl_results_all.txt.gz', alpha_min = .8, alpha_max = 1.2, cell_types = c('B', 'DC', 'NK'))
+hybrid_output_list <- read_pseudobulk_cre_output_per_celltype(hybrid_output_loc, add_mtc = F, filter_alpha = F, add_global_nominal_threshold = F, add_local_nominal_threshold = F, filename_output = 'qtl_results_all.txt.gz', alpha_min = .8, alpha_max = 1.2, cell_types = c('B', 'CD4T', 'CD8T', 'DC', 'NK'))
 #hybrid_output_list <- read_pseudobulk_cre_output_per_celltype(hybrid_output_loc, add_mtc = T, filter_alpha = T, add_global_nominal_threshold = T, add_local_nominal_threshold = T, filename_output = 'test_qtl_results_all.txt', alpha_min = .8, alpha_max = 1.2, filter_significance = F)
 # merge them
 hybrid_output <- do.call('rbind', hybrid_output_list)
@@ -903,7 +923,9 @@ hybrid_output <- hybrid_output[abs(hybrid_output[['distance']]) > 0, ]
 
 # check pseudobulk vs the hi-C data
 plot_sharing_per_celltype(list('B' = pseudobulk_output[pseudobulk_output$cell_type == 'B', ][['r2g']], 'CD4T' = pseudobulk_output[pseudobulk_output$cell_type == 'CD4T', ][['r2g']], 'CD8T' = pseudobulk_output[pseudobulk_output$cell_type == 'CD8T', ][['r2g']], 'DC' = pseudobulk_output[pseudobulk_output$cell_type == 'DC', ][['r2g']], 'monocyte' = pseudobulk_output[pseudobulk_output$cell_type == 'monocyte', ][['r2g']], 'NK' = pseudobulk_output[pseudobulk_output$cell_type == 'NK', ][['r2g']], 'HiC' = screen_r2g[['r2g']]), use_label_dict = T, use_color_dict = T)
+grid.text("Overlap of CRE-gene pairs in pseudobulk (distance>0)", x = 0.65, y = 0.95, gp = gpar(fontsize = 20))
 plot_sharing_per_celltype(list('B' = hybrid_output[hybrid_output$cell_type == 'B', ][['r2g']], 'CD4T' = hybrid_output[hybrid_output$cell_type == 'CD4T', ][['r2g']], 'CD8T' = hybrid_output[hybrid_output$cell_type == 'CD8T', ][['r2g']], 'DC' = hybrid_output[hybrid_output$cell_type == 'DC', ][['r2g']], 'monocyte' = hybrid_output[hybrid_output$cell_type == 'monocyte', ][['r2g']], 'NK' = hybrid_output[hybrid_output$cell_type == 'NK', ][['r2g']], 'HiC' = screen_r2g[['r2g']]), use_label_dict = T, use_color_dict = T)
+grid.text("Overlap of CRE-gene pairs in hybrid method (distance>0)", x = 0.65, y = 0.95, gp = gpar(fontsize = 20))
 
 # get unique ones
 pseudobulk_output_unique <- pseudobulk_output[!duplicated(paste(pseudobulk_output[['snp_id']], pseudobulk_output[['feature_id']])), ]
@@ -927,43 +949,68 @@ nrow(qtl_overlap_unique)
 nrow(hybrid_output_unique)
 # [1] 7515
 
+# subset to smaller than 150k
+binomial_output_unique <- binomial_output_unique[abs(binomial_output_unique[['distance']]) <= 150000, ]
+scenic_output_unique_unfiltered <- scenic_output_unique_unfiltered[abs(scenic_output_unique_unfiltered[['distance']]) <= 150000, ]
+scenic_output_unique <- scenic_output_unique[abs(scenic_output_unique[['distance']]) <= 150000, ]
+pseudobulk_output_unique <- pseudobulk_output_unique[abs(pseudobulk_output_unique[['distance']]) <= 150000, ]
+qtl_overlap_unique <- qtl_overlap_unique[abs(qtl_overlap_unique[['distance']]) <= 150000, ]
+hybrid_output_unique <- hybrid_output_unique[abs(hybrid_output_unique[['distance']]) <= 150000, ]
+
+
+# make the unique region-gene numbers into a table
+# n_effects_region_gene <- data.frame(
+#   'category' = c('binomial', 'SCENIC+ filtered', 'SCENIC+ unfiltered', 'pseudobulk', 'QTL overlap', 'hybrid (no mono only)'), 
+#   'neffects' = c(nrow(binomial_output_unique), nrow(scenic_output_unique), nrow(scenic_output_unique_unfiltered), nrow(pseudobulk_output_unique), nrow(qtl_overlap_unique), nrow(hybrid_output))
+# )
 # make the unique region-gene numbers into a table
 n_effects_region_gene <- data.frame(
-  'category' = c('binomial', 'SCENIC+ filtered', 'SCENIC+ unfiltered', 'pseudobulk', 'QTL overlap', 'hybrid (B,DC,NK only)'), 
-  'neffects' = c(nrow(binomial_output_unique), nrow(scenic_output_unique), nrow(scenic_output_unique_unfiltered), nrow(pseudobulk_output_unique), nrow(qtl_overlap_unique), nrow(hybrid_output))
+  'category' = c('SCENIC+ filtered', 'SCENIC+ unfiltered', 'pseudobulk', 'QTL overlap', 'hybrid (no mono only)'), 
+  'neffects' = c(nrow(scenic_output_unique), nrow(scenic_output_unique_unfiltered), nrow(pseudobulk_output_unique), nrow(qtl_overlap_unique), nrow(hybrid_output_unique))
 )
+
 # and make into a plot
 ggplot(data = n_effects_region_gene, mapping = aes(x = category, y = neffects, fill = category)) + 
   geom_bar(stat = 'identity') +
   xlab('CRE detection method') +
   ylab('Number of region-gene pairs') +
-  ggtitle('Number of detected CRE-gene pairs across methods') +
-  scale_fill_manual(values = list('binomial' = '#BEAED4', 'pseudobulk' = '#7FC97F', 'QTL overlap' = '#386CB0', 'SCENIC+ unfiltered' = '#FFFF99', 'SCENIC+ filtered' = '#FDC086', 'hybrid (B,DC,NK only)' = '#F0027F')) + 
+  ggtitle('Number of detected CRE-gene pairs across methods\n') +
+  scale_fill_manual(values = list('binomial' = '#BEAED4', 'pseudobulk' = '#7FC97F', 'QTL overlap' = '#386CB0', 'SCENIC+ unfiltered' = '#FFFF99', 'SCENIC+ filtered' = '#FDC086', 'hybrid (no mono only)' = '#F0027F')) + 
   theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
   theme(legend.position="none")
 
 
-# plot these numbers
+# # plot these numbers
+# plot_sharing_per_celltype(
+#   list('pseudobulk' = pseudobulk_output_unique[['r2g']], 
+#        'binomial' = binomial_output_unique[['r2g']], 
+#        'scenic' = scenic_output_unique[['r2g']], 
+#        'scenic unfiltered' = scenic_output_unique_unfiltered[['r2g']],
+#        'qtl' = qtl_overlap_unique[['r2g']], 
+#        'hybrid' = hybrid_output_unique[['r2g']]), 
+#   use_label_dict=F, use_color_dict=T
+# )
+# plot_sharing_per_celltype(
+#   list('pseudobulk' = pseudobulk_output_unique[['r2g']], 
+#        'binomial' = binomial_output_unique[['r2g']], 
+#        'scenic' = scenic_output_unique[['r2g']], 
+#        'scenic unfiltered' = scenic_output_unique_unfiltered[['r2g']],
+#        'qtl' = qtl_overlap_unique[['r2g']], 
+#        'hybrid' = hybrid_output_unique[['r2g']], 
+#        'screen_hic' = screen_r2g[['r2g']]), 
+#   use_label_dict=F, use_color_dict=T
+# )
 plot_sharing_per_celltype(
-  list('pseudobulk' = pseudobulk_output_unique[['r2g']], 
-       'binomial' = binomial_output_unique[['r2g']], 
-       'scenic' = scenic_output_unique[['r2g']], 
+  list('pseudobulk' = pseudobulk_output_unique[['r2g']],
+       'scenic' = scenic_output_unique[['r2g']],
        'scenic unfiltered' = scenic_output_unique_unfiltered[['r2g']],
-       'qtl' = qtl_overlap_unique[['r2g']], 
-       'hybrid' = hybrid_output_unique[['r2g']]), 
-  use_label_dict=F, use_color_dict=T
+       'qtl' = qtl_overlap_unique[['r2g']],
+       'hybrid' = hybrid_output_unique[['r2g']],
+       'screen_hic' = screen_r2g[['r2g']]),
+  use_label_dict=F, use_color_dict=T, 
+  use_this_color_dict = list('binomial' = '#BEAED4', 'pseudobulk' = '#7FC97F', 'qtl' = '#386CB0', 'scenic unfiltered' = '#FFFF99', 'scenic' = '#FDC086', 'hybrid' = '#F0027F', 'hiC' = '#FF7F00')
 )
-plot_sharing_per_celltype(
-  list('pseudobulk' = pseudobulk_output_unique[['r2g']], 
-       'binomial' = binomial_output_unique[['r2g']], 
-       'scenic' = scenic_output_unique[['r2g']], 
-       'scenic unfiltered' = scenic_output_unique_unfiltered[['r2g']],
-       'qtl' = qtl_overlap_unique[['r2g']], 
-       'hybrid' = hybrid_output_unique[['r2g']], 
-       'screen_hic' = screen_r2g[['r2g']]), 
-  use_label_dict=F, use_color_dict=T
-)
-
+grid.text("Overlap of CRE-gene pairs across methods (distance>0)", x = 0.65, y = 0.95, gp = gpar(fontsize = 20))
 
 # get the percentage positive
 frac_pos_pseudobulk_output_unique <- nrow(pseudobulk_output_unique[sign(pseudobulk_output_unique[['zscore']]) == 1, ]) / nrow(pseudobulk_output_unique)
@@ -981,10 +1028,15 @@ frac_pos_hybrid_output_unique <- nrow(hybrid_output_unique[sign(hybrid_output_un
 
 
 # plot these numbers
+# n_pos_tbl <- data.frame(
+#   'method' = c('pseudobulk', 'binomial', 'scenic', 'scenic uf', 'QTL', 'hybrid (no mono)', 'pseudobulk', 'binomial', 'scenic', 'scenic uf', 'QTL', 'hybrid (no mono)'), 
+#   'direction' = c('positive', 'positive', 'positive', 'positive', 'positive', 'positive', 'negative', 'negative', 'negative', 'negative', 'negative', 'negative'), 
+#   'n' = c(frac_pos_pseudobulk_output_unique, frac_pos_binomial_output_unique, frac_pos_scenic_output_unique, frac_pos_scenic_output_unfiltered_unique, frac_pos_qtl_overlap_unique, frac_pos_hybrid_output_unique, 1-frac_pos_pseudobulk_output_unique, 1-frac_pos_binomial_output_unique, 1-frac_pos_scenic_output_unique, 1-frac_pos_scenic_output_unfiltered_unique, 1-frac_pos_qtl_overlap_unique, 1-frac_pos_hybrid_output_unique)
+# )
 n_pos_tbl <- data.frame(
-  'method' = c('pseudobulk', 'binomial', 'scenic', 'scenic uf', 'QTL', 'hybrid (B,DC,NK)', 'pseudobulk', 'binomial', 'scenic', 'scenic uf', 'QTL', 'hybrid (B,DC,NK)'), 
-  'direction' = c('positive', 'positive', 'positive', 'positive', 'positive', 'positive', 'negative', 'negative', 'negative', 'negative', 'negative', 'negative'), 
-  'n' = c(frac_pos_pseudobulk_output_unique, frac_pos_binomial_output_unique, frac_pos_scenic_output_unique, frac_pos_scenic_output_unfiltered_unique, frac_pos_qtl_overlap_unique, frac_pos_hybrid_output_unique, 1-frac_pos_pseudobulk_output_unique, 1-frac_pos_binomial_output_unique, 1-frac_pos_scenic_output_unique, 1-frac_pos_scenic_output_unfiltered_unique, 1-frac_pos_qtl_overlap_unique, 1-frac_pos_hybrid_output_unique)
+  'method' = c('pseudobulk', 'scenic', 'scenic uf', 'QTL', 'hybrid (no mono)', 'pseudobulk', 'scenic', 'scenic uf', 'QTL', 'hybrid (no mono)'), 
+  'direction' = c('positive', 'positive', 'positive', 'positive', 'positive', 'negative', 'negative', 'negative', 'negative', 'negative'), 
+  'n' = c(frac_pos_pseudobulk_output_unique, frac_pos_scenic_output_unique, frac_pos_scenic_output_unfiltered_unique, frac_pos_qtl_overlap_unique, frac_pos_hybrid_output_unique, 1-frac_pos_pseudobulk_output_unique, 1-frac_pos_scenic_output_unique, 1-frac_pos_scenic_output_unfiltered_unique, 1-frac_pos_qtl_overlap_unique, 1-frac_pos_hybrid_output_unique)
 )
 p_directions <- ggplot(data = n_pos_tbl, mapping = aes(x = method, y = n, fill = direction)) + 
   geom_bar(stat = 'identity', position = 'stack') +
@@ -999,10 +1051,11 @@ p_directions
 p_region_direction_distances <- ggplot(
   data = rbind(
     pseudobulk_output_unique[pseudobulk_output_unique[['distance']] < 150000 & pseudobulk_output_unique[['distance']] > 0, c('distance', 'category'), ], 
-    binomial_output_unique[binomial_output_unique[['distance']] < 150000 & binomial_output_unique[['distance']] > 0, c('distance', 'category'), ], 
+    # binomial_output_unique[binomial_output_unique[['distance']] < 150000 & binomial_output_unique[['distance']] > 0, c('distance', 'category'), ], 
     qtl_overlap_unique[qtl_overlap_unique[['distance']] < 150000 & qtl_overlap_unique[['distance']] > 0, c('distance', 'category'), ], 
     hybrid_output_unique[hybrid_output_unique[['distance']] < 150000 & hybrid_output_unique[['distance']] > 0, c('distance', 'category'), ], 
-    screen_r2g[screen_r2g[['distance']] < 150000 & screen_r2g[['distance']] > 0, c('distance', 'category'), ]), 
+    screen_r2g[screen_r2g[['distance']] < 150000 & screen_r2g[['distance']] > 0, c('distance', 'category'), ], 
+    scenic_output_unique[scenic_output_unique[['distance']] < 150000 & scenic_output_unique[['distance']] > 0, c('distance', 'category'), ]), 
   mapping = aes(
     x = distance, 
     fill = category
@@ -1012,18 +1065,19 @@ p_region_direction_distances <- ggplot(
   xlab('Distance between region and gene') + 
   ylab('Density') + 
   ggtitle('Distance between region and gene\nacross different methods') + 
-  scale_fill_manual(values = list('binomial' = '#BEAED4', 'pseudobulk' = '#7FC97F', 'qtl_overlap' = '#386CB0', 'hybrid' = '#F0027F', 'hiC' = '#FF7F00')) + 
+  scale_fill_manual(values = list('binomial' = '#BEAED4', 'pseudobulk' = '#7FC97F', 'qtl_overlap' = '#386CB0', 'hybrid' = '#F0027F', 'hiC' = '#FF7F00', 'scenic' = '#FDC086')) + 
   theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
 # show plot
 p_region_direction_distances
 # do same for positive direction
 p_region_direction_distances_pos <- ggplot(
   data = rbind(
-    pseudobulk_output_unique[pseudobulk_output_unique[['distance']] > 0 & pseudobulk_output_unique[['r']] > 0, c('distance', 'category'), ], 
-    binomial_output_unique[binomial_output_unique[['distance']] > 0 & binomial_output_unique[['r']] > 0, c('distance', 'category'), ], 
+    pseudobulk_output_unique[pseudobulk_output_unique[['distance']] < 150000 & pseudobulk_output_unique[['r']] > 0, c('distance', 'category'), ], 
+    # binomial_output_unique[binomial_output_unique[['distance']] > 0 & binomial_output_unique[['r']] > 0, c('distance', 'category'), ], 
     qtl_overlap_unique[qtl_overlap_unique[['distance']] > 0 & qtl_overlap_unique[['sign']] > 0, c('distance', 'category'), ], 
     hybrid_output_unique[hybrid_output_unique[['distance']] > 0 & hybrid_output_unique[['distance']] > 0, c('distance', 'category'), ], 
-    screen_r2g[screen_r2g[['distance']] < 150000 & screen_r2g[['distance']] > 0, c('distance', 'category'), ]), 
+    screen_r2g[screen_r2g[['distance']] < 150000 & screen_r2g[['distance']] > 0, c('distance', 'category'), ], 
+    scenic_output_unique[scenic_output_unique[['distance']] < 150000 & scenic_output_unique[['distance']] > 0 & scenic_output_unique[['rho_R2G']] > 0, c('distance', 'category'), ]), 
   mapping = aes(
     x = distance, 
     fill = category
@@ -1033,17 +1087,18 @@ p_region_direction_distances_pos <- ggplot(
   xlab('Distance between region and gene') + 
   ylab('Density') + 
   ggtitle('Distance between region and gene\nacross different methods\nfor positive associations') + 
-  scale_fill_manual(values = list('binomial' = '#BEAED4', 'pseudobulk' = '#7FC97F', 'qtl_overlap' = '#386CB0', 'hybrid' = '#F0027F', 'hiC' = '#FF7F00')) + 
+  scale_fill_manual(values = list('binomial' = '#BEAED4', 'pseudobulk' = '#7FC97F', 'qtl_overlap' = '#386CB0', 'hybrid' = '#F0027F', 'hiC' = '#FF7F00', 'scenic' = '#FDC086')) + 
   theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
 p_region_direction_distances_pos
 # finally for negative direction
 p_region_direction_distances_neg <- ggplot(
   data = rbind(
     pseudobulk_output_unique[pseudobulk_output_unique[['distance']] < 150000 & pseudobulk_output_unique[['distance']] > 0 & pseudobulk_output_unique[['r']] < 0, c('distance', 'category'), ], 
-    binomial_output_unique[binomial_output_unique[['distance']] < 150000 & binomial_output_unique[['distance']] > 0 & binomial_output_unique[['r']] < 0, c('distance', 'category'), ], 
+    # binomial_output_unique[binomial_output_unique[['distance']] < 150000 & binomial_output_unique[['distance']] > 0 & binomial_output_unique[['r']] < 0, c('distance', 'category'), ], 
     qtl_overlap_unique[qtl_overlap_unique[['distance']] < 150000 & qtl_overlap_unique[['distance']] > 0 & qtl_overlap_unique[['sign']] < 0, c('distance', 'category'), ], 
     hybrid_output_unique[hybrid_output_unique[['distance']] < 150000 & hybrid_output_unique[['distance']] > 0 & hybrid_output_unique[['r']] < 0, c('distance', 'category'), ], 
-    screen_r2g[screen_r2g[['distance']] < 150000 & screen_r2g[['distance']] > 0, c('distance', 'category'), ]), 
+    screen_r2g[screen_r2g[['distance']] < 150000 & screen_r2g[['distance']] > 0, c('distance', 'category'), ], 
+    scenic_output_unique_unfiltered[scenic_output_unique_unfiltered[['distance']] < 150000 & scenic_output_unique_unfiltered[['distance']] > 0 & scenic_output_unique_unfiltered[['rho_R2G']] > 0, c('distance', 'category'), ]), 
   mapping = aes(
     x = distance, 
     fill = category
@@ -1053,7 +1108,7 @@ p_region_direction_distances_neg <- ggplot(
   xlab('Distance between region and gene') + 
   ylab('Density') + 
   ggtitle('Distance between region and gene\nacross different methods\nfor negative associations') + 
-  scale_fill_manual(values = list('binomial' = '#BEAED4', 'pseudobulk' = '#7FC97F', 'qtl_overlap' = '#386CB0', 'hybrid' = '#F0027F', 'hiC' = '#FF7F00')) + 
+  scale_fill_manual(values = list('binomial' = '#BEAED4', 'pseudobulk' = '#7FC97F', 'qtl_overlap' = '#386CB0', 'hybrid' = '#F0027F', 'hiC' = '#FF7F00', 'scenic' = '#FFFF99')) + 
   theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
 p_region_direction_distances_neg
 
@@ -1070,7 +1125,13 @@ p_screen_fractions <- ggplot(data = fracs_screen, mapping = aes(x = group, y = f
   theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
 p_screen_fractions
 # get the percentage of each screen group
-fracs_screen_is_ca <- get_group_proportions(list('pseudobulk' = pseudobulk_output_unique, 'hybrid' = hybrid_output_unique, 'qtl_overlap' = qtl_overlap_unique, 'scenic' = scenic_output_unique, 'scenic_unfiltered' = scenic_output_unique_unfiltered, 'binomial' = binomial_output_unique, 'cPeaks' = cpeaks_anno), specific_trait_expression = 'CA', specific_trait_name = 'CA')
+fracs_screen_is_ca <- get_group_proportions(list('pseudobulk' = pseudobulk_output_unique, 
+                                                 'hybrid' = hybrid_output_unique, 
+                                                 'qtl_overlap' = qtl_overlap_unique, 
+                                                 'scenic' = scenic_output_unique, 
+                                                 'scenic_unfiltered' = scenic_output_unique_unfiltered, 
+                                                 # 'binomial' = binomial_output_unique, 
+                                                 'cPeaks' = cpeaks_anno), specific_trait_expression = 'CA', specific_trait_name = 'CA')
 # make into a plot
 p_screen_fractions_ca <- ggplot(data = fracs_screen_is_ca, mapping = aes(x = group, y = frac, fill = category)) + 
   geom_bar(stat = 'identity', position = 'stack') +
@@ -1081,7 +1142,13 @@ p_screen_fractions_ca <- ggplot(data = fracs_screen_is_ca, mapping = aes(x = gro
   scale_fill_manual(values = roycols::get_color_list(c('is CA', 'is not CA')))
 p_screen_fractions_ca
 # get the percentage of each screen group
-fracs_screen_is_tf <- get_group_proportions(list('pseudobulk' = pseudobulk_output_unique, 'hybrid' = hybrid_output_unique, 'qtl_overlap' = qtl_overlap_unique, 'scenic' = scenic_output_unique, 'scenic_unfiltered' = scenic_output_unique_unfiltered, 'binomial' = binomial_output_unique, 'cPeaks' = cpeaks_anno), specific_trait_expression = 'TF', specific_trait_name = 'TF')
+fracs_screen_is_tf <- get_group_proportions(list('pseudobulk' = pseudobulk_output_unique, 
+                                                 'hybrid' = hybrid_output_unique, 
+                                                 'qtl_overlap' = qtl_overlap_unique, 
+                                                 'scenic' = scenic_output_unique, 
+                                                 'scenic_unfiltered' = scenic_output_unique_unfiltered, 
+                                                 # 'binomial' = binomial_output_unique, 
+                                                 'cPeaks' = cpeaks_anno), specific_trait_expression = 'TF', specific_trait_name = 'TF')
 # make into a plot
 p_screen_fractions_tf <- ggplot(data = fracs_screen_is_tf, mapping = aes(x = group, y = frac, fill = category)) + 
   geom_bar(stat = 'identity', position = 'stack') +
@@ -1092,7 +1159,13 @@ p_screen_fractions_tf <- ggplot(data = fracs_screen_is_tf, mapping = aes(x = gro
   scale_fill_manual(values = roycols::get_color_list(c('is TF', 'is not TF')))
 p_screen_fractions_tf
 # get the percentage of each screen group
-fracs_screen_is_ctcf <- get_group_proportions(list('pseudobulk' = pseudobulk_output_unique, 'hybrid' = hybrid_output_unique, 'qtl_overlap' = qtl_overlap_unique, 'scenic' = scenic_output_unique, 'scenic_unfiltered' = scenic_output_unique_unfiltered, 'binomial' = binomial_output_unique, 'cPeaks' = cpeaks_anno), specific_trait_expression = 'CTCF', specific_trait_name = 'CTCF')
+fracs_screen_is_ctcf <- get_group_proportions(list('pseudobulk' = pseudobulk_output_unique, 
+                                                   'hybrid' = hybrid_output_unique, 
+                                                   'qtl_overlap' = qtl_overlap_unique, 
+                                                   'scenic' = scenic_output_unique, 
+                                                   'scenic_unfiltered' = scenic_output_unique_unfiltered, 
+                                                   # 'binomial' = binomial_output_unique, 
+                                                   'cPeaks' = cpeaks_anno), specific_trait_expression = 'CTCF', specific_trait_name = 'CTCF')
 # make into a plot
 p_screen_fractions_ctcf <- ggplot(data = fracs_screen_is_ctcf, mapping = aes(x = group, y = frac, fill = category)) + 
   geom_bar(stat = 'identity', position = 'stack') +
@@ -1103,7 +1176,13 @@ p_screen_fractions_ctcf <- ggplot(data = fracs_screen_is_ctcf, mapping = aes(x =
   scale_fill_manual(values = roycols::get_color_list(c('is CTCF', 'is not CTCF')))
 p_screen_fractions_ctcf
 # get the percentage of each screen group
-fracs_screen_is_ctcf <- get_group_proportions(list('pseudobulk' = pseudobulk_output_unique, 'hybrid' = hybrid_output_unique, 'qtl_overlap' = qtl_overlap_unique, 'scenic' = scenic_output_unique, 'scenic_unfiltered' = scenic_output_unique_unfiltered, 'binomial' = binomial_output_unique, 'cPeaks' = cpeaks_anno), specific_trait_expression = 'CTCF', specific_trait_name = 'CTCF')
+fracs_screen_is_ctcf <- get_group_proportions(list('pseudobulk' = pseudobulk_output_unique, 
+                                                   'hybrid' = hybrid_output_unique, 
+                                                   'qtl_overlap' = qtl_overlap_unique, 
+                                                   'scenic' = scenic_output_unique, 
+                                                   'scenic_unfiltered' = scenic_output_unique_unfiltered, 
+                                                   # 'binomial' = binomial_output_unique, 
+                                                   'cPeaks' = cpeaks_anno), specific_trait_expression = 'CTCF', specific_trait_name = 'CTCF')
 # make into a plot
 p_screen_fractions_ctcf <- ggplot(data = fracs_screen_is_ctcf, mapping = aes(x = group, y = frac, fill = category)) + 
   geom_bar(stat = 'identity', position = 'stack') +
@@ -1114,7 +1193,13 @@ p_screen_fractions_ctcf <- ggplot(data = fracs_screen_is_ctcf, mapping = aes(x =
   scale_fill_manual(values = roycols::get_color_list(c('is CTCF', 'is not CTCF')))
 p_screen_fractions_ctcf
 # get the percentage of each screen group
-fracs_screen_is_pls <- get_group_proportions(list('pseudobulk' = pseudobulk_output_unique, 'hybrid' = hybrid_output_unique, 'qtl_overlap' = qtl_overlap_unique, 'scenic' = scenic_output_unique, 'scenic_unfiltered' = scenic_output_unique_unfiltered, 'binomial' = binomial_output_unique, 'cPeaks' = cpeaks_anno), specific_trait_expression = 'PLS', specific_trait_name = 'PLS')
+fracs_screen_is_pls <- get_group_proportions(list('pseudobulk' = pseudobulk_output_unique, 
+                                                  'hybrid' = hybrid_output_unique, 
+                                                  'qtl_overlap' = qtl_overlap_unique, 
+                                                  'scenic' = scenic_output_unique, 
+                                                  'scenic_unfiltered' = scenic_output_unique_unfiltered, 
+                                                  # 'binomial' = binomial_output_unique, 
+                                                  'cPeaks' = cpeaks_anno), specific_trait_expression = 'PLS', specific_trait_name = 'PLS')
 # make into a plot
 p_screen_fractions_pls <- ggplot(data = fracs_screen_is_pls, mapping = aes(x = group, y = frac, fill = category)) + 
   geom_bar(stat = 'identity', position = 'stack') +
@@ -1125,7 +1210,13 @@ p_screen_fractions_pls <- ggplot(data = fracs_screen_is_pls, mapping = aes(x = g
   scale_fill_manual(values = roycols::get_color_list(c('is PLS', 'is not PLS')))
 p_screen_fractions_pls
 # get the percentage of each screen group
-fracs_screen_is_els <- get_group_proportions(list('pseudobulk' = pseudobulk_output_unique, 'hybrid' = hybrid_output_unique, 'qtl_overlap' = qtl_overlap_unique, 'scenic' = scenic_output_unique, 'scenic_unfiltered' = scenic_output_unique_unfiltered, 'binomial' = binomial_output_unique, 'cPeaks' = cpeaks_anno), specific_trait_expression = 'ELS', specific_trait_name = 'ELS')
+fracs_screen_is_els <- get_group_proportions(list('pseudobulk' = pseudobulk_output_unique, 
+                                                  'hybrid' = hybrid_output_unique, 
+                                                  'qtl_overlap' = qtl_overlap_unique, 
+                                                  'scenic' = scenic_output_unique, 
+                                                  'scenic_unfiltered' = scenic_output_unique_unfiltered, 
+                                                  # 'binomial' = binomial_output_unique, 
+                                                  'cPeaks' = cpeaks_anno), specific_trait_expression = 'ELS', specific_trait_name = 'ELS')
 # make into a plot
 p_screen_fractions_els <- ggplot(data = fracs_screen_is_els, mapping = aes(x = group, y = frac, fill = category)) + 
   geom_bar(stat = 'identity', position = 'stack') +
@@ -1136,7 +1227,13 @@ p_screen_fractions_els <- ggplot(data = fracs_screen_is_els, mapping = aes(x = g
   scale_fill_manual(values = roycols::get_color_list(c('is ELS', 'is not ELS')))
 p_screen_fractions_els
 # get the percentage of each screen group
-fracs_screen_is_pels <- get_group_proportions(list('pseudobulk' = pseudobulk_output_unique, 'hybrid' = hybrid_output_unique, 'qtl_overlap' = qtl_overlap_unique, 'scenic' = scenic_output_unique, 'scenic_unfiltered' = scenic_output_unique_unfiltered, 'binomial' = binomial_output_unique, 'cPeaks' = cpeaks_anno), specific_trait_expression = 'pELS', specific_trait_name = 'pELS')
+fracs_screen_is_pels <- get_group_proportions(list('pseudobulk' = pseudobulk_output_unique, 
+                                                   'hybrid' = hybrid_output_unique, 
+                                                   'qtl_overlap' = qtl_overlap_unique, 
+                                                   'scenic' = scenic_output_unique, 
+                                                   'scenic_unfiltered' = scenic_output_unique_unfiltered, 
+                                                   # 'binomial' = binomial_output_unique, 
+                                                   'cPeaks' = cpeaks_anno), specific_trait_expression = 'pELS', specific_trait_name = 'pELS')
 # make into a plot
 p_screen_fractions_pels <- ggplot(data = fracs_screen_is_pels, mapping = aes(x = group, y = frac, fill = category)) + 
   geom_bar(stat = 'identity', position = 'stack') +
@@ -1147,7 +1244,13 @@ p_screen_fractions_pels <- ggplot(data = fracs_screen_is_pels, mapping = aes(x =
   scale_fill_manual(values = roycols::get_color_list(c('is pELS', 'is not pELS')))
 p_screen_fractions_pels
 # get the percentage of each screen group
-fracs_screen_is_dels <- get_group_proportions(list('pseudobulk' = pseudobulk_output_unique, 'hybrid' = hybrid_output_unique, 'qtl_overlap' = qtl_overlap_unique, 'scenic' = scenic_output_unique, 'scenic_unfiltered' = scenic_output_unique_unfiltered, 'binomial' = binomial_output_unique, 'cPeaks' = cpeaks_anno), specific_trait_expression = 'dELS', specific_trait_name = 'dELS')
+fracs_screen_is_dels <- get_group_proportions(list('pseudobulk' = pseudobulk_output_unique, 
+                                                   'hybrid' = hybrid_output_unique, 
+                                                   'qtl_overlap' = qtl_overlap_unique, 
+                                                   'scenic' = scenic_output_unique, 
+                                                   'scenic_unfiltered' = scenic_output_unique_unfiltered, 
+                                                   # 'binomial' = binomial_output_unique, 
+                                                   'cPeaks' = cpeaks_anno), specific_trait_expression = 'dELS', specific_trait_name = 'dELS')
 # make into a plot
 p_screen_fractions_dels <- ggplot(data = fracs_screen_is_dels, mapping = aes(x = group, y = frac, fill = category)) + 
   geom_bar(stat = 'identity', position = 'stack') +
@@ -1234,25 +1337,42 @@ con_hyb_qtl <- nrow(hybrid_vs_qtl[sign(hybrid_vs_qtl[['zscore']]) == sign(hybrid
 
 
 # in a pairwise table
+# pairwise_correlation_table <- data.frame(
+#   'method1' = c('pseudobulk', 'pseudobulk', 'pseudobulk', 'pseudobulk', 'pseudobulk', 'pseudobulk',
+#                 'scenic', 'scenic', 'scenic', 'scenic', 'scenic', 'scenic', 
+#                 'binomial', 'binomial', 'binomial', 'binomial', 'binomial', 'binomial',
+#                 'QTL', 'QTL', 'QTL', 'QTL', 'QTL', 'QTL', 
+#                 'scenic uf', 'scenic uf', 'scenic uf', 'scenic uf', 'scenic uf', 'scenic uf', 
+#                 'hybrid', 'hybrid', 'hybrid', 'hybrid', 'hybrid', 'hybrid'), 
+#   'method2' = c('pseudobulk', 'scenic', 'binomial', 'QTL', 'scenic uf', 'hybrid', 
+#                 'pseudobulk', 'scenic', 'binomial', 'QTL', 'scenic uf', 'hybrid', 
+#                 'pseudobulk', 'scenic', 'binomial', 'QTL', 'scenic uf', 'hybrid', 
+#                 'pseudobulk', 'scenic', 'binomial', 'QTL', 'scenic uf', 'hybrid', 
+#                 'pseudobulk', 'scenic', 'binomial', 'QTL', 'scenic uf', 'hybrid', 
+#                 'pseudobulk', 'scenic', 'binomial', 'QTL', 'scenic uf', 'hybrid'), 
+#   'concordance' = c(1, con_pseudo_sce, con_pseudo_bino, con_pseudo_qtl, con_pseudo_sceun, con_pseudo_vs_hyb, 
+#                     con_pseudo_sce, 1, con_sce_bino, con_sce_qtl, con_sce_sceun, con_hyb_sce, 
+#                     con_pseudo_bino, con_sce_bino, 1, con_bino_qtl, con_sceun_bino, con_hyb_bino, 
+#                     con_pseudo_qtl, con_sce_qtl, con_bino_qtl, 1, con_sceun_qtl, con_hyb_qtl, 
+#                     con_pseudo_sceun, con_sce_sceun, con_sceun_bino, con_sceun_qtl, 1, con_hyb_sceun, 
+#                     con_pseudo_vs_hyb, con_hyb_sce, con_hyb_bino, con_hyb_qtl, con_hyb_sceun, 1)
+# )
 pairwise_correlation_table <- data.frame(
-  'method1' = c('pseudobulk', 'pseudobulk', 'pseudobulk', 'pseudobulk', 'pseudobulk', 'pseudobulk',
-                'scenic', 'scenic', 'scenic', 'scenic', 'scenic', 'scenic', 
-                'binomial', 'binomial', 'binomial', 'binomial', 'binomial', 'binomial',
-                'QTL', 'QTL', 'QTL', 'QTL', 'QTL', 'QTL', 
-                'scenic uf', 'scenic uf', 'scenic uf', 'scenic uf', 'scenic uf', 'scenic uf', 
-                'hybrid', 'hybrid', 'hybrid', 'hybrid', 'hybrid', 'hybrid'), 
-  'method2' = c('pseudobulk', 'scenic', 'binomial', 'QTL', 'scenic uf', 'hybrid', 
-                'pseudobulk', 'scenic', 'binomial', 'QTL', 'scenic uf', 'hybrid', 
-                'pseudobulk', 'scenic', 'binomial', 'QTL', 'scenic uf', 'hybrid', 
-                'pseudobulk', 'scenic', 'binomial', 'QTL', 'scenic uf', 'hybrid', 
-                'pseudobulk', 'scenic', 'binomial', 'QTL', 'scenic uf', 'hybrid', 
-                'pseudobulk', 'scenic', 'binomial', 'QTL', 'scenic uf', 'hybrid'), 
-  'concordance' = c(1, con_pseudo_sce, con_pseudo_bino, con_pseudo_qtl, con_pseudo_sceun, con_pseudo_vs_hyb, 
-                    con_pseudo_sce, 1, con_sce_bino, con_sce_qtl, con_sce_sceun, con_hyb_sce, 
-                    con_pseudo_bino, con_sce_bino, 1, con_bino_qtl, con_sceun_bino, con_hyb_bino, 
-                    con_pseudo_qtl, con_sce_qtl, con_bino_qtl, 1, con_sceun_qtl, con_hyb_qtl, 
-                    con_pseudo_sceun, con_sce_sceun, con_sceun_bino, con_sceun_qtl, 1, con_hyb_sceun, 
-                    con_pseudo_vs_hyb, con_hyb_sce, con_hyb_bino, con_hyb_qtl, con_hyb_sceun, 1)
+  'method1' = c('pseudobulk', 'pseudobulk', 'pseudobulk', 'pseudobulk', 'pseudobulk',
+                'scenic', 'scenic',  'scenic', 'scenic', 'scenic', 
+                'QTL', 'QTL',  'QTL', 'QTL', 'QTL', 
+                'scenic uf',  'scenic uf', 'scenic uf', 'scenic uf', 'scenic uf', 
+                'hybrid',  'hybrid', 'hybrid', 'hybrid', 'hybrid'), 
+  'method2' = c('pseudobulk', 'scenic', 'QTL', 'scenic uf', 'hybrid', 
+                'pseudobulk', 'scenic', 'QTL', 'scenic uf', 'hybrid', 
+                'pseudobulk', 'scenic', 'QTL', 'scenic uf', 'hybrid', 
+                'pseudobulk', 'scenic', 'QTL', 'scenic uf', 'hybrid', 
+                'pseudobulk', 'scenic', 'QTL', 'scenic uf', 'hybrid'), 
+  'concordance' = c(1, con_pseudo_sce, con_pseudo_qtl, con_pseudo_sceun, con_pseudo_vs_hyb, 
+                    con_pseudo_sce, 1, con_sce_qtl, con_sce_sceun, con_hyb_sce, 
+                    con_pseudo_qtl, con_sce_qtl, 1, con_sceun_qtl, con_hyb_qtl, 
+                    con_pseudo_sceun, con_sce_sceun, con_sceun_qtl, 1, con_hyb_sceun, 
+                    con_pseudo_vs_hyb, con_hyb_sce, con_hyb_qtl, con_hyb_sceun, 1)
 )
 # round so it stays readable
 pairwise_correlation_table[['concordance']] <- round(pairwise_correlation_table[['concordance']], digits = 2)
@@ -1283,26 +1403,47 @@ nrow(scenic_unfiltered_vs_qtl)
 # [1] 666
 
 # make overlap into a table
+# pairwise_overlap_table <- data.frame(
+#   'method1' = c('pseudobulk', 'pseudobulk', 'pseudobulk', 'pseudobulk', 'pseudobulk', 'pseudobulk',
+#                 'scenic', 'scenic', 'scenic', 'scenic', 'scenic', 'scenic', 
+#                 'binomial', 'binomial', 'binomial', 'binomial', 'binomial', 'binomial',
+#                 'QTL', 'QTL', 'QTL', 'QTL', 'QTL', 'QTL', 
+#                 'scenic uf', 'scenic uf', 'scenic uf', 'scenic uf', 'scenic uf', 'scenic uf', 
+#                 'hybrid', 'hybrid', 'hybrid', 'hybrid', 'hybrid', 'hybrid'), 
+#   'method2' = c('pseudobulk', 'scenic', 'binomial', 'QTL', 'scenic uf', 'hybrid', 
+#                 'pseudobulk', 'scenic', 'binomial', 'QTL', 'scenic uf', 'hybrid', 
+#                 'pseudobulk', 'scenic', 'binomial', 'QTL', 'scenic uf', 'hybrid', 
+#                 'pseudobulk', 'scenic', 'binomial', 'QTL', 'scenic uf', 'hybrid', 
+#                 'pseudobulk', 'scenic', 'binomial', 'QTL', 'scenic uf', 'hybrid', 
+#                 'pseudobulk', 'scenic', 'binomial', 'QTL', 'scenic uf', 'hybrid'), 
+#   'overlapping' = c(nrow(pseudobulk_output_unique), nrow(pseudobulk_vs_scenic), nrow(pseudobulk_vs_binomial), nrow(pseudobulk_vs_qtl), nrow(pseudobulk_vs_scenic_unfiltered), nrow(pseudobulk_vs_hybrid), 
+#                     nrow(pseudobulk_vs_scenic), nrow(scenic_output_unique), nrow(scenic_vs_binomial), nrow(scenic_vs_qtl), nrow(scenic_unfiltered_vs_scenic_filtered), nrow(hybrid_vs_scenic),  
+#                     nrow(pseudobulk_vs_binomial), nrow(scenic_vs_binomial), nrow(binomial_output_unique), nrow(binomial_vs_qtl), nrow(scenic_unfiltered_vs_binomial), nrow(hybrid_vs_binomial), 
+#                     nrow(pseudobulk_vs_qtl), nrow(scenic_vs_qtl), nrow(binomial_vs_qtl), nrow(qtl_overlap_unique), nrow(scenic_unfiltered_vs_qtl), nrow(hybrid_vs_qtl),  
+#                     nrow(pseudobulk_vs_scenic_unfiltered), nrow(scenic_unfiltered_vs_scenic_filtered), nrow(scenic_unfiltered_vs_binomial), nrow(scenic_unfiltered_vs_qtl), nrow(scenic_output_unique_unfiltered), nrow(hybrid_vs_scenic_unfiltered), 
+#                     nrow(pseudobulk_vs_hybrid), nrow(hybrid_vs_scenic), nrow(hybrid_vs_binomial), nrow(hybrid_vs_qtl), nrow(hybrid_vs_scenic_unfiltered), nrow(hybrid_output_unique))
+# )
 pairwise_overlap_table <- data.frame(
-  'method1' = c('pseudobulk', 'pseudobulk', 'pseudobulk', 'pseudobulk', 'pseudobulk', 'pseudobulk',
-                'scenic', 'scenic', 'scenic', 'scenic', 'scenic', 'scenic', 
-                'binomial', 'binomial', 'binomial', 'binomial', 'binomial', 'binomial',
-                'QTL', 'QTL', 'QTL', 'QTL', 'QTL', 'QTL', 
-                'scenic uf', 'scenic uf', 'scenic uf', 'scenic uf', 'scenic uf', 'scenic uf', 
-                'hybrid', 'hybrid', 'hybrid', 'hybrid', 'hybrid', 'hybrid'), 
-  'method2' = c('pseudobulk', 'scenic', 'binomial', 'QTL', 'scenic uf', 'hybrid', 
-                'pseudobulk', 'scenic', 'binomial', 'QTL', 'scenic uf', 'hybrid', 
-                'pseudobulk', 'scenic', 'binomial', 'QTL', 'scenic uf', 'hybrid', 
-                'pseudobulk', 'scenic', 'binomial', 'QTL', 'scenic uf', 'hybrid', 
-                'pseudobulk', 'scenic', 'binomial', 'QTL', 'scenic uf', 'hybrid', 
-                'pseudobulk', 'scenic', 'binomial', 'QTL', 'scenic uf', 'hybrid'), 
-  'overlapping' = c(nrow(pseudobulk_output_unique), nrow(pseudobulk_vs_scenic), nrow(pseudobulk_vs_binomial), nrow(pseudobulk_vs_qtl), nrow(pseudobulk_vs_scenic_unfiltered), nrow(pseudobulk_vs_hybrid), 
-                    nrow(pseudobulk_vs_scenic), nrow(scenic_output_unique), nrow(scenic_vs_binomial), nrow(scenic_vs_qtl), nrow(scenic_unfiltered_vs_scenic_filtered), nrow(hybrid_vs_scenic),  
-                    nrow(pseudobulk_vs_binomial), nrow(scenic_vs_binomial), nrow(binomial_output_unique), nrow(binomial_vs_qtl), nrow(scenic_unfiltered_vs_binomial), nrow(hybrid_vs_binomial), 
-                    nrow(pseudobulk_vs_qtl), nrow(scenic_vs_qtl), nrow(binomial_vs_qtl), nrow(qtl_overlap_unique), nrow(scenic_unfiltered_vs_qtl), nrow(hybrid_vs_qtl),  
-                    nrow(pseudobulk_vs_scenic_unfiltered), nrow(scenic_unfiltered_vs_scenic_filtered), nrow(scenic_unfiltered_vs_binomial), nrow(scenic_unfiltered_vs_qtl), nrow(scenic_output_unique_unfiltered), nrow(hybrid_vs_scenic_unfiltered), 
-                    nrow(pseudobulk_vs_hybrid), nrow(hybrid_vs_scenic), nrow(hybrid_vs_binomial), nrow(hybrid_vs_qtl), nrow(hybrid_vs_scenic_unfiltered), nrow(hybrid_output_unique))
+  'method1' = c('pseudobulk', 'pseudobulk', 'pseudobulk', 'pseudobulk', 'pseudobulk',
+                'scenic', 'scenic', 'scenic', 'scenic', 'scenic', 
+                'QTL', 'QTL', 'QTL', 'QTL', 'QTL', 
+                'scenic uf', 'scenic uf', 'scenic uf', 'scenic uf', 'scenic uf', 
+                'hybrid', 'hybrid',  'hybrid', 'hybrid', 'hybrid'), 
+  'method2' = c('pseudobulk', 'scenic',  'QTL', 'scenic uf', 'hybrid', 
+                'pseudobulk', 'scenic',  'QTL', 'scenic uf', 'hybrid', 
+                'pseudobulk', 'scenic',  'QTL', 'scenic uf', 'hybrid', 
+                'pseudobulk', 'scenic',  'QTL', 'scenic uf', 'hybrid', 
+                'pseudobulk', 'scenic',  'QTL', 'scenic uf', 'hybrid'), 
+  'overlapping' = c(nrow(pseudobulk_output_unique), nrow(pseudobulk_vs_scenic), nrow(pseudobulk_vs_qtl), nrow(pseudobulk_vs_scenic_unfiltered), nrow(pseudobulk_vs_hybrid), 
+                    nrow(pseudobulk_vs_scenic), nrow(scenic_output_unique),  nrow(scenic_vs_qtl), nrow(scenic_unfiltered_vs_scenic_filtered), nrow(hybrid_vs_scenic),  
+                    nrow(pseudobulk_vs_qtl), nrow(scenic_vs_qtl), nrow(qtl_overlap_unique), nrow(scenic_unfiltered_vs_qtl), nrow(hybrid_vs_qtl),  
+                    nrow(pseudobulk_vs_scenic_unfiltered), nrow(scenic_unfiltered_vs_scenic_filtered), nrow(scenic_unfiltered_vs_qtl), nrow(scenic_output_unique_unfiltered), nrow(hybrid_vs_scenic_unfiltered), 
+                    nrow(pseudobulk_vs_hybrid), nrow(hybrid_vs_scenic), nrow(hybrid_vs_qtl), nrow(hybrid_vs_scenic_unfiltered), nrow(hybrid_output_unique))
 )
+# make into confusion matrix
+p_n_overlaps <- create_confusion_matrix(pairwise_overlap_table, truth_column = 'method1', prediction_column = 'method2', freq_column = 'overlapping', premade_table = T, truth_column_label = 'method 1', prediction_column_label = 'method 2') +
+  ggtitle('Overlapping region-gene pairs\nin CRE detection methods')
+p_n_overlaps + theme(legend.position="none")
 
 # write these tables
 write.table(pseudobulk_vs_scenic, gzfile('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/overlaps/pseudobulk_vs_scenic.tsv.gz'), row.names = F, col.names = T, sep = '\t', quote = F)
@@ -1325,23 +1466,31 @@ mdfiver::create_md5_for_file('/groups/umcg-franke-scrna/tmp04/projects/multiome/
 mdfiver::create_md5_for_file('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/overlaps/scenic_unfiltered_vs_binomial.tsv.gz')
 mdfiver::create_md5_for_file('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/overlaps/scenic_unfiltered_vs_qtl.tsv.gz')
 
-# make into confusion matrix
-p_n_overlaps <- create_confusion_matrix(pairwise_overlap_table, truth_column = 'method1', prediction_column = 'method2', freq_column = 'overlapping', premade_table = T, truth_column_label = 'method 1', prediction_column_label = 'method 2') +
-  ggtitle('Overlapping region-gene pairs\nin CRE detection methods')
-p_n_overlaps + theme(legend.position="none")
-
 # plot them as well
 plot_grid(
-  plot_concondance(pseudobulk_vs_binomial, 'zscore', 'meta_z') + ggtitle('Effects of pseudobulk vs binomial\nCRE detection') + xlab('Pseudobulk Z-score') + ylab('Binomial model Z-score'), 
-  plot_concondance(pseudobulk_vs_scenic, 'zscore', 'rho_R2G') + ggtitle('Effects of pseudobulk vs SCENIC+ CRE\ndetection') + xlab('Pseudobulk Z-score') + ylab('SCENIC+ R2G Rho'), 
-  plot_concondance(scenic_vs_binomial, 'rho_R2G', 'meta_z') + ggtitle('Effects of SCENIC+ vs binomial\nCRE detection') + xlab('SCENIC+ R2G Rho') + ylab('Binomial model Z-score'), 
-  plot_concondance(pseudobulk_vs_hybrid, 'z_from_p.x', 'z_from_p.y') + ggtitle('Effects of pseudobulk vs hybrid\nCRE detection') + xlab('Pseudobulk Z-score') + ylab('Hybrid method Z-score')
+  # plot_concondance(pseudobulk_vs_binomial, 'zscore', 'meta_z') + ggtitle('Effects of pseudobulk vs binomial\nCRE detection') + xlab('Pseudobulk Z-score') + ylab('Binomial model Z-score'), 
+  plot_concondance(pseudobulk_vs_scenic, 'zscore', 'rho_R2G') + ggtitle('Effects of pseudobulk vs SCENIC+ CRE\ndetection') + xlab('Pseudobulk Z-score') + ylab('SCENIC+ R2G Rho'),
+  # plot_concondance(scenic_vs_binomial, 'rho_R2G', 'meta_z') + ggtitle('Effects of SCENIC+ vs binomial\nCRE detection') + xlab('SCENIC+ R2G Rho') + ylab('Binomial model Z-score'), 
+  plot_concondance(pseudobulk_vs_hybrid, 'z_from_p.x', 'z_from_p.y') + ggtitle('Effects of pseudobulk vs hybrid\nCRE detection') + xlab('Pseudobulk Z-score') + ylab('Hybrid method Z-score'),
+  plot_concondance(hybrid_vs_scenic, 'z_from_p', 'rho_R2G') + ggtitle('Effects of pseudobulk vs hybrid\nCRE detection') + xlab('SCENIC+ R2G Rho') + ylab('Hybrid method Z-score')
 )
 
 plot_grid(
-  plot_concondance(pseudobulk_vs_binomial, 'zscore', 'meta_z') + ggtitle('Effects of pseudobulk vs binomial\nCRE detection') + xlab('Pseudobulk Z-score') + ylab('Binomial model Z-score'), 
-  plot_concondance(pseudobulk_vs_scenic_unfiltered, 'zscore', 'rho_R2G') + ggtitle('Effects of pseudobulk vs SCENIC+ CRE\ndetection') + xlab('Pseudobulk Z-score') + ylab('SCENIC+ R2G Rho'), 
-  plot_concondance(scenic_vs_binomial, 'rho_R2G', 'meta_z') + ggtitle('Effects of SCENIC+ vs binomial\nCRE detection') + xlab('SCENIC+ R2G Rho') + ylab('Binomial model Z-score')
+  # plot_concondance(pseudobulk_vs_binomial, 'zscore', 'meta_z') + ggtitle('Effects of pseudobulk vs binomial\nCRE detection') + xlab('Pseudobulk Z-score') + ylab('Binomial model Z-score'), 
+  plot_concondance(pseudobulk_vs_scenic_unfiltered, 'zscore', 'rho_R2G') + ggtitle('Effects of pseudobulk vs SCENIC+\n(unfiltered) CRE detection') + xlab('Pseudobulk Z-score') + ylab('SCENIC+ R2G Rho'), 
+  # plot_concondance(scenic_vs_binomial, 'rho_R2G', 'meta_z') + ggtitle('Effects of SCENIC+ vs binomial\nCRE detection') + xlab('SCENIC+ R2G Rho') + ylab('Binomial model Z-score'), 
+  plot_concondance(pseudobulk_vs_hybrid, 'z_from_p.x', 'z_from_p.y') + ggtitle('Effects of pseudobulk vs hybrid\nCRE detection') + xlab('Pseudobulk Z-score') + ylab('Hybrid method Z-score'),
+  plot_concondance(hybrid_vs_scenic_unfiltered, 'z_from_p', 'rho_R2G') + ggtitle('Effects of pseudobulk vs SCENIC+\n(unfiltered) CRE detection') + xlab('SCENIC+ R2G Rho') + ylab('Hybrid method Z-score')
+)
+
+plot_grid(
+  # plot_concondance(pseudobulk_vs_binomial, 'zscore', 'meta_z') + ggtitle('Effects of pseudobulk vs binomial\nCRE detection') + xlab('Pseudobulk Z-score') + ylab('Binomial model Z-score'), 
+  plot_concondance(pseudobulk_vs_scenic, 'zscore', 'rho_R2G') + ggtitle('Effects of pseudobulk vs SCENIC+ CRE\ndetection') + xlab('Pseudobulk Z-score') + ylab('SCENIC+ R2G Rho'),
+  plot_concondance(pseudobulk_vs_scenic_unfiltered, 'zscore', 'rho_R2G') + ggtitle('Effects of pseudobulk vs SCENIC+\n(unfiltered) CRE detection') + xlab('Pseudobulk Z-score') + ylab('SCENIC+ R2G Rho'), 
+  # plot_concondance(scenic_vs_binomial, 'rho_R2G', 'meta_z') + ggtitle('Effects of SCENIC+ vs binomial\nCRE detection') + xlab('SCENIC+ R2G Rho') + ylab('Binomial model Z-score'), 
+  plot_concondance(pseudobulk_vs_hybrid, 'z_from_p.x', 'z_from_p.y') + ggtitle('Effects of pseudobulk vs hybrid\nCRE detection') + xlab('Pseudobulk Z-score') + ylab('Hybrid method Z-score'),
+  plot_concondance(hybrid_vs_scenic, 'z_from_p', 'rho_R2G') + ggtitle('Effects of pseudobulk vs hybrid\nCRE detection') + xlab('SCENIC+ R2G Rho') + ylab('Hybrid method Z-score'), 
+  plot_concondance(hybrid_vs_scenic_unfiltered, 'z_from_p', 'rho_R2G') + ggtitle('Effects of pseudobulk vs SCENIC+\n(unfiltered) CRE detection') + xlab('SCENIC+ R2G Rho') + ylab('Hybrid method Z-score')
 )
 
 # also add the correlations
