@@ -19,6 +19,52 @@ library(ggvenn)
 # Functions        #
 ####################
 
+random_sample_combinations <- function(true_table, sample_column1='TF_ens', sample_column2='Gene_ens', n_samplings=20) {
+  # get the TFs and their occurences
+  tf_occurences <- data.frame(table(unique(true_table[, c(..sample_column1, ..sample_column2)])[[sample_column1]]))
+  # set column names more descriptive
+  colnames(tf_occurences) <- c('sample1', 'occ')
+  # get the unique genes
+  sample2_values <- unique(true_table[[sample_column2]])
+  
+  # which we'll store in a list
+  samplings <- list()
+  # let's do each sampling
+  for (sampling_i in 1:n_samplings) {
+    # create a list to turn into a tf-gene table
+    sampling_tbl_list <- list()
+    # check each of the TFs
+    for (tf_i in 1 : nrow(tf_occurences)) {
+      # grab the tf
+      tf <- tf_occurences[tf_i, 'sample1']
+      # and the occurences
+      occ <- tf_occurences[tf_i, 'occ']
+      # now randomly get this many genes
+      random_genes <- sample(sample2_values, size = occ)
+      # make that into a df
+      sampled_df_tf <- data.frame('sample1' = rep(tf, times = occ), 'sample2' = random_genes)
+      colnames(sampled_df_tf) <- c(sample_column1, sample_column2)
+      # put in the list for this sampling
+      sampling_tbl_list[[tf]] <- sampled_df_tf
+    }
+    # merge the TFs of this sampling
+    sampling_tbl <- do.call('rbind', sampling_tbl_list)
+    # add the g2g again
+    sampling_tbl[['g2g']] <- apply(sampling_tbl, 1, function(x) {
+      # get those genes
+      genes <- c(x[[sample_column1]], x[[sample_column2]])
+      # order them
+      genes <- genes[order(genes)]
+      # paste together
+      genes_string <- paste(genes, collapse='_')
+      return(genes_string)
+    })
+    # put in the list
+    samplings[[sampling_i]] <- sampling_tbl
+  }
+  return(samplings)
+}
+
 
 ####################
 # Settings         #
@@ -113,3 +159,36 @@ ggplot(data = gene_overlap_df, mapping = aes(x = in_string, y = n, fill = in_str
 ggvenn::ggvenn(
   data = list('SCENIC+' = unique(scenic_output[['g2g']]), 'STRING' = unique(string_output[['g2g']]))
 ) + ggtitle('Overlap of TF-gene links in SCENIC+ vs STRING')
+
+
+# get some stats for the true set
+scenic_tf_gene_in_string <- length(unique(intersect(scenic_output[['g2g']], string_output[['g2g']])))
+scenic_tf_gene_not_in_string <- length(unique(scenic_output[['g2g']])) - scenic_tf_gene_in_string
+
+# get random samplings
+samplings <- random_sample_combinations(true_table=scenic_output, sample_column1='TF_ens', sample_column2='Gene_ens', n_samplings=100)
+
+# check each of the samplings
+sampling_stats <- list()
+for (sampling_i in 1 : length(samplings)) {
+  # extract the random sampling
+  sampling_tbl <- samplings[[sampling_i]]
+  # check which of the random samplings are in string
+  sampling_tf_gene_in_string <- length(unique(intersect(sampling_tbl[['g2g']], string_output[['g2g']])))
+  sampling_tf_gene_not_in_string <- length(unique(sampling_tbl[['g2g']])) - sampling_tf_gene_in_string
+  # make contingency table
+  contingency_table <- matrix(
+    c(scenic_tf_gene_in_string, scenic_tf_gene_not_in_string,
+      sampling_tf_gene_in_string, sampling_tf_gene_not_in_string),
+    nrow = 2,
+    byrow = TRUE,
+    dimnames = list(
+      set = c("scenic", "random"),
+      string = c("in_string", "no_string")
+    )
+  )
+  # do fisher-exact
+  fexact <- fisher.test(contingency_table)
+  # put in the list
+  sampling_stats[[sampling_i]] <- fexact
+}
