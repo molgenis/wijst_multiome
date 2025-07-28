@@ -34,7 +34,7 @@ library(optparse)
 # luck seed
 set.seed(7777)
 # whether we are in debug mode
-debug <- T
+debug <- F
 
 
 ####################
@@ -155,7 +155,7 @@ out_cov_out_fh <- out_cov
 # and write
 if (grepl('.gz$', out_cov)) {
   # gzip if ends with .gz
-  out_fh <- gzfile(out_cov_out_fh)
+  out_cov_out_fh <- gzfile(out_cov)
 }
 write.table(binary_metadata, out_cov_out_fh, sep = '\t', row.names = F, col.names = T, quote = F)
 # also make a checksum

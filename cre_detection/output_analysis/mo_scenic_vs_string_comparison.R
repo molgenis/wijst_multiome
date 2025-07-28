@@ -192,3 +192,22 @@ for (sampling_i in 1 : length(samplings)) {
   # put in the list
   sampling_stats[[sampling_i]] <- fexact
 }
+
+# get the odds ratios of each comparison
+ors <- rep(NA, times = length(sampling_stats))
+# and the p-values
+ps <- rep(NA, times = length(sampling_stats))
+for (fexact_i in 1:length(sampling_stats)) {
+  # grab the odds ratio
+  ors[fexact_i] <- sampling_stats[[fexact_i]]$estimate
+  ps[fexact_i] <- sampling_stats[[fexact_i]]$p.value
+}
+# plot the odds ratios
+ggplot(data = data.frame(x = ors), mapping = aes(x = x)) + 
+  geom_density(fill = 'darkred', alpha=.5) +
+  xlab('Odds ratios') +
+  ylab('Density') +
+  ggtitle('Odds ratios of STRING enrichment in\nSCENIC vs random samplings from SCENIC') +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+grid.text(paste('p =', formatC(max(ps), format = "e", digits = 2)), x = 0.8, y = 0.9, gp = gpar(fontsize = 16))
+
