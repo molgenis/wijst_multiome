@@ -1201,3 +1201,46 @@ plot_sharing_per_celltype(
 grid.text('CRE-gene pair overlaps in\nCD8+ T samplings', x = 0.8, y = 0.85, gp = gpar(fontsize = 16))
 
 ```
+
+```{r sampling_overlap_plot_string, include=TRUE, fig.width=8, fig.height=8}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+plot_sharing_per_celltype(
+  list(
+    'full' = unique(subsampling_replication_cd8t[['full_vs_full']][subsampling_replication_cd8t[['full_vs_full']][['full_fdr.x']] < 0.01, ][['qtl']]), 
+    'sampling1' = unique(subsampling_replication_cd8t[['sampling1_vs_sampling1']][subsampling_replication_cd8t[['sampling1_vs_sampling1']][['sampling1_fdr.x']] < 0.01, ][['qtl']]), 
+    'sampling2' = unique(subsampling_replication_cd8t[['sampling2_vs_sampling2']][subsampling_replication_cd8t[['sampling2_vs_sampling2']][['sampling2_fdr.x']] < 0.01, ][['qtl']])
+  )
+)
+grid.text('CRE-gene pair overlaps in\nCD8+ T samplings (fdr < 0.01)', x = 0.8, y = 0.85, gp = gpar(fontsize = 16))
+
+```
+
+```{r sampling_overlap_plot_scatter, include=TRUE, fig.width=8, fig.height=8}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+p_scatter_sampling <- ggplot(data = subsampling_replication_cd8t[['sampling1_vs_sampling2']], mapping = aes(x = sampling1_beta, y = sampling2_beta)) +
+  geom_point() + 
+  xlab('beta in sampling 1') +
+  ylab('beta in sampling 2') +
+  ggtitle('Betas in sampling 1 vs 2\nin CD8+ T cells') +
+  theme(
+    # X label font size
+    axis.title.x = element_text(size = 20), 
+    # Y label font size
+    axis.title.y = element_text(size = 20), 
+    # X tick font size
+    axis.text.x = element_text(size = 16), 
+    # Y tick font size
+    axis.text.y = element_text(size = 16), 
+    # title size
+    title = element_text(size = 24)
+  ) + 
+    theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) +
+  xlim(min(c(subsampling_replication_cd8t[['sampling1_vs_sampling2']][['sampling1_beta']], subsampling_replication_cd8t[['sampling1_vs_sampling2']][['sampling2_beta']])), max(c(subsampling_replication_cd8t[['sampling1_vs_sampling2']][['sampling1_beta']], subsampling_replication_cd8t[['sampling1_vs_sampling2']][['sampling2_beta']]))) +
+  ylim(min(c(subsampling_replication_cd8t[['sampling1_vs_sampling2']][['sampling1_beta']], subsampling_replication_cd8t[['sampling1_vs_sampling2']][['sampling2_beta']])), max(c(subsampling_replication_cd8t[['sampling1_vs_sampling2']][['sampling1_beta']], subsampling_replication_cd8t[['sampling1_vs_sampling2']][['sampling2_beta']])))
+
+# show plot
+p_scatter_sampling
+
+```
