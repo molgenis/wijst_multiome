@@ -123,12 +123,17 @@ merge_chunks_in_directory <- function(chunk_directory, filename_output='qtl_resu
     chunk_path <- paste(chunk_directory, chunk, filename_output, sep = '/')
     # check if the file exists
     if (file.exists(chunk_path)) {
-      # read the file
-      chunk_output <- fread(chunk_path, header = T, sep = '\t')
-      # add chunk info
-      chunk_output[['chunk']] <- chunk
-      # and put in the list
-      chunks_list[[chunk]] <- chunk_output
+      # check the size of the file
+      if (file.size(chunk_path) > 0) {
+        # read the file
+        chunk_output <- fread(chunk_path, header = T, sep = '\t')
+        # add chunk info
+        chunk_output[['chunk']] <- chunk
+        # and put in the list
+        chunks_list[[chunk]] <- chunk_output
+      } else {
+        warning(paste('file exists at', paste(chunk_directory, chunk, filename_output, sep = '/'), 'but no file is of size 0', filename_output))
+      }
     } else {
       warning(paste('folder exists at', paste(chunk_directory, chunk, filename_output, sep = '/'), 'but no file is there with name', filename_output))
     }
