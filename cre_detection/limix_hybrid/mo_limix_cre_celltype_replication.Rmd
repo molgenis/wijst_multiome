@@ -1031,3 +1031,173 @@ cre_celltype_stat_p_cor
 
 ```
 
+```{r subsampling_replication, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# do a replication of the subsamplings of CD8T
+subsampling_replication_cd8t <- list()
+# full vs everything
+subsampling_replication_cd8t[['full_vs_full']] <- match_qtl_outputs(
+  '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/CD8T/',
+  '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/CD8T/', 
+  replicating_qtl_prepend='qtl_results_all', 
+  replicating_in_qtl_prepend ='qtl_results_all', 
+  replicating_qtl_append='.txt.gz', 
+  replicating_in_qtl_append='.txt.gz', 
+  nosplit=T, 
+  replicating_name='full', replicating_in_name='full'
+)
+subsampling_replication_cd8t[['full_vs_sampling1']] <- match_qtl_outputs(
+  '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/CD8T/',
+  '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input_sampled/sampling1/L1/CD8T/', 
+  replicating_qtl_prepend='qtl_results_all', 
+  replicating_in_qtl_prepend ='qtl_results_all', 
+  replicating_qtl_append='.txt.gz', 
+  replicating_in_qtl_append='.txt.gz', 
+  nosplit=T, 
+  replicating_name='full', replicating_in_name='sampling1'
+)
+subsampling_replication_cd8t[['full_vs_sampling2']] <- match_qtl_outputs(
+  '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/CD8T/',
+  '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input_sampled/sampling2/L1/CD8T/', 
+  replicating_qtl_prepend='qtl_results_all', 
+  replicating_in_qtl_prepend ='qtl_results_all', 
+  replicating_qtl_append='.txt.gz', 
+  replicating_in_qtl_append='.txt.gz', 
+  nosplit=T, 
+  replicating_name='full', replicating_in_name='sampling2'
+)
+# sampling1 vs everything
+subsampling_replication_cd8t[['sampling1_vs_full']] <- match_qtl_outputs(
+  '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input_sampled/sampling1/L1/CD8T/', 
+  '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/CD8T/',
+  replicating_qtl_prepend='qtl_results_all', 
+  replicating_in_qtl_prepend ='qtl_results_all', 
+  replicating_qtl_append='.txt.gz', 
+  replicating_in_qtl_append='.txt.gz', 
+  nosplit=T, 
+  replicating_name='sampling1', replicating_in_name='full'
+)
+subsampling_replication_cd8t[['sampling1_vs_sampling1']] <- match_qtl_outputs(
+  '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input_sampled/sampling1/L1/CD8T/', 
+  '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input_sampled/sampling1/L1/CD8T/', 
+  replicating_qtl_prepend='qtl_results_all', 
+  replicating_in_qtl_prepend ='qtl_results_all', 
+  replicating_qtl_append='.txt.gz', 
+  replicating_in_qtl_append='.txt.gz', 
+  nosplit=T, 
+  replicating_name='sampling1', replicating_in_name='sampling1'
+)
+subsampling_replication_cd8t[['sampling1_vs_sampling2']] <- match_qtl_outputs(
+  '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input_sampled/sampling1/L1/CD8T/', 
+  '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input_sampled/sampling2/L1/CD8T/', 
+  replicating_qtl_prepend='qtl_results_all', 
+  replicating_in_qtl_prepend ='qtl_results_all', 
+  replicating_qtl_append='.txt.gz', 
+  replicating_in_qtl_append='.txt.gz', 
+  nosplit=T, 
+  replicating_name='sampling1', replicating_in_name='sampling2'
+)
+# sampling2 vs everything
+subsampling_replication_cd8t[['sampling2_vs_full']] <- match_qtl_outputs(
+  '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input_sampled/sampling2/L1/CD8T/', 
+  '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/CD8T/',
+  replicating_qtl_prepend='qtl_results_all', 
+  replicating_in_qtl_prepend ='qtl_results_all', 
+  replicating_qtl_append='.txt.gz', 
+  replicating_in_qtl_append='.txt.gz', 
+  nosplit=T, 
+  replicating_name='sampling2', replicating_in_name='full'
+)
+subsampling_replication_cd8t[['sampling2_vs_sampling1']] <- match_qtl_outputs(
+  '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input_sampled/sampling2/L1/CD8T/', 
+  '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input_sampled/sampling1/L1/CD8T/', 
+  replicating_qtl_prepend='qtl_results_all', 
+  replicating_in_qtl_prepend ='qtl_results_all', 
+  replicating_qtl_append='.txt.gz', 
+  replicating_in_qtl_append='.txt.gz', 
+  nosplit=T, 
+  replicating_name='sampling2', replicating_in_name='sampling1'
+)
+subsampling_replication_cd8t[['sampling2_vs_sampling2']] <- match_qtl_outputs(
+  '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input_sampled/sampling2/L1/CD8T/', 
+  '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input_sampled/sampling2/L1/CD8T/', 
+  replicating_qtl_prepend='qtl_results_all', 
+  replicating_in_qtl_prepend ='qtl_results_all', 
+  replicating_qtl_append='.txt.gz', 
+  replicating_in_qtl_append='.txt.gz', 
+  nosplit=T, 
+  replicating_name='sampling2', replicating_in_name='sampling2'
+)
+
+
+```
+
+```{r sampling_replication_stats, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# check replication in CREs across samplings
+subsampling_replication_stats <- get_stats_qtl_matches(subsampling_replication_cd8t, 
+                                  significance_column_replicating_emperical='fdr', 
+                                  significance_column_replicating_nominal='p',
+                                  significance_column_replicating_in_emperical='fdr',
+                                  significance_column_replicating_in_nominal='p',
+                                  significance_cutoff_replicating_emperical=0.05, 
+                                  significance_cutoff_replicating_nominal=0.05, 
+                                  significance_cutoff_replicating_in_emperical=0.05, 
+                                  significance_cutoff_replicating_in_nominal=0.05, 
+                                  score_column_replicating='zscore', 
+                                  score_column_replicating_in='zscore', 
+                                  beta_column_replicating='beta', 
+                                  beta_column_replicating_in='beta', 
+                                  se_column_replicating='se', 
+                                  se_column_replicating_in='se', 
+                                  allele_column_replicating='assessed_allele', 
+                                  allele_column_replicating_in='assessed_allele', 
+                                  cor_method='spearman')
+
+```
+
+```{r sampling_replication_plot, include=TRUE, fig.width=12, fig.height=12}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# check replication in caQTLs across cell types
+subsampling_stat_p <- plot_replication_stats(subsampling_replication_stats, mid_value = 0.5, comparing_value_to_text=list('n_sig_both' = 'N sig both: ', 'n_sig_tested' = 'N test both: ', 'rb_emp_nom' = 'nom rep rb: '), colour_column = 'rb_emp_nom', category_plot_order = c('full', 'sampling1', 'sampling2'), text_size = 4) +
+  xlab('Set replicating') +
+  ylab('Set replicating in') +
+  ggtitle('Replication of CD8+ T\nCREs across samplings') +
+  labs(fill="Rb") +
+  theme(
+    # X label font size
+    axis.title.x = element_text(size = 20), 
+    # Y label font size
+    axis.title.y = element_text(size = 20), 
+    # X tick font size
+    axis.text.x = element_text(size = 16), 
+    # Y tick font size
+    axis.text.y = element_text(size = 16), 
+    # title size
+    title = element_text(size = 24)
+  )
+
+# save the figure
+ggsave('~/plots/mo_sccre_sampling_replication.pdf', plot = subsampling_stat_p, width = 12, height = 12)
+
+# display the figure
+subsampling_stat_p
+
+```
+
+```{r sampling_overlap_plot, include=TRUE, fig.width=8, fig.height=8}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+plot_sharing_per_celltype(
+  list(
+    'full' = unique(subsampling_replication_cd8t[['full_vs_full']][subsampling_replication_cd8t[['full_vs_full']][['full_significant.x']] == T, ][['qtl']]), 
+    'sampling1' = unique(subsampling_replication_cd8t[['sampling1_vs_sampling1']][subsampling_replication_cd8t[['sampling1_vs_sampling1']][['sampling1_significant.x']] == T, ][['qtl']]), 
+    'sampling2' = unique(subsampling_replication_cd8t[['sampling2_vs_sampling2']][subsampling_replication_cd8t[['sampling2_vs_sampling2']][['sampling2_significant.x']] == T, ][['qtl']])
+  )
+)
+grid.text('CRE-gene pair overlaps in\nCD8+ T samplings', x = 0.8, y = 0.85, gp = gpar(fontsize = 16))
+
+```
