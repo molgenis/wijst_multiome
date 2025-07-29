@@ -209,5 +209,38 @@ ggplot(data = data.frame(x = ors), mapping = aes(x = x)) +
   ylab('Density') +
   ggtitle('Odds ratios of STRING enrichment in\nSCENIC vs random samplings from SCENIC') +
   theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
-grid.text(paste('p =', formatC(max(ps), format = "e", digits = 2)), x = 0.8, y = 0.9, gp = gpar(fontsize = 16))
+grid.text(paste('p =', formatC(max(ps), format = "e", digits = 2)), x = 0.8, y = 0.85, gp = gpar(fontsize = 16))
 
+# plot the expected vs observed
+max_p_index <- which(ps == max(ps))
+# get that specific sampling
+max_p_sampling <- samplings[[max_p_index]]
+# and get the expected overlap
+max_p_overlap <- length(unique(intersect(max_p_sampling[['g2g']], string_output[['g2g']])))
+# make into a plot
+p_overlap_expected_observed <- ggplot(data = data.frame('group' = c('Observed', 'Expected'), 'n' = c(scenic_tf_gene_in_string, max_p_overlap)), mapping = aes(x = group, y = n, fill= group)) + 
+  geom_bar(stat = 'identity') + 
+  ylim(c(0, scenic_tf_gene_in_string*1.25)) +
+  scale_fill_manual(values = list('Observed' = 'darkgreen', 'Expected' = 'gray')) +
+  ylab('Number of TF-target gene combinations\noverlapping with STRING') +
+  xlab('') +
+  ggtitle('Odds ratios of STRING enrichment in\nSCENIC+ vs random samplings from SCENIC+') +
+  theme(legend.position = 'none') + 
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) +
+  # horizontal comparison
+  geom_segment(data = NULL, aes(x = 'Expected', xend = 'Observed', y = scenic_tf_gene_in_string*1.1, yend = scenic_tf_gene_in_string*1.1), colour = "darkgray", size = 1) +
+  # vertical comparison on Expected side
+  geom_segment(data = NULL, aes(x = 'Expected', xend = 'Expected', y = scenic_tf_gene_in_string*1.1, yend = max_p_overlap*1.05), colour = "darkgray", size = 1) +
+  # vertical comparison on Observed side
+  geom_segment(data = NULL, aes(x = 'Observed', xend = 'Observed', y = scenic_tf_gene_in_string*1.1, yend = scenic_tf_gene_in_string*1.05), colour = "darkgray", size = 1) +
+  # add OR text
+  annotate('text', x = 1.5, y = scenic_tf_gene_in_string*1.2, label = paste('OR =', 1.6), size = 5) +
+  # add p text
+  annotate('text', x = 1.5, y = scenic_tf_gene_in_string*1.15, label = paste('p =', formatC(max(ps), format = "e", digits = 2)), size = 5) +
+  # make ticks bigger
+  theme(axis.text.x = element_text(size = 14)) +
+  # make y label bigger
+  theme(axis.title.y = element_text(size = 14))
+
+# show the plot
+p_overlap_expected_observed
