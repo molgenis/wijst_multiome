@@ -180,7 +180,7 @@ merge_chunks_in_directory <- function(chunk_directory, filename_output='qtl_resu
 #' results <- read_cre_output_per_celltype("results/CRE_output")
 #' head(results)
 #' }
-read_cre_output_per_celltype <- function(cre_output_folder, filename_output='qtl_results_all.txt.gz', significance_column='empirical_feature_p_value', significance_cutoff=0.05, add_mtc=T, mtc_column='empirical_feature_p_value', feature_mtc_column='feature_id', mtc_column_to_add='feature_q_value', add_global_nominal_threshold=T, add_local_nominal_threshold=T, global_nominal_threshold_column_to_add='pval_nominal_threshold_global', local_nominal_threshold_column_to_add='pval_nominal_threshold_local', alpha_column='alpha_param', beta_column='beta_param', nominal_p_column='p_value', filter_alpha=T, alpha_min=.2, alpha_max=5, filter_significance=F) {
+read_cre_output_per_celltype <- function(cre_output_folder, filename_output='qtl_results_all.txt.gz', significance_column='empirical_feature_p_value', significance_cutoff=0.05, add_mtc=T, mtc_column='empirical_feature_p_value', feature_mtc_column='feature_id', mtc_column_to_add='feature_q_value', add_global_nominal_threshold=T, add_local_nominal_threshold=T, global_nominal_threshold_column_to_add='pval_nominal_threshold_global', local_nominal_threshold_column_to_add='pval_nominal_threshold_local', alpha_column='alpha_param', beta_column='beta_param', nominal_p_column='p_value', filter_alpha=T, alpha_min=.2, alpha_max=5, filter_significance=F, gene_frac_exp_loc = NULL, gene_frac_exp_cutoff = NULL, gene_frac_feature_column='feature', gene_frac_frac_column='frac_exp', gene_column='feature_id', gene_frac_cutoff=NULL) {
   # initalize the variable
   cell_type_output <- NULL
   # check if the file exists
@@ -192,6 +192,19 @@ read_cre_output_per_celltype <- function(cre_output_folder, filename_output='qtl
     # filter on alpha if requested
     if (filter_alpha) {
       cell_type_output <- cell_type_output[!(cell_type_output[[alpha_column]] > alpha_max | cell_type_output[[alpha_column]] < alpha_min), ]
+    }
+    # add the fraction of expression if we have that information
+    if (!is.null(gene_frac_exp_loc)) {
+      # read the file
+      gene_fracs <- fread(gene_frac_exp_loc, header = T, sep = '\t')
+      # add this data
+      cell_type_output[['gene_frac_exp']] <- gene_fracs[match(cell_type_output[[gene_column]], gene_fracs[[gene_frac_feature_column]]), ][[gene_frac_frac_column]]
+      # filter on this info if asked to
+      if (!is.null(gene_frac_cutoff)) {
+        cell_type_output <- cell_type_output[
+          cell_type_output[['gene_frac_exp']] >= gene_frac_cutoff
+        ]
+      }
     }
     
     # get the features and the emperical p value
@@ -266,7 +279,11 @@ option_list <- list(
   make_option(c("-i", "--in"), type="character", default=NULL, 
               help="input directory", metavar="character"),
   make_option(c("-o", "--out"), type="character", default=NULL, 
-              help="output file with all data", metavar="character")
+              help="output file with all data", metavar="character"), 
+  make_option(c("-g", "--gene_frac_exp_loc"), type="character", default=NULL, 
+              help="location of the file which has the fraction of cells expressing a gene", metavar="character"), 
+  make_option(c("-f", "--gene_frac_exp_cutoff"), type="numeric", default=NULL, 
+              help="minimum fraction of cells expressing a gene required to keep a gene in CRE results", metavar="numeric")
 )
 
 # initialize optparser
@@ -276,11 +293,15 @@ opt <- parse_args(opt_parser)
 # initialize variables
 qtl_in_loc <- NULL
 qtl_out_loc <- NULL
+gene_frac_exp_loc <- NULL
+gene_frac_exp_cutoff <- NULL
 
 # load debug settings if set to debug mode
 if (debug) {
   qtl_in_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/NK/'
-  qtl_out_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/NK/qtl_results_all.txt.gz'
+  qtl_out_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/NK/qtl_results_all_frac01.txt.gz'
+  gene_frac_exp_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/frac_exp/NK.tsv.gz'
+  gene_frac_exp_cutoff <- 0.1
 } else {
   # there are some things we cannot allow
   if (is.null(opt[['in']])) {
@@ -297,9 +318,11 @@ if (debug) {
   if (qtl_in_loc == qtl_out_loc) {
     stop('input and output are the same, do not overwrite your source file!')
   }
+  gene_frac_exp_loc <- opt[['gene_frac_exp_loc']]
+  gene_frac_exp_cutoff <- opt[['gene_frac_exp_cutoff']]
 }
 # do the actual things
-qtl_merged_all <- read_cre_output_per_celltype(qtl_in_loc)
+qtl_merged_all <- read_cre_output_per_celltype(qtl_in_loc, gene_frac_exp_loc = gene_frac_exp_loc, gene_frac_exp_cutoff = gene_frac_exp_cutoff)
 # make the output location filehandle
 output_loc_fh <- qtl_out_loc
 # gz filehandle, if the output location ends with .gz
@@ -316,4 +339,3 @@ mdfiver::create_md5_for_file(qtl_out_loc)
 
 # and let them know we are done
 message('finished')
-
