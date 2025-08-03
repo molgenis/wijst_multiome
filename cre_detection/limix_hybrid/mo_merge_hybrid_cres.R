@@ -202,7 +202,7 @@ read_cre_output_per_celltype <- function(cre_output_folder, filename_output='qtl
       # filter on this info if asked to
       if (!is.null(gene_frac_cutoff)) {
         cell_type_output <- cell_type_output[
-          cell_type_output[['gene_frac_exp']] >= gene_frac_cutoff
+          cell_type_output[['gene_frac_exp']] >= gene_frac_cutoff, 
         ]
       }
     }
@@ -322,7 +322,7 @@ if (debug) {
   gene_frac_exp_cutoff <- opt[['gene_frac_exp_cutoff']]
 }
 # do the actual things
-qtl_merged_all <- read_cre_output_per_celltype(qtl_in_loc, gene_frac_exp_loc = gene_frac_exp_loc, gene_frac_exp_cutoff = gene_frac_exp_cutoff)
+qtl_merged_all <- read_cre_output_per_celltype(qtl_in_loc, gene_frac_exp_loc = gene_frac_exp_loc, gene_frac_cutoff = gene_frac_exp_cutoff)
 # make the output location filehandle
 output_loc_fh <- qtl_out_loc
 # gz filehandle, if the output location ends with .gz
