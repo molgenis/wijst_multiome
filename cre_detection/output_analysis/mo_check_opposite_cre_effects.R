@@ -76,6 +76,23 @@ normalize_mj <- function(seurat_object, assay_to_add='MJ', assay_to_normalize='R
 }
 
 
+get_binarized_vs_other  <- function(seurat_object, binarized_feature_name, other_feature_name, binarized_assay='binpeaks', binarized_layer='counts', other_assay='MJ', other_layer='data') {
+  # extract the binarized feature
+  binarized_features <- Seurat::GetAssayData(seurat_object, layer = binarized_layer, assay = binarized_assay)
+  # get the specific featurs
+  binarized_feature <- as.vector(unlist(binarized_features[binarized_feature_name, ]))
+  # make into a character, as it is binarized
+  binarized_feature <- as.character(binarized_feature)
+  # extract the other feature
+  other_features <- Seurat::GetAssayData(seurat_object, layer = other_layer, assay = other_assay)
+  # get the specific feature
+  other_feature <- as.vector(unlist(other_features[other_feature_name, ]))
+  # merge these
+  features_both <- data.frame(x = binarized_feature, y = other_feature)
+  return(features_both)
+}
+
+
 plot_binarized_vs_other <- function(seurat_object, binarized_feature_name, other_feature_name, binarized_assay='binpeaks', binarized_layer='counts', other_assay='MJ', other_layer='data', pointless=F, legendless=T, ylim=NULL, paper_style=T, angle_labels=F, better_colors=T) {
   # extract the binarized feature
   binarized_features <- Seurat::GetAssayData(seurat_object, layer = binarized_layer, assay = binarized_assay)
@@ -91,7 +108,7 @@ plot_binarized_vs_other <- function(seurat_object, binarized_feature_name, other
   features_both <- data.frame(x = binarized_feature, y = other_feature)
   # make into a boxplot
   p <- ggplot(data = features_both, mapping = aes(x = x, y = y, fill = x)) +
-    geom_boxplot() +
+    geom_boxplot(outlier.shape = NA) +
     xlab(binarized_feature_name) +
     ylab(other_feature_name) +
     geom_boxplot(outlier.shape = NA) + 
@@ -636,3 +653,22 @@ plot_grid(
   nrow = 1, 
   ncol = 2
 )
+
+############################
+# Plot interaction effects #
+############################
+
+# split up UT and 24hCA
+mono_object_ut <- mono_object[, !is.na(mono_object@meta.data[['condition_final']]) & mono_object@meta.data[['condition_final']] == 'UT']
+mono_object_24hca <- mono_object[, !is.na(mono_object@meta.data[['condition_final']]) & mono_object@meta.data[['condition_final']] == '24hCA']
+
+# now let's do that for an effect that has an interaction effect in UT vs 24hCA for the monocyte data
+plot_grid(
+  plot_binarized_vs_other(mono_object_ut, 'chr17-14355631-14357200', 'HS3ST3B1') + ggtitle('Monocytes UT') + ylim(c(0,50)),
+  plot_binarized_vs_other(mono_object_24hca, 'chr17-14355631-14357200', 'HS3ST3B1') + ggtitle('Monocytes 24hCA') + ylim(0,50)
+)
+# get expression of both
+exp_vs_open_mono_ut <- get_binarized_vs_other(mono_object_ut, 'chr17-14355631-14357200', 'HS3ST3B1')
+exp_vs_open_mono_24hca <- get_binarized_vs_other(mono_object_24hca, 'chr17-14355631-14357200', 'HS3ST3B1')
+
+

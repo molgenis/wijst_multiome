@@ -881,7 +881,7 @@ merge_chromosome_output(caqtl_output_24hca_loc, input_append='_fdr005_significan
 merge_chromosome_output(caqtl_output_loc, input_append='_fdr005_significant.txt.gz', output_dir=NULL, output_file='qtl_results_all_qval_allchroms_fdr005_significant.txt.gz')
 
 # location of the interaction-eQTL outputs
-icaqtl_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_caqtl/sc-eqtlgen/output/combined_significant//L1/'
+icaqtl_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_caqtl/sc-eqtlgen/output/ut_and_24hca_significant/L1/'
 # read the icaqtl output, and filter by ones that are FDR significant in the combined mapping
 filter_interactions_by_qtls(icaqtl_output_loc, caqtl_output_loc)
 
