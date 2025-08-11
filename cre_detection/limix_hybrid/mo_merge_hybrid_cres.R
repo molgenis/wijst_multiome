@@ -212,8 +212,12 @@ read_cre_output_per_celltype <- function(cre_output_folder, filename_output='qtl
       # subset to what we need
       cell_type_output_features <- NULL
       # which is a bit if we care about the nominal threshold
-      if (add_global_nominal_threshold) {
-        cell_type_output_features <- cell_type_output[, c(..feature_mtc_column, ..mtc_column, ..nominal_p_column, ..alpha_column, ..beta_column), with = F]
+      if (add_global_nominal_threshold | add_local_nominal_threshold) {
+        cell_type_output_features <- cell_type_output[, c(..feature_mtc_column, ..mtc_column, ..nominal_p_column, ..significance_column, ..alpha_column, ..beta_column), with = F]
+        # set values that are zero, to be the minimum in R
+        cell_type_output_features[cell_type_output_features[[mtc_column]] == 0, mtc_column] <- .Machine$double.xmin
+        cell_type_output_features[cell_type_output_features[[significance_column]] == 0, significance_column] <- .Machine$double.xmin
+        cell_type_output_features[cell_type_output_features[[nominal_p_column]] == 0, nominal_p_column] <- .Machine$double.xmin
       }
       # even less if we don't try to get the nominal threshold as well
       else {
@@ -267,7 +271,7 @@ read_cre_output_per_celltype <- function(cre_output_folder, filename_output='qtl
 # luck seed
 set.seed(7777)
 # whether we are in debug mode
-debug <- F
+debug <- T
 
 
 ####################
@@ -298,9 +302,9 @@ gene_frac_exp_cutoff <- NULL
 
 # load debug settings if set to debug mode
 if (debug) {
-  qtl_in_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/NK/'
-  qtl_out_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/NK/qtl_results_all_frac01.txt.gz'
-  gene_frac_exp_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/frac_exp/NK.tsv.gz'
+  qtl_in_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/monocyte/'
+  qtl_out_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/monocyte/qtl_results_all_frac01.txt.gz'
+  gene_frac_exp_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/frac_exp/monocyte.tsv.gz'
   gene_frac_exp_cutoff <- 0.1
 } else {
   # there are some things we cannot allow

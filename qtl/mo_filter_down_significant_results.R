@@ -137,11 +137,14 @@ filter_file_by_significance <- function(input_loc, output_loc, significance_colu
     # get just the two columns we care about
     cell_type_output_features <- cell_type_output[, c(feature_mtc_column, mtc_column)]
     # order by significance
-    cell_type_output_features <- cell_type_output_features[order(cell_type_output_features[[mtc_column]]), ]
+    cell_type_output_features <- cell_type_output_features[order(cell_type_output_features[[mtc_column]], cell_type_output_features[[significance_column]]), ]
     # keep only the first entry
     cell_type_output_features[!duplicated(cell_type_output_features[[feature_mtc_column]]), ]
     # set the values that are larger than 1, to be 1, problem with precision
     cell_type_output_features[cell_type_output_features[[mtc_column]] > 1, mtc_column] <- 1
+    # set values that are zero, to be the minimum in R
+    cell_type_output_features[cell_type_output_features[[mtc_column]] == 0, mtc_column] <- .Machine$double.xmin
+    cell_type_output_features[cell_type_output_features[[significance_column]] == 0, significance_column] <- .Machine$double.xmin
     # add multiple testing correction
     cell_type_output_features[['qvalue']] <- qvalue(cell_type_output_features[[mtc_column]])$qvalues
     # now add back to the original table
@@ -208,7 +211,7 @@ filter_file_by_significance <- function(input_loc, output_loc, significance_colu
 #' @param sep value separator in table
 #' @returns 0 if success
 #' 
-split_output_by_column <- function(input_dir, input_file='qtl_results_all.txt.gz', output_dir=NULL, output_file_prepend='qtl_results_all_qval_', output_file_append='.txt.gz', significance_cutoff=0.05, split_column='feature_chromosome', add_mtc=T, mtc_column='empirical_feature_p_value', feature_mtc_column='feature_id', mtc_column_to_add='feature_q_value', add_global_nominal_threshold=T, global_nominal_threshold_column_to_add='pval_nominal_threshold_global', add_local_nominal_threshold=T, local_nominal_threshold_column_to_add='pval_nominal_threshold_local', alpha_column='alpha_param', beta_column='beta_param', nominal_p_column='p_value', verbose=T, filter_alpha=T, folders=NULL, sep='\t') {
+split_output_by_column <- function(input_dir, significance_column='p_value', input_file='qtl_results_all.txt.gz', output_dir=NULL, output_file_prepend='qtl_results_all_qval_', output_file_append='.txt.gz', significance_cutoff=0.05, split_column='feature_chromosome', add_mtc=T, mtc_column='empirical_feature_p_value', feature_mtc_column='feature_id', mtc_column_to_add='feature_q_value', add_global_nominal_threshold=T, global_nominal_threshold_column_to_add='pval_nominal_threshold_global', add_local_nominal_threshold=T, local_nominal_threshold_column_to_add='pval_nominal_threshold_local', alpha_column='alpha_param', beta_column='beta_param', nominal_p_column='p_value', verbose=T, filter_alpha=T, folders=NULL, sep='\t') {
   # get the folders in the directory, which should be the cell types
   cell_types <- list.dirs(input_dir, full.names = F, recursive = F)
   # subset if a set of folders was supplied
@@ -260,13 +263,16 @@ split_output_by_column <- function(input_dir, input_file='qtl_results_all.txt.gz
         cell_type_output_features <- cell_type_output[, c(feature_mtc_column, mtc_column), with = F]
       }
       # order by significance
-      cell_type_output_features <- cell_type_output_features[order(cell_type_output_features[[mtc_column]]), ]
+      cell_type_output_features <- cell_type_output_features[order(cell_type_output_features[[mtc_column]], cell_type_output[[significance_column]]), ]
       # remove where the feature is smaller than zero
       cell_type_output_features <- cell_type_output_features[!(cell_type_output_features[[mtc_column]] < 0), ]
       # keep only the first entry
       cell_type_output_features[!duplicated(cell_type_output_features[[feature_mtc_column]]), ]
       # set the values that are larger than 1, to be 1, problem with precision
       cell_type_output_features[cell_type_output_features[[mtc_column]] > 1, mtc_column] <- 1
+      # set values that are zero, to be the minimum in R
+      cell_type_output_features[cell_type_output_features[[mtc_column]] == 0, mtc_column] <- .Machine$double.xmin
+      cell_type_output_features[cell_type_output_features[[significance_column]] == 0, significance_column] <- .Machine$double.xmin
       # add multiple testing correction
       cell_type_output_features[['qvalue']] <- qvalue(cell_type_output_features[[mtc_column]])$qvalues
       # now add back to the original table
