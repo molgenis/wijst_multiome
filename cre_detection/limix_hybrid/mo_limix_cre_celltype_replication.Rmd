@@ -166,6 +166,8 @@ get_color_coding_dict <- function() {
 	#color_coding_dict[['Monocytes']] <- '#7570B3'
 	color_coding_dict[['Microfold cells']] <- '#BEAED4'
 	color_coding_dict[['Monocytes']] <- '#EDBA1B'
+	color_coding_dict[['monocyte']] <- '#EDBA1B'
+	color_coding_dict[['Monocyte']] <- '#EDBA1B'
 	color_coding_dict[['Naive B cells']] <- '#FDC086'
 	#color_coding_dict[['Plasma cells']] <- '#E7298A'
 	color_coding_dict[['Plasma cells']] <- '#DB8E00'
@@ -906,6 +908,317 @@ plot_replication_stats <- function(replication_stats, replicating_column='replic
 }
 
 
+read_pseudobulk_cre_output_per_celltype <- function(pseudobulk_output_folder, cell_types=NULL, filename_output='qtl_results_all.txt.gz', significance_column='empirical_feature_p_value', significance_cutoff=0.05, add_mtc=T, mtc_column='empirical_feature_p_value', feature_mtc_column='feature_id', mtc_column_to_add='feature_q_value', add_global_nominal_threshold=F, add_local_nominal_threshold=F, global_nominal_threshold_column_to_add='pval_nominal_threshold_global', local_nominal_threshold_column_to_add='pval_nominal_threshold_local', alpha_column='alpha_param', beta_column='beta_param', nominal_p_column='p_value', filter_alpha=T, alpha_min=.2, alpha_max=5, filter_significance=T) {
+  # list all the files in the directory
+  cell_type_folders <- list.dirs(pseudobulk_output_folder, full.names = F, recursive = F)
+  # intersect the cell type folders with the cell types we are interested in
+  if (!is.null(cell_types)) {
+    cell_type_folders <- intersect(cell_type_folders, cell_types)
+  }
+  # save the results in a list
+  output_per_celltype <- list()
+  # now check each cell type
+  for (cell_type in cell_type_folders) {
+    # paste together the full file path
+    cell_type_output_loc <- paste(pseudobulk_output_folder, cell_type, filename_output, sep = '/')
+    # check if the file exists
+    if (file.exists(cell_type_output_loc)) {
+      # read this file
+      cell_type_output <- fread(cell_type_output_loc, header = T, sep = '\t')
+      # make sure there are no duplicates
+      cell_type_output <- unique(cell_type_output)
+      # filter on alpha if requested
+      if (filter_alpha) {
+        cell_type_output <- cell_type_output[!(cell_type_output[[alpha_column]] > alpha_max | cell_type_output[[alpha_column]] < alpha_min), ]
+      }
+      
+      # get the features and the emperical p value
+      if (add_mtc) {
+        # subset to what we need
+        cell_type_output_features <- NULL
+        # which is a bit if we care about the nominal threshold
+        if (add_global_nominal_threshold) {
+          cell_type_output_features <- cell_type_output[, c(..feature_mtc_column, ..mtc_column, ..nominal_p_column, ..alpha_column, ..beta_column), with = F]
+        }
+        # even less if we don't try to get the nominal threshold as well
+        else {
+          cell_type_output_features <- cell_type_output[, c(..feature_mtc_column, ..mtc_column), with = F]
+        }
+        # remove the wherever we dont have our significance
+        cell_type_output_features <- cell_type_output_features[!is.na(cell_type_output_features[[significance_column]]) & cell_type_output_features[[significance_column]] >= 0, ]
+        # order by significance
+        cell_type_output_features <- cell_type_output_features[order(cell_type_output_features[[mtc_column]]), ]
+        # keep only the first entry
+        cell_type_output_features[!duplicated(cell_type_output_features[[feature_mtc_column]]), ]
+        # set the values that are larger than 1, to be 1, problem with precision
+        cell_type_output_features[cell_type_output_features[[mtc_column]] > 1, mtc_column] <- 1
+        # add multiple testing correction
+        cell_type_output_features[['qvalue']] <- qvalue(cell_type_output_features[[mtc_column]])$qvalues
+        # now add back to the original table
+        cell_type_output[[mtc_column_to_add]] <- cell_type_output_features[match(cell_type_output[[feature_mtc_column]], cell_type_output_features[[feature_mtc_column]]), 'qvalue'][['qvalue']]
+        # based on this MTC column, we can now also add a cuttoff
+        if (add_local_nominal_threshold) {
+          cell_type_output_local_threshold <- calculate_nominal_thresholds(cell_type_output_features, fdr=significance_cutoff, pval_col=nominal_p_column, nominal_threshold_column='nomthres', cutoff_column = 'qvalue', alpha_column = alpha_column, beta_column = beta_column)
+          # now add the nominal threshold to the full table
+          cell_type_output[[local_nominal_threshold_column_to_add]] <- cell_type_output_local_threshold[match(cell_type_output[[feature_mtc_column]], cell_type_output_local_threshold[[feature_mtc_column]]), 'nomthres'][['nomthres']]
+        }
+        if(add_global_nominal_threshold) {
+          # filter the output to significant MTC hits
+          cell_type_output_features_significant <- cell_type_output_features[cell_type_output_features[['qvalue']] < significance_cutoff, ]
+          # and get the maximum significant nominal value
+          global_p_cutoff <- max(cell_type_output_features_significant[[nominal_p_column]])
+          # add that to the table
+          cell_type_output[[global_nominal_threshold_column_to_add]] <- global_p_cutoff
+        }
+      }
+      # filter the file if requested
+      if (filter_significance) {
+        cell_type_output <- cell_type_output[
+          cell_type_output[[significance_column]] < significance_cutoff, 
+        ]
+      }
+      # add the cell type
+      cell_type_output[['cell_type']] <- cell_type
+      # put in the list
+      output_per_celltype[[cell_type]] <- cell_type_output
+    }
+    else {
+      warning(paste('folder exists at', cell_type_output_loc, 'but no file is there'))
+    }
+  }
+  return(output_per_celltype)
+}
+
+
+rename_labels <- function(vector_to_rename) {
+  # get the labels that are present
+  label_renaming <- get_label_dict()
+  # now check which labels we are missing
+  missing_renames <- setdiff(unique(vector_to_rename), names(label_renaming))
+  # add those renames as not being renames
+  for (missing_rename in missing_renames) {
+    label_renaming[[missing_rename]] <- missing_rename
+  }
+  # now replace each value with the rename
+  renamed_vector <- as.vector(unlist(label_renaming[vector_to_rename]))
+  # and return that
+  return(renamed_vector)
+}
+
+
+remap_with_label_dict <- function(vector_of_names) {
+  # get the label dict
+  relabels <- get_label_dict()
+  # get the labels available for renaming
+  labels_available <- names(relabels)
+  # get the ones we cant remap
+  unmappable <- setdiff(unique(vector_of_names), labels_available)
+  # report on those
+  if (length(unmappable) > 0) {
+    print(paste('cannot remap the following names, they will be returned unchanged:', paste(unmappable, collapse = ',')))
+    # and put those in our remapping list as their originals
+    relabels[unmappable] <- unmappable
+  }
+  # now actually do the remapping
+  remapped <- as.vector(unlist(relabels[vector_of_names]))
+  return(remapped)
+}
+
+
+
+
+#' Plot Sharing of  Genes per Cell Type
+#'
+#' This function plots the sharing of differentially genes across cell types using an UpSet plot. It allows the use of custom label and color dictionaries.
+#'
+#' @param genes_per_ct list with the genes for each cell type
+#' @param use_label_dict A logical value indicating whether to use a custom label dictionary for renaming cell types. Default is TRUE.
+#' @param use_color_dict A logical value indicating whether to use a custom color dictionary for cell types. Default is TRUE.
+#' @param n_intersects value describing how many intersections to plot, default is all
+#' @param use_this_color_dict list with colours for each category, if not supplied, environment default is used
+#' @return An UpSet plot showing the sharing of DE genes across cell types.
+#'
+plot_sharing_per_celltype <- function(genes_per_ct, use_label_dict=T, use_color_dict=T, n_intersects=NA, use_this_color_dict=NULL){
+  # rename labels if requested
+  if (use_label_dict) {
+    names(genes_per_ct) <- remap_with_label_dict(names(genes_per_ct))
+  }
+  # get the total overlap
+  total_overlap <- fromList(genes_per_ct)
+  # count how many in each overlap
+  combination_to_overlap <- list()
+  apply(total_overlap, 1, function(x){
+    # get which ones have a number
+    positions_1 <- x > 0
+    # get which these are, and paste together
+    cols_1 <- paste(colnames(total_overlap)[positions_1], collapse = ',')
+    # add to list if does not exist
+    if (cols_1 %in% c(names(combination_to_overlap))) {
+      combination_to_overlap[[cols_1]] <<- combination_to_overlap[[cols_1]] + 1
+    }
+    else{
+      combination_to_overlap[[cols_1]] <<- 1
+    }
+  })
+  # make into an ordered df
+  combination_numbers <- data.frame('combination' = names(combination_to_overlap), 'nr' = as.vector(unlist(combination_to_overlap)))
+  combination_numbers <- combination_numbers[order(combination_numbers[['nr']], combination_numbers[['combination']], decreasing = T), ]
+  # get lowest number we have for the sets
+  intersect_size_smallest <- 0
+  if (is.na(n_intersects)) {
+    intersect_size_smallest <- min(combination_numbers[['nr']])
+  }
+  else {
+    intersect_size_smallest <- combination_numbers[n_intersects, 'nr']
+  }
+  # set queries and colours
+  queries <- list()
+  sets.bar.color <- 'black'
+  if(use_color_dict){
+    # create df to store the number of each set, so we know how to order
+    nrs_df <- NULL
+    # get the cell types we have
+    cell_types <- names(genes_per_ct)
+    # get colour codes for the cell types
+    cell_type_colours <- NULL
+    # use the supplied colour coding dict
+    if (!is.null(use_this_color_dict)) {
+      cell_type_colours <- use_this_color_dict
+    }
+    # otherwise the default one
+    else {
+      cell_type_colours <- get_color_coding_dict()
+    }
+    
+    # also get colours for the cell types we don't have colours for
+    cell_type_colours_missing <- roycols::get_color_list(setdiff(cell_types, names(cell_type_colours)))
+    # and merge them
+    cell_type_colours <- c(cell_type_colours, cell_type_colours_missing)
+    # add the colors for the cell types
+    i <- 1
+    for(cell_type in cell_types){
+      # check if there is a singleton for this cell type, so this celltype is 1, but the total of the row is also 1
+      n_singletons <- nrow(total_overlap[total_overlap[[cell_type]] == 1 & rowSums(total_overlap) == 1, ])
+      # if we have singletons, colour it
+      if (n_singletons > 0 & n_singletons >= intersect_size_smallest) {
+        # add for the singles in the intersection sizes
+        ct_list <- list(
+          query = intersects,
+          params = list(cell_type),
+          color = cell_type_colours[[cell_type]],
+          active = T)
+        queries[[i]] <- ct_list
+        i <- i + 1
+      }
+      # add for the DF to order the set sizes
+      numbers_row <- data.frame(ct=c(cell_type), nr=c(length(genes_per_ct[[cell_type]])), stringsAsFactors = F)
+      if(is.null(nrs_df)){
+        nrs_df <- numbers_row
+      }
+      else{
+        nrs_df <- rbind(nrs_df, numbers_row)
+      }
+    }
+    # get the order of the sets
+    ordered_cts <- nrs_df[order(nrs_df$nr, decreasing = T), 'ct']
+    # add the colors for the sets
+    sets.bar.color <- unlist(cell_type_colours[ordered_cts])
+    # make the plot
+    upset(total_overlap, order.by = 'freq', nsets = length(genes_per_ct), queries = queries, sets.bar.color=sets.bar.color, nintersects = n_intersects)
+  }
+  else {
+    upset(total_overlap, order.by = 'freq', nsets = length(genes_per_ct), nintersects = n_intersects)
+  }
+  
+  #return(DE_genes_per_ct)
+}
+
+
+get_closest_flanks <- function(position_table, left_flank_column1, right_flank_column1, left_flank_column2, right_flank_column2) {
+  # get the distance between left flanks
+  dist_left_flank1_to_left_flank2 <- position_table[[left_flank_column1]] - position_table[[left_flank_column2]]
+  # distance between the right flanks
+  dist_right_flank1_to_right_flank2 <- position_table[[right_flank_column1]] - position_table[[right_flank_column2]]
+  # distance between left flank 1 and right flank 2
+  dist_left_flank1_to_right_flank2 <- position_table[[left_flank_column1]] - position_table[[right_flank_column2]]
+  # distance between right flank 1 and left flank 2
+  dist_right_flank1_to_left_flank2 <- position_table[[right_flank_column1]] - position_table[[left_flank_column2]]
+  # put in a table for convenience sake
+  distances_tbl <- data.table(
+    'lf1_to_lf2' = dist_left_flank1_to_left_flank2, 
+    'rf1_to_rf2' = dist_right_flank1_to_right_flank2, 
+    'lf1_to_rf2' = dist_left_flank1_to_right_flank2, 
+    'rf1_to_lf2' = dist_right_flank1_to_left_flank2
+  )
+  # add the minimum absolute distance
+  distances_tbl[['min_dist']] <- apply(distances_tbl, 1, function(x) {
+    return(min(abs(x)))
+  })
+  # but set this to zero if any of the flanks end in the bodies
+  #              -----
+  #                 ++++
+  distances_tbl[(distances_tbl[['lf1_to_lf2']] < 0 & distances_tbl[['lf1_to_rf2']] > 0) |
+                  #                   ----
+                #                 ++++
+                (distances_tbl[['rf1_to_lf2']] > 0 & distances_tbl[['lf1_to_rf2']] < 0) |
+                  #                   ----
+                #                 +++++++++
+                (distances_tbl[['lf1_to_lf2']] > 0 & distances_tbl[['rf1_to_rf2']] < 0) |
+                  #                 ---------
+                #                   ++++
+                (distances_tbl[['lf1_to_lf2']] < 0 & distances_tbl[['rf1_to_rf2']] > 0)
+                , 'min_dist'] <- 0
+  return(distances_tbl)
+}
+
+
+get_group_proportions <- function(named_list_of_dfs, column_to_get_proportions_from='screen', specific_trait_expression=NULL, specific_trait_name=NULL) {
+  # we'll save per df
+  results_per_group <- list()
+  # we'll check each df
+  for (group_name in names(named_list_of_dfs)) {
+    # we'll need the numbers for the traits
+    group_totals <- NULL
+    # check a specific trait if requested
+    if (!is.null(specific_trait_name) & !is.null(specific_trait_expression)) {
+      # get true/false vector for that expression
+      is_of_trait <- grepl(specific_trait_expression, named_list_of_dfs[[group_name]][[column_to_get_proportions_from]])
+      # turn into a string
+      is_trait_string <- ifelse (is_of_trait, paste('is', specific_trait_name), paste('is not', specific_trait_name))
+      # make factor
+      is_trait_factor <- factor(is_trait_string, levels = c(paste('is', specific_trait_name), paste('is not', specific_trait_name)))
+      # get the totals from that
+      group_totals <- data.frame(table(is_trait_string))
+    }
+    else {
+      # otherwise get the totals of each group
+      group_totals <- data.frame(table(named_list_of_dfs[[group_name]][[column_to_get_proportions_from]]))
+    }
+    # rename the columns
+    colnames(group_totals) <- c('category', 'n')
+    # add the fraction now as well
+    group_totals[['frac']] <- group_totals[['n']] / sum(group_totals[['n']])
+    # finally add the group as well
+    group_totals[['group']] <- group_name
+    # place in the list
+    results_per_group[[group_name]] <- group_totals
+  }
+  # merge all the tables
+  results_all <- do.call('rbind', results_per_group)
+  # make sure the 'nots' are always last
+  categories <- as.character(unique(results_all[['category']]))
+  # get the ones that have 'not' in their name
+  categories_not <- categories[grep('^is not ', categories)]
+  # and the ones that are not not 'not'
+  categories_other <- setdiff(categories, categories_not)
+  # and make that the order
+  results_all[['category']] <- factor(results_all[['category']], levels=(c(categories_not, categories_other)))
+  results_all <- results_all[order(results_all[['category']]), ]
+  return(results_all)
+}
+
+
+
 ```
 
 ```{r path_setup, include=FALSE}
@@ -927,9 +1240,9 @@ knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 cre_celltype_replication <- match_qtl_outputs_each(
   cre_output_combined_loc, 
   cre_output_combined_loc, 
-  qtl_prepend='qtl_results_all', qtl_append='.txt.gz', 
+  qtl_prepend='qtl_results_all_frac01', qtl_append='.txt.gz', 
   nosplit=T, 
-  folders_to_use = c('B', 'CD4T', 'CD8T', 'DC', 'NK')
+  folders_to_use = c('B', 'CD4T', 'CD8T', 'DC', 'monocyte', 'NK')
 )
 
 ```
@@ -949,7 +1262,7 @@ knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 cre_celltype_stat_p <- plot_replication_stats(cre_celltype_stats, mid_value = 0.5, comparing_value_to_text=list('n_sig_both' = 'N sig both: ', 'n_sig_tested' = 'N test both: ', 'rb_emp_nom' = 'nom rep rb: '), colour_column = 'rb_emp_nom', category_plot_order = c('B', 'CD4+ T', 'CD8+ T', 'NK', 'DC', 'Monocyte'), text_size = 4) +
   xlab('Cell type replicating') +
   ylab('Cell type replicating in') +
-  ggtitle('Replication of CREs across cell types') +
+  ggtitle('Replication of CRE-targetted genes across cell types') +
   labs(fill="Rb") +
   theme(
     # X label font size
@@ -1010,7 +1323,7 @@ cre_celltype_stat_p_cor <- plot_replication_stats(cre_celltype_stats, mid_value 
   xlab('Cell type replicating') +
   ylab('Cell type replicating in') +
   ggtitle('Replication of CREs across cell types') +
-  labs(fill="Correlation") +
+  labs(fill="Rho") +
   theme(
     # X label font size
     axis.title.x = element_text(size = 20), 
@@ -1029,6 +1342,184 @@ ggsave('~/plots/mo_sccre_celltype_replication_cor.pdf', plot = cre_celltype_stat
 
 # display the figure
 cre_celltype_stat_p_cor
+
+```
+
+```{r tables_hybrid, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# read the cpeaks annotation
+cpeaks_anno_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/cPeaks/cPeaks_wscreenv4.tsv.gz'
+cpeaks_anno <- fread(cpeaks_anno_loc, header = T, sep = '\t')
+# add the Signac style name
+cpeaks_anno[['signac_hg38']] <- paste(cpeaks_anno[['chr_hg38']], cpeaks_anno[['start_hg38']], cpeaks_anno[['end_hg38']], sep = '-')
+# as well as the SCENIC+ style name
+cpeaks_anno[['scenic_hg38']] <- paste0(cpeaks_anno[['chr_hg38']], ':', cpeaks_anno[['start_hg38']], '-', cpeaks_anno[['end_hg38']])
+# location of the hybrid method
+hybrid_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/'
+# read hybrid method
+hybrid_output_list <- read_pseudobulk_cre_output_per_celltype(hybrid_output_loc, add_mtc = F, filter_alpha = F, add_global_nominal_threshold = F, add_local_nominal_threshold = F, filename_output = 'qtl_results_all_frac01.txt.gz', alpha_min = .2, alpha_max = 5, cell_types = c('B', 'CD4T', 'CD8T', 'DC', 'monocyte', 'NK'))
+# merge them
+hybrid_output <- do.call('rbind', hybrid_output_list)
+# add z score
+hybrid_output[['zscore']] <- hybrid_output[['beta']] / hybrid_output[['beta_se']]
+# add a correlation based on the Z score, taking sample size and removing 2 + 10 PCs to get the degrees of freedom
+hybrid_output[['r']] <- hybrid_output[['zscore']] / sqrt(hybrid_output[['zscore']]^2 + (hybrid_output[['n_samples']][1] - 12))
+# add a p based z
+hybrid_output[['z_from_p']] <- qnorm(hybrid_output[['p_value']] / 2) * -1 * sign(hybrid_output[['beta']])
+# and add the distances
+hybrid_output <- cbind(hybrid_output, cpeaks_anno[match(hybrid_output[['snp_id']], cpeaks_anno[['signac_hg38']]), c('chr_hg38', 'start_hg38', 'end_hg38')])
+hybrid_distances <- get_closest_flanks(hybrid_output, 'start_hg38', 'end_hg38', 'feature_start', 'feature_end')
+hybrid_output[['distance']] <- hybrid_distances[['min_dist']]
+hybrid_output[['category']] <- 'hybrid'
+hybrid_output[['screen']] <- cpeaks_anno[match(hybrid_output[['snp_id']], cpeaks_anno[['signac_hg38']]), ][['screen_all']]
+
+
+```
+
+```{r lists_hybrid, include=TRUE, fig.with=10, fig.height=6}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# make a list with each QTL
+cres_to_genes_per_celltype <- list()
+cres_per_celltype <- list()
+genes_per_celltype <- list()
+# check each table
+for (ct in unique(hybrid_output[['cell_type']])) {
+  # extract that set
+  cres_celltype <- hybrid_output[hybrid_output[['cell_type']] == ct, ]
+  # subset to what is significant
+  cres_celltype_sig <- cres_celltype[
+    cres_celltype[['feature_q_value']] < 0.05 &
+    cres_celltype[['p_value']] <= cres_celltype[['pval_nominal_threshold_global']] & 
+    cres_celltype[['distance']] > 0, 
+  ]
+  # get the qtls from that
+  cres_to_genes_per_celltype[[ct]] <- paste(cres_celltype_sig[['snp_id']], cres_celltype_sig[['feature_id']])
+  cres_per_celltype[[ct]] <- cres_celltype_sig[['snp_id']]
+  genes_per_celltype[[ct]] <-cres_celltype_sig[['feature_id']]
+}
+# plot the overlap
+plot_sharing_per_celltype(cres_to_genes_per_celltype)
+grid.text("Overlap of CRE-gene pairs across cell types", x = 0.65, y = 0.95, gp = gpar(fontsize = 20))
+plot_sharing_per_celltype(cres_per_celltype)
+grid.text("Overlap of CREs across cell types", x = 0.65, y = 0.95, gp = gpar(fontsize = 20))
+plot_sharing_per_celltype(genes_per_celltype)
+grid.text("Overlap of CRE-targetted genes across cell types", x = 0.65, y = 0.95, gp = gpar(fontsize = 20))
+
+```
+
+```{r distances_celltypes, include=TRUE, fig.with=6, fig.height=6}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# make plot of distances, excluding overlapping region and gene combinations
+p_region_direction_distances <- ggplot(
+  data = hybrid_output[hybrid_output[['distance']] > 0, ], 
+  mapping = aes(
+    x = distance, 
+    fill = cell_type
+  )
+) + 
+  labs(fill="Cell type") +
+  geom_density(alpha = 0.5) +
+  xlab('Distance between region and gene') + 
+  ylab('Density') + 
+  ggtitle('Distance between region and gene\nacross cell types') + 
+  scale_fill_manual(values = get_color_coding_dict()) + 
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+
+# show the plot
+p_region_direction_distances
+
+```
+```{r screen_annotations, include=TRUE, fig.with=10, fig.height=10}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# split the output back into the list
+for (cell_type in unique(hybrid_output[['cell_type']])) {
+  # and put that in the list
+  hybrid_output_list[[cell_type]] <- hybrid_output[!is.na(hybrid_output[['cell_type']]) & hybrid_output[['cell_type']] == cell_type, ]
+}
+
+# the the relative proportions
+fracs_screen_is_ca <- get_group_proportions(hybrid_output_list, specific_trait_expression = 'CA', specific_trait_name = 'CA')
+fracs_screen_is_tf <- get_group_proportions(hybrid_output_list, specific_trait_expression = 'TF', specific_trait_name = 'TF')
+fracs_screen_is_ctcf <- get_group_proportions(hybrid_output_list, specific_trait_expression = 'CTCF', specific_trait_name = 'CTCF')
+fracs_screen_is_pls <- get_group_proportions(hybrid_output_list, specific_trait_expression = 'PLS', specific_trait_name = 'PLS')
+fracs_screen_is_els <- get_group_proportions(hybrid_output_list, specific_trait_expression = 'ELS', specific_trait_name = 'ELS')
+fracs_screen_is_pels <- get_group_proportions(hybrid_output_list, specific_trait_expression = 'pELS', specific_trait_name = 'pELS')
+fracs_screen_is_dels <- get_group_proportions(hybrid_output_list, specific_trait_expression = 'dELS', specific_trait_name = 'dELS')
+
+# and plot them
+p_screen_fractions_ca <- ggplot(data = fracs_screen_is_ca, mapping = aes(x = group, y = frac, fill = category)) + 
+  geom_bar(stat = 'identity', position = 'stack') +
+  xlab('Cell type') +
+  ylab('fraction of CA screen regions') +
+  ggtitle('CA screen regions') +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) +
+  scale_fill_manual(values = roycols::get_color_list(c('is CA', 'is not CA')))
+p_screen_fractions_tf <- ggplot(data = fracs_screen_is_tf, mapping = aes(x = group, y = frac, fill = category)) + 
+  geom_bar(stat = 'identity', position = 'stack') +
+  xlab('Cell type') +
+  ylab('fraction of TF screen regions') +
+  ggtitle('TF screen regions') +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) +
+  scale_fill_manual(values = roycols::get_color_list(c('is TF', 'is not TF')))
+p_screen_fractions_ctcf <- ggplot(data = fracs_screen_is_ctcf, mapping = aes(x = group, y = frac, fill = category)) + 
+  geom_bar(stat = 'identity', position = 'stack') +
+  xlab('Cell type') +
+  ylab('fraction of CTCF screen regions') +
+  ggtitle('CTCF screen regions') +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) +
+  scale_fill_manual(values = roycols::get_color_list(c('is CTCF', 'is not CTCF')))
+p_screen_fractions_ctcf <- ggplot(data = fracs_screen_is_ctcf, mapping = aes(x = group, y = frac, fill = category)) + 
+  geom_bar(stat = 'identity', position = 'stack') +
+  xlab('Cell type') +
+  ylab('fraction of CTCF screen regions') +
+  ggtitle('CTCF screen regions') +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) +
+  scale_fill_manual(values = roycols::get_color_list(c('is CTCF', 'is not CTCF')))
+p_screen_fractions_pls <- ggplot(data = fracs_screen_is_pls, mapping = aes(x = group, y = frac, fill = category)) + 
+  geom_bar(stat = 'identity', position = 'stack') +
+  xlab('Cell type') +
+  ylab('fraction of PLS screen regions') +
+  ggtitle('PLS screen regions') +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) +
+  scale_fill_manual(values = roycols::get_color_list(c('is PLS', 'is not PLS')))
+p_screen_fractions_els <- ggplot(data = fracs_screen_is_els, mapping = aes(x = group, y = frac, fill = category)) + 
+  geom_bar(stat = 'identity', position = 'stack') +
+  xlab('Cell type') +
+  ylab('fraction of ELS screen regions') +
+  ggtitle('ELS screen regions') +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) +
+  scale_fill_manual(values = roycols::get_color_list(c('is ELS', 'is not ELS')))
+p_screen_fractions_pels <- ggplot(data = fracs_screen_is_pels, mapping = aes(x = group, y = frac, fill = category)) + 
+  geom_bar(stat = 'identity', position = 'stack') +
+  xlab('Cell type') +
+  ylab('fraction of pELS screen regions') +
+  ggtitle('pELS screen regions') +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) +
+  scale_fill_manual(values = roycols::get_color_list(c('is pELS', 'is not pELS')))
+p_screen_fractions_dels <- ggplot(data = fracs_screen_is_dels, mapping = aes(x = group, y = frac, fill = category)) + 
+  geom_bar(stat = 'identity', position = 'stack') +
+  xlab('Cell type') +
+  ylab('fraction of dELS screen regions') +
+  ggtitle('dELS screen regions') +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) +
+  scale_fill_manual(values = roycols::get_color_list(c('is dELS', 'is not dELS')))
+
+# show in one plot
+plot_grid(
+  p_screen_fractions_ca, 
+  p_screen_fractions_tf, 
+  p_screen_fractions_ctcf, 
+  p_screen_fractions_pls, 
+  p_screen_fractions_els, 
+  p_screen_fractions_pels, 
+  p_screen_fractions_dels, 
+  nrow = 3, 
+  ncol = 3
+)
 
 ```
 
@@ -1350,41 +1841,266 @@ subsampling_stat_p
 
 ```
 
-```{r gene_exp_chrom_openness, include=TRUE, fig.width=8, fig.height=8}
+```{r subsampling_replication_filtered, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
-# add the average openness
-cd8t_openness_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/signac_peaks/output/mo_peaks_lane1to80_CD8T.bed'
-cd8t_openness <- fread(cd8t_openness_loc, header = T, sep = '\t')
-# get non-zero expression
-cd8t_nonzero_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/sc-eqtlgen/ncells_by_genes/L1/combined/CD8T.tsv.gz'
-cd8t_nonzero <- fread(cd8t_nonzero_loc, header = T, sep = '\t')
-# make this per feature
-cd8t_nonzero <- data.frame('feature' = cd8t_nonzero[['feature']], 'pct_exp' = rowSums(cd8t_nonzero[, -c('feature')]) / cd8t_openness[1, ][['ncell']])
-
-```
-
-```{r sampling_filtering, include=TRUE, fig.width=8, fig.height=8}
-knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
-
-# we'll filter on the expression side
-expression_frac_cutoff <- 0.1
-
-# create a new list to save the filtered lists
+# do a replication of the subsamplings of CD8T
 subsampling_replication_cd8t_filtered <- list()
-# check each of the sets
-for(comparison in names(subsampling_replication_cd8t)) {
-  # extract the comparison that we are looking at
-  subsampling_specific <- subsampling_replication_cd8t[[comparison]]
-  # add the pct
-  subsampling_specific[['frac_exp']] <- cd8t_nonzero[match(gsub('_\\S+$', '', subsampling_specific[['qtl']]), cd8t_nonzero[['feature']]), ][['pct_exp']]
-  # subset the data on the cutoff
-  subsampling_specific <- subsampling_specific[
-    subsampling_specific[['frac_exp']] >= expression_frac_cutoff, 
-  ]
-  # put this into the list
-  subsampling_replication_cd8t_filtered[[comparison]] <- subsampling_specific
-}
+# full vs everything
+subsampling_replication_cd8t_filtered[['full_vs_full']] <- match_qtl_outputs(
+  '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/CD8T/',
+  '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/CD8T/', 
+  replicating_qtl_prepend='qtl_results_all_frac01', 
+  replicating_in_qtl_prepend ='qtl_results_all_frac01', 
+  replicating_qtl_append='.txt.gz', 
+  replicating_in_qtl_append='.txt.gz', 
+  nosplit=T, 
+  replicating_name='full', replicating_in_name='full'
+)
+subsampling_replication_cd8t_filtered[['full_vs_sampling1']] <- match_qtl_outputs(
+  '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/CD8T/',
+  '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input_sampled/sampling1/L1/CD8T/', 
+  replicating_qtl_prepend='qtl_results_all_frac01', 
+  replicating_in_qtl_prepend ='qtl_results_all_frac01', 
+  replicating_qtl_append='.txt.gz', 
+  replicating_in_qtl_append='.txt.gz', 
+  nosplit=T, 
+  replicating_name='full', replicating_in_name='sampling1'
+)
+subsampling_replication_cd8t_filtered[['full_vs_sampling2']] <- match_qtl_outputs(
+  '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/CD8T/',
+  '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input_sampled/sampling2/L1/CD8T/', 
+  replicating_qtl_prepend='qtl_results_all_frac01', 
+  replicating_in_qtl_prepend ='qtl_results_all_frac01', 
+  replicating_qtl_append='.txt.gz', 
+  replicating_in_qtl_append='.txt.gz', 
+  nosplit=T, 
+  replicating_name='full', replicating_in_name='sampling2'
+)
+subsampling_replication_cd8t_filtered[['full_vs_sampling3']] <- match_qtl_outputs(
+  '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/CD8T/',
+  '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input_sampled/sampling3/L1/CD8T/', 
+  replicating_qtl_prepend='qtl_results_all_frac01', 
+  replicating_in_qtl_prepend ='qtl_results_all_frac01', 
+  replicating_qtl_append='.txt.gz', 
+  replicating_in_qtl_append='.txt.gz', 
+  nosplit=T, 
+  replicating_name='full', replicating_in_name='sampling3'
+)
+subsampling_replication_cd8t_filtered[['full_vs_sampling4']] <- match_qtl_outputs(
+  '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/CD8T/',
+  '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input_sampled/sampling3/L1/CD8T/', 
+  replicating_qtl_prepend='qtl_results_all_frac01', 
+  replicating_in_qtl_prepend ='qtl_results_all_frac01', 
+  replicating_qtl_append='.txt.gz', 
+  replicating_in_qtl_append='.txt.gz', 
+  nosplit=T, 
+  replicating_name='full', replicating_in_name='sampling4'
+)
+# sampling1 vs everything
+subsampling_replication_cd8t_filtered[['sampling1_vs_full']] <- match_qtl_outputs(
+  '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input_sampled/sampling1/L1/CD8T/', 
+  '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/CD8T/',
+  replicating_qtl_prepend='qtl_results_all_frac01', 
+  replicating_in_qtl_prepend ='qtl_results_all_frac01', 
+  replicating_qtl_append='.txt.gz', 
+  replicating_in_qtl_append='.txt.gz', 
+  nosplit=T, 
+  replicating_name='sampling1', replicating_in_name='full'
+)
+subsampling_replication_cd8t_filtered[['sampling1_vs_sampling1']] <- match_qtl_outputs(
+  '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input_sampled/sampling1/L1/CD8T/', 
+  '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input_sampled/sampling1/L1/CD8T/', 
+  replicating_qtl_prepend='qtl_results_all_frac01', 
+  replicating_in_qtl_prepend ='qtl_results_all_frac01', 
+  replicating_qtl_append='.txt.gz', 
+  replicating_in_qtl_append='.txt.gz', 
+  nosplit=T, 
+  replicating_name='sampling1', replicating_in_name='sampling1'
+)
+subsampling_replication_cd8t_filtered[['sampling1_vs_sampling2']] <- match_qtl_outputs(
+  '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input_sampled/sampling1/L1/CD8T/', 
+  '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input_sampled/sampling2/L1/CD8T/', 
+  replicating_qtl_prepend='qtl_results_all_frac01', 
+  replicating_in_qtl_prepend ='qtl_results_all_frac01', 
+  replicating_qtl_append='.txt.gz', 
+  replicating_in_qtl_append='.txt.gz', 
+  nosplit=T, 
+  replicating_name='sampling1', replicating_in_name='sampling2'
+)
+subsampling_replication_cd8t_filtered[['sampling1_vs_sampling3']] <- match_qtl_outputs(
+  '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input_sampled/sampling1/L1/CD8T/', 
+  '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input_sampled/sampling2/L1/CD8T/', 
+  replicating_qtl_prepend='qtl_results_all_frac01', 
+  replicating_in_qtl_prepend ='qtl_results_all_frac01', 
+  replicating_qtl_append='.txt.gz', 
+  replicating_in_qtl_append='.txt.gz', 
+  nosplit=T, 
+  replicating_name='sampling1', replicating_in_name='sampling3'
+)
+subsampling_replication_cd8t_filtered[['sampling1_vs_sampling4']] <- match_qtl_outputs(
+  '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input_sampled/sampling1/L1/CD8T/', 
+  '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input_sampled/sampling2/L1/CD8T/', 
+  replicating_qtl_prepend='qtl_results_all_frac01', 
+  replicating_in_qtl_prepend ='qtl_results_all_frac01', 
+  replicating_qtl_append='.txt.gz', 
+  replicating_in_qtl_append='.txt.gz', 
+  nosplit=T, 
+  replicating_name='sampling1', replicating_in_name='sampling4'
+)
+# sampling2 vs everything
+subsampling_replication_cd8t_filtered[['sampling2_vs_full']] <- match_qtl_outputs(
+  '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input_sampled/sampling2/L1/CD8T/', 
+  '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/CD8T/',
+  replicating_qtl_prepend='qtl_results_all_frac01', 
+  replicating_in_qtl_prepend ='qtl_results_all_frac01', 
+  replicating_qtl_append='.txt.gz', 
+  replicating_in_qtl_append='.txt.gz', 
+  nosplit=T, 
+  replicating_name='sampling2', replicating_in_name='full'
+)
+subsampling_replication_cd8t_filtered[['sampling2_vs_sampling1']] <- match_qtl_outputs(
+  '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input_sampled/sampling2/L1/CD8T/', 
+  '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input_sampled/sampling1/L1/CD8T/', 
+  replicating_qtl_prepend='qtl_results_all_frac01', 
+  replicating_in_qtl_prepend ='qtl_results_all_frac01', 
+  replicating_qtl_append='.txt.gz', 
+  replicating_in_qtl_append='.txt.gz', 
+  nosplit=T, 
+  replicating_name='sampling2', replicating_in_name='sampling1'
+)
+subsampling_replication_cd8t_filtered[['sampling2_vs_sampling2']] <- match_qtl_outputs(
+  '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input_sampled/sampling2/L1/CD8T/', 
+  '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input_sampled/sampling2/L1/CD8T/', 
+  replicating_qtl_prepend='qtl_results_all_frac01', 
+  replicating_in_qtl_prepend ='qtl_results_all_frac01', 
+  replicating_qtl_append='.txt.gz', 
+  replicating_in_qtl_append='.txt.gz', 
+  nosplit=T, 
+  replicating_name='sampling2', replicating_in_name='sampling2'
+)
+subsampling_replication_cd8t_filtered[['sampling2_vs_sampling3']] <- match_qtl_outputs(
+  '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input_sampled/sampling2/L1/CD8T/', 
+  '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input_sampled/sampling3/L1/CD8T/', 
+  replicating_qtl_prepend='qtl_results_all_frac01', 
+  replicating_in_qtl_prepend ='qtl_results_all_frac01', 
+  replicating_qtl_append='.txt.gz', 
+  replicating_in_qtl_append='.txt.gz', 
+  nosplit=T, 
+  replicating_name='sampling2', replicating_in_name='sampling3'
+)
+subsampling_replication_cd8t_filtered[['sampling2_vs_sampling4']] <- match_qtl_outputs(
+  '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input_sampled/sampling2/L1/CD8T/', 
+  '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input_sampled/sampling4/L1/CD8T/', 
+  replicating_qtl_prepend='qtl_results_all_frac01', 
+  replicating_in_qtl_prepend ='qtl_results_all_frac01', 
+  replicating_qtl_append='.txt.gz', 
+  replicating_in_qtl_append='.txt.gz', 
+  nosplit=T, 
+  replicating_name='sampling2', replicating_in_name='sampling4'
+)
+# sampling 3 vs everything
+subsampling_replication_cd8t_filtered[['sampling3_vs_full']] <- match_qtl_outputs(
+  '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input_sampled/sampling3/L1/CD8T/', 
+  '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/CD8T/',
+  replicating_qtl_prepend='qtl_results_all_frac01', 
+  replicating_in_qtl_prepend ='qtl_results_all_frac01', 
+  replicating_qtl_append='.txt.gz', 
+  replicating_in_qtl_append='.txt.gz', 
+  nosplit=T, 
+  replicating_name='sampling3', replicating_in_name='full'
+)
+subsampling_replication_cd8t_filtered[['sampling3_vs_sampling1']] <- match_qtl_outputs(
+  '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input_sampled/sampling3/L1/CD8T/', 
+  '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input_sampled/sampling1/L1/CD8T/', 
+  replicating_qtl_prepend='qtl_results_all_frac01', 
+  replicating_in_qtl_prepend ='qtl_results_all_frac01', 
+  replicating_qtl_append='.txt.gz', 
+  replicating_in_qtl_append='.txt.gz', 
+  nosplit=T, 
+  replicating_name='sampling3', replicating_in_name='sampling1'
+)
+subsampling_replication_cd8t_filtered[['sampling3_vs_sampling2']] <- match_qtl_outputs(
+  '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input_sampled/sampling3/L1/CD8T/', 
+  '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input_sampled/sampling2/L1/CD8T/', 
+  replicating_qtl_prepend='qtl_results_all_frac01', 
+  replicating_in_qtl_prepend ='qtl_results_all_frac01', 
+  replicating_qtl_append='.txt.gz', 
+  replicating_in_qtl_append='.txt.gz', 
+  nosplit=T, 
+  replicating_name='sampling3', replicating_in_name='sampling2'
+)
+subsampling_replication_cd8t_filtered[['sampling3_vs_sampling3']] <- match_qtl_outputs(
+  '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input_sampled/sampling3/L1/CD8T/', 
+  '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input_sampled/sampling3/L1/CD8T/', 
+  replicating_qtl_prepend='qtl_results_all_frac01', 
+  replicating_in_qtl_prepend ='qtl_results_all_frac01', 
+  replicating_qtl_append='.txt.gz', 
+  replicating_in_qtl_append='.txt.gz', 
+  nosplit=T, 
+  replicating_name='sampling3', replicating_in_name='sampling3'
+)
+subsampling_replication_cd8t_filtered[['sampling3_vs_sampling4']] <- match_qtl_outputs(
+  '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input_sampled/sampling3/L1/CD8T/', 
+  '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input_sampled/sampling4/L1/CD8T/', 
+  replicating_qtl_prepend='qtl_results_all_frac01', 
+  replicating_in_qtl_prepend ='qtl_results_all_frac01', 
+  replicating_qtl_append='.txt.gz', 
+  replicating_in_qtl_append='.txt.gz', 
+  nosplit=T, 
+  replicating_name='sampling3', replicating_in_name='sampling4'
+)
+# sampling 4 vs everything
+subsampling_replication_cd8t_filtered[['sampling4_vs_full']] <- match_qtl_outputs(
+  '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input_sampled/sampling4/L1/CD8T/', 
+  '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/CD8T/',
+  replicating_qtl_prepend='qtl_results_all_frac01', 
+  replicating_in_qtl_prepend ='qtl_results_all_frac01', 
+  replicating_qtl_append='.txt.gz', 
+  replicating_in_qtl_append='.txt.gz', 
+  nosplit=T, 
+  replicating_name='sampling4', replicating_in_name='full'
+)
+subsampling_replication_cd8t_filtered[['sampling4_vs_sampling1']] <- match_qtl_outputs(
+  '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input_sampled/sampling4/L1/CD8T/', 
+  '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input_sampled/sampling1/L1/CD8T/', 
+  replicating_qtl_prepend='qtl_results_all_frac01', 
+  replicating_in_qtl_prepend ='qtl_results_all_frac01', 
+  replicating_qtl_append='.txt.gz', 
+  replicating_in_qtl_append='.txt.gz', 
+  nosplit=T, 
+  replicating_name='sampling4', replicating_in_name='sampling1'
+)
+subsampling_replication_cd8t_filtered[['sampling4_vs_sampling2']] <- match_qtl_outputs(
+  '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input_sampled/sampling4/L1/CD8T/', 
+  '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input_sampled/sampling2/L1/CD8T/', 
+  replicating_qtl_prepend='qtl_results_all_frac01', 
+  replicating_in_qtl_prepend ='qtl_results_all_frac01', 
+  replicating_qtl_append='.txt.gz', 
+  replicating_in_qtl_append='.txt.gz', 
+  nosplit=T, 
+  replicating_name='sampling4', replicating_in_name='sampling2'
+)
+subsampling_replication_cd8t_filtered[['sampling4_vs_sampling3']] <- match_qtl_outputs(
+  '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input_sampled/sampling4/L1/CD8T/', 
+  '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input_sampled/sampling3/L1/CD8T/', 
+  replicating_qtl_prepend='qtl_results_all_frac01', 
+  replicating_in_qtl_prepend ='qtl_results_all_frac01', 
+  replicating_qtl_append='.txt.gz', 
+  replicating_in_qtl_append='.txt.gz', 
+  nosplit=T, 
+  replicating_name='sampling4', replicating_in_name='sampling3'
+)
+subsampling_replication_cd8t_filtered[['sampling4_vs_sampling4']] <- match_qtl_outputs(
+  '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input_sampled/sampling4/L1/CD8T/', 
+  '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input_sampled/sampling4/L1/CD8T/', 
+  replicating_qtl_prepend='qtl_results_all_frac01', 
+  replicating_in_qtl_prepend ='qtl_results_all_frac01', 
+  replicating_qtl_append='.txt.gz', 
+  replicating_in_qtl_append='.txt.gz', 
+  nosplit=T, 
+  replicating_name='sampling4', replicating_in_name='sampling4'
+)
 
 ```
 
