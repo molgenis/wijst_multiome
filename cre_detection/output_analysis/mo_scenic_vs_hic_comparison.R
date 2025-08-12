@@ -20,6 +20,39 @@ library(doParallel)
 # Functions        #
 ####################
 
+#' Calculate Minimum Distances Between Flanking Positions
+#'
+#' This function computes the pairwise distances between left and right flanking positions
+#' from two sets of genomic coordinates provided in a data table. It returns a table of
+#' distances and the minimum absolute distance for each row, with special handling for
+#' overlapping flanks.
+#'
+#' @param position_table A `data.table` or `data.frame` containing genomic positions.
+#' @param left_flank_column1 A string specifying the column name for the left flank of the first set.
+#' @param right_flank_column1 A string specifying the column name for the right flank of the first set.
+#' @param left_flank_column2 A string specifying the column name for the left flank of the second set.
+#' @param right_flank_column2 A string specifying the column name for the right flank of the second set.
+#'
+#' @return A `data.table` with the following columns:
+#' \describe{
+#'   \item{lf1_to_lf2}{Distance from left flank 1 to left flank 2}
+#'   \item{rf1_to_rf2}{Distance from right flank 1 to right flank 2}
+#'   \item{lf1_to_rf2}{Distance from left flank 1 to right flank 2}
+#'   \item{rf1_to_lf2}{Distance from right flank 1 to left flank 2}
+#'   \item{min_dist}{Minimum absolute distance among the above, or 0 if flanks overlap}
+#' }
+#'
+#' @examples
+#' library(data.table)
+#' dt <- data.table(
+#'   lf1 = c(100, 200),
+#'   rf1 = c(150, 250),
+#'   lf2 = c(130, 220),
+#'   rf2 = c(180, 270)
+#' )
+#' get_closest_flanks(dt, "lf1", "rf1", "lf2", "rf2")
+#'
+#' @export
 get_closest_flanks <- function(position_table, left_flank_column1, right_flank_column1, left_flank_column2, right_flank_column2) {
   # get the distance between left flanks
   dist_left_flank1_to_left_flank2 <- position_table[[left_flank_column1]] - position_table[[left_flank_column2]]
@@ -58,7 +91,37 @@ get_closest_flanks <- function(position_table, left_flank_column1, right_flank_c
 }
 
 
-randomly_sample_regions_per_gene <- function(true_table, table_to_sample_from, region_column_true='region', gene_column_true='gene', region_column_sampling='region', gene_column_sampling='gene', distance_column_true=NULL, distance_column_sampling=NULL, distance_overshoot=.25, n_retries=10) {
+#' Randomly Sample Regions Per Gene with Optional Distance Constraints
+#'
+#' This function performs gene-wise sampling of regions from a reference table, matching the number of regions in a "true" table. 
+#' Optionally, it can constrain sampling based on distance comparisons, retrying several times if sampling fails.
+#'
+#' @param true_table A `data.frame` or `data.table` containing the original regions and genes.
+#' @param table_to_sample_from A `data.frame` or `data.table` with regions to sample from.
+#' @param region_column_true A string giving the column name for regions in `true_table`. Default is `"region"`.
+#' @param gene_column_true A string giving the column name for genes in `true_table`. Default is `"gene"`.
+#' @param region_column_sampling A string specifying the region column in `table_to_sample_from`. Default is `"region"`.
+#' @param gene_column_sampling A string specifying the gene column in `table_to_sample_from`. Default is `"gene"`.
+#' @param distance_column_true Optional string for the column holding distance values in `true_table`. If `NULL`, distance is ignored.
+#' @param distance_column_sampling Optional string for the column holding distance values in `table_to_sample_from`.
+#' @param distance_overshoot A numeric value defining the tolerance window around distances. Can be a proportion or fixed value. Default is `0.25`.
+#' @param n_retries Integer number of times to retry sampling if suitable regions aren't found. Default is `10`.
+#' @param filter_trues Logical. If `TRUE`, removes true regions from `table_to_sample_from` before sampling. Default is `FALSE`.
+#'
+#' @return A `data.frame` containing sampled regions and their corresponding genes.
+#'
+#' @examples
+#' # Sample regions per gene ignoring distance
+#' sampled <- randomly_sample_regions_per_gene(
+#'   true_table = true_df,
+#'   table_to_sample_from = background_df,
+#'   region_column_true = "region",
+#'   gene_column_true = "gene",
+#'   filter_trues = TRUE
+#' )
+#'
+#' @export
+randomly_sample_regions_per_gene <- function(true_table, table_to_sample_from, region_column_true='region', gene_column_true='gene', region_column_sampling='region', gene_column_sampling='gene', distance_column_true=NULL, distance_column_sampling=NULL, distance_overshoot=.25, n_retries=10, filter_trues=F) {
   # get all unique genes
   true_genes <- unique(true_table[[gene_column_true]])
   # we'll store the samplings per gene first
@@ -70,6 +133,10 @@ randomly_sample_regions_per_gene <- function(true_table, table_to_sample_from, r
     true_gene <- true_genes[i]
     # get the sample table for that gene
     sample_from_gene <- table_to_sample_from[table_to_sample_from[[gene_column_sampling]] == true_gene, ]
+    # remove the true effects from the sampling if requested
+    if (filter_trues) {
+      sample_from_gene <- sample_from_gene[!(sample_from_gene[[region_column_sampling]] %in% true_table[true_table[[gene_column_true]] == true_gene, ][[region_column_true]]), ]
+    }
     # check if we can sample
     if (nrow(sample_from_gene) > 0) {
       # initialize the sampling result
@@ -168,52 +235,6 @@ randomly_sample_regions_per_gene <- function(true_table, table_to_sample_from, r
   # merge all
   sampled_all <- do.call('rbind', samplings_per_gene)
   return(sampled_all)
-}
-
-random_sample_combinations <- function(true_table, sample_column1='TF_ens', sample_column2='Gene_ens', n_samplings=20) {
-  # get the TFs and their occurences
-  tf_occurences <- data.frame(table(unique(true_table[, c(..sample_column1, ..sample_column2)])[[sample_column1]]))
-  # set column names more descriptive
-  colnames(tf_occurences) <- c('sample1', 'occ')
-  # get the unique genes
-  sample2_values <- unique(true_table[[sample_column2]])
-  
-  # which we'll store in a list
-  samplings <- list()
-  # let's do each sampling
-  for (sampling_i in 1:n_samplings) {
-    # create a list to turn into a tf-gene table
-    sampling_tbl_list <- list()
-    # check each of the TFs
-    for (tf_i in 1 : nrow(tf_occurences)) {
-      # grab the tf
-      tf <- tf_occurences[tf_i, 'sample1']
-      # and the occurences
-      occ <- tf_occurences[tf_i, 'occ']
-      # now randomly get this many genes
-      random_genes <- sample(sample2_values, size = occ)
-      # make that into a df
-      sampled_df_tf <- data.frame('sample1' = rep(tf, times = occ), 'sample2' = random_genes)
-      colnames(sampled_df_tf) <- c(sample_column1, sample_column2)
-      # put in the list for this sampling
-      sampling_tbl_list[[tf]] <- sampled_df_tf
-    }
-    # merge the TFs of this sampling
-    sampling_tbl <- do.call('rbind', sampling_tbl_list)
-    # add the g2g again
-    sampling_tbl[['g2g']] <- apply(sampling_tbl, 1, function(x) {
-      # get those genes
-      genes <- c(x[[sample_column1]], x[[sample_column2]])
-      # order them
-      genes <- genes[order(genes)]
-      # paste together
-      genes_string <- paste(genes, collapse='_')
-      return(genes_string)
-    })
-    # put in the list
-    samplings[[sampling_i]] <- sampling_tbl
-  }
-  return(samplings)
 }
 
 
@@ -346,3 +367,34 @@ for (sampling_i in 1 : length(random_scenic_samplings_noregion)) {
   sampling_stats[[sampling_i]] <- fexact
 }
 
+# randomly sample regions to genes without taking the region into consideration
+random_scenic_samplings_in_vs_out <- list()
+for (i in 1:20) {
+  random_scenic_samplings_in_vs_out[[i]] <- randomly_sample_regions_per_gene(scenic_output_autosomal[scenic_output_autosomal[['distance']] > 0 & scenic_output_autosomal[['distance']] <= 150000, ], window_pairs, region_column_true = 'signac_region_name', gene_column_true = 'Gene', distance_column_true = 'distance', distance_column_sampling = 'distance', distance_overshoot = 10000, filter_trues = T)
+}
+# do the statistics again
+sampling_stats_in_vs_out <- list()
+for (sampling_i in 1 : length(random_scenic_samplings_in_vs_out)) {
+  # extract the random sampling
+  sampling_tbl <- random_scenic_samplings_in_vs_out[[sampling_i]]
+  # add region to gene
+  sampling_tbl[['r2g']] <- paste(sampling_tbl[['region']], sampling_tbl[['gene']])
+  # check which of the random samplings are in string
+  sampling_r_gene_in_hic <- length(unique(intersect(sampling_tbl[['r2g']], hic[['r2g']])))
+  sampling_r_gene_not_in_hic <- length(unique(sampling_tbl[['r2g']])) - sampling_r_gene_in_hic
+  # make contingency table
+  contingency_table <- matrix(
+    c(scenic_r_gene_in_hic, scenic_r_gene_not_in_hic,
+      sampling_r_gene_in_hic, sampling_r_gene_not_in_hic),
+    nrow = 2,
+    byrow = TRUE,
+    dimnames = list(
+      set = c("scenic", "no_scenic"),
+      string = c("in_hic", "no_hic")
+    )
+  )
+  # do fisher-exact
+  fexact <- fisher.test(contingency_table)
+  # put in the list
+  sampling_stats_in_vs_out[[sampling_i]] <- fexact
+}
