@@ -58,14 +58,14 @@ get_closest_flanks <- function(position_table, left_flank_column1, right_flank_c
 }
 
 
-randomly_sample_regions_per_gene <- function(true_table, table_to_sample_from, region_column_true='region', gene_column_true='gene', region_column_sampling='region', gene_column_sampling='gene', distance_column_true=NULL, distance_column_sampling=NULL, distance_overshoot=.25) {
+randomly_sample_regions_per_gene <- function(true_table, table_to_sample_from, region_column_true='region', gene_column_true='gene', region_column_sampling='region', gene_column_sampling='gene', distance_column_true=NULL, distance_column_sampling=NULL, distance_overshoot=.25, n_retries=10) {
   # get all unique genes
   true_genes <- unique(true_table[[gene_column_true]])
   # we'll store the samplings per gene first
   samplings_per_gene <- list()
   # check each gene
-  #for (true_gene in true_genes) {
   samplings_per_gene <- foreach (i = 1: length(true_genes)) %dopar% {
+  #for (i in 1:length(true_genes)) {
     # get the gene
     true_gene <- true_genes[i]
     # get the sample table for that gene
@@ -84,7 +84,78 @@ randomly_sample_regions_per_gene <- function(true_table, table_to_sample_from, r
       } else if ((is.null(distance_column_true) & !is.null(distance_column_sampling)) | (!is.null(distance_column_true) & is.null(distance_column_sampling))) {
         stop('distance_column_true and distance_column_sampling both need to be either true or false')
       } else {
-        stop('TODO')
+        # set the number of retries
+        n_tried <- 0
+        # and whether we succeeded
+        succeeded <- F
+        while(n_tried <= n_retries & succeeded == F) {
+          # and sort by distance
+          sample_from_gene <- sample_from_gene[order(sample_from_gene[[distance_column_sampling]]), ]
+          # get the actual data for this gene
+          true_for_gene <- unique(true_table[true_table[[gene_column_true]] == true_gene, c(..gene_column_true, ..region_column_true, ..distance_column_true)])
+          # sort by distance
+          true_for_gene <- true_for_gene[order(true_for_gene[[distance_column_true]]), ]
+          # get the regions for this gene
+          true_regions <- true_for_gene[[region_column_true]]
+          # make a vector of the samples genes
+          sampled_for_gene_vector <- rep(NA, times = length(true_regions))
+          # check each true region
+          for (i_region in 1: length(true_regions)) {
+            # get the region based on index
+            true_region <- true_regions[i_region]
+            # get the distance for this region
+            region_distance <- true_table[true_table[[region_column_true]] == true_region, ][[distance_column_true]][1]
+            # calculate the flanks
+            flank_left <- NULL
+            flank_right <- NULL
+            # we'll do either as fraction of actual size
+            if (distance_overshoot < 0) {
+              stop('distance overshoot needs to be either a fraction or a positive number larger than 1')
+            }
+            else if (distance_overshoot > 1) {
+              flank_left <- max(0, region_distance - distance_overshoot)
+              flank_right <- region_distance + distance_overshoot
+            }
+            else if (distance_overshoot >= 0) {
+              flank_left <- region_distance * (1 - distance_overshoot)
+              flank_right <- region_distance * (1 + distance_overshoot)
+            }
+            # subset to regions that fall into this distance
+            sampled_regions_comparable_distance <- sample_from_gene[
+              #sample_from_gene[[region_column_sampling]] != true_region & 
+                sample_from_gene[[distance_column_sampling]] >= flank_left & 
+                sample_from_gene[[distance_column_sampling]] <= flank_right, ]
+            # if there is anything to select, we can continue on
+            if (nrow(sampled_regions_comparable_distance) > 0) {
+              # then randomly select a region
+              random_region_i <- sample(1 : nrow(sampled_regions_comparable_distance), 1)
+              # and get that region
+              region_randomly_selected <- sampled_regions_comparable_distance[random_region_i, ][[region_column_sampling]]
+              # and put that into the vector
+              sampled_for_gene_vector[i_region] <- region_randomly_selected
+              # now remove that random region from out pool, so we don't select it again
+              sample_from_gene <- sample_from_gene[sample_from_gene[[region_column_sampling]] != region_randomly_selected, ]
+            }
+            else {
+              # otherwise we might have to try again
+              n_tried <- n_tried + 1
+              # reset 
+              sampled_for_gene <- NULL
+              # and break the loop
+              break
+            }
+          }
+          # if we got to the end, we succeeded
+          succeeded <- T
+        }
+        # if we didn't succeed, let the user know
+        if (!succeeded) {
+          warning(paste0('could not sample for ', true_gene, ' after ', n_retries, ' retries, will skip this gene!'))
+          sampled_for_gene <- data.frame('gene' = c(), 'region' = c())
+        }
+        else {
+          sampled_for_gene <- data.frame('gene' = rep(true_gene, times = length(sampled_for_gene_vector)), 'region' = sampled_for_gene_vector)
+        }
       }
       # put the sampling in the list
       #samplings_per_gene[[true_gene]] <- sampled_for_gene
@@ -241,12 +312,12 @@ scenic_output_autosomal <- scenic_output[scenic_output[['region_chr']] %in% past
 # randomly sample regions to genes without taking the region into consideration
 random_scenic_samplings_noregion <- list()
 for (i in 1:20) {
-  random_scenic_samplings_noregion[[i]] <- randomly_sample_regions_per_gene(scenic_output_autosomal, window_pairs, region_column_true = 'signac_region_name', gene_column_true = 'Gene')
+  random_scenic_samplings_noregion[[i]] <- randomly_sample_regions_per_gene(scenic_output_autosomal[scenic_output_autosomal[['distance']] > 0 & scenic_output_autosomal[['distance']] <= 150000, ], window_pairs, region_column_true = 'signac_region_name', gene_column_true = 'Gene', distance_column_true = 'distance', distance_column_sampling = 'distance', distance_overshoot = 10000)
 }
 
 # get true overlap
-scenic_r_gene_in_hic <- length(unique(intersect(scenic_output_autosomal[['r2g']], hic[['r2g']])))
-scenic_r_gene_not_in_hic <- length(unique(scenic_output_autosomal[['r2g']])) - scenic_r_gene_in_string
+scenic_r_gene_in_hic <- length(unique(intersect(scenic_output_autosomal[scenic_output_autosomal[['distance']] > 0 & scenic_output_autosomal[['distance']] <= 150000, ][['r2g']], hic[['r2g']])))
+scenic_r_gene_not_in_hic <- length(unique(scenic_output_autosomal[scenic_output_autosomal[['distance']] > 0 & scenic_output_autosomal[['distance']] <= 150000, ][['r2g']])) - scenic_r_gene_in_hic
 
 # check each of the samplings
 sampling_stats <- list()
