@@ -5,7 +5,9 @@
 # Function: merged chunked CRE outputs
 # Example: Rscript mo_merge_hybrid_cres.R \
 # --in /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/B/ \
-# --out /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/B/qtl_results_all.txt.gz
+# --out /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/B/qtl_results_all_frac01.txt.gz \
+# --gene_frac_exp_loc /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/frac_exp/B.tsv.gz \
+# --gene_frac_exp_cutoff 0.1
 #
 ############################################################################################################################
 
@@ -271,7 +273,7 @@ read_cre_output_per_celltype <- function(cre_output_folder, filename_output='qtl
 # luck seed
 set.seed(7777)
 # whether we are in debug mode
-debug <- T
+debug <- F
 
 
 ####################
@@ -302,9 +304,9 @@ gene_frac_exp_cutoff <- NULL
 
 # load debug settings if set to debug mode
 if (debug) {
-  qtl_in_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/monocyte/'
-  qtl_out_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/monocyte/qtl_results_all_frac01.txt.gz'
-  gene_frac_exp_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/frac_exp/monocyte.tsv.gz'
+  qtl_in_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/CD4T/'
+  qtl_out_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/CD4T/qtl_results_all_frac01.txt.gz'
+  gene_frac_exp_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/frac_exp/CD4T.tsv.gz'
   gene_frac_exp_cutoff <- 0.1
 } else {
   # there are some things we cannot allow
