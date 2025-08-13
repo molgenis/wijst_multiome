@@ -805,18 +805,12 @@ nc2022_v2@meta.data[['cell_type_lowerres']] <- as.vector(unlist(lowres_mapping[n
 nc2022_v2 <- nc2022_v2[, !is.na(nc2022_v2@meta.data[['condition_previous']]) & !is.na(nc2022_v2@meta.data[['Assignment_frac']]) & nc2022_v2@meta.data[['Assignment_frac']] > .7]
 
 # make a mapping for the conditions
-condition_mapping <- list(
-  'UT' = 0,
-  '3hCA' = 1,
-  '3hMTB' = 1, 
-  '3hPA' = 1,
-  '24hCA' = 2, 
-  '24hMTB' = 2,
-  '24hPA' = 2
+condition_mapping <- data.frame(
+  'condition_previous' = c('UT', '3hCA', '3hMTB', '3hPA', '24hCA', '24hMTB', '24hPA'), 
+  'çondition_coded' = c(0, 1, 1, 1, 2, 2, 2)
 )
 # add coded condition
-nc2022_v2@meta.data[['condition_coded']] <- as.vector(unlist(condition_mapping[nc2022_v2@meta.data[['condition_previous']]]))
-
+nc2022_v2@meta.data[['condition_coded']] <- condition_mapping[match(nc2022_v2@meta.data[['condition_previous']], condition_mapping[['condition_previous']]), 'çondition_coded']
 # get the psam location
 psam_loc <- '/groups/umcg-franke-scrna/tmp02/projects/sc-eqtlgen-consortium-pipeline/wg1-preprocessing/wg1_wijst2020/genotype/unimputed/all/cytosnp_all_1m/cytosnp_all_1m.psam'
 psam <- read.delim(psam_loc, as.is = T, check.names = F)
