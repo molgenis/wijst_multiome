@@ -1,0 +1,71 @@
+# config for eqtl pipeline
+# use empty string for missing files (eg kinship, randomeff, ...)
+
+#####################################################################################
+###### The following arguments are for indicating file locations on your system #####
+#####################################################################################
+
+# The path to the folder within which the simgularity image & "wp3.simg" is located
+wp3_image_loc: /groups/umcg-franke-scrna/tmp02/software/wp3.simg
+# The path to the folder within which the simgularity image & "limixDec22.simg" is located
+limix_image_loc: /groups/umcg-franke-scrna/tmp02/software/limixAug24.A.sif
+# This folder will be bound to Singularty (needs to be highr up then every data item.
+top_dir: /groups/umcg-franke-scrna/tmp02/
+# where the scripts are located, should be inside the container
+script_folder: /tools/WG3-pipeline-QTL/scripts/
+# where the limix QTL pipeline is located, should be outside the container
+limix_loc: /groups/umcg-franke-scrna/tmp02/software/Limix_QTL/
+# where the eigenmt script is located
+eigenmt_loc:
+# genotype inputs
+genotype_loc: /groups/umcg-franke-scrna/tmp02/projects/sc-eqtlgen-consortium-pipeline/wg1-preprocessing/wg1_wijst2020/genotype/imputed/bgen_split/
+genotype_prepend: imputed_hg38_info_filled_chr
+genotype_append: .bgen #TODO not used
+# phenotype inputs
+phenotype_loc: /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/eqtl/sc-eqtlgen/input/nc2022_replication/24hCA/L1/
+phenotype_prepend:
+phenotype_append: .qtlInput.txt.gz
+# covariates and as such, interaction terms
+covariates_loc: /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/eqtl/sc-eqtlgen/input/nc2022_replication/24hCA/L1/
+covariates_prepend:
+covariates_append: .qtlInput.Pcs.txt.gz
+# location of kinship file
+kinship_loc: ''
+# location of the chunking file
+chunking_file_loc: /groups/umcg-franke-scrna/tmp02/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/input/ChunkingFile.txt
+# location of the limix annotation file
+limix_annotation_loc: /groups/umcg-franke-scrna/tmp02/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/input/
+limix_annotation_prepend: LimixAnnotationFile
+limix_annotation_append: .txt
+# location of the sample mapping file
+smf_loc: /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/eqtl/sc-eqtlgen/input/nc2022_replication/24hCA/L1/smf.txt
+# location of the variant-features to test for interactions
+variant_feature_confinement_loc: /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/confinements/replication/
+variant_feature_confinement_prepend:
+variant_feature_confinement_append: _mo_ut_and24hca_ieqtl_significant.tsv.gz
+
+#####################################
+##       input files/folders       ###
+#####################################
+
+out_folder: /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/output/ut_and_24hca_significant/24hCA/
+
+interaction_terms:
+    - condition_coded
+
+######################################
+######        Do not change      #####
+######################################
+numberOfPermutations: '0'
+minorAlleleFrequency: '0.01'
+windowSize: '1' # gene + cis window from one side
+hardyWeinbergCutoff: '0.0001'
+compressFiles: true
+
+celltypes:
+    - B
+    - CD4T
+    - CD8T
+    - DC
+    - monocyte
+    - NK
