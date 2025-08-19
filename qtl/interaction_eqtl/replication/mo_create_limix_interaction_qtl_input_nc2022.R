@@ -818,7 +818,7 @@ psam <- read.delim(psam_loc, as.is = T, check.names = F)
 do_limix_input_pipeline(
   seurat_object = nc2022_v2[, !is.na(nc2022_v2@meta.data[['condition_previous']]) & nc2022_v2@meta.data[['condition_previous']] %in% c('UT', '24hCA')], 
   psam = psam, 
-  output_loc='/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/eqtl/sc-eqtlgen/input/nc2022_replication/24hCA/L1/',
+  output_loc='/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/replication/input/nc2022/24hCA/L1/',
   participant_column='Assignment',
   celltype_column='cell_type_lowerres',
   merge_pcs_into_covariates=F,
@@ -833,7 +833,7 @@ do_limix_input_pipeline(
 do_limix_input_pipeline(
   seurat_object = nc2022_v2[, !is.na(nc2022_v2@meta.data[['condition_previous']]) & nc2022_v2@meta.data[['condition_previous']] %in% c('UT', '24hCA', '24hMTB', '24hPA')], 
   psam = psam, 
-  output_loc='/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/eqtl/sc-eqtlgen/input/nc2022_replication/24h/L1/',
+  output_loc='/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/replication/input/nc2022/24h/L1/',
   participant_column='Assignment',
   celltype_column='cell_type_lowerres',
   merge_pcs_into_covariates=F,
@@ -848,7 +848,7 @@ do_limix_input_pipeline(
 do_limix_input_pipeline(
   seurat_object = nc2022_v2[, !is.na(nc2022_v2@meta.data[['condition_previous']])], 
   psam = psam, 
-  output_loc='/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/eqtl/sc-eqtlgen/input/nc2022_replication/timepoint/L1/',
+  output_loc='/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/replication/input/nc2022/timepoint/L1/',
   participant_column='Assignment',
   celltype_column='cell_type_lowerres',
   merge_pcs_into_covariates=F,

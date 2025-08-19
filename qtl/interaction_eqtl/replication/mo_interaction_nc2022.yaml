@@ -22,11 +22,11 @@ genotype_loc: /groups/umcg-franke-scrna/tmp02/projects/sc-eqtlgen-consortium-pip
 genotype_prepend: imputed_hg38_info_filled_chr
 genotype_append: .bgen #TODO not used
 # phenotype inputs
-phenotype_loc: /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/eqtl/sc-eqtlgen/input/nc2022_replication/24hCA/L1/
+phenotype_loc: /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/replication/input/nc2022/24hCA/L1/
 phenotype_prepend:
 phenotype_append: .qtlInput.txt.gz
 # covariates and as such, interaction terms
-covariates_loc: /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/eqtl/sc-eqtlgen/input/nc2022_replication/24hCA/L1/
+covariates_loc: /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/replication/input/nc2022/24hCA/L1/
 covariates_prepend:
 covariates_append: .qtlInput.Pcs.txt.gz
 # location of kinship file
@@ -38,7 +38,7 @@ limix_annotation_loc: /groups/umcg-franke-scrna/tmp02/projects/sc-eqtlgen-consor
 limix_annotation_prepend: LimixAnnotationFile
 limix_annotation_append: .txt
 # location of the sample mapping file
-smf_loc: /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/eqtl/sc-eqtlgen/input/nc2022_replication/24hCA/L1/smf.txt
+smf_loc: /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/replication/input/nc2022/24hCA/L1/smf.txt
 # location of the variant-features to test for interactions
 variant_feature_confinement_loc: /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/confinements/replication/
 variant_feature_confinement_prepend:
@@ -48,7 +48,7 @@ variant_feature_confinement_append: _mo_ut_and24hca_ieqtl_significant.tsv.gz
 ##       input files/folders       ###
 #####################################
 
-out_folder: /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/output/ut_and_24hca_significant/24hCA/
+out_folder: /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/replication/output/nc2022/ut_and_24hca_significant/24hCA/
 
 interaction_terms:
     - condition_coded
