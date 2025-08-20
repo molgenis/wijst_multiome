@@ -14,6 +14,7 @@ library(mdfiver)
 library(ggplot2)
 library(ggvenn)
 library(doParallel)
+library(svMisc)
 
 
 ####################
@@ -411,8 +412,78 @@ for (cell_type in unique(hybrid_output[['cell_type']])) {
   # and put that in the list
   hybrid_output_list[[cell_type]] <- hybrid_output[!is.na(hybrid_output[['cell_type']]) & hybrid_output[['cell_type']] == cell_type, ]
 }
+
+# get significant region-gene pairs in SCENIC+
+hybrid_output_significant <- hybrid_output[!is.na(hybrid_output[['feature_q_value']]) &
+                                             hybrid_output[['feature_q_value']] < 0.05 &
+                                             hybrid_output[['pval_nominal_threshold_global']] <= hybrid_output[['p_value']] &
+                                             hybrid_output[['distance']] > 0 & 
+                                             hybrid_output[['distance']] <= 150000, ]
+# and non significant
+hybrid_output_nonsignificant <- hybrid_output[!is.na(hybrid_output[['feature_q_value']]) &
+                                             !(hybrid_output[['feature_q_value']] < 0.05) |
+                                             !(hybrid_output[['pval_nominal_threshold_global']] <= hybrid_output[['p_value']]) &
+                                             hybrid_output[['distance']] > 0 & 
+                                             hybrid_output[['distance']] <= 150000, ]
+# get the unique limix-sc region-gene pairs
+hybrid_region_gene_pairs_sig <- unique(paste(hybrid_output_significant[['snp_id']], hybrid_output_significant[['feature_id']]))
+hybrid_region_gene_pairs_nonsig <- unique(paste(hybrid_output_nonsignificant[['snp_id']], hybrid_output_nonsignificant[['feature_id']]))
+# get the unique region-gene pairs in hiC
+hic_region_gene_pairs <- hic[['r2g']]
+# get significant limix-sc region-gene pairs in hic
+hybrid_region_gene_pairs_sig_in_hic <- intersect(hybrid_region_gene_pairs_sig, hic_region_gene_pairs)
+# get non-significant limix-sc region-gene pairs in hic
+hybrid_region_gene_pairs_nonsig_in_hic <- intersect(hybrid_region_gene_pairs_nonsig, hic_region_gene_pairs)
+# and the not in hic
+hybrid_region_gene_pairs_sig_not_in_hic <- setdiff(hybrid_region_gene_pairs_sig, hic_region_gene_pairs)
+hybrid_region_gene_pairs_nonsig_not_in_hic <- setdiff(hybrid_region_gene_pairs_nonsig, hic_region_gene_pairs)
+# and the lengths
+hybrid_region_gene_pairs_sig_in_hic_n <- length(hybrid_region_gene_pairs_sig_in_hic)
+hybrid_region_gene_pairs_nonsig_in_hic_n <- length(hybrid_region_gene_pairs_nonsig_in_hic)
+hybrid_region_gene_pairs_sig_not_in_hic_n <- length(hybrid_region_gene_pairs_sig_not_in_hic)
+hybrid_region_gene_pairs_nonsig_not_in_hic_n <- length(hybrid_region_gene_pairs_nonsig_not_in_hic)
+
+# make contingency table
+contingency_table <- matrix(
+  c(hybrid_region_gene_pairs_sig_in_hic_n, hybrid_region_gene_pairs_sig_not_in_hic_n,
+    hybrid_region_gene_pairs_nonsig_in_hic_n, hybrid_region_gene_pairs_nonsig_not_in_hic_n),
+  nrow = 2,
+  byrow = TRUE,
+  dimnames = list(
+    set = c("sig", "nonsig"),
+    string = c("in_hic", "no_hic")
+  )
+)
+# show the table
+contingency_table
+# set      in_hic no_hic
+# sig       848   8248
+# nonsig   7055  91712
+
+# do fisher-exact
+fexact <- fisher.test(contingency_table)
+# show fexact result
+fexact
+# Fisher's Exact Test for Count Data
+# 
+# data:  contingency_table
+# p-value = 1.698e-13
+# alternative hypothesis: true odds ratio is not equal to 1
+# 95 percent confidence interval:
+#  1.238845 1.440579
+# sample estimates:
+# odds ratio 
+#   1.336516 
+
+# determine number of samplings
+n_samplings <- 5
 # now do a sampling per cell type
 samplings_cell_types <- list()
+# calculate the total samplings
+n_samplings_tot <- n_samplings * length(names(hybrid_output_list))
+# and initialize that number
+sampling_i_tot <- 0
+# check each cell type
 for (cell_type in names(hybrid_output_list)) {
   # extract that table
   cres_hybrid_ct <- hybrid_output_list[[cell_type]]
@@ -424,7 +495,12 @@ for (cell_type in names(hybrid_output_list)) {
   cres_hybrid_ct <- cres_hybrid_ct[cres_hybrid_ct[['distance']] > 0 & cres_hybrid_ct[['distance']] <= 150000, ]
   # do x amount of samplings
   random_scenic_samplings_in_vs_out <- list()
-  for (i in 1:20) {
+  for (i in 1:n_samplings) {
+    # increase sampling number
+    sampling_i_tot <- sampling_i_tot + 1
+    # show which iteration we are doing
+    progress(sampling_i_tot, n_samplings_tot, progress.bar = TRUE)
+    # do the sampling
     random_scenic_samplings_in_vs_out[[i]] <- randomly_sample_regions_per_gene(cres_hybrid_ct, window_pairs, region_column_true = 'snp_id', gene_column_true = 'feature_id', distance_column_true = 'distance', distance_column_sampling = 'distance', distance_overshoot = 10000, filter_trues = T)
   }
   # put that in the list

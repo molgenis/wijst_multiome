@@ -296,6 +296,8 @@ window_pairs_distances <- get_closest_flanks(window_pairs, 'region_start', 'regi
 window_pairs[['distance']] <- window_pairs_distances[['min_dist']]
 # make sure to make the distance NA if the chromosomes were different (should never be the case, but just in case that might be the input)
 window_pairs[window_pairs[['region_chr']] != window_pairs[['gene_chr']], 'distance'] <- NA
+# add the region to gene here as well
+window_pairs[['r2g']] <- paste(window_pairs[['region']], window_pairs[['gene']])
 
 # we'll do the same thing for the hi-C data, to see if the distances are comparable
 hic[, c('region_chr', 'region_start', 'region_end')] <- cpeaks_anno[match(hic[['region']], cpeaks_anno[['signac_hg38']]), c('chr_hg38', 'start_hg38', 'end_hg38')]
@@ -330,15 +332,53 @@ scenic_output[['r2g']] <- paste(scenic_output[['signac_region_name']], scenic_ou
 # subset to autosomal for scenic
 scenic_output_autosomal <- scenic_output[scenic_output[['region_chr']] %in% paste0('chr', 1:22), ]
 
+# get SCENIC regio-gene combinations
+scenic_region_to_gene <- unique(scenic_output_autosomal[scenic_output_autosomal[['distance']] > 0 & scenic_output_autosomal[['distance']] <= 150000, ][['r2g']])
+# get testable regio-gene combinations
+testable_region_to_gene <- unique(window_pairs[window_pairs[['distance']] > 0 & window_pairs[['distance']] <= 150000, ][['r2g']])
+# and non significant but theoretically tested
+nonscenic_region_to_gene <- setdiff(testable_region_to_gene, scenic_region_to_gene)
+# get true overlap
+scenic_r_gene_in_hic <- length(intersect(scenic_region_to_gene, hic[['r2g']]))
+scenic_r_gene_not_in_hic <- length(scenic_region_to_gene) - scenic_r_gene_in_hic
+nonscenic_r_gene_in_hic <- length(intersect(nonscenic_region_to_gene, hic[['r2g']]))
+nonscenic_r_gene_not_in_hic <- length(nonscenic_region_to_gene) - nonscenic_r_gene_in_hic
+# make contingency table
+contingency_table <- matrix(
+  c(scenic_r_gene_in_hic, scenic_r_gene_not_in_hic,
+    nonscenic_r_gene_in_hic, nonscenic_r_gene_not_in_hic),
+  nrow = 2,
+  byrow = TRUE,
+  dimnames = list(
+    set = c("scenic", "nonscenic"),
+    string = c("in_hic", "no_hic")
+  )
+)
+# show the table
+contingency_table
+# set         in_hic  no_hic
+# scenic      4476   49091
+# nonscenic  84636 4357617
+# do fisher-exact
+fexact <- fisher.test(contingency_table)
+# show fexact result
+fexact
+# 	Fisher's Exact Test for Count Data
+# 
+# data:  contingency_table
+# p-value < 2.2e-16
+# alternative hypothesis: true odds ratio is not equal to 1
+# 95 percent confidence interval:
+#   4.548432 4.843781
+# sample estimates:
+#   odds ratio 
+# 4.694678 
+
 # randomly sample regions to genes without taking the region into consideration
 random_scenic_samplings_noregion <- list()
 for (i in 1:20) {
   random_scenic_samplings_noregion[[i]] <- randomly_sample_regions_per_gene(scenic_output_autosomal[scenic_output_autosomal[['distance']] > 0 & scenic_output_autosomal[['distance']] <= 150000, ], window_pairs, region_column_true = 'signac_region_name', gene_column_true = 'Gene', distance_column_true = 'distance', distance_column_sampling = 'distance', distance_overshoot = 10000)
 }
-
-# get true overlap
-scenic_r_gene_in_hic <- length(unique(intersect(scenic_output_autosomal[scenic_output_autosomal[['distance']] > 0 & scenic_output_autosomal[['distance']] <= 150000, ][['r2g']], hic[['r2g']])))
-scenic_r_gene_not_in_hic <- length(unique(scenic_output_autosomal[scenic_output_autosomal[['distance']] > 0 & scenic_output_autosomal[['distance']] <= 150000, ][['r2g']])) - scenic_r_gene_in_hic
 
 # check each of the samplings
 sampling_stats <- list()
@@ -372,6 +412,7 @@ random_scenic_samplings_in_vs_out <- list()
 for (i in 1:20) {
   random_scenic_samplings_in_vs_out[[i]] <- randomly_sample_regions_per_gene(scenic_output_autosomal[scenic_output_autosomal[['distance']] > 0 & scenic_output_autosomal[['distance']] <= 150000, ], window_pairs, region_column_true = 'signac_region_name', gene_column_true = 'Gene', distance_column_true = 'distance', distance_column_sampling = 'distance', distance_overshoot = 10000, filter_trues = T)
 }
+
 # do the statistics again
 sampling_stats_in_vs_out <- list()
 for (sampling_i in 1 : length(random_scenic_samplings_in_vs_out)) {
