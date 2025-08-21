@@ -2,7 +2,7 @@
 ############################################################################################################################
 # Authors: Roy Oelen
 # Name: mo_get_esnp_enrichment.R
-# Function: check if eSNPs are enriched to be in open chromatin regions
+# Function: check for overlap of eSNPs in open chromatin or SCREEN annotated cCREs
 ############################################################################################################################
 
 ####################
@@ -11,6 +11,7 @@
 
 library(data.table)
 library(IRanges)
+library(ggplot2)
 
 
 ####################
@@ -55,7 +56,7 @@ get_qtls_per_celltype_limix <- function(qtl_output_loc, output_file='qtl_results
       }
       # filter
       cell_type_output <- cell_type_output[
-          !is.na(cell_type_output[[nominal_cutoff_column]]) & 
+        !is.na(cell_type_output[[nominal_cutoff_column]]) & 
           !is.na(cell_type_output[[nominal_significance_column]]) &
           cell_type_output[[nominal_significance_column]] <= cell_type_output[[nominal_cutoff_column]], 
       ]
@@ -163,6 +164,97 @@ qtl_merge_with_openness <- function(qtl_input, openness_input, variant_column_qt
 }
 
 
+get_color_coding_dict <- function() {
+  # medhigh
+  color_coding_dict <- list()
+  color_coding_dict[["B"]] <- "#71BC4B"
+  #color_coding_dict[['CD4_T_cells']] <- '#7FC97F'
+  color_coding_dict[['CD4_T_cells']] <- '#153057'
+  color_coding_dict[['CD4T']] <- '#153057'
+  #color_coding_dict[['CD8_T_cells']] <- '#BEAED4'
+  color_coding_dict[['CD8_T_cells']] <- '#009DDB'
+  color_coding_dict[['CD8T']] <- '#009DDB'
+  #color_coding_dict[['Dendritic_cells']] <- '#FDC086'
+  color_coding_dict[['Dendritic_cells']] <- '#965EC8'
+  color_coding_dict[['DC']] <- '#965EC8'
+  color_coding_dict[['Endothelial_cells']] <- '#FFFFB3'
+  color_coding_dict[['Fibroblasts']] <- '#386CB0'
+  color_coding_dict[['Glia_cells']] <- '#F0027F'
+  color_coding_dict[['Mast_cells']] <- '#BF5B17'
+  color_coding_dict[['Mature_absorptive_enterocytes']] <- '#A6CEE3'
+  color_coding_dict[['Mature_secretory_enterocytes']] <- '#1B9E77'
+  color_coding_dict[['Memory_B']] <- '#D95F02'
+  color_coding_dict[['Microfold_cell']] <- '#BEAED4'
+  #color_coding_dict[['Monocytes']] <- '#7570B3'
+  color_coding_dict[['Monocyte']] <- '#EDBA1B'
+  color_coding_dict[['monocyte']] <- '#EDBA1B'
+  color_coding_dict[['Naive_B_cells']] <- '#FDC086'
+  color_coding_dict[['NK']] <- '#E64B50'
+  #color_coding_dict[['Plasma_cells']] <- '#E7298A'
+  color_coding_dict[['Plasma_cells']] <- '#DB8E00'
+  color_coding_dict[['Stem_cells']] <- '#66A61E'
+  color_coding_dict[['Stromal_cells']] <- '#8DD3C7'
+  #color_coding_dict[['T_others']] <- '#A6761D'
+  color_coding_dict[['T_others']] <- '#FF63B6'
+  color_coding_dict[['Transit_amplifying_cells']] <- '#FF7F00'
+  color_coding_dict[['disconcordant']] <- 'gray'
+  #color_coding_dict[['CD4+ T cells']] <- '#7FC97F'
+  color_coding_dict[['CD4+ T cells']] <- '#153057'
+  color_coding_dict[['CD4+ T']] <- '#153057'
+  #color_coding_dict[['CD8+ T cells']] <- '#BEAED4'
+  color_coding_dict[['CD8+ T cells']] <- '#009DDB'
+  color_coding_dict[['CD8+ T']] <- '#009DDB'
+  #color_coding_dict[['Dendritic cells']] <- '#FDC086'
+  color_coding_dict[['Dendritic cells']] <- '#965EC8'
+  color_coding_dict[['Endothelial cells']] <- '#FFFFB3'
+  color_coding_dict[['Endothelial\ncells']] <- '#FFFFB3'
+  color_coding_dict[['Fibroblasts']] <- '#386CB0'
+  color_coding_dict[['Glia cells']] <- '#F0027F'
+  color_coding_dict[['MAST cells']] <- '#BF5B17'
+  color_coding_dict[['Mature absorptive enterocytes']] <- '#A6CEE3'
+  color_coding_dict[['Mature\nabsorptive\nenterocytes']] <- '#A6CEE3'
+  color_coding_dict[['Mature secretory enterocytes']] <- '#1B9E77'
+  color_coding_dict[['Mature secretory\nenterocytes']] <- '#1B9E77'
+  color_coding_dict[['Memory B cells']] <- '#D95F02'
+  #color_coding_dict[['Monocytes']] <- '#7570B3'
+  color_coding_dict[['Microfold cells']] <- '#BEAED4'
+  color_coding_dict[['Monocytes']] <- '#EDBA1B'
+  color_coding_dict[['Naive B cells']] <- '#FDC086'
+  #color_coding_dict[['Plasma cells']] <- '#E7298A'
+  color_coding_dict[['Plasma cells']] <- '#DB8E00'
+  color_coding_dict[['Stem cells']] <- '#66A61E'
+  color_coding_dict[['Stromal cells']] <- '#8DD3C7'
+  #color_coding_dict[['other T cells']] <- '#A6761D'
+  color_coding_dict[['other T cells']] <- '#FF63B6'
+  color_coding_dict[['Transit amplifying cells']] <- '#FF7F00'
+  color_coding_dict[['Transit\namplifying cells']] <- '#FF7F00'
+  color_coding_dict[['disconcordant']] <- 'gray'
+  # up and down regulation will be added to, we need a whitening percentage
+  pct_whitening <- 40
+  # then we will check each cell type
+  for (cell_type in names(color_coding_dict)) {
+    # the up color is the same as the regular one
+    color_coding_dict[[paste(cell_type, 'up')]] <- color_coding_dict[[cell_type]]
+    # but the down one will have a more faded colour
+    color_coding_dict[[paste(cell_type, 'down')]] <- colorRampPalette(c(color_coding_dict[[cell_type]], "white"))(100)[pct_whitening]
+    # we'll do something similiar when we have multiple conditions
+    color_coding_dict[[paste(cell_type, 'combined')]] <- color_coding_dict[[cell_type]]
+    color_coding_dict[[paste(cell_type, 'UT')]] <- colorRampPalette(c(color_coding_dict[[cell_type]], "white"))(100)[pct_whitening]
+    color_coding_dict[[paste(cell_type, '24hCA')]] <- colorRampPalette(c(color_coding_dict[[cell_type]], "black"))(100)[pct_whitening]
+    # or when doing matching
+    color_coding_dict[[paste(cell_type, 'matched')]] <- color_coding_dict[[cell_type]]
+    color_coding_dict[[paste(cell_type, 'none')]] <- colorRampPalette(c(color_coding_dict[[cell_type]], "white"))(100)[pct_whitening]
+    color_coding_dict[[paste(cell_type, 'unmatched')]] <- colorRampPalette(c(color_coding_dict[[cell_type]], "black"))(100)[pct_whitening]
+  }
+  # general
+  color_coding_dict[['AI']] <- 'darkblue'
+  color_coding_dict[['NI']] <- 'darkred'
+  color_coding_dict[['Actively Inflamed']] <- 'darkblue'
+  color_coding_dict[['Non-Inflamed']] <- 'darkred'
+  return(color_coding_dict)
+}
+
+
 ####################
 # Main code        #
 ####################
@@ -200,86 +292,171 @@ for (cell_type in openness_cell_types) {
 # add 'chr' to the chromosome
 qtl_output_all[['snp_chromosome']] <- paste0('chr', qtl_output_all[['snp_chromosome']])
 
-# we'll do this in chunks, because the data gets quite big
-gene_chunk_size <- 250
-# get all unique genes
-qtl_genes <- unique(qtl_output_all[['feature_id']])
-# save the result of each chunk
-chunk_results <- list()
-# go through the chunks
-chunk_start <- 1
-# message process
-message(paste('processing', as.character(length(qtl_genes)), 'features in chunks of', as.character(gene_chunk_size)))
-# keep checking each chunk
-while(chunk_start < length(qtl_genes)) {
-  # the end of the chunk
-  chunk_end <- chunk_start + gene_chunk_size - 1
-  # unless we don't have a full chunk left
-  if (chunk_end > length(qtl_genes)) {
-    chunk_end <- length(qtl_genes)
-  }
-  # message
-  message(paste('processing chunk', chunk_start, 'to', chunk_end))
-  # grab the genes of this chunk
-  chunk_genes <- qtl_genes[chunk_start : chunk_end]
-  # subset the data to those genes
-  qtl_data_chunk <- qtl_output_all[!is.na(qtl_output_all[['feature_id']]) & qtl_output_all[['feature_id']] %in% chunk_genes, ]
-  
-  # overlap based on cell type openness
-  for (cell_type in names(openness_table_per_celltype)) {
-    qtl_data_chunk <- qtl_merge_with_openness(
-      qtl_data_chunk, 
-      openness_table_per_celltype[[cell_type]], 
-      overlapping_region_column = paste0('openness_region_', cell_type), 
-      overlapping_openness_column = paste0('openness_openness_', cell_type), 
-      variant_window_left = 0, 
-      variant_window_right = 0, 
-      variant_column_qtls = 'snp_id', 
-      chromosome_column_qtls = 'snp_chromosome', 
-      position_column_qtls = 'snp_position'
-    )
-  }
-  
-  # put chunk in the list
-  chunk_results[[paste(as.character(chunk_start), as.character(chunk_end), sep = '-')]] <- qtl_data_chunk
-  
-  # update chunk
-  chunk_start <- chunk_start + gene_chunk_size
+# get the cpeaks overlaps for each variant
+qtl_variants_all_cpeaks_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/annotations/mo_qtl_variants_tested_cpeaks_overlap.tsv.gz'
+qtl_variants_all_cpeaks <- fread(qtl_variants_all_cpeaks_loc, header = T, sep = '\t')
+
+# check each cell type, and add the openness for that cell type
+for (cell_type in names(openness_table_per_celltype)) {
+  # get openness for that cell type
+  openness_celltype <- openness_table_per_celltype[[cell_type]]
+  # keep only the things we need
+  openness_celltype <- openness_celltype[, c('name', 'pct_exp')]
+  # rename the column
+  colnames(openness_celltype) <- c('overlapping_feature', paste('openness', cell_type, sep = '_'))
+  # merge that onto the variant table
+  qtl_variants_all_ct_openness <- merge(qtl_variants_all_cpeaks, openness_celltype, by ='overlapping_feature', all.x = T)
+  # now sort this by openness
+  qtl_variants_all_ct_openness <- qtl_variants_all_ct_openness[order(qtl_variants_all_ct_openness[[paste('openness', cell_type, sep = '_')]], decreasing = T)]
+  # and keep the largest openness per variant
+  qtl_variants_all_ct_openness <- qtl_variants_all_ct_openness[!duplicated(qtl_variants_all_ct_openness[['snp_id']]), ]
+  # finally, add this information to the original QTL table
+  qtl_output_all[[paste('openness', cell_type, sep = '_')]] <- qtl_variants_all_ct_openness[match(qtl_output_all[['snp_id']], qtl_variants_all_ct_openness[['snp_id']]), ][[paste('openness', cell_type, sep = '_')]]
 }
 
-# merge all the chunks back
-qtl_output_all <- do.call('rbind', chunk_results)
-
-# add the openness of any region if present
-qtl_output_all[['openness_region_any']] <- apply(qtl_output_all, 1, function(x) {
+# add the max openness of any region if present
+qtl_output_all[['openness_max']] <- apply(qtl_output_all, 1, function(x) {
   # get the openness columns
-  any_openness <- x[grepl('openness_region_', names(x))]
+  any_openness <- x[grepl('openness_', names(x))]
+  # make sure we are looking at numbers
+  any_openness <- as.numeric(any_openness)
   # and then anything that is not NA
   any_openness <- any_openness[!is.na(any_openness)]
   # if any values are not NA, we'll return that
   if (length(any_openness) > 0) {
-    return(any_openness[1])
+    return(max(any_openness))
   }
   else {
     return(NA)
   }
 })
 
+# add the matching openness of any region if present
+qtl_output_all[['openness_matching']] <- apply(qtl_output_all, 1, function(x) {
+  # get the openness columns
+  matching_openness <- x[[paste('openness', x[['cell_type']], sep = '_')]]
+  # make sure we are looking at numbers
+  matching_openness <- as.numeric(matching_openness)
+  # return this
+  return(matching_openness)
+})
 
-# TESTING STUFF
-# get CD4T top effects
-cd4t_top <- qtl_output_all[
-    qtl_output_all[['cell_type']] == 'CD4T' & 
-    qtl_output_all[['is_top_variant']] == T, ]
-# get the monocyte effects
-monocyte_top <- qtl_output_all[
-  qtl_output_all[['cell_type']] == 'monocyte' & 
-    qtl_output_all[['is_top_variant']] == T, ]
-# check if it was also the top in mono
-cd4t_top[['top_mono']] <- paste(cd4t_top[['snp_id']], cd4t_top[['feature_id']]) %in% paste(monocyte_top[['snp_id']], monocyte_top[['feature_id']])
-cd4t_top[['any_mono']] <- paste(cd4t_top[['snp_id']], cd4t_top[['feature_id']]) %in% paste(qtl_output_all[qtl_output_all[['cell_type']] == 'monocyte', ][['snp_id']], qtl_output_all[qtl_output_all[['cell_type']] == 'monocyte', ][['feature_id']])
+# subset to what is significant also at the snp-level
+qtl_output_all_snpsig <- qtl_output_all[!is.na(qtl_output_all[['p_value']]) & 
+                                          !is.na(qtl_output_all[['pval_nominal_threshold_global']]) &
+                                          qtl_output_all[['p_value']] <= qtl_output_all[['pval_nominal_threshold_global']], ]
 
-# check if in open chromatin for CD4T
-cd4t_top[['open_cd4t']] <- !is.na(cd4t_top[['openness_openness_CD4T']]) & cd4t_top[['openness_openness_CD4T']] >= 0.001
-# check if in open chromatin for monocyte
-cd4t_top[['open_monocyte']] <- !is.na(cd4t_top[['openness_openness_monocyte']]) & cd4t_top[['openness_openness_monocyte']] >= 0.001
+# add information about if the variant is in open chromatin, set to none first
+qtl_output_all_snpsig[['in_open_chromatin']] <- 'none'
+# update where there is any openness
+qtl_output_all_snpsig[!is.na(qtl_output_all_snpsig[['openness_max']]) & qtl_output_all_snpsig[['openness_max']] >= 0.001, 'in_open_chromatin'] <- 'unmatched'
+# or if it matches the cell type
+qtl_output_all_snpsig[!is.na(qtl_output_all_snpsig[['openness_matching']]) & qtl_output_all_snpsig[['openness_matching']] >= 0.001, 'in_open_chromatin'] <- 'matched'
+# set levels
+qtl_output_all_snpsig[['in_open_chromatin']] <- factor(qtl_output_all_snpsig[['in_open_chromatin']], levels = c('none', 'unmatched', 'matched'))
+# now make this into a table per cell type
+qtl_output_all_snpsig_openatac_occurences <- data.frame(table(qtl_output_all_snpsig[, c('cell_type', 'in_open_chromatin')]))
+# also for just the top effects
+qtl_output_all_snpsig_openatac_occurences_leads <- data.frame(table(qtl_output_all_snpsig[qtl_output_all_snpsig[['is_top_variant']] == T, c('cell_type', 'in_open_chromatin')]))
+# order by chromatin state, so that when we plot them later, this is the order they occur in
+# qtl_output_all_snpsig_openatac_occurences[['in_open_chromatin']] <- factor(qtl_output_all_snpsig_openatac_occurences[['in_open_chromatin']], levels = c('none', 'unmatched', 'matched'))
+# qtl_output_all_snpsig_openatac_occurences_leads[['in_open_chromatin']] <- factor(qtl_output_all_snpsig_openatac_occurences_leads[['in_open_chromatin']], levels = c('none', 'unmatched', 'matched'))
+qtl_output_all_snpsig_openatac_occurences <- qtl_output_all_snpsig_openatac_occurences[order(qtl_output_all_snpsig_openatac_occurences[['in_open_chromatin']]), ]
+qtl_output_all_snpsig_openatac_occurences_leads <- qtl_output_all_snpsig_openatac_occurences_leads[order(qtl_output_all_snpsig_openatac_occurences_leads[['in_open_chromatin']]), ]
+# add annotation for cell type and chromatin status
+qtl_output_all_snpsig_openatac_occurences[['celltype_in_open_chromatin']] <- paste(qtl_output_all_snpsig_openatac_occurences[['cell_type']], qtl_output_all_snpsig_openatac_occurences[['in_open_chromatin']])
+qtl_output_all_snpsig_openatac_occurences_leads[['celltype_in_open_chromatin']] <- paste(qtl_output_all_snpsig_openatac_occurences_leads[['cell_type']], qtl_output_all_snpsig_openatac_occurences_leads[['in_open_chromatin']])
+# because we ordered by in_open_chromatin before, if we order based on the current order, the chromatin state with the cell type should follow the same order
+qtl_output_all_snpsig_openatac_occurences[['celltype_in_open_chromatin']] <- factor(qtl_output_all_snpsig_openatac_occurences[['celltype_in_open_chromatin']], levels = qtl_output_all_snpsig_openatac_occurences[['celltype_in_open_chromatin']])
+qtl_output_all_snpsig_openatac_occurences_leads[['celltype_in_open_chromatin']] <- factor(qtl_output_all_snpsig_openatac_occurences_leads[['celltype_in_open_chromatin']], levels = qtl_output_all_snpsig_openatac_occurences_leads[['celltype_in_open_chromatin']])
+# make these into plots
+p_all_variant_openatac_overlap <- ggplot(data = qtl_output_all_snpsig_openatac_occurences, mapping = aes(x = cell_type, y = Freq, fill = celltype_in_open_chromatin)) +
+  # barplots specifically
+  geom_bar(stat = 'identity', position = 'stack') +
+  # with manual colors
+  scale_fill_manual(values = get_color_coding_dict()) +
+  # labels
+  xlab('Cell type') + 
+  ylab('Number of variants') + 
+  ggtitle('Open chromatin state of eSNPs') + 
+  # add more whitespace
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+  # rotate the x axis ticks
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  # and set the label for the SCREEN annotation
+  labs(fill = "Open chromatin state")
+p_all_variant_openatac_overlap_lead <- ggplot(data = qtl_output_all_snpsig_openatac_occurences_leads, mapping = aes(x = cell_type, y = Freq, fill = celltype_in_open_chromatin)) +
+  # barplots specifically
+  geom_bar(stat = 'identity', position = 'stack') +
+  # with manual colors
+  scale_fill_manual(values = get_color_coding_dict()) +
+  # labels
+  xlab('Cell type') + 
+  ylab('Number of variants') + 
+  ggtitle('Open chromatin state of lead eSNPs') + 
+  # add more whitespace
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+  # rotate the x axis ticks
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  # and set the label for the SCREEN annotation
+  labs(fill = "Open chromatin state")
+
+
+
+# get the screen matches for each variant
+qtl_variants_all_screen_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/annotations/mo_qtl_variants_tested_screen_overlap.tsv.gz'
+qtl_variants_all_screen <- fread(qtl_variants_all_screen_loc, header = T, sep = '\t')
+# add the matching screen region to the variants
+qtl_output_all_snpsig[['screen_region']] <- qtl_variants_all_screen[match(qtl_output_all_snpsig[['snp_id']], qtl_variants_all_screen[['snp_id']]), ][['overlapping_feature']]
+# get the screen annotations as well
+screen_anno_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/encode_cres/v4/GRCh38-cCREs.bed'
+screen_anno <- fread(screen_anno_loc, header = F, sep = '\t')
+colnames(screen_anno) <- c('chromosome', 'start', 'end', 'id1', 'id2', 'type')
+# add name based on the location
+screen_anno[['signac_hg38']] <- paste(screen_anno[['chromosome']], screen_anno[['start']], screen_anno[['end']], sep = '-')
+# and add the type information onto the QTL output
+qtl_output_all_snpsig[['screen_annotation']] <- screen_anno[match(qtl_output_all_snpsig[['screen_region']], screen_anno[['signac_hg38']]), ][['type']]
+# make the NA for the annotations into 'none'
+qtl_output_all_snpsig[is.na(qtl_output_all_snpsig[['screen_annotation']]), 'screen_annotation'] <- 'none'
+# set levels
+qtl_output_all_snpsig[['screen_annotation']] <- factor(qtl_output_all_snpsig[['screen_annotation']], levels = c('none', setdiff(unique(qtl_output_all_snpsig[['screen_annotation']]), 'none')))
+# now make this into a table per cell type
+qtl_output_all_snpsig_screen_occurences <- data.frame(table(qtl_output_all_snpsig[, c('cell_type', 'screen_annotation')]))
+# also for just the top effects
+qtl_output_all_snpsig_screen_occurences_leads <- data.frame(table(qtl_output_all_snpsig[qtl_output_all_snpsig[['is_top_variant']] == T, c('cell_type', 'screen_annotation')]))
+# get colours for each category
+qtl_output_all_snpsig_screen_occurences_colours <- roycols::get_color_list(unique(qtl_output_all_snpsig_screen_occurences[['screen_annotation']]))
+# but make 'none' gray
+qtl_output_all_snpsig_screen_occurences_colours[['none']] <- 'gray'
+
+# make these into plots
+p_all_variant_screen_overlap <- ggplot(data = qtl_output_all_snpsig_screen_occurences, mapping = aes(x = cell_type, y = Freq, fill = screen_annotation)) +
+  # barplots specifically
+  geom_bar(stat = 'identity', position = 'stack') +
+  # with manual colors
+  scale_fill_manual(values = qtl_output_all_snpsig_screen_occurences_colours) +
+  # labels
+  xlab('Cell type') + 
+  ylab('Number of variants') + 
+  ggtitle('Categories of elements from ENCODE SCREEN v4\noverlapping with eSNPs') + 
+  # add more whitespace
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+  # rotate the x axis ticks
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  # and set the label for the SCREEN annotation
+  labs(fill = "SCREEN annotation")
+p_all_variant_screen_overlap_lead <- ggplot(data = qtl_output_all_snpsig_screen_occurences_leads, mapping = aes(x = cell_type, y = Freq, fill = screen_annotation)) +
+  # barplots specifically
+  geom_bar(stat = 'identity', position = 'stack') +
+  # with manual colors
+  scale_fill_manual(values = qtl_output_all_snpsig_screen_occurences_colours) +
+  # labels
+  xlab('Cell type') + 
+  ylab('Number of variants') + 
+  ggtitle('Categories of elements from ENCODE SCREEN v4\noverlapping with lead eSNPs') + 
+  # add more whitespace
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+  # rotate the x axis ticks
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  # and set the label for the SCREEN annotation
+  labs(fill = "SCREEN annotation")
