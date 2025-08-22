@@ -476,7 +476,7 @@ fexact
 #   1.336516 
 
 # determine number of samplings
-n_samplings <- 5
+n_samplings <- 20
 # now do a sampling per cell type
 samplings_cell_types <- list()
 # calculate the total samplings
@@ -506,3 +506,119 @@ for (cell_type in names(hybrid_output_list)) {
   # put that in the list
   samplings_cell_types[[cell_type]] <- random_scenic_samplings_in_vs_out
 }
+
+# initialize the number of tests
+tests_i_tot <- 0
+# store sampling result per cell type
+fishers_per_celltype <- list()
+# check each cell type
+for (cell_type in names(samplings_cell_types)) {
+  # do the statistics again
+  sampling_stats_in_vs_out <- list()
+  # grab the samplings for this cell type
+  random_scenic_samplings_in_vs_out <- samplings_cell_types[[cell_type]]
+  # now do each sampling
+  for (sampling_i in 1 : length(random_scenic_samplings_in_vs_out)) {
+    # increase sampling number
+    tests_i_tot <- tests_i_tot + 1
+    # show which iteration we are doing
+    progress(tests_i_tot, n_samplings_tot, progress.bar = TRUE)
+    # extract the random sampling
+    sampling_tbl <- random_scenic_samplings_in_vs_out[[sampling_i]]
+    # remove any empty values
+    sampling_tbl <- sampling_tbl[!is.na(sampling_tbl[['region']]), ]
+    # add region to gene
+    sampling_tbl[['r2g']] <- paste(sampling_tbl[['region']], sampling_tbl[['gene']])
+    # check which of the random samplings are in string
+    sampling_r_gene_in_hic <- length(unique(intersect(sampling_tbl[['r2g']], hic[['r2g']])))
+    sampling_r_gene_not_in_hic <- length(unique(sampling_tbl[['r2g']])) - sampling_r_gene_in_hic
+    # make contingency table
+    contingency_table <- matrix(
+      c(hybrid_region_gene_pairs_sig_in_hic_n, hybrid_region_gene_pairs_sig_not_in_hic_n,
+        sampling_r_gene_in_hic, sampling_r_gene_not_in_hic),
+      nrow = 2,
+      byrow = TRUE,
+      dimnames = list(
+        set = c("sig", "nonsig"),
+        hic = c("in_hic", "no_hic")
+      )
+    )
+    # do fisher-exact
+    fexact <- fisher.test(contingency_table)
+    # put in the list
+    sampling_stats_in_vs_out[[sampling_i]] <- fexact
+  }
+  # put all samplings of the cell type in the list
+  fishers_per_celltype[[cell_type]] <- sampling_stats_in_vs_out
+}
+# B
+# Fisher's Exact Test for Count Data
+# 
+# data:  contingency_table
+# p-value < 2.2e-16
+# alternative hypothesis: true odds ratio is not equal to 1
+# 95 percent confidence interval:
+#  2.653345 3.120660
+# sample estimates:
+# odds ratio 
+#   2.878637 
+# 
+# CD4T
+# Fisher's Exact Test for Count Data
+# 
+# data:  contingency_table
+# p-value < 2.2e-16
+# alternative hypothesis: true odds ratio is not equal to 1
+# 95 percent confidence interval:
+#   2.709919 3.189095
+# sample estimates:
+#   odds ratio 
+# 2.940741 
+# 
+# CD8T
+# Fisher's Exact Test for Count Data
+# 
+# data:  contingency_table
+# p-value < 2.2e-16
+# alternative hypothesis: true odds ratio is not equal to 1
+# 95 percent confidence interval:
+#  2.564364 3.014605
+# sample estimates:
+# odds ratio 
+#   2.781406 
+# 
+# DC
+# Fisher's Exact Test for Count Data
+# 
+# data:  contingency_table
+# p-value < 2.2e-16
+# alternative hypothesis: true odds ratio is not equal to 1
+# 95 percent confidence interval:
+#   2.648446 3.114993
+# sample estimates:
+#   odds ratio 
+# 2.873302 
+# 
+# monocyte
+# Fisher's Exact Test for Count Data
+# 
+# data:  contingency_table
+# p-value < 2.2e-16
+# alternative hypothesis: true odds ratio is not equal to 1
+# 95 percent confidence interval:
+#  2.593313 3.049023
+# sample estimates:
+# odds ratio 
+#   2.813013 
+# 
+# NK
+# Fisher's Exact Test for Count Data
+# 
+# data:  contingency_table
+# p-value < 2.2e-16
+# alternative hypothesis: true odds ratio is not equal to 1
+# 95 percent confidence interval:
+#   2.667941 3.138627
+# sample estimates:
+#   odds ratio 
+# 2.894757 
