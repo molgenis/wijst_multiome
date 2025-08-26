@@ -439,3 +439,14 @@ for (sampling_i in 1 : length(random_scenic_samplings_in_vs_out)) {
   # put in the list
   sampling_stats_in_vs_out[[sampling_i]] <- fexact
 }
+
+# Fisher's Exact Test for Count Data
+# 
+# data:  contingency_table
+# p-value < 2.2e-16
+# alternative hypothesis: true odds ratio is not equal to 1
+# 95 percent confidence interval:
+#  2.505260 2.806209
+# sample estimates:
+# odds ratio 
+#   2.651049 
