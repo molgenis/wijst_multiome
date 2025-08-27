@@ -977,6 +977,40 @@ get_all_annotations <- function(base_loc, metadata_file='inflammation_final/iqtl
   return(ct_list)
 }
 
+
+qtl_sumstats_to_table <- function(sumstats_per_celltype, qtl_column='qtl', significance_column_replicating='mo_significant', significance_column_replicating_in='nc2022_significant', direction_column_replicating='mo_zscore', direction_column_replicating_in='nc2022_zscore_signed') {
+  # save each in a list first
+  summary_per_celltype <- list()
+  # check each cell type
+  for (cell_type in names(sumstats_per_celltype)) {
+    # extract this cell type
+    sumstats_celltype <- sumstats_per_celltype[[cell_type]]
+    # get the total
+    n_tested <- nrow(sumstats_celltype)
+    # get how many significant in both
+    n_sig_both <- nrow(sumstats_celltype[sumstats_celltype[[significance_column_replicating]] == T & sumstats_celltype[[significance_column_replicating_in]] == T, ])
+    # and how many are also in the same direction
+    n_sig_both_and_direction <- nrow(sumstats_celltype[sumstats_celltype[[significance_column_replicating]] == T & 
+                                      sumstats_celltype[[significance_column_replicating_in]] == T &
+                                      sign(sumstats_celltype[[direction_column_replicating]]) == sign(sumstats_celltype[[direction_column_replicating_in]]), ])
+    # get the real numbers we need
+    n_only_tested <- n_tested - n_sig_both
+    n_replicate_right_direction <- n_sig_both_and_direction
+    n_replicate_wrong_direction <- n_sig_both - n_replicate_right_direction
+    # put into dataframe
+    summary_celltype <- data.frame(
+      'cell_type' = rep(cell_type, times = 3), 
+      'status' = c('only_tested', 'replicates_right', 'replicates_wrong'), 
+      'number' = c(n_only_tested, n_replicate_right_direction, n_replicate_wrong_direction)
+    )
+    # put in the list
+    summary_per_celltype[[cell_type]] <- summary_celltype
+  }
+  # merge all cell types
+  summaries_all <- do.call('rbind', summary_per_celltype)
+  return(summaries_all)
+}
+
 ```
 
 ```{r path_setup, include=FALSE}
@@ -990,6 +1024,7 @@ knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 ieqtl_output_combined_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/output/ut_and_24hca_significant/L1/'
 # same for OneK1K, the one to compare against
 nc2022_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/replication/output/nc2022/ut_and_24hca_significant/24hCA/'
+nc2022_allcond_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/replication/output/nc2022/ut_and_24hca_significant/24h/'
 
 ```
 
@@ -1036,6 +1071,8 @@ knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 # create snp metadata files
 mo_base_effects <- get_all_annotations(ieqtl_output_combined_loc)
 nc2022_base_effects <- get_all_annotations(nc2022_loc, metadata_file = 'condition_coded/iqtl_results_all.txt.gz')
+nc2022_allcond_base_effects <- get_all_annotations(nc2022_allcond_loc, metadata_file = 'condition_coded/iqtl_results_all.txt.gz')
+
 
 ```
 
@@ -1084,7 +1121,7 @@ mono_combined_top_eqtl_nc2022 <- mono_combined_top_eqtl_nc2022[mono_combined_top
 # then redo the multiple testing correction on the
 mono_combined_top_eqtl_nc2022[['BH']] <- p.adjust(mono_combined_top_eqtl_nc2022[['nc2022_p']], method = 'BH')
 # and use that for significance
-mono_combined_top_eqtl_nc2022[['nc2022_significant']] <- mono_combined_top_eqtl_nc2022[['nc2022_p']] < 0.05
+mono_combined_top_eqtl_nc2022[['nc2022_significant']] <- mono_combined_top_eqtl_nc2022[['BH']] < 0.05
 
 
 # get the minimal significant z for nc2022
@@ -1160,6 +1197,8 @@ for (ct in names(mo_vs_nc2022_ieqtls)) {
   ct_table <- mo_vs_nc2022_ieqtls[[ct]]
   # add BH correction for the nc2022 ieqtls, as only those we are trying to replicate
   ct_table[['nc2022_bh']] <- p.adjust(ct_table[['nc2022_p']], method = 'BH')
+  # and say if it was significant at that level
+  ct_table[['nc2022_bh_significant']] <- ct_table[['nc2022_bh']] < 0.05
   # put back into list
   mo_vs_nc2022_ieqtls[[ct]] <- ct_table
 }
@@ -1256,5 +1295,98 @@ for (ct in names(mo_vs_nc2022_ieqtls)) {
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 mo_vs_nc2022_stats_snplevel <- get_stats_qtl_matches(mo_vs_nc2022_ieqtls, replicating_name = 'mo', replicating_in_name = 'nc2022', se_column_replicating = 'se_variant', se_column_replicating_in = 'se_variant', beta_column_replicating = 'beta_variant',  beta_column_replicating_in = 'beta_variant', score_column_replicating = 'z_variant', score_column_replicating_in = 'zscore_variant_signed', significance_column_replicating_in_emperical = 'p_variant_dummy', significance_column_replicating_emperical = 'p_variant_dummy', significance_column_replicating_in_nominal = 'p_variant_dummy', significance_column_replicating_nominal = 'p_variant_dummy')
+
+```
+
+```{r summary_statistics, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+mo_vs_nc2022_replication_summary <- qtl_sumstats_to_table(mo_vs_nc2022_ieqtls, significance_column_replicating_in = 'nc2022_bh_significant')
+
+```
+
+```{r get_condition_overlap, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# and vs combined
+mo_vs_nc2022_allcond_ieqtls <- match_qtl_outputs_all(ieqtl_output_combined_loc, 
+                                             nc2022_allcond_loc, replicating_name='mo', 
+                                             replicating_in_name='nc2022',
+                                             replicating_qtl_prepend='inflammation_final/iqtl_results_all_eigenmt', 
+                                             replicating_qtl_append='.tsv.gz', 
+                                             replicating_qtl_pval_column='p_value', 
+                                             replicating_qtl_feature_column='feature', 
+                                             replicating_qtl_variant_column='snp_id', 
+                                             replicating_qtl_fdr_column='feature_q_value', 
+                                             replicating_qtl_beta_column='beta', 
+                                             replicating_qtl_se_column='beta_se', 
+                                             replicating_qtl_aa_column=NULL, 
+                                             replicating_in_qtl_prepend='condition_coded/iqtl_results_all_eigenmt', 
+                                             replicating_in_qtl_append='.tsv.gz', 
+                                             replicating_in_qtl_pval_column='p_value', 
+                                             replicating_in_qtl_feature_column='feature', 
+                                             replicating_in_qtl_variant_column='snp_id', 
+                                             replicating_in_qtl_fdr_column='feature_q_value', 
+                                             replicating_in_qtl_beta_column='beta', 
+                                             replicating_in_qtl_se_column='beta_se', 
+                                             replicating_in_qtl_aa_column=NULL, 
+                                              )
+
+```
+
+```{r add_snp_metadata_allcond, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# create snp metadata files
+for (ct in names(mo_vs_nc2022_allcond_ieqtls)) {
+  # get the table
+  ct_table <- mo_vs_nc2022_allcond_ieqtls[[ct]]
+  # get the snp metadata for nc2022
+  ct_nc2022_snps <- nc2022_snp_metadata[[ct]]
+  # get the snp metadata for the multiome one
+  ct_mo_snps <- mo_snp_metadata[[ct]]
+  # add the assessed allele for mo
+  ct_table[['mo_assessed_allele']] <- ct_mo_snps[match(ct_table[['variant']], ct_mo_snps[['snp_id']])][['assessed_allele']]
+  # and for NC2022
+  ct_table[['nc2022_assessed_allele']] <- ct_nc2022_snps[match(ct_table[['variant']], ct_nc2022_snps[['snp_id']])][['assessed_allele']]
+  # get positions where it doesn't match
+  aa_mismatch <- ct_table[['mo_assessed_allele']] != ct_table[['nc2022_assessed_allele']]
+  # extract original nc2022 z score
+  nc2022_zscore <- ct_table[['nc2022_zscore']]
+  # and beta
+  nc2022_beta <- ct_table[['nc2022_beta']]
+  # flip directions where aa mismatches
+  nc2022_zscore[aa_mismatch] <- -1 *nc2022_zscore[aa_mismatch]
+  nc2022_beta[aa_mismatch] <- -1 *nc2022_beta[aa_mismatch]
+  # and add these columns back
+  ct_table[['nc2022_zscore_signed']] <- nc2022_zscore
+  ct_table[['nc2022_beta_signed']] <- nc2022_beta
+  # and put back into the list
+  mo_vs_nc2022_allcond_ieqtls[[ct]] <- ct_table
+}
+
+```
+
+```{r add_bh_correction_allcond, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# check once again each cell type
+for (ct in names(mo_vs_nc2022_allcond_ieqtls)) {
+  # get the table
+  ct_table <- mo_vs_nc2022_allcond_ieqtls[[ct]]
+  # add BH correction for the nc2022 ieqtls, as only those we are trying to replicate
+  ct_table[['nc2022_bh']] <- p.adjust(ct_table[['nc2022_p']], method = 'BH')
+  # and say if it was significant at that level
+  ct_table[['nc2022_bh_significant']] <- ct_table[['nc2022_bh']] < 0.05
+  # put back into list
+  mo_vs_nc2022_allcond_ieqtls[[ct]] <- ct_table
+}
+
+```
+
+```{r summary_statistics, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+mo_vs_nc2022_allcond_replication_summary <- qtl_sumstats_to_table(mo_vs_nc2022_allcond_ieqtls, significance_column_replicating_in = 'nc2022_bh_significant')
 
 ```
