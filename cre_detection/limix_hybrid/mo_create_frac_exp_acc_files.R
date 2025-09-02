@@ -74,7 +74,7 @@ fracs_acc_prepend <- ''
 fracs_acc_append <- '.tsv.gz'
 
 # these are the cell types to use
-cell_types <- c('B')
+cell_types <- c('B', 'CD4T', 'CD8T', 'DC', 'monocyte', 'NK')
 
 # check each cell type
 for (cell_type in cell_types) {
@@ -86,13 +86,12 @@ for (cell_type in cell_types) {
   object <- add_binarized_assay(object)
   # add the binarized expression assay
   object <- add_binarized_assay(object, assay_to_binarize = 'RNA', layer_to_binarize = 'counts', assay_to_add = 'binexp')
-  # we can now calculate the average expression, which will be the fraction expressed, because we made every value >1 into 1
-  frac_nonzero <- AverageExpression(object, assays = c('binpeaks', 'binexp'), group.by = 'orig.ident')
   
-  # extract expression
-  frac_exp_nonzero <- frac_nonzero[['binexp']]
+  
+  # we can now calculate the average expression, which will be the fraction expressed, because we made every value >1 into 1
+  frac_exp_nonzero <- Matrix::rowMeans(object@assays$binexp@counts)
   # make into the format we expect
-  frac_exp_nonzero <- data.frame('feature' = rownames(frac_exp_nonzero), 'frac_exp' = frac_exp_nonzero[, 1])
+  frac_exp_nonzero <- data.frame('feature' = names(frac_exp_nonzero), 'frac_exp' = as.vector(frac_exp_nonzero))
   # order by feature
   frac_exp_nonzero <- frac_exp_nonzero[order(frac_exp_nonzero[['feature']]), ]
   # get the location of where to store
@@ -102,10 +101,10 @@ for (cell_type in cell_types) {
   # and make a checksum
   mdfiver::create_md5_for_file(fracs_exp_loc_full)
   
-  # extract accessibility
-  frac_acc_nonzero <- frac_nonzero[['binpeaks']]
+  # we can now calculate the average accessibility, which will be the fraction expressed, because we made every value >1 into 1
+  frac_acc_nonzero <- Matrix::rowMeans(object@assays$binpeaks@counts)
   # make into the format we accect
-  frac_acc_nonzero <- data.frame('feature' = rownames(frac_acc_nonzero), 'frac_acc' = frac_acc_nonzero[, 1])
+  frac_acc_nonzero <- data.frame('feature' = names(frac_acc_nonzero), 'frac_acc' = as.vector(frac_acc_nonzero))
   # order by feature
   frac_acc_nonzero <- frac_acc_nonzero[order(frac_acc_nonzero[['feature']]), ]
   # get the location of where to store
@@ -114,4 +113,7 @@ for (cell_type in cell_types) {
   write.table(frac_acc_nonzero, gzfile(fracs_acc_loc_full), row.names = F, col.names = T, sep = '\t', quote = F)
   # and make a checksum
   mdfiver::create_md5_for_file(fracs_acc_loc_full)
+  
+  # clear memory
+  rm(object)
 }
