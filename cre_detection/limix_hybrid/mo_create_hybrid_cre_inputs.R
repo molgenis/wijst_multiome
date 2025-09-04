@@ -5,8 +5,8 @@
 # Function: create single-cell LIMIX input files
 # Example: 
 # Rscript mo_create_hybrid_cre_inputs.R \
-# --in /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/seurat_preprocess_samples/objects/mo_multimodal_b_1_80_20240521.rds \
-# --out /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/B/ \
+# --in /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/seurat_preprocess_samples/objects/mo_multimodal_monocyte_1_80_20240521.rds \
+# --out /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/monocyte/ \
 # --confinement /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eQTA/featureVariantFile.w150k.filtered0.0001_cts.txt \
 # --gene_annotation_file /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/annotations/cellranger_arc_gene_annotations.tsv.gz \
 # --donor_annotation_column sample_final
@@ -240,6 +240,8 @@ option_list <- list(
   make_option(c("-g", "--gene_annotation_file"), type="character", default=NULL, 
               help="gene annotation file", metavar="character"), 
   make_option(c("-s", "--donor_annotation_column"), type="character", default='sample_final', 
+              help="gene annotation file", metavar="character"), 
+  make_option(c("-t", "--chromosomes"), type="character", default=NULL, 
               help="gene annotation file", metavar="character")
 )
 
@@ -291,6 +293,8 @@ if (debug) {
   }
   # donor annotation column
   donor_annotation_column <- opt[['donor_annotation_column']]
+  # the chromosomes supplied
+  chroms_supplied <- opt[['chromosomes']]
 }
 
 # read that file
@@ -316,7 +320,17 @@ ct_object <- readRDS(ct_object_loc)
 # add pflogpf
 ct_object <- normalize_mj(ct_object)
 
-for (i in 1:22) {
+# check which chroms to do
+chroms_to_do <- 1:22
+# if a parameter was supplied let's do that
+if (!is.null(chroms_supplied)) {
+  # split by comma
+  chroms_supplied_split <- strsplit(chroms_supplied, ',')[[1]]
+  # and make integer
+  chroms_to_do <- as.numeric(chroms_supplied_split)
+}
+
+for (i in chroms_to_do) {
   # write the slices
   write_matrix_slices(ct_object, output_loc, paste0('chr', i), gene_anno, region_to_gene_confinement)
 }
