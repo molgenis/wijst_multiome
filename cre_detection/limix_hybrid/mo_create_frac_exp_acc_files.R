@@ -117,3 +117,89 @@ for (cell_type in cell_types) {
   # clear memory
   rm(object)
 }
+
+# check each cell type
+for (cell_type in cell_types) {
+  # past the path together
+  object_full_loc <- paste0(objects_loc, '/', object_prepend, tolower(cell_type), object_append)
+  # read the object
+  object <- readRDS(object_full_loc)
+  # add the binarized chromatin assay
+  object <- add_binarized_assay(object)
+  # add the binarized expression assay
+  object <- add_binarized_assay(object, assay_to_binarize = 'RNA', layer_to_binarize = 'counts', assay_to_add = 'binexp')
+  # extract the expression matrix
+  object_exp <- object@assays$binexp@counts
+  # extract the accessiblity matrix
+  object_acc <- object@assays$binpeaks@counts
+  # add sample and lane
+  object@meta.data[['sample_lane']] <- paste(object@meta.data[['sample_final']], object@meta.data[['lane']], sep = ';;')
+  # extract the samples 
+  samples <- unique(object@meta.data[['sample_lane']])
+  # extract the features
+  exp_features <- rownames(object_exp)
+  # extract the features
+  acc_features <- rownames(object_acc)
+  # save binary matrix per sample
+  frac_exp_nonzero_psample <- list()
+  frac_acc_nonzero_psample <- list()
+  # add those features as a column
+  frac_exp_nonzero_psample[['feature']] <- data.frame('feature' = exp_features)
+  frac_acc_nonzero_psample[['feature']] <- data.frame('feature' = acc_features)
+  # check each sample
+  for (sample_mtdt in samples) {
+    # get indices where it is this sample
+    sample_this_sample <- object@meta.data[['sample_lane']] == sample_mtdt
+    
+    # subset the matrix
+    object_exp_sample <- object_exp[, sample_this_sample]
+    # now the fraction of nonzero
+    frac_exp_nonzero <- NULL
+    if (!is.null(dim(object_exp_sample))) {
+      frac_exp_nonzero <- Matrix::rowMeans(object_exp_sample)
+    }
+    else {
+      frac_exp_nonzero <- object_exp_sample
+    }
+    # make into df
+    frac_exp_nonzero <- data.frame(x = as.vector(unlist(frac_exp_nonzero)))
+    # set the column to be the sample
+    colnames(frac_exp_nonzero) <- c(sample_mtdt)
+    # and add to the list
+    frac_exp_nonzero_psample[[sample_mtdt]] <- frac_exp_nonzero
+    
+    # subset the matrix
+    object_acc_sample <- object_acc[, sample_this_sample]
+    frac_acc_nonzero <- NULL
+    if (!is.null(dim(object_acc_sample))) {
+      frac_acc_nonzero <- Matrix::rowMeans(object_acc_sample)
+    }
+    else {
+      frac_acc_nonzero <- object_acc_sample
+    }
+    # make into df
+    frac_acc_nonzero <- data.frame(x = as.vector(unlist(frac_acc_nonzero)))
+    # set the column to be the sample
+    colnames(frac_acc_nonzero) <- c(sample_mtdt)
+    # and add to the list
+    frac_acc_nonzero_psample[[sample_mtdt]] <- frac_acc_nonzero
+  }
+  
+  # merge all the dfs in the list
+  frac_exp_nonzero_asample <- do.call('cbind', frac_exp_nonzero_psample)
+  frac_acc_nonzero_asample <- do.call('cbind', frac_acc_nonzero_psample)
+  
+  # get the location of where to store
+  fracs_exp_asample_loc_full <- paste0(fracs_exp_loc, '/', fracs_exp_prepend, cell_type, '_persample', fracs_exp_append)
+  # write the file
+  write.table(frac_exp_nonzero_asample, gzfile(fracs_exp_asample_loc_full), row.names = F, col.names = T, sep = '\t', quote = F)
+  # and make a checksum
+  mdfiver::create_md5_for_file(fracs_exp_asample_loc_full)
+  
+  # get the location of where to store
+  fracs_acc_asample_loc_full <- paste0(fracs_acc_loc, '/', fracs_acc_prepend, cell_type, '_persample', fracs_acc_append)
+  # write the file
+  write.table(frac_acc_nonzero_asample, gzfile(fracs_acc_asample_loc_full), row.names = F, col.names = T, sep = '\t', quote = F)
+  # and make a checksum
+  mdfiver::create_md5_for_file(fracs_acc_asample_loc_full)
+}
