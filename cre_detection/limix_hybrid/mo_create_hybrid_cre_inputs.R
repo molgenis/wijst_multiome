@@ -181,6 +181,10 @@ write_matrix_slices <- function(multimodal_object, output_loc, chromosome, gene_
     # and the largest
     chunk_max <- max(c(gene_annos_chunk[[gene_anno_start_column]], gene_annos_chunk[[gene_anno_end_column]]))
     
+    # get how many genes and regions we have
+    n_genes <- length(intersect(chunk_genes, rownames(expression)))
+    n_regions <- length(intersect(chunk_regions, rownames(accessibility)))
+    
     # subset to these genes
     assay_genes <- expression[chunk_genes[chunk_genes %in% rownames(expression)], ]
     # and regions
@@ -190,6 +194,25 @@ write_matrix_slices <- function(multimodal_object, output_loc, chromosome, gene_
     genes_ns <- as.matrix(assay_genes)
     # and the accessibility
     regions_ns <- as.matrix(assay_regions)
+    
+    # if there was only one gene, we need to modify the matrix, as R will transpose it
+    if (n_genes == 1) {
+      # get sample names
+      genes_samples <- colnames(expression)
+      # so we need to transpose it back
+      genes_ns <- matrix(genes_ns, nrow = 1, dimnames = list(c(intersect(chunk_genes, rownames(expression))), genes_samples))
+      # make sure it is numeric
+      #genes_ns <- as.numeric(genes_ns)
+    }
+    # if there was only one region, we need to modify the matrix, as R will transpose it
+    if (n_regions == 1) {
+      # get the sample naems
+      region_samples <- colnames(accessibility)
+      # so we need to transpose it back
+      regions_ns <- matrix(regions_ns, nrow = 1, dimnames = list(c(intersect(chunk_regions, rownames(accessibility))), region_samples))
+      # make sure it is numeric
+      #regions_ns <- as.numeric(regions_ns)
+    }
     
     # create full path of the matrix
     output_directory_chunk <- paste0(output_loc, '/', chromosome, '-', chunk_min, '-', chunk_max, '/')
