@@ -79,17 +79,11 @@ def create_md5_file(input_file):
 ##############################
 
 # location to store the object
-pycistopic_object_wimputations_loc = '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/pycistopic/objects/merged_major_and_minor_celltypes_120topics_imputed.pkl'
-pycistopic_object_wimputations_jl_loc = '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/pycistopic/objects/merged_major_and_minor_celltypes_120topics_imputed.joblib'
+pycistopic_object_loc = '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/pycistopic/objects/merged_major_and_minor_celltypes_120topics.pkl'
 
 # save the object
-#with open(pycistopic_object_wimputations_loc, 'wb') as f:
-#   pickle.dump(imputed_acc_obj, f)
-joblib.dump(imputed_acc_obj, pycistopic_object_wimputations_jl_loc)
-
-# make a checksum
-#create_md5_file(pycistopic_object_wimputations_loc)
-create_md5_file(pycistopic_object_wimputations_jl_loc)
+with open(pycistopic_object_loc, 'rb') as f:
+   cistopic_obj = pickle.load(f)
 
 
 ######################
@@ -110,14 +104,10 @@ imputed_acc_obj = impute_accessibility(
 ###########################
 
 # location to store the object
-pycistopic_object_wimputations_loc = '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/pycistopic/objects/merged_major_and_minor_celltypes_120topics_imputed.pkl'
 pycistopic_object_wimputations_jl_loc = '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/pycistopic/objects/merged_major_and_minor_celltypes_120topics_imputed_jl.pkl'
 
 # save the object
-# with open(pycistopic_object_wimputations_loc, 'wb') as f:
-#    pickle.dump(imputed_acc_obj, f)
-
+joblib.dump(imputed_acc_obj, pycistopic_object_wimputations_jl_loc)
 
 # make a checksum
-# create_md5_file(pycistopic_object_wimputations_loc)
 create_md5_file(pycistopic_object_wimputations_jl_loc)
