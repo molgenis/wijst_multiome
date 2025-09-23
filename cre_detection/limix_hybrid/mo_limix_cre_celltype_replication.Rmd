@@ -722,8 +722,14 @@ get_stats_qtl_matches <- function(table_per_match, name_split='_vs_',
     # if they are the same, we don't have to do much
     if (replicating_name == replicating_in_name) {
       # we check how many are significant
-      n_sig <- nrow(replication_table[
-          replication_table[[paste0(replicating_name, '_', significance_column_replicating_emperical, '.x')]] < significance_cutoff_replicating_emperical])
+      n_sig <- NULL
+      if (isTRUE(significance_cutoff_replicating_emperical)) {
+        n_sig <- nrow(replication_table[
+          replication_table[[paste0(replicating_name, '_', significance_column_replicating_emperical, '.x')]] == T, ])
+      } else {
+        n_sig <- nrow(replication_table[
+          replication_table[[paste0(replicating_name, '_', significance_column_replicating_emperical, '.x')]] < significance_cutoff_replicating_emperical, ])
+      }
       # and then all of these will be the same
       replicated_emperical_emperical_in_replicating <- n_sig
       replicated_emperical_nominal_in_replicating <- n_sig
@@ -743,8 +749,16 @@ get_stats_qtl_matches <- function(table_per_match, name_split='_vs_',
     }
     else {
       # check how many significant in replicating, are present in the other
-      replicated_emperical_tested_in_replicating <- nrow(replication_table[
-          replication_table[[paste(replicating_name, significance_column_replicating_emperical, sep = '_')]] < significance_cutoff_replicating_emperical])
+      replicated_emperical_tested_in_replicating <- NULL
+      # using the boolean value in the column if it was a boolean
+      if (isTRUE(significance_cutoff_replicating_emperical)) {
+        replicated_emperical_tested_in_replicating <- nrow(replication_table[
+          replication_table[[paste(replicating_name, significance_column_replicating_emperical, sep = '_')]] == T, ])
+      } else {
+        # otherwise use it as a cutoff
+        replicated_emperical_tested_in_replicating <- nrow(replication_table[
+          replication_table[[paste(replicating_name, significance_column_replicating_emperical, sep = '_')]] < significance_cutoff_replicating_emperical, ])
+      }
       
       # subset to emperical only in where we are replicating
       replication_table_emp_to_all <- NULL
@@ -1360,6 +1374,66 @@ cre_celltype_stat_p
 
 ```
 
+```{r cre_replication_plot, include=TRUE, fig.width=12, fig.height=12}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# check replication in caQTLs across cell types
+cre_celltype_stat_p <- plot_replication_stats(cre_celltype_stats, mid_value = 0.5, comparing_value_to_text=list('n_sig_both' = 'N sig both: ', 'n_sig_tested' = 'N test both: ', 'rb_emp_all' = 'rb: '), colour_column = 'rb_emp_all', category_plot_order = c('B', 'CD4+ T', 'CD8+ T', 'NK', 'DC', 'Monocyte'), text_size = 4) +
+  xlab('Cell type replicating') +
+  ylab('Cell type replicating in') +
+  ggtitle('Replication of CRE-targetted genes across cell types') +
+  labs(fill="Rb") +
+  theme(
+    # X label font size
+    axis.title.x = element_text(size = 20), 
+    # Y label font size
+    axis.title.y = element_text(size = 20), 
+    # X tick font size
+    axis.text.x = element_text(size = 16), 
+    # Y tick font size
+    axis.text.y = element_text(size = 16), 
+    # title size
+    title = element_text(size = 24)
+  )
+
+# save the figure
+ggsave('~/plots/mo_sccre_celltype_replication.pdf', plot = cre_celltype_stat_p, width = 12, height = 12)
+
+# display the figure
+cre_celltype_stat_p
+
+```
+
+```{r cre_replication_plot_con, include=TRUE, fig.width=12, fig.height=12}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# check replication in caQTLs across cell types
+cre_celltype_stat_p_cor <- plot_replication_stats(cre_celltype_stats, mid_value = 0.5, comparing_value_to_text=list('n_sig_both' = 'N sig both: ', 'n_sig_tested' = 'N test both: ', 'cor_emp_nom' = 'nom rep cor: '), colour_column = 'cor_emp_nom', category_plot_order = c('B', 'CD4+ T', 'CD8+ T', 'NK', 'DC', 'Monocyte'), text_size = 4) +
+  xlab('Cell type replicating') +
+  ylab('Cell type replicating in') +
+  ggtitle('Replication of CREs across cell types') +
+  labs(fill="Rho") +
+  theme(
+    # X label font size
+    axis.title.x = element_text(size = 20), 
+    # Y label font size
+    axis.title.y = element_text(size = 20), 
+    # X tick font size
+    axis.text.x = element_text(size = 16), 
+    # Y tick font size
+    axis.text.y = element_text(size = 16), 
+    # title size
+    title = element_text(size = 24)
+  )
+
+# save the figure
+ggsave('~/plots/mo_sccre_celltype_replication_cor.pdf', plot = cre_celltype_stat_p_cor, width = 12, height = 12)
+
+# display the figure
+cre_celltype_stat_p_cor
+
+```
+
 ```{r cre_replication_plot_con, include=TRUE, fig.width=12, fig.height=12}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
@@ -1466,8 +1540,9 @@ for (ct in unique(hybrid_output[['cell_type']])) {
   cres_celltype <- hybrid_output[hybrid_output[['cell_type']] == ct, ]
   # subset to what is significant
   cres_celltype_sig <- cres_celltype[
-    cres_celltype[['feature_q_value']] < 0.05 &
-    cres_celltype[['p_value']] <= cres_celltype[['pval_nominal_threshold_global']] & 
+    # cres_celltype[['feature_q_value']] < 0.05 &
+    # cres_celltype[['p_value']] <= cres_celltype[['pval_nominal_threshold_global']] & 
+    cres_celltype[['global_significance']] == T &
     cres_celltype[['distance']] > 0, 
   ]
   # get the qtls from that
