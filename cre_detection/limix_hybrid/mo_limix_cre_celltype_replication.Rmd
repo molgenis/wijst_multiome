@@ -516,7 +516,12 @@ match_qtl_outputs <- function(replicating_qtl_folder, replicating_in_qtl_folder,
     # add the qtl column
     replicating_qtl_chromosome_top[['qtl']] <- paste0(replicating_qtl_chromosome_top[[replicating_qtl_feature_column]], '_', replicating_qtl_chromosome_top[[replicating_qtl_variant_column]])
     # and significance
-    replicating_qtl_chromosome_top[['significant']] <- replicating_qtl_chromosome_top[[replicating_qtl_fdr_column]] < replicating_qtl_fdr_cutoff & replicating_qtl_chromosome_top[[replicating_qtl_pval_column]] < 0.05
+    if (isTRUE(replicating_qtl_fdr_cutoff)) {
+      # if we have a T value instead of a number, we'll just use that instead of a cutoff value
+      replicating_qtl_chromosome_top[['significant']] <- replicating_qtl_chromosome_top[[replicating_qtl_fdr_column]]
+    } else {
+      replicating_qtl_chromosome_top[['significant']] <- replicating_qtl_chromosome_top[[replicating_qtl_fdr_column]] < replicating_qtl_fdr_cutoff & replicating_qtl_chromosome_top[[replicating_qtl_pval_column]] < 0.05
+    }
     # calculate the Z
     replicating_qtl_chromosome_top[['zscore']] <- replicating_qtl_chromosome_top[[replicating_qtl_beta_column]] / replicating_qtl_chromosome_top[[replicating_qtl_se_column]]
     # subset to the column we want
@@ -533,7 +538,12 @@ match_qtl_outputs <- function(replicating_qtl_folder, replicating_in_qtl_folder,
     # and keep only matching QTLs from our UT output
     replicating_in_qtl_chromosome <- replicating_in_qtl_chromosome[replicating_in_qtl_chromosome[['qtl']] %in% replicating_qtl_chromosome_top[['qtl']], ]
     # and significance
-    replicating_in_qtl_chromosome[['significant']] <- replicating_in_qtl_chromosome[[replicating_in_qtl_fdr_column]] < replicating_in_qtl_fdr_cutoff & replicating_in_qtl_chromosome[[replicating_in_qtl_pval_column]] < 0.05
+    if (isTRUE(replicating_in_qtl_fdr_cutoff)) {
+      # if the value is a straight-up T, then we use it as-is without using a cutoff value
+      replicating_in_qtl_chromosome[['significant']] <- replicating_in_qtl_chromosome[[replicating_in_qtl_fdr_column]]
+    } else {
+      replicating_in_qtl_chromosome[['significant']] <- replicating_in_qtl_chromosome[[replicating_in_qtl_fdr_column]] < replicating_in_qtl_fdr_cutoff & replicating_in_qtl_chromosome[[replicating_in_qtl_pval_column]] < 0.05
+    }
     # calculate the Z
     replicating_in_qtl_chromosome[['zscore']] <- replicating_in_qtl_chromosome[[replicating_in_qtl_beta_column]] / replicating_in_qtl_chromosome[[replicating_in_qtl_se_column]]
     # subset to the column we want
@@ -589,7 +599,7 @@ match_qtl_outputs_each <- function(qtl_folder, name='replicating', in_name='repl
       # check overlaps
       folder_vs_folder <- match_qtl_outputs(replicating_qtl_folder, replicating_in_qtl_folder, replicating_name=folder, replicating_in_name=folder2, 
                               replicating_qtl_prepend=qtl_prepend, replicating_qtl_append=qtl_append, replicating_qtl_pval_column=qtl_pval_column, replicating_qtl_feature_column=qtl_feature_column, replicating_qtl_variant_column=qtl_variant_column, replicating_qtl_fdr_column=qtl_fdr_column, replicating_qtl_beta_column=qtl_beta_column, replicating_qtl_se_column=qtl_se_column, replicating_qtl_aa_column=qtl_aa_column, replicating_qtl_fdr_cutoff=qtl_fdr_cutoff, 
-                              replicating_in_qtl_prepend=qtl_prepend, replicating_in_qtl_append=qtl_append, replicating_in_qtl_pval_column=qtl_pval_column, replicating_in_qtl_feature_column=qtl_feature_column, replicating_in_qtl_variant_column=qtl_variant_column, replicating_in_qtl_fdr_column=qtl_fdr_column, replicating_in_qtl_beta_column=qtl_beta_column, replicating_in_qtl_se_column=qtl_se_column, replicating_in_qtl_aa_column=qtl_aa_column, replicating_in_qtl_fdr_cutoff=1.1, nosplit=nosplit)
+                              replicating_in_qtl_prepend=qtl_prepend, replicating_in_qtl_append=qtl_append, replicating_in_qtl_pval_column=qtl_pval_column, replicating_in_qtl_feature_column=qtl_feature_column, replicating_in_qtl_variant_column=qtl_variant_column, replicating_in_qtl_fdr_column=qtl_fdr_column, replicating_in_qtl_beta_column=qtl_beta_column, replicating_in_qtl_se_column=qtl_se_column, replicating_in_qtl_aa_column=qtl_aa_column, replicating_in_qtl_fdr_cutoff=qtl_fdr_cutoff, nosplit=nosplit)
       # add to the list
       folder_vs_folder_all[[paste(folder, folder2, sep = '_vs_')]] <- folder_vs_folder
     }
@@ -705,6 +715,10 @@ get_stats_qtl_matches <- function(table_per_match, name_split='_vs_',
     nominal_to_nominal_concordance <- NA
     emperical_to_nominal_concordance <- NA
     emperical_to_emperical_concordance <- NA
+    nominal_to_nominal_rb <- NA
+    emperical_to_nominal_rb <- NA
+    emperical_to_all_rb <- NA
+    emperical_to_emperical_rb <- NA
     # if they are the same, we don't have to do much
     if (replicating_name == replicating_in_name) {
       # we check how many are significant
@@ -724,12 +738,35 @@ get_stats_qtl_matches <- function(table_per_match, name_split='_vs_',
       emperical_to_emperical_concordance <- 1
       nominal_to_nominal_rb <- 1
       emperical_to_nominal_rb <- 1
+      emperical_to_all_rb <- 1
       emperical_to_emperical_rb <- 1
     }
     else {
       # check how many significant in replicating, are present in the other
       replicated_emperical_tested_in_replicating <- nrow(replication_table[
           replication_table[[paste(replicating_name, significance_column_replicating_emperical, sep = '_')]] < significance_cutoff_replicating_emperical])
+      
+      # subset to emperical only in where we are replicating
+      replication_table_emp_to_all <- NULL
+      # if the significance cutoff is a T/F we don't use it as a cutoff
+      if (isTRUE(significance_cutoff_replicating_emperical)) {
+        replication_table_emp_to_all <- replication_table[
+          replication_table[[paste(replicating_name, significance_column_replicating_emperical, sep = '_')]] == T, 
+        ]
+      } else {
+        replication_table_emp_to_all <- replication_table[
+          replication_table[[paste(replicating_name, significance_column_replicating_emperical, sep = '_')]] < significance_cutoff_replicating_emperical, 
+        ]
+      }
+      # and the beta
+      beta_replicating_in <- replication_table_emp_to_all[[paste(replicating_in_name, beta_column_replicating_in, sep = '_')]]
+      # check which have the same allelic direction
+      alleles_differ_locs <- which(replication_table_emp_to_all[[paste(replicating_name, allele_column_replicating, sep = '_')]] != replication_table_emp_to_all[[paste(replicating_in_name, allele_column_replicating_in, sep = '_')]])
+      # and flip direction of betas to reflect this
+      beta_replicating_in[alleles_differ_locs] <- -1 * beta_replicating_in[alleles_differ_locs]
+      # calculate Rb
+     emp_to_all_rb_table <- calcu_cor_true(b1 = replication_table_emp_to_all[[paste(replicating_name, beta_column_replicating, sep = '_')]], se1 = replication_table_emp_to_all[[paste(replicating_name, se_column_replicating, sep = '_')]], b2 = beta_replicating_in, se2 = replication_table_emp_to_all[[paste(replicating_in_name, se_column_replicating_in, sep = '_')]])
+      emperical_to_all_rb <- emp_to_all_rb_table[1, 'r']
       
       # subset to nominal in both
       replication_table <- replication_table[
@@ -756,10 +793,19 @@ get_stats_qtl_matches <- function(table_per_match, name_split='_vs_',
       nominal_to_nominal_rb <- nominal_to_nominal_rb_table[1, 'r']
       
       # subset the replicating to emperical for replicating
-      replication_table <- replication_table[
+      if (isTRUE(significance_cutoff_replicating_emperical)) {
+        # if the cutoff is just a 'T' value, we use that as the filter
+        replication_table <- replication_table[
+          replication_table[[paste(replicating_name, significance_column_replicating_emperical, sep = '_')]] == T &
+          replication_table[[paste(replicating_in_name, significance_column_replicating_in_nominal, sep = '_')]] < significance_cutoff_replicating_in_nominal, 
+        ]
+      } else {
+        replication_table <- replication_table[
           replication_table[[paste(replicating_name, significance_column_replicating_emperical, sep = '_')]] < significance_cutoff_replicating_emperical &
           replication_table[[paste(replicating_in_name, significance_column_replicating_in_nominal, sep = '_')]] < significance_cutoff_replicating_in_nominal, 
-      ]
+        ]
+      }
+      
       # check how many significant in replicating, are nominally significant in the other
       replicated_emperical_nominal_in_replicating <- nrow(replication_table)
       # get the Z scores
@@ -782,10 +828,35 @@ get_stats_qtl_matches <- function(table_per_match, name_split='_vs_',
       emperical_to_nominal_rb <- emperical_to_nominal_rb_table[1, 'r']
       
       # subset the replicating to emperical for both
-      replication_table <- replication_table[
+      if (isTRUE(significance_cutoff_replicating_emperical) & isTRUE(significance_cutoff_replicating_in_emperical)) {
+        # subset both just on that T value
+        replication_table <- replication_table[
+          replication_table[[paste(replicating_name, significance_column_replicating_emperical, sep = '_')]] == T &
+          replication_table[[paste(replicating_in_name, significance_column_replicating_in_emperical, sep = '_')]] == T, 
+        ]
+      }
+      else if(isTRUE(significance_cutoff_replicating_emperical)) {
+        # or only one
+        replication_table <- replication_table[
+          replication_table[[paste(replicating_name, significance_column_replicating_emperical, sep = '_')]] == T &
+          replication_table[[paste(replicating_in_name, significance_column_replicating_in_emperical, sep = '_')]] < significance_cutoff_replicating_in_emperical, 
+        ]
+      }
+      else if(isTRUE(significance_cutoff_replicating_in_emperical)) {
+        # or the other
+        replication_table <- replication_table[
+          replication_table[[paste(replicating_name, significance_column_replicating_emperical, sep = '_')]] < significance_cutoff_replicating_emperical &
+          replication_table[[paste(replicating_in_name, significance_column_replicating_in_emperical, sep = '_')]] == T, 
+        ]
+      }
+      else {
+        # or on actual values
+        replication_table <- replication_table[
           replication_table[[paste(replicating_name, significance_column_replicating_emperical, sep = '_')]] < significance_cutoff_replicating_emperical &
           replication_table[[paste(replicating_in_name, significance_column_replicating_in_emperical, sep = '_')]] < significance_cutoff_replicating_in_emperical, 
-      ]
+        ]
+      }
+      
       # check how many significant in replicating, are also significant in the other
       replicated_emperical_emperical_in_replicating <- nrow(replication_table)
       # get the Z scores
@@ -823,7 +894,8 @@ get_stats_qtl_matches <- function(table_per_match, name_split='_vs_',
         'con_emp_emp' = c(emperical_to_emperical_concordance), 
         'rb_nom_nom' = c(nominal_to_nominal_rb), 
         'rb_emp_nom' = c(emperical_to_nominal_rb), 
-        'rb_emp_emp' = c(emperical_to_emperical_rb))
+        'rb_emp_emp' = c(emperical_to_emperical_rb), 
+        'rb_emp_all' = c(emperical_to_all_rb))
       # put in the list
       stats_per_combination[[combination]] <- stats_combination
   }
@@ -1240,9 +1312,12 @@ knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 cre_celltype_replication <- match_qtl_outputs_each(
   cre_output_combined_loc, 
   cre_output_combined_loc, 
-  qtl_prepend='qtl_results_all_frac01', qtl_append='.txt.gz', 
+  # qtl_prepend='qtl_results_all_frac01', qtl_append='.txt.gz', 
+  qtl_prepend='qtl_results_annotated_all', qtl_append='.txt', 
   nosplit=T, 
-  folders_to_use = c('B', 'CD4T', 'CD8T', 'DC', 'monocyte', 'NK')
+  folders_to_use = c('B', 'CD4T', 'CD8T', 'DC', 'monocyte', 'NK'), 
+  qtl_fdr_column = 'global_significance', 
+  qtl_fdr_cutoff = T
 )
 
 ```
@@ -1251,7 +1326,7 @@ cre_celltype_replication <- match_qtl_outputs_each(
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # check replication in caQTLs across cell types
-cre_celltype_stats <- get_stats_qtl_matches(cre_celltype_replication)
+cre_celltype_stats <- get_stats_qtl_matches(cre_celltype_replication, significance_cutoff_replicating_emperical = T, significance_cutoff_replicating_in_emperical = T)
 
 ```
 
@@ -1358,7 +1433,8 @@ cpeaks_anno[['scenic_hg38']] <- paste0(cpeaks_anno[['chr_hg38']], ':', cpeaks_an
 # location of the hybrid method
 hybrid_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/'
 # read hybrid method
-hybrid_output_list <- read_pseudobulk_cre_output_per_celltype(hybrid_output_loc, add_mtc = F, filter_alpha = F, add_global_nominal_threshold = F, add_local_nominal_threshold = F, filename_output = 'qtl_results_all_frac01.txt.gz', alpha_min = .2, alpha_max = 5, cell_types = c('B', 'CD4T', 'CD8T', 'DC', 'monocyte', 'NK'))
+# hybrid_output_list <- read_pseudobulk_cre_output_per_celltype(hybrid_output_loc, add_mtc = F, filter_alpha = F, add_global_nominal_threshold = F, add_local_nominal_threshold = F, filename_output = 'qtl_results_all_frac01.txt.gz', alpha_min = .2, alpha_max = 5, cell_types = c('B', 'CD4T', 'CD8T', 'DC', 'monocyte', 'NK'))
+hybrid_output_list <- read_pseudobulk_cre_output_per_celltype(hybrid_output_loc, add_mtc = F, filter_alpha = F, add_global_nominal_threshold = F, add_local_nominal_threshold = F, filename_output = 'qtl_results_annotated_all.txt', alpha_min = .2, alpha_max = 5, cell_types = c('B', 'CD4T', 'CD8T', 'DC', 'monocyte', 'NK'))
 # merge them
 hybrid_output <- do.call('rbind', hybrid_output_list)
 # add z score

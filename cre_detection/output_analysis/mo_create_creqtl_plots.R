@@ -365,7 +365,7 @@ sc_metadata_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/me
 sc_metadata <- fread(sc_metadata_loc, header = T, sep = '\t')
 
 # get the single-cell smf
-smf_sc <- data.table('phenotype_id' = sc_metadata[['barcode_lane']], 'genotype_id' = sc_metadata[['sample_final']], 'condition' = sc_metadata[['final_condition']], 'lane' = sc_metadata[['lane']])
+smf_sc <- data.table('phenotype_id' = sc_metadata[['barcode_lane']], 'genotype_id' = sc_metadata[['sample_final']], 'condition' = sc_metadata[['condition_final']], 'lane' = sc_metadata[['lane']])
 
 # read the information for a specific chunk
 sc_exp_acc4 <- load_sc_exp_acc('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/CD4T/chr11-125926-590601/')
