@@ -173,7 +173,18 @@ gene_anno <- fread(gene_anno_loc, header = F, sep = '\t')
 colnames(gene_anno) <- c('ens', 'gs', 'modality', 'chrom', 'start', 'end')
 
 # read hybrid method
-hybrid_output_list <- read_pseudobulk_cre_output_per_celltype(hybrid_output_loc, add_mtc = F, filter_alpha = F, add_global_nominal_threshold = F, add_local_nominal_threshold = F, filename_output = 'qtl_results_all_frac01.txt.gz', alpha_min = .8, alpha_max = 1.2, filter_significance = F)
+# hybrid_output_list <- read_pseudobulk_cre_output_per_celltype(hybrid_output_loc, add_mtc = F, filter_alpha = F, add_global_nominal_threshold = F, add_local_nominal_threshold = F, filename_output = 'qtl_results_all_frac01.txt.gz', alpha_min = .8, alpha_max = 1.2, filter_significance = F)
+hybrid_output_list <- read_pseudobulk_cre_output_per_celltype(hybrid_output_loc, add_mtc = F, filter_alpha = F, add_global_nominal_threshold = F, add_local_nominal_threshold = F, filename_output = 'qtl_results_annotated_all.txt', alpha_min = .8, alpha_max = 1.2, filter_significance = F)
+# get the unique mappings
+hybrid_mappings <- names(hybrid_output_list)
+# extract the pseudobulk ones
+pseudobulk_mappings <- hybrid_mappings[grep('_pb$', hybrid_mappings)]
+# extract those
+pseudobulk_output_list <- hybrid_output_list[pseudobulk_mappings]
+# and remove the append of '_pb'
+names(pseudobulk_output_list) <- gsub('_pb', '', names(pseudobulk_output_list))
+# split those
+hybrid_output_list <- hybrid_output_list[setdiff(hybrid_mappings, pseudobulk_mappings)]
 # merge them
 hybrid_output <- do.call('rbind', hybrid_output_list)
 # add z score
@@ -189,7 +200,8 @@ hybrid_distances <- get_closest_flanks(hybrid_output, 'start_hg38', 'end_hg38', 
 # add this to the table
 hybrid_output[['distance']] <- hybrid_distances[['min_dist']]
 # remove regions with larger p values than our cutoff
-hybrid_output <- hybrid_output[hybrid_output[['p_value']] < hybrid_output[['pval_nominal_threshold_global']], ]
+# hybrid_output <- hybrid_output[hybrid_output[['p_value']] < hybrid_output[['pval_nominal_threshold_global']], ]
+hybrid_output <- hybrid_output[hybrid_output[['global_significance']] == T, ]
 
 # filter based on distance
 hybrid_output_unfiltered <- hybrid_output
@@ -206,14 +218,14 @@ reunion_output <- reunion_output[reunion_output[['distance']] > 0 & reunion_outp
 
 # now look at the overlap
 ggvenn::ggvenn(
-  data = list('10x10k' = unique(hybrid_output[['snp_id']]), 'REUNION' = unique(reunion_output[['overlapping_feature']]))
-) + ggtitle('Overlap of CREs between 10x10k and REUNION')
+  data = list('LMM' = unique(hybrid_output[['snp_id']]), 'REUNION' = unique(reunion_output[['overlapping_feature']]))
+) + ggtitle('Overlap of CREs between LMM and REUNION')
 ggvenn::ggvenn(
-  data = list('10x10k' = unique(hybrid_output[['feature_id']]), 'REUNION' = unique(reunion_output[['gene_id']]))
-) + ggtitle('Overlap of CRE genes between 10x10k and REUNION')
+  data = list('LMM' = unique(hybrid_output[['feature_id']]), 'REUNION' = unique(reunion_output[['gene_id']]))
+) + ggtitle('Overlap of CRE genes between LMM and REUNION')
 ggvenn::ggvenn(
-  data = list('10x10k' = unique(paste(hybrid_output[['snp_id']], hybrid_output[['feature_id']])), 'REUNION' = unique(paste(reunion_output[['overlapping_feature']], reunion_output[['gene_id']])))
-) + ggtitle('Overlap of region-gene links between 10x10k and REUNION')
+  data = list('LMM' = unique(paste(hybrid_output[['snp_id']], hybrid_output[['feature_id']])), 'REUNION' = unique(paste(reunion_output[['overlapping_feature']], reunion_output[['gene_id']])))
+) + ggtitle('Overlap of region-gene links between LMM and REUNION')
 
 # sort the hybrid output by significance
 hybrid_output <- hybrid_output[order(hybrid_output[['p_value']]), ]
@@ -226,25 +238,27 @@ hybrid_output_top <- hybrid_output[!duplicated(hybrid_output[['r2g']]), ]
 reunion_output_top <- reunion_output[!duplicated(reunion_output[['r2g']]), ]
 
 # merge these
-matched_output <- merge(reunion_output_top[, c('r2g', 'peak_gene_corr')], hybrid_output_top[, c('r2g', 'r')], by = 'r2g')
+matched_output <- merge(reunion_output_top[, c('r2g', 'peak_gene_corr')], hybrid_output_top[, c('r2g', 'r', 'z_score')], by = 'r2g')
 # rename columns
-colnames(matched_output) <- c('r2g', 'cor_reunion', 'cor_hybrid')
+colnames(matched_output) <- c('r2g', 'cor_reunion', 'cor_hybrid', 'z_hybrid')
 # and make unique
 matched_output <- unique(matched_output)
 
 # calculate the concordance
-mo_reunion_rho_concordance <- sum(sign(matched_output[['cor_hybrid']]) == sign(matched_output[['cor_reunion']])) / nrow(matched_output)
+mo_reunion_rho_concordance <- sum(sign(matched_output[['z_hybrid']]) == sign(matched_output[['cor_reunion']])) / nrow(matched_output)
+# and the replication rate
+mo_reunion_replication <- sum(sign(matched_output[['z_hybrid']]) == sign(matched_output[['cor_reunion']])) / nrow(hybrid_output_top)
 # get the minimal and maximum correlations
 min_sig_rho_10x <- min(abs(matched_output[['cor_reunion']]))
-min_sig_rho_mo <- min(abs(matched_output[['cor_hybrid']]))
+min_sig_rho_mo <- min(abs(matched_output[['z_hybrid']]))
 max_sig_rho_10x <- max(abs(matched_output[['cor_reunion']]))
-max_sig_rho_mo <- max(abs(matched_output[['cor_hybrid']]))
+max_sig_rho_mo <- max(abs(matched_output[['z_hybrid']]))
 # plot the correlations
-ggplot(data = matched_output, mapping = aes(x = cor_hybrid, y = cor_reunion)) + 
+ggplot(data = matched_output, mapping = aes(x = z_hybrid, y = cor_reunion)) + 
   geom_point() +
-  xlab('R2G Rho in LIMIX hybrid') + 
+  xlab('R2G Z in LIMIX LMM') + 
   ylab('R2G Rho in reunion') + 
-  ggtitle('R2G correlations in LIMIX hybrid\n vs reunion') + 
+  ggtitle('R2G correlations in LIMIX LMM\n vs reunion') + 
   theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
   # left to right block of non-significant effects
   geom_rect(aes(xmin = -1 * max_sig_rho_mo, xmax = max_sig_rho_mo, ymin = -1 * min_sig_rho_10x, ymax = min_sig_rho_10x), 
@@ -266,6 +280,8 @@ ggplot(data = matched_output, mapping = aes(x = cor_hybrid, y = cor_reunion)) +
             fill = "#0072B2", alpha = 0.01) + 
   # add the concordance
   annotate("label", x = max_sig_rho_mo * 0.75 , y = max_sig_rho_10x * -0.75, label = paste('concordance', round(mo_reunion_rho_concordance, digits = 2), sep = ':\n')) +
+  # add the replication
+  annotate("label", x = max_sig_rho_mo * -0.75 , y = max_sig_rho_10x * -0.75, label = paste('replication LMM in Reunion', round(mo_reunion_replication, digits = 2), sep = ':\n')) +
   # add the names of the concordant and non-concordant blocks
   annotate("text", x = max_sig_rho_mo * -0.70 , y = max_sig_rho_10x * 0.75, label = 'discordant', colour = '#D55E00', fontface = 'bold') +
   # add the names of the concordant and non-concordant blocks
