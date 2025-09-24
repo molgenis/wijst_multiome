@@ -1431,7 +1431,14 @@ mdfiver::create_md5_for_file(eqtlgen_vs_combined_tbl_loc)
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # extract specifically CD4T UT to make the plot
-cd4t_ut_top_eqtl_eqtlgen <- eqtlgen_vs_ut[['CD4T']]
+# cd4t_ut_top_eqtl_eqtlgen <- eqtlgen_vs_ut[['CD4T']]
+cd4t_ut_top_eqtl_eqtlgen <- eqtlgen_vs_ut_tbl[eqtlgen_vs_ut_tbl[['cell_type']] == 'CD4T', ]
+# remove any empty entries
+cd4t_ut_top_eqtl_eqtlgen <- cd4t_ut_top_eqtl_eqtlgen[!is.na(cd4t_ut_top_eqtl_eqtlgen[['mo_zscore']]) & !is.na(cd4t_ut_top_eqtl_eqtlgen[['eQTLgen_zscore']]), ]
+# fix the zscore
+cd4t_ut_top_eqtl_eqtlgen[['mo_zscore_signed']] <- cd4t_ut_top_eqtl_eqtlgen[['mo_zscore']]
+cd4t_ut_top_eqtl_eqtlgen[cd4t_ut_top_eqtl_eqtlgen[['eQTLgen_assessed_allele']] != cd4t_ut_top_eqtl_eqtlgen[['mo_assessed_allele']], ][['mo_zscore_signed']] <- -1 * cd4t_ut_top_eqtl_eqtlgen[cd4t_ut_top_eqtl_eqtlgen[['eQTLgen_assessed_allele']] != cd4t_ut_top_eqtl_eqtlgen[['mo_assessed_allele']], ][['mo_zscore_signed']]
+
 
 # get the minimal significant z for k1
 min_sig_z_eqtlgen <- min(abs(cd4t_ut_top_eqtl_eqtlgen[cd4t_ut_top_eqtl_eqtlgen[['eQTLgen_significant']] == T, 'eQTLgen_zscore']))
@@ -1497,3 +1504,79 @@ ggsave('~/plots/mo_scatter_mo_cd4t_ut_vs_eqtlgen_eqtl.pdf', width=5, height=5)
 
 ```
 
+```{r plot_eqtlgen_overlap, include=TRUE, fig.width=5, fig.height=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# extract specifically CD4T combined to make the plot
+# cd4t_combined_top_eqtl_eqtlgen <- eqtlgen_vs_combined[['CD4T']]
+cd4t_combined_top_eqtl_eqtlgen <- eqtlgen_vs_combined_tbl[eqtlgen_vs_combined_tbl[['cell_type']] == 'CD4T', ]
+# remove any empty entries
+cd4t_combined_top_eqtl_eqtlgen <- cd4t_combined_top_eqtl_eqtlgen[!is.na(cd4t_combined_top_eqtl_eqtlgen[['mo_zscore']]) & !is.na(cd4t_combined_top_eqtl_eqtlgen[['eQTLgen_zscore']]), ]
+# fix the zscore
+cd4t_combined_top_eqtl_eqtlgen[['mo_zscore_signed']] <- cd4t_combined_top_eqtl_eqtlgen[['mo_zscore']]
+cd4t_combined_top_eqtl_eqtlgen[cd4t_combined_top_eqtl_eqtlgen[['eQTLgen_assessed_allele']] != cd4t_combined_top_eqtl_eqtlgen[['mo_assessed_allele']], ][['mo_zscore_signed']] <- -1 * cd4t_combined_top_eqtl_eqtlgen[cd4t_combined_top_eqtl_eqtlgen[['eQTLgen_assessed_allele']] != cd4t_combined_top_eqtl_eqtlgen[['mo_assessed_allele']], ][['mo_zscore_signed']]
+
+
+# get the minimal significant z for k1
+min_sig_z_eqtlgen <- min(abs(cd4t_combined_top_eqtl_eqtlgen[cd4t_combined_top_eqtl_eqtlgen[['eQTLgen_significant']] == T, 'eQTLgen_zscore']))
+min_sig_z_mo <- min(abs(cd4t_combined_top_eqtl_eqtlgen[cd4t_combined_top_eqtl_eqtlgen[['mo_significant']] == T, 'mo_zscore_signed']))
+# and the max z
+max_sig_z_eqtlgen <- max(abs(cd4t_combined_top_eqtl_eqtlgen[cd4t_combined_top_eqtl_eqtlgen[['eQTLgen_significant']] == T, 'eQTLgen_zscore']))
+max_sig_z_mo <- max(abs(cd4t_combined_top_eqtl_eqtlgen[cd4t_combined_top_eqtl_eqtlgen[['mo_significant']] == T, 'mo_zscore_signed']))
+
+# calculate concordance
+n_significant_both <- sum(cd4t_combined_top_eqtl_eqtlgen[['eQTLgen_significant']] == T & cd4t_combined_top_eqtl_eqtlgen[['mo_significant']] == T)
+n_significant_directed_both <- sum(cd4t_combined_top_eqtl_eqtlgen[['eQTLgen_significant']] == T & cd4t_combined_top_eqtl_eqtlgen[['mo_significant']] == T &
+                                     sign(cd4t_combined_top_eqtl_eqtlgen[['eQTLgen_zscore']]) == sign(cd4t_combined_top_eqtl_eqtlgen[['mo_zscore_signed']]))
+concordance <- round(n_significant_directed_both / n_significant_both, digits = 3)
+
+# plot the concordance of the two
+p <- ggplot(data = cd4t_combined_top_eqtl_eqtlgen, mapping = aes(x = mo_zscore_signed, y = eQTLgen_zscore)) + 
+  geom_point(size = 0.2) + 
+  xlim(c(max_sig_z_mo * -1, max_sig_z_mo * 1)) +
+  ylim(c(max_sig_z_eqtlgen * -1, max_sig_z_eqtlgen * 1)) + 
+  # left to right block of non-significant effects
+  geom_rect(aes(xmin = -1 * max_sig_z_mo, xmax = max_sig_z_mo, ymin = -1 * min_sig_z_eqtlgen, ymax = min_sig_z_eqtlgen), 
+            fill = "white", alpha = 0.005) +
+  # bottom to top block of non-significant effects
+  geom_rect(aes(xmin = -1 * min_sig_z_mo, xmax = min_sig_z_mo, ymin = -1 * max_sig_z_eqtlgen, ymax = max_sig_z_eqtlgen), 
+            fill = "white", alpha = 0.005) +
+  # bottom left block
+  geom_rect(aes(xmin = -1 * max_sig_z_mo, xmax = -1 *min_sig_z_mo, ymin = -1 * max_sig_z_eqtlgen, ymax = -1 * min_sig_z_eqtlgen), 
+            fill = "#0072B2", alpha = 0.01) +
+  # bottom right block
+  geom_rect(aes(xmin = min_sig_z_mo, xmax = max_sig_z_mo, ymin = -1 * max_sig_z_eqtlgen, ymax = -1 * min_sig_z_eqtlgen), 
+            fill = "#D55E00", alpha = 0.01) +
+  # top left block
+  geom_rect(aes(xmin = -1 * max_sig_z_mo, xmax = -1 *min_sig_z_mo, ymin = min_sig_z_eqtlgen, ymax = max_sig_z_eqtlgen), 
+            fill = "#D55E00", alpha = 0.01) + 
+  # top right block
+  geom_rect(aes(xmin = min_sig_z_mo, xmax = max_sig_z_mo, ymin = max_sig_z_eqtlgen, ymax = min_sig_z_eqtlgen), 
+            fill = "#0072B2", alpha = 0.01) + 
+  # labels for x and y axis
+  xlab('Z-score in multi-omics eQTLs') +
+  ylab('Z-score in eqtlgen eQTLs') +
+  # vertical negative z ccombinedoff line
+  geom_vline(xintercept=c(-1 *min_sig_z_mo), color="black", size=0.5, linetype = "dashed") +
+	# horizonal negative z ccombinedoff line
+  geom_hline(yintercept=c(-1 *min_sig_z_eqtlgen), color="black", size=0.5, linetype="dashed") +
+  # vertical positive z ccombinedoff line
+  geom_vline(xintercept=c(min_sig_z_mo), color="black", size=0.5, linetype = "dashed") +
+	# horizonal positive z ccombinedoff line
+  geom_hline(yintercept=c(min_sig_z_eqtlgen), color="black", size=0.5, linetype="dashed") +
+  # make backgrounds white
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+  # add the concordance
+  annotate("label", x = max_sig_z_mo * 0.75 , y = max_sig_z_eqtlgen * -0.75, label = paste('concordance', concordance, sep = ':\n')) +
+  # add the names of the concordant and non-concordant blocks
+  annotate("text", x = max_sig_z_mo * -0.70 , y = max_sig_z_eqtlgen * 0.75, label = 'discordant', colour = '#D55E00', fontface = 'bold') +
+  # add the names of the concordant and non-concordant blocks
+  annotate("text", x = max_sig_z_mo * 0.70 , y = max_sig_z_eqtlgen * 0.75, label = 'concordant', colour = '#0072B2', fontface = 'bold') +
+  # add the title
+  ggtitle('Concordance of eQTL effects between eQTLgen\nphase 1 and multi-omics CD4+ T cells in combined')
+p
+
+# save this plot
+ggsave('~/plots/mo_scatter_mo_cd4t_combined_vs_eqtlgen_eqtl.pdf', width=5, height=5)
+
+```

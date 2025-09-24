@@ -720,6 +720,29 @@ p_eqtl_cs_primary_and_other_poster <- p_eqtl_cs_primary_and_other +
     axis.text.x = element_text(size = 16), 
     axis.text.y = element_text(size = 16)
   )
+# add to the others as well
+p_eqtl_cs_primary_and_other <- p_eqtl_cs_primary_and_other + 
+  xlab('Cell type') +
+  ylab('Number of independent eQTLs') +
+  theme(legend.position="none") +
+  theme(
+    plot.title = element_text(size = 24),
+    axis.title.x = element_text(size = 20),
+    axis.title.y = element_text(size = 20), 
+    axis.text.x = element_text(size = 16), 
+    axis.text.y = element_text(size = 16)
+  )
+p_eqtl_cs_each <- p_eqtl_cs_each + 
+  xlab('Cell type') +
+  ylab('Number of independent eQTLs') +
+  theme(legend.position="none") +
+  theme(
+    plot.title = element_text(size = 24),
+    axis.title.x = element_text(size = 20),
+    axis.title.y = element_text(size = 20), 
+    axis.text.x = element_text(size = 16), 
+    axis.text.y = element_text(size = 16)
+  )
 
 # save the plots
 ggsave(filename = '~/plots/mo_eqtl_cs_primary_and_other.pdf', plot = p_eqtl_cs_primary_and_other, width = 8, height = 8)
@@ -771,6 +794,29 @@ p_caqtl_cs_each <- cs_numbers_to_plot(caqtl_cs_counts_full, use_color_dict = T, 
 
 # and for the poster
 p_caqtl_cs_primary_and_other_poster <- p_caqtl_cs_primary_and_other + 
+  xlab('Cell type') +
+  ylab('Number of independent caQTLs') +
+  theme(legend.position="none") +
+  theme(
+    plot.title = element_text(size = 24),
+    axis.title.x = element_text(size = 20),
+    axis.title.y = element_text(size = 20), 
+    axis.text.x = element_text(size = 16), 
+    axis.text.y = element_text(size = 16)
+  )
+# add to the others as well
+p_caqtl_cs_primary_and_other <- p_caqtl_cs_primary_and_other + 
+  xlab('Cell type') +
+  ylab('Number of independent caQTLs') +
+  theme(legend.position="none") +
+  theme(
+    plot.title = element_text(size = 24),
+    axis.title.x = element_text(size = 20),
+    axis.title.y = element_text(size = 20), 
+    axis.text.x = element_text(size = 16), 
+    axis.text.y = element_text(size = 16)
+  )
+p_caqtl_cs_each <- p_caqtl_cs_each + 
   xlab('Cell type') +
   ylab('Number of independent caQTLs') +
   theme(legend.position="none") +
