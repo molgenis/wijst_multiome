@@ -52,6 +52,7 @@ for dir_full in ${dirlist[*]}
         # paste together the paths
         expression_folder_loc=${PER_SAMPLE_MATRICES}'/'${dir}/${EXPRESSION_ASSAY}'/'
         accessibility_folder_loc=${PER_SAMPLE_MATRICES}'/'${dir}/${ACCESSIBILITY_ASSAY}'/'
+        metadata_loc=${PER_SAMPLE_MATRICES}'/'${dir}'/metadata.tsv.gz'
         # check if both of the folders exist
         if [ -d "$expression_folder_loc" ];
             then
@@ -90,7 +91,10 @@ for dir_full in ${dirlist[*]}
     --output_folder '${output_loc_full}' \
     --n_perm '${N_PERM}' \
     --seeds_file_loc '${SEEDS_LOC}' \
-    --cre_loc '${CRE_LOC}'
+    --cre_loc '${CRE_LOC}' \
+    --metadata '${metadata_loc}' \
+    --fixed_covariates nCount_RNA,nFeature_peaks
+
 '>> ${output_job_full}
             fi
         fi
