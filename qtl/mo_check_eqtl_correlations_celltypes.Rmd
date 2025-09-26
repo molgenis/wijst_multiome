@@ -680,6 +680,7 @@ get_stats_qtl_matches <- function(table_per_match, name_split='_vs_',
   stats_per_combination <- list()
   # check each of the tables
   for (combination in names(table_per_match)) {
+    print(combination)
     # extract the two names
     replicating_name <- strsplit(combination, name_split)[[1]][1]
     replicating_in_name <- strsplit(combination, name_split)[[1]][2]
@@ -693,11 +694,21 @@ get_stats_qtl_matches <- function(table_per_match, name_split='_vs_',
     nominal_to_nominal_concordance <- NA
     emperical_to_nominal_concordance <- NA
     emperical_to_emperical_concordance <- NA
+    nominal_to_nominal_rb <- NA
+    emperical_to_nominal_rb <- NA
+    emperical_to_all_rb <- NA
+    emperical_to_emperical_rb <- NA
     # if they are the same, we don't have to do much
     if (replicating_name == replicating_in_name) {
       # we check how many are significant
-      n_sig <- nrow(replication_table[
-          replication_table[[paste0(replicating_name, '_', significance_column_replicating_emperical, '.x')]] < significance_cutoff_replicating_emperical])
+      n_sig <- NULL
+      if (isTRUE(significance_cutoff_replicating_emperical)) {
+        n_sig <- nrow(replication_table[
+          replication_table[[paste0(replicating_name, '_', significance_column_replicating_emperical, '.x')]] == T, ])
+      } else {
+        n_sig <- nrow(replication_table[
+          replication_table[[paste0(replicating_name, '_', significance_column_replicating_emperical, '.x')]] < significance_cutoff_replicating_emperical, ])
+      }
       # and then all of these will be the same
       replicated_emperical_emperical_in_replicating <- n_sig
       replicated_emperical_nominal_in_replicating <- n_sig
@@ -712,12 +723,43 @@ get_stats_qtl_matches <- function(table_per_match, name_split='_vs_',
       emperical_to_emperical_concordance <- 1
       nominal_to_nominal_rb <- 1
       emperical_to_nominal_rb <- 1
+      emperical_to_all_rb <- 1
       emperical_to_emperical_rb <- 1
     }
     else {
       # check how many significant in replicating, are present in the other
-      replicated_emperical_tested_in_replicating <- nrow(replication_table[
-          replication_table[[paste(replicating_name, significance_column_replicating_emperical, sep = '_')]] < significance_cutoff_replicating_emperical])
+      replicated_emperical_tested_in_replicating <- NULL
+      # using the boolean value in the column if it was a boolean
+      if (isTRUE(significance_cutoff_replicating_emperical)) {
+        replicated_emperical_tested_in_replicating <- nrow(replication_table[
+          replication_table[[paste(replicating_name, significance_column_replicating_emperical, sep = '_')]] == T, ])
+      } else {
+        # otherwise use it as a cutoff
+        replicated_emperical_tested_in_replicating <- nrow(replication_table[
+          replication_table[[paste(replicating_name, significance_column_replicating_emperical, sep = '_')]] < significance_cutoff_replicating_emperical, ])
+      }
+      
+      # subset to emperical only in where we are replicating
+      replication_table_emp_to_all <- NULL
+      # if the significance cutoff is a T/F we don't use it as a cutoff
+      if (isTRUE(significance_cutoff_replicating_emperical)) {
+        replication_table_emp_to_all <- replication_table[
+          replication_table[[paste(replicating_name, significance_column_replicating_emperical, sep = '_')]] == T, 
+        ]
+      } else {
+        replication_table_emp_to_all <- replication_table[
+          replication_table[[paste(replicating_name, significance_column_replicating_emperical, sep = '_')]] < significance_cutoff_replicating_emperical, 
+        ]
+      }
+      # and the beta
+      beta_replicating_in <- replication_table_emp_to_all[[paste(replicating_in_name, beta_column_replicating_in, sep = '_')]]
+      # check which have the same allelic direction
+      alleles_differ_locs <- which(replication_table_emp_to_all[[paste(replicating_name, allele_column_replicating, sep = '_')]] != replication_table_emp_to_all[[paste(replicating_in_name, allele_column_replicating_in, sep = '_')]])
+      # and flip direction of betas to reflect this
+      beta_replicating_in[alleles_differ_locs] <- -1 * beta_replicating_in[alleles_differ_locs]
+      # calculate Rb
+     emp_to_all_rb_table <- calcu_cor_true(b1 = replication_table_emp_to_all[[paste(replicating_name, beta_column_replicating, sep = '_')]], se1 = replication_table_emp_to_all[[paste(replicating_name, se_column_replicating, sep = '_')]], b2 = beta_replicating_in, se2 = replication_table_emp_to_all[[paste(replicating_in_name, se_column_replicating_in, sep = '_')]])
+      emperical_to_all_rb <- emp_to_all_rb_table[1, 'r']
       
       # subset to nominal in both
       replication_table <- replication_table[
@@ -744,10 +786,19 @@ get_stats_qtl_matches <- function(table_per_match, name_split='_vs_',
       nominal_to_nominal_rb <- nominal_to_nominal_rb_table[1, 'r']
       
       # subset the replicating to emperical for replicating
-      replication_table <- replication_table[
+      if (isTRUE(significance_cutoff_replicating_emperical)) {
+        # if the cutoff is just a 'T' value, we use that as the filter
+        replication_table <- replication_table[
+          replication_table[[paste(replicating_name, significance_column_replicating_emperical, sep = '_')]] == T &
+          replication_table[[paste(replicating_in_name, significance_column_replicating_in_nominal, sep = '_')]] < significance_cutoff_replicating_in_nominal, 
+        ]
+      } else {
+        replication_table <- replication_table[
           replication_table[[paste(replicating_name, significance_column_replicating_emperical, sep = '_')]] < significance_cutoff_replicating_emperical &
           replication_table[[paste(replicating_in_name, significance_column_replicating_in_nominal, sep = '_')]] < significance_cutoff_replicating_in_nominal, 
-      ]
+        ]
+      }
+      
       # check how many significant in replicating, are nominally significant in the other
       replicated_emperical_nominal_in_replicating <- nrow(replication_table)
       # get the Z scores
@@ -770,10 +821,35 @@ get_stats_qtl_matches <- function(table_per_match, name_split='_vs_',
       emperical_to_nominal_rb <- emperical_to_nominal_rb_table[1, 'r']
       
       # subset the replicating to emperical for both
-      replication_table <- replication_table[
+      if (isTRUE(significance_cutoff_replicating_emperical) & isTRUE(significance_cutoff_replicating_in_emperical)) {
+        # subset both just on that T value
+        replication_table <- replication_table[
+          replication_table[[paste(replicating_name, significance_column_replicating_emperical, sep = '_')]] == T &
+          replication_table[[paste(replicating_in_name, significance_column_replicating_in_emperical, sep = '_')]] == T, 
+        ]
+      }
+      else if(isTRUE(significance_cutoff_replicating_emperical)) {
+        # or only one
+        replication_table <- replication_table[
+          replication_table[[paste(replicating_name, significance_column_replicating_emperical, sep = '_')]] == T &
+          replication_table[[paste(replicating_in_name, significance_column_replicating_in_emperical, sep = '_')]] < significance_cutoff_replicating_in_emperical, 
+        ]
+      }
+      else if(isTRUE(significance_cutoff_replicating_in_emperical)) {
+        # or the other
+        replication_table <- replication_table[
+          replication_table[[paste(replicating_name, significance_column_replicating_emperical, sep = '_')]] < significance_cutoff_replicating_emperical &
+          replication_table[[paste(replicating_in_name, significance_column_replicating_in_emperical, sep = '_')]] == T, 
+        ]
+      }
+      else {
+        # or on actual values
+        replication_table <- replication_table[
           replication_table[[paste(replicating_name, significance_column_replicating_emperical, sep = '_')]] < significance_cutoff_replicating_emperical &
           replication_table[[paste(replicating_in_name, significance_column_replicating_in_emperical, sep = '_')]] < significance_cutoff_replicating_in_emperical, 
-      ]
+        ]
+      }
+      
       # check how many significant in replicating, are also significant in the other
       replicated_emperical_emperical_in_replicating <- nrow(replication_table)
       # get the Z scores
@@ -811,7 +887,8 @@ get_stats_qtl_matches <- function(table_per_match, name_split='_vs_',
         'con_emp_emp' = c(emperical_to_emperical_concordance), 
         'rb_nom_nom' = c(nominal_to_nominal_rb), 
         'rb_emp_nom' = c(emperical_to_nominal_rb), 
-        'rb_emp_emp' = c(emperical_to_emperical_rb))
+        'rb_emp_emp' = c(emperical_to_emperical_rb), 
+        'rb_emp_all' = c(emperical_to_all_rb))
       # put in the list
       stats_per_combination[[combination]] <- stats_combination
   }
@@ -969,14 +1046,22 @@ caqtl_replication_stats_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiom
 
 ```
 
-```{r caqtl_combined_replication_plot, include=TRUE, fig.width=12, fig.height=12}
+```{r caqtl_combined_replication_read, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # check replication in caQTLs across cell types
-caqtl_combined_celltype_stat_p <- plot_replication_stats(caqtl_combined_celltype_stats, mid_value = 0.5, comparing_value_to_text=list('n_sig_both' = 'N sig both: ', 'n_sig_tested' = 'N test both: ', 'rb_emp_nom' = 'nom rep rb: '), colour_column = 'rb_emp_nom', category_plot_order = c('B', 'CD4+ T', 'CD8+ T', 'NK', 'DC', 'Monocyte'), text_size = 4) +
+caqtl_combined_celltype_stats <- fread(caqtl_replication_stats_loc, row.names = F, header = T, sep = '\t')
+
+```
+
+```{r caqtl_combined_replication_plot, include=TRUE, fig.width=8, fig.height=8}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# check replication in caQTLs across cell types
+caqtl_combined_celltype_stat_p <- plot_replication_stats(caqtl_combined_celltype_stats, mid_value = 0.5, comparing_value_to_text=list('n_sig_both' = 'N sig: ', 'n_sig_tested' = 'N test: ', 'rb_emp_all' = 'Rb: '), colour_column = 'rb_emp_all', category_plot_order = c('B', 'CD4+ T', 'CD8+ T', 'NK', 'DC', 'Monocyte'), text_size = 4, legendless = T) +
   xlab('Cell type replicating') +
   ylab('Cell type replicating in') +
-  ggtitle('Replication of caQTLs across cell types') +
+  ggtitle('Replication of caQTLs') +
   labs(fill="Rb") +
   theme(
     # X label font size
@@ -992,7 +1077,7 @@ caqtl_combined_celltype_stat_p <- plot_replication_stats(caqtl_combined_celltype
   )
 
 # save the figure
-ggsave('~/plots/mo_caqtl_celltype_replication.pdf', plot = caqtl_combined_celltype_stat_p, width = 12, height = 12)
+ggsave('~/plots/mo_caqtl_celltype_replication.pdf', plot = caqtl_combined_celltype_stat_p, width = 8, height = 8)
 
 # display the figure
 caqtl_combined_celltype_stat_p
@@ -1014,12 +1099,13 @@ eqtl_combined_celltype_replication <- match_qtl_outputs_each(
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # check replication in caQTLs across cell types
-#saveRDS(eqtl_combined_celltype_replication, '~/rds/eqtl_combined_celltype_replication')
-# for(replication_name in names(eqtl_combined_celltype_replication)) {
-#   replication_save_loc <- paste0('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/replication/celltypes/mo_matched_eqtl_', replication_name, '.tsv.gz')
-#   write.table(eqtl_combined_celltype_replication[[replication_save_loc]], gzfile(replication_save_loc), row.names = F, col.names = T, sep = '\t')
-#   mdfiver::create_md5_for_file(replication_save_loc)
-# }
+saveRDS(eqtl_combined_celltype_replication, '~/rds/eqtl_combined_celltype_replication.rds')
+mdfiver::create_md5_for_file('~/rds/eqtl_combined_celltype_replication.rds')
+ for(replication_name in names(eqtl_combined_celltype_replication)) {
+   replication_save_loc <- paste0('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/replication/celltypes/mo_matched_eqtl_', replication_name, '.tsv.gz')
+   write.table(eqtl_combined_celltype_replication[[replication_save_loc]], gzfile(replication_save_loc), row.names = F, col.names = T, sep = '\t')
+   mdfiver::create_md5_for_file(replication_save_loc)
+ }
 
 ```
 
@@ -1031,25 +1117,26 @@ eqtl_combined_celltype_stats <- get_stats_qtl_matches(eqtl_combined_celltype_rep
 
 ```
 
-```{r caqtl_combined_replication_save, include=FALSE}
+```{r eqtl_combined_replication_save, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # check replication in caQTLs across cell types
-# saveRDS(eqtl_combined_celltype_stats, '~/eqtl_combined_celltype_stats.rds')
-# eqtl_replication_stats_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/replication/celltypes/mo_eqtl_replication_stats.tsv.gz'
-# write.table(eqtl_combined_celltype_stats, gzfile(eqtl_replication_stats_loc), row.names = F, col.names = T, sep = '\t')
-# mdfiver::create_md5_for_file(eqtl_replication_stats_loc)
+saveRDS(eqtl_combined_celltype_stats, '~/eqtl_combined_celltype_stats.rds')
+mdfiver::create_md5_for_file('~/eqtl_combined_celltype_stats.rds')
+eqtl_replication_stats_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/replication/celltypes/mo_eqtl_replication_stats.tsv.gz'
+write.table(eqtl_combined_celltype_stats, gzfile(eqtl_replication_stats_loc), row.names = F, col.names = T, sep = '\t')
+mdfiver::create_md5_for_file(eqtl_replication_stats_loc)
 
 ```
 
-```{r eqtl_combined_replication_plot, include=TRUE, fig.width=12, fig.height=12}
+```{r eqtl_combined_replication_plot, include=TRUE, fig.width=8, fig.height=8}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # check replication in caQTLs across cell types
-eqtl_combined_celltype_stat_p <- plot_replication_stats(eqtl_combined_celltype_stats, mid_value = 0.5, comparing_value_to_text=list('n_sig_both' = 'N sig both: ', 'n_sig_tested' = 'N test both: ', 'rb_emp_nom' = 'nom rep rb: '), colour_column = 'rb_emp_nom', category_plot_order = c('B', 'CD4+ T', 'CD8+ T', 'NK', 'DC', 'Monocyte'), text_size = 4) +
+eqtl_combined_celltype_stat_p <- plot_replication_stats(eqtl_combined_celltype_stats, mid_value = 0.5, comparing_value_to_text=list('n_sig_both' = 'N sig: ', 'n_sig_tested' = 'N test: ', 'rb_emp_all' = 'Rb: '), colour_column = 'rb_emp_all', category_plot_order = c('B', 'CD4+ T', 'CD8+ T', 'NK', 'DC', 'Monocyte'), text_size = 4, legendless = T) +
   xlab('Cell type replicating') +
   ylab('Cell type replicating in') +
-  ggtitle('Replication of eQTLs across cell types') +
+  ggtitle('Replication of eQTLs') +
   labs(fill="Rb") +
   theme(
     # X label font size
@@ -1065,7 +1152,7 @@ eqtl_combined_celltype_stat_p <- plot_replication_stats(eqtl_combined_celltype_s
   )
 
 # save the figure
-ggsave('~/plots/mo_eqtl_celltype_replication.pdf', plot = eqtl_combined_celltype_stat_p, width = 12, height = 12)
+ggsave('~/plots/mo_eqtl_celltype_replication.pdf', plot = eqtl_combined_celltype_stat_p, width = 8, height = 8)
 
 # display the figure
 eqtl_combined_celltype_stat_p
