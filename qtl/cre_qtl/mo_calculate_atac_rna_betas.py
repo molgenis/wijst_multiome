@@ -3,17 +3,18 @@ This script is used to combine calculate betas and p values between chromatin an
 
 authors: Roy Oelen
 
+location: /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/cre_eqtl/scripts/mo_calculate_atac_rna_betas.py
+
 example usage:
 
-python mo_calculate_atac_rna_betas.py \
-    --expression_folder /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/coeqtl/trial_run/matrices/DC/MO100_230202_lane6/RNA/ \
-    --chromatin_folder /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/coeqtl/trial_run/matrices/DC/MO100_230202_lane6/peaks/ \
-    --output_folder /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/coeqtl/trial_run/betas_ps/DC/MO100_230202_lane6/ \
-    --use_gpu \
-    --check_order_intersect \
-    --cre_loc /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/coeqtl/trial_run/cre_lists/monocyte_eregulon_pairs.tsv.gz \
-    --n_perm 10 \
-    --seeds_file_loc /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/coeqtl/trial_run/betas_ps/DC/MO100_230202_lane6/to_use_seeds.txt.gz
+python /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/cre_eqtl/scripts/mo_calculate_atac_rna_betas.py \
+    --expression_folder /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/cre_eqtl/creqtl_replication_round2/matrices/monocyte/MO119_230209_lane8/RNA/ \
+    --chromatin_folder /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/cre_eqtl/creqtl_replication_round2/matrices/monocyte/MO119_230209_lane8/peaks/ \
+    --output_folder /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/cre_eqtl/creqtl_replication_round2/beta_ps/monocyte/MO119_230209_lane8/ \
+    --check_order_intersect --cre_loc /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/cre_eqtl/creqtl_replication/cre_lists/mo_creqtl_monocyte_round2.tsv.gz \
+    --n_perm 0 \
+    --metadata /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/cre_eqtl/creqtl_replication_round2/matrices/monocyte/MO119_230209_lane8/metadata.tsv.gz \
+    --fixed_covariates nCount_RNA,nFeature_peaks
 
 """
 
@@ -275,7 +276,7 @@ def yeo_johnson_normalization_and_scale(matrix):
         return yeo_johnson_normalization_and_scale_cpu(matrix)
 
 
-def binomial_regression_gpu(binary_array_2d, normal_array_2d, epochs=100):
+def binomial_regression_gpu(binary_array_2d, normal_array_2d, epochs=100, metadata=None, covariates=[]):
     """
     Perform binomial regression on 2D arrays using GPU acceleration with PyTorch.
 
@@ -303,74 +304,79 @@ def binomial_regression_gpu(binary_array_2d, normal_array_2d, epochs=100):
     - The beta coefficients are extracted from the trained model, and p-values and standard errors are computed using statsmodels.
     - If a singular matrix error occurs during the fitting process, the p-value and standard error are set to NaN.
     """
-    # create custom class of regression model that uses GPU
+    # --- Define logistic regression model ---
     class LogisticRegressionModel(nn.Module):
-        # constructor
-        def __init__(self):
+        def __init__(self, input_dim):
             super(LogisticRegressionModel, self).__init__()
-            self.linear = nn.Linear(1, 1)
-        # move through array
+            self.linear = nn.Linear(input_dim, 1)
+
         def forward(self, x):
             return torch.sigmoid(self.linear(x))
-    
-    # Initialize the arrays of p values, betas, and standard errors
-    betas = cp.zeros(normal_array_2d.shape[0])
-    p_values = cp.ones(normal_array_2d.shape[0])
-    std_errs = cp.zeros(normal_array_2d.shape[0])
-    # do each row
-    for i in range(normal_array_2d.shape[0]):
-        # create GPU logistic regression model
-        model = LogisticRegressionModel().cuda()
-        # cross entropy loss
+
+    n_features, n_samples = normal_array_2d.shape
+
+    # --- Subset metadata to only covariates ---
+    if metadata is not None and len(covariates) > 0:
+        metadata = metadata[covariates]  # keep only covariates
+        covariate_matrix = metadata.to_numpy().astype(np.float32)  # shape: (samples, covariates)
+    else:
+        covariate_matrix = None
+
+    # Initialize results
+    betas = cp.zeros(n_features)
+    p_values = cp.ones(n_features)
+    std_errs = cp.zeros(n_features)
+
+    # Loop over features (rows)
+    for i in range(n_features):
+        # Predictor for this feature (samples,)
+        feature_vector = normal_array_2d[i].get().reshape(-1, 1).astype(np.float32)
+
+        # Combine with covariates
+        if covariate_matrix is not None:
+            X_full = np.hstack([feature_vector, covariate_matrix])  # shape: (samples, 1+covariates)
+        else:
+            X_full = feature_vector
+
+        y_train = binary_array_2d[i].get().reshape(-1, 1).astype(np.float32)
+
+        # --- Train with PyTorch on GPU ---
+        X_tensor = torch.tensor(X_full, dtype=torch.float32).cuda()
+        y_tensor = torch.tensor(y_train, dtype=torch.float32).cuda()
+
+        model = LogisticRegressionModel(X_full.shape[1]).cuda()
         criterion = nn.BCELoss()
-        # optimizer
         optimizer = optim.Adam(model.parameters(), lr=0.01)
-        # setup the training data, so the original data
-        X_train = torch.tensor(normal_array_2d[i].get(), dtype=torch.float32).reshape(-1, 1).cuda()
-        y_train = torch.tensor(binary_array_2d[i].get(), dtype=torch.float32).reshape(-1, 1).cuda()
-        # do multiple iterations to train the model
+
         for epoch in range(epochs):
-            # do a model
             model.train()
-            # set gradient to zero
             optimizer.zero_grad()
-            # do the predictions
-            outputs = model(X_train)
-            # get the loss
-            loss = criterion(outputs, y_train)
-            # and update the model
+            outputs = model(X_tensor)
+            loss = criterion(outputs, y_tensor)
             loss.backward()
             optimizer.step()
-        
-        # get beta
+
+        # Extract beta for the main predictor (first column)
         beta = model.linear.weight.data.cpu().numpy()[0][0]
-        # put into list
         betas[i] = beta
-        
-        # Compute p-values and standard errors using statsmodels
+
+        # --- Statsmodels for p-values and std errors ---
         try:
-            # constant term for intercept
-            X_sm = sm.add_constant(normal_array_2d[i].get())
-            # make model using data and intercept
-            logit_model = sm.Logit(binary_array_2d[i].get(), X_sm)
-            # get the result of the model
+            X_sm = sm.add_constant(X_full)  # add intercept
+            logit_model = sm.Logit(y_train, X_sm)
             result = logit_model.fit(disp=0)
-            # extract p-value for the predictor
+
+            # First predictor after intercept is our feature of interest
             p_value = result.pvalues[1]
-            # extract standard error for the predictor
             std_err = result.bse[1]
-        except np.linalg.LinAlgError:
-            # set p-value and standard error to NaN if Singular matrix error occurs and we don't have a good fit
+        except (np.linalg.LinAlgError, ValueError):
             p_value = np.nan
             std_err = np.nan
 
-        # add p value and standard error in list
         p_values[i] = p_value
         std_errs[i] = std_err
-    
-    # put results in a dictionary and return those
-    results = {'p': p_values, 'beta': betas, 'std_err': std_errs}
-    return results
+
+    return {'p': p_values, 'beta': betas, 'std_err': std_errs}
 
 
 def binomial_regression_single_row_cpu(X_row, y_row):
@@ -378,101 +384,79 @@ def binomial_regression_single_row_cpu(X_row, y_row):
     Perform binomial regression for a single row of data.
 
     Parameters:
-    X_row (array-like): A 1D array of predictor variables for a single observation.
-    y_row (array-like): A 1D array of binary response variables for a single observation.
+    X_row (array-like): A 2D array of predictors for one feature (samples x predictors).
+                        This should already include the main predictor and any covariates.
+    y_row (array-like): A 1D array of binary response variables for the same samples.
 
     Returns:
-    tuple: A tuple containing the beta coefficient, the p-value, and the standard error for the predictor variable.
-           If a singular matrix error occurs, all values are set to NaN.
-
-    Example:
-    >>> X_row = [1.0, 2.0, 3.0]
-    >>> y_row = [0, 1, 0]
-    >>> beta, p_value, std_err = binomial_regression_single_row_cpu(X_row, y_row)
-    >>> print(beta, p_value, std_err)
-    0.5 0.045 0.1
-
-    Notes:
-    - This function uses statsmodels to perform logistic regression.
-    - A constant term is added to the predictor variables to account for the intercept.
-    - If a singular matrix error occurs during the fitting process, all values are set to NaN.
+    tuple: (beta, p_value, std_err) for the main predictor (first column after intercept).
     """
-    # do binomial regression for a single row
     try:
-        # constant term for intercept
+        # add intercept
         X_sm = sm.add_constant(X_row)
-        # make model use data and use intercept
         logit_model = sm.Logit(y_row, X_sm)
-        # get result of the model
         result = logit_model.fit(disp=0)
-        # extract the coefficient/beta
+
+        # extract coefficient, p-value, and std error for the main predictor (col 1)
         beta = result.params[1]
-        # get the p-value
         p_value = result.pvalues[1]
-        # get the standard error
         std_err = result.bse[1]
-    except np.linalg.LinAlgError:
-        # set both beta, p, and std_err to NAN if we encounter an error
-        beta = np.nan
-        p_value = np.nan
-        std_err = np.nan
+    except (np.linalg.LinAlgError, ValueError):
+        beta, p_value, std_err = np.nan, np.nan, np.nan
     return beta, p_value, std_err
 
 
-def binomial_regression_cpu(binary_array_2d, normal_array_2d):
+def binomial_regression_cpu(binary_array_2d, normal_array_2d, metadata=None, covariates=[]):
     """
-    Perform binomial regression on 2D arrays using multithreading on the CPU.
+    Perform binomial regression on 2D arrays using multithreading on the CPU,
+    adjusting for covariates from a metadata table.
 
     Parameters:
-    binary_array_2d (array-like): A 2D array of binary response variables.
-    normal_array_2d (array-like): A 2D array of predictor variables.
+    binary_array_2d (array-like): A 2D array of binary response variables (features x samples).
+    normal_array_2d (array-like): A 2D array of predictor variables (features x samples).
+    metadata (pd.DataFrame or None): Metadata table with sample-level covariates.
+    covariates (list): List of column names in metadata to include as covariates.
 
     Returns:
-    dict: A dictionary containing three keys:
-          - 'p': A 1D array of p-values for each row.
-          - 'beta': A 1D array of beta coefficients for each row.
-          - 'std_err': A 1D array of standard errors for each row.
-
-    Example:
-    >>> binary_array_2d = np.array([[0, 1, 0], [1, 0, 1]])
-    >>> normal_array_2d = np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
-    >>> results = binomial_regression_cpu(binary_array_2d, normal_array_2d)
-    >>> print(results['beta'], results['p'], results['std_err'])
-    [0.5, 0.7] [0.045, 0.032] [0.1, 0.15]
-
-    Notes:
-    - This function uses ThreadPoolExecutor for multithreading to perform regression on each row concurrently.
-    - The helper function `binomial_regression_single_row_cpu` is used to perform regression on a single row.
-    - The results are stored in arrays and returned as a dictionary.
+    dict: {'p': p-values, 'beta': betas, 'std_err': standard errors}
     """
-    # initialize the arrays of p values, betas, and standard errors, given the shape of the input
-    betas = np.zeros(normal_array_2d.shape[0])
-    p_values = np.ones(normal_array_2d.shape[0])
-    std_errs = np.zeros(normal_array_2d.shape[0])
+    normal_array_2d = np.asarray(normal_array_2d)
+    binary_array_2d = np.asarray(binary_array_2d)
+    n_features, n_samples = normal_array_2d.shape
 
-    # use ThreadPoolExecutor for multithreading
+    # subset metadata to covariates
+    if metadata is not None and len(covariates) > 0:
+        metadata = metadata[covariates]
+        covariate_matrix = metadata.to_numpy().astype(np.float32)  # (samples x k)
+        if covariate_matrix.shape[0] != n_samples:
+            raise ValueError("Metadata covariates must have the same number of rows (samples) as the input arrays.")
+    else:
+        covariate_matrix = None
+
+    betas = np.zeros(n_features)
+    p_values = np.ones(n_features)
+    std_errs = np.zeros(n_features)
+
     with ThreadPoolExecutor() as executor:
-        # store results in list
         futures = []
-        # check each row in the first array (both arrays are the same size)
-        for i in range(normal_array_2d.shape[0]):
-            # do the row
-            futures.append(executor.submit(binomial_regression_single_row_cpu, normal_array_2d[i].flatten(), binary_array_2d[i].flatten()))
-        # go through all results
+        for i in range(n_features):
+            feature_vector = normal_array_2d[i].reshape(-1, 1).astype(np.float32)
+            if covariate_matrix is not None:
+                X_full = np.hstack([feature_vector, covariate_matrix])
+            else:
+                X_full = feature_vector
+            y_row = binary_array_2d[i].astype(np.float32)
+            futures.append(executor.submit(binomial_regression_single_row_cpu, X_full, y_row))
+
         for i, future in enumerate(futures):
-            # grab the beta, p-value, and standard error from the result of the thread
             beta, p_value, std_err = future.result()
-            # put into the list
             betas[i] = beta
             p_values[i] = p_value
             std_errs[i] = std_err
-    
-    # put all results in a dictionary and return those
-    results = {'p': p_values, 'beta': betas, 'std_err': std_errs}
-    return results
 
+    return {'p': p_values, 'beta': betas, 'std_err': std_errs}
 
-def binomial_regression(binary_array_2d, normal_array_2d):
+def binomial_regression(binary_array_2d, normal_array_2d, metadata=None, covariates=[]):
     """
     Perform binomial regression on 2D arrays, using GPU acceleration if available.
 
@@ -498,12 +482,12 @@ def binomial_regression(binary_array_2d, normal_array_2d):
     """
     # depending on GPU, use one or the other method
     if use_gpu:
-        return binomial_regression_gpu(binary_array_2d, normal_array_2d)
+        return binomial_regression_gpu(binary_array_2d, normal_array_2d, metadata = metadata, covariates = covariates)
     else:
-        return binomial_regression_cpu(np.array(binary_array_2d), normal_array_2d)
+        return binomial_regression_cpu(np.array(binary_array_2d), normal_array_2d, metadata = metadata, covariates = covariates)
 
 
-def binomial_regression_chunked_sparse(binary_sparse_matrix, normal_array_2d, chunk_size=1000):
+def binomial_regression_chunked_sparse(binary_sparse_matrix, normal_array_2d, chunk_size=1000, metadata=None, covariates=[]):
     """
     Perform binomial regression on sparse 2D arrays in chunks.
 
@@ -533,7 +517,7 @@ def binomial_regression_chunked_sparse(binary_sparse_matrix, normal_array_2d, ch
         chunk_binary_dense = chunk_binary_sparse.todense()
         
         # Perform binomial regression on the chunk
-        chunk_results = binomial_regression(chunk_binary_dense, chunk_normal)
+        chunk_results = binomial_regression(chunk_binary_dense, chunk_normal, metadata = metadata, covariates = covariates)
         
         # Store the results
         if use_gpu:
@@ -603,6 +587,8 @@ parser.add_argument('-n', '--nrow_chunk', type = int, help = 'number of rows per
 parser.add_argument('-s', '--sample_name', type = str, help = 'sample name to add to all output tables, leave parameter out for no header (string)', default = None)
 parser.add_argument('-p', '--n_perm', type = int, help = 'number of permutations to perform (integer)', default = 0)
 parser.add_argument('-d', '--seeds_file_loc', type = str, help = 'list of permutation seeds to use (string)', default = None)
+parser.add_argument('-m', '--metadata', type = str, help = 'location of the metadata file (string)', default = None)
+parser.add_argument('-f', '--fixed_covariates', type = str, help = 'comma separated string of fixed effects to correct for (string)', default = None)
 args = parser.parse_args()
 
 # whether we use GPU or not
@@ -625,6 +611,10 @@ sample_name = args.sample_name
 n_perm = args.n_perm
 # get the seeds file
 seeds_file_loc = args.seeds_file_loc
+# get the metadata file
+metadata_loc = args.metadata
+# and the fixed covariates
+fixed_covariates_string = args.fixed_covariates
 
 # location of the RNA matrix
 rna_matrix_loc = ''.join([rna_data_loc, '/matrix.mtx.gz'])
@@ -642,6 +632,10 @@ output_beta_loc = ''.join([output_folder, '/beta.txt.gz'])
 output_p_loc = ''.join([output_folder, '/p.txt.gz'])
 output_se_loc = ''.join([output_folder, '/se.txt.gz'])
 
+# set up the covariates
+covariates = []
+if fixed_covariates_string is not None:
+    covariates = fixed_covariates_string.split(',')
 
 #################
 # load all data #
@@ -677,6 +671,12 @@ with gzip.open(atac_features_loc, 'r') as file:
     for i, line in enumerate(file):
         atac_features[i] = line.strip().decode('utf-8')
 
+# load the metadata if we have it
+metadata = None
+if metadata_loc is not None:
+    metadata = pd.read_csv(filepath_or_buffer = metadata_loc, 
+                           sep = '\t', 
+                           header = 0)
 
 #######################
 # intersect and order #
@@ -695,7 +695,34 @@ if check_order_and_intersect:
     # and the two matrices
     rna_matrix = rna_matrix[:, indices_barcodes_rna]
     atac_matrix = atac_matrix[:, indices_barcodes_atac]
+    # if we have metadata, we have to use that as well
+    if metadata is not None:
+        # ensure all barcodes are strings
+        rna_barcodes  = [b.decode() if isinstance(b, bytes) else str(b) for b in rna_barcodes]
+        atac_barcodes = [b.decode() if isinstance(b, bytes) else str(b) for b in atac_barcodes]
+        barcodes_both = [b.decode() if isinstance(b, bytes) else str(b) for b in barcodes_both]
+        # get the metadata barcodes
+        mtdt_barcodes = metadata['barcode'].astype(str).tolist()
+        # check which are present in both
+        barcodes_both = list(set(barcodes_both) & set(mtdt_barcodes))
+        # get the indices in the original lists
+        indices_barcodes_rna = [i for i, value in enumerate(rna_barcodes) if value in barcodes_both]
+        indices_barcodes_mtdt = [i for i, value in enumerate(mtdt_barcodes) if value in barcodes_both]
+        # subset those barcodes now
+        rna_barcodes = [rna_barcodes[i] for i in indices_barcodes_rna]
+        mtdt_barcodes = [mtdt_barcodes[i] for i in indices_barcodes_mtdt]
+        # and subset the matrices
+        rna_matrix = rna_matrix[:, indices_barcodes_rna]
+        atac_matrix = atac_matrix[:, indices_barcodes_rna]
+        metadata = metadata.iloc[indices_barcodes_mtdt, :]
 
+##########################
+# z-transform covariates #
+##########################
+
+metadata[covariates] = metadata[covariates].apply(
+    lambda col: (col - col.mean()) / col.std(ddof=0)
+)
 
 #####################
 # overlap with CREs #
@@ -739,10 +766,10 @@ rna_normal = yeo_johnson_normalization_and_scale(subset_genes)
 regression_results = None
 # if the chunk size is bigger than zero, we do chunking
 if row_chunk_size > 0:
-    regression_results = binomial_regression_chunked_sparse(subset_regions, rna_normal, chunk_size = row_chunk_size)
+    regression_results = binomial_regression_chunked_sparse(subset_regions, rna_normal, chunk_size = row_chunk_size, metadata = metadata, covariates = covariates)
 # otherwise we do everything all in once
 else:
-    regression_results = binomial_regression(subset_regions.todense(), rna_normal)
+    regression_results = binomial_regression(subset_regions.todense(), rna_normal, metadata = metadata, covariates = covariates)
 
 # add the results back in the order of the confinement file
 ordered_ps = [None] * len(regions)
