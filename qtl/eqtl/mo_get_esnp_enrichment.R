@@ -245,6 +245,7 @@ get_color_coding_dict <- function() {
     color_coding_dict[[paste(cell_type, 'matched')]] <- color_coding_dict[[cell_type]]
     color_coding_dict[[paste(cell_type, 'none')]] <- colorRampPalette(c(color_coding_dict[[cell_type]], "white"))(100)[pct_whitening]
     color_coding_dict[[paste(cell_type, 'unmatched')]] <- colorRampPalette(c(color_coding_dict[[cell_type]], "black"))(100)[pct_whitening]
+    color_coding_dict[[paste(cell_type, 'matched only')]] <- colorRampPalette(c(color_coding_dict[[cell_type]], "white"))(50)[pct_whitening]
   }
   # general
   color_coding_dict[['AI']] <- 'darkblue'
@@ -253,6 +254,102 @@ get_color_coding_dict <- function() {
   color_coding_dict[['Non-Inflamed']] <- 'darkred'
   return(color_coding_dict)
 }
+
+
+check_only_matching_openness <- function(qtl_output_all, cutoff=0.001) {
+  # get the unique cell types
+  cell_types <- unique(qtl_output_all[['cell_type']])
+  # add the 'only' openness
+  qtl_output_all[['only_matching']] <- apply(qtl_output_all, 1, function(x, cutoff) {
+    # make sure to only keep the columns that mention the cell types and the column that has the cell type
+    x <- x[grepl(paste('cell_type', paste(cell_types, collapse='|'), sep = '|'), names(x))]
+    # get the openness columns
+    matching_openness <- x[[paste('openness', x[['cell_type']], sep = '_')]]
+    # make sure we are looking at numbers
+    matching_openness <- as.numeric(matching_openness)
+    # if the value is already NA or doesn't fit the cutoff, we don't have to do anything else
+    if (is.na(matching_openness) | matching_openness < cutoff) {
+      return(F)
+    }
+    # get all the other openness columns
+    openness_columns <- names(x)[grepl('openness_', names(x))]
+    # remove the matching one
+    openness_columns <- setdiff(openness_columns, paste('openness', x[['cell_type']], sep = '_'))
+    # get the openess values
+    any_openness <- x[openness_columns]
+    # make sure we are looking at numbers
+    any_openness <- as.numeric(any_openness)
+    # and then anything that is not NA
+    any_openness <- any_openness[!is.na(any_openness)]
+    # set the max openness
+    max_any_openness <- 0
+    if (length(any_openness) > 0) {
+      max_any_openness <- max(any_openness)
+    }
+    # now check if any of the others are bigger than cutoff, and if the cell type one is bigger than the cutoff
+    if (matching_openness < cutoff) {
+      return(F)
+    } else if (matching_openness >= cutoff & max_any_openness >= cutoff) {
+      return(F)
+    } else if (matching_openness >= cutoff & max_any_openness < cutoff) {
+      return(T)
+    }
+  }, cutoff)
+  return(qtl_output_all)
+}
+
+
+#' get a label dict that replaces the posix safe names into printable versions
+#' 
+#' @returns a label dict that replaces the posix safe names into printable versions
+#' label_dict_names <- get_label_dict()
+get_label_dict <- function() {
+  label_dict <- list()
+  label_dict[['CD4_T_cells']] <- 'CD4+ T cells'
+  label_dict[['CD8_T_cells']] <- 'CD8+ T cells'
+  label_dict[['CD4T']] <- 'CD4+ T'
+  label_dict[['CD8T']] <- 'CD8+ T'
+  label_dict[['CD4_T']] <- 'CD4+ T'
+  label_dict[['CD8_T']] <- 'CD8+ T'
+  label_dict[['Dendritic_cells']] <- 'Dendritic cells'
+  label_dict[['Endothelial_cells']] <- 'Endothelial cells'
+  label_dict[['Fibroblasts']] <- 'Fibroblasts'
+  label_dict[['Glia_cells']] <- 'Glia cells'
+  label_dict[['Mast_cells']] <- 'MAST cells'
+  label_dict[['Mature_absorptive_enterocytes']] <- 'Mature absorptive enterocytes'
+  label_dict[['Mature_secretory_enterocytes']] <- 'Mature secretory enterocytes'
+  label_dict[['Memory_B']] <- 'Memory B cells'
+  label_dict[['Monocytes']] <- 'Monocytes'
+  label_dict[['monocyte']] <- 'Monocyte'
+  label_dict[['Mono']] <- 'Monocyte'
+  label_dict[['Plasma_cells']] <- 'Plasma cells'
+  label_dict[['Stem_cells']] <- 'Stem cells'
+  label_dict[['Stromal_cells']] <- 'Stromal cells'
+  label_dict[['T_others']] <- 'other T cells'
+  label_dict[['Transit_amplifying_cells']] <- 'Transit amplifying cells'
+  label_dict[['AI']] <- 'Actively Inflamed'
+  label_dict[['NI']] <- 'Non-Inflamed'
+  return(label_dict)
+}
+
+remap_with_label_dict <- function(vector_of_names) {
+  # get the label dict
+  relabels <- get_label_dict()
+  # get the labels available for renaming
+  labels_available <- names(relabels)
+  # get the ones we cant remap
+  unmappable <- setdiff(unique(vector_of_names), labels_available)
+  # report on those
+  if (length(unmappable) > 0) {
+    print(paste('cannot remap the following names, they will be returned unchanged:', paste(unmappable, collapse = ',')))
+    # and put those in our remapping list as their originals
+    relabels[unmappable] <- unmappable
+  }
+  # now actually do the remapping
+  remapped <- as.vector(unlist(relabels[vector_of_names]))
+  return(remapped)
+}
+
 
 
 ####################
@@ -341,6 +438,9 @@ qtl_output_all[['openness_matching']] <- apply(qtl_output_all, 1, function(x) {
   return(matching_openness)
 })
 
+# add the only-matching openness
+qtl_output_all <- check_only_matching_openness(qtl_output_all)
+
 # subset to what is significant also at the snp-level
 qtl_output_all_snpsig <- qtl_output_all[!is.na(qtl_output_all[['p_value']]) & 
                                           !is.na(qtl_output_all[['pval_nominal_threshold_global']]) &
@@ -352,25 +452,43 @@ qtl_output_all_snpsig[['in_open_chromatin']] <- 'none'
 qtl_output_all_snpsig[!is.na(qtl_output_all_snpsig[['openness_max']]) & qtl_output_all_snpsig[['openness_max']] >= 0.001, 'in_open_chromatin'] <- 'unmatched'
 # or if it matches the cell type
 qtl_output_all_snpsig[!is.na(qtl_output_all_snpsig[['openness_matching']]) & qtl_output_all_snpsig[['openness_matching']] >= 0.001, 'in_open_chromatin'] <- 'matched'
+# also add information if it is only matched
+qtl_output_all_snpsig[['in_open_chromatin_only']] <- qtl_output_all_snpsig[['in_open_chromatin']]
+# and add that as added information
+qtl_output_all_snpsig[qtl_output_all_snpsig[['only_matching']], 'in_open_chromatin_only'] <- 'matched only'
 # set levels
 qtl_output_all_snpsig[['in_open_chromatin']] <- factor(qtl_output_all_snpsig[['in_open_chromatin']], levels = c('none', 'unmatched', 'matched'))
+qtl_output_all_snpsig[['in_open_chromatin_only']] <- factor(qtl_output_all_snpsig[['in_open_chromatin_only']], levels = c('none', 'unmatched', 'matched', 'matched only'))
 # now make this into a table per cell type
 qtl_output_all_snpsig_openatac_occurences <- data.frame(table(qtl_output_all_snpsig[, c('cell_type', 'in_open_chromatin')]))
+qtl_output_all_snpsig_openatac_occurences_only <- data.frame(table(qtl_output_all_snpsig[, c('cell_type', 'in_open_chromatin_only')]))
 # also for just the top effects
 qtl_output_all_snpsig_openatac_occurences_leads <- data.frame(table(qtl_output_all_snpsig[qtl_output_all_snpsig[['is_top_variant']] == T, c('cell_type', 'in_open_chromatin')]))
+qtl_output_all_snpsig_openatac_occurences_leads_only <- data.frame(table(qtl_output_all_snpsig[qtl_output_all_snpsig[['is_top_variant']] == T, c('cell_type', 'in_open_chromatin_only')]))
 # order by chromatin state, so that when we plot them later, this is the order they occur in
 # qtl_output_all_snpsig_openatac_occurences[['in_open_chromatin']] <- factor(qtl_output_all_snpsig_openatac_occurences[['in_open_chromatin']], levels = c('none', 'unmatched', 'matched'))
 # qtl_output_all_snpsig_openatac_occurences_leads[['in_open_chromatin']] <- factor(qtl_output_all_snpsig_openatac_occurences_leads[['in_open_chromatin']], levels = c('none', 'unmatched', 'matched'))
 qtl_output_all_snpsig_openatac_occurences <- qtl_output_all_snpsig_openatac_occurences[order(qtl_output_all_snpsig_openatac_occurences[['in_open_chromatin']]), ]
 qtl_output_all_snpsig_openatac_occurences_leads <- qtl_output_all_snpsig_openatac_occurences_leads[order(qtl_output_all_snpsig_openatac_occurences_leads[['in_open_chromatin']]), ]
+qtl_output_all_snpsig_openatac_occurences_only <- qtl_output_all_snpsig_openatac_occurences_only[order(qtl_output_all_snpsig_openatac_occurences_only[['in_open_chromatin_only']]), ]
+qtl_output_all_snpsig_openatac_occurences_leads_only <- qtl_output_all_snpsig_openatac_occurences_leads_only[order(qtl_output_all_snpsig_openatac_occurences_leads_only[['in_open_chromatin_only']]), ]
+# add nicer cell type name
+qtl_output_all_snpsig_openatac_occurences[['cell_type_nice']] <- remap_with_label_dict(as.character(qtl_output_all_snpsig_openatac_occurences[['cell_type']]))
+qtl_output_all_snpsig_openatac_occurences_leads[['cell_type_nice']] <- remap_with_label_dict(as.character(qtl_output_all_snpsig_openatac_occurences_leads[['cell_type']]))
+qtl_output_all_snpsig_openatac_occurences_only[['cell_type_nice']] <- remap_with_label_dict(as.character(qtl_output_all_snpsig_openatac_occurences_only[['cell_type']]))
+qtl_output_all_snpsig_openatac_occurences_leads_only[['cell_type_nice']] <- remap_with_label_dict(as.character(qtl_output_all_snpsig_openatac_occurences_leads_only[['cell_type']]))
 # add annotation for cell type and chromatin status
-qtl_output_all_snpsig_openatac_occurences[['celltype_in_open_chromatin']] <- paste(qtl_output_all_snpsig_openatac_occurences[['cell_type']], qtl_output_all_snpsig_openatac_occurences[['in_open_chromatin']])
-qtl_output_all_snpsig_openatac_occurences_leads[['celltype_in_open_chromatin']] <- paste(qtl_output_all_snpsig_openatac_occurences_leads[['cell_type']], qtl_output_all_snpsig_openatac_occurences_leads[['in_open_chromatin']])
+qtl_output_all_snpsig_openatac_occurences[['celltype_in_open_chromatin']] <- paste(qtl_output_all_snpsig_openatac_occurences[['cell_type_nice']], qtl_output_all_snpsig_openatac_occurences[['in_open_chromatin']])
+qtl_output_all_snpsig_openatac_occurences_leads[['celltype_in_open_chromatin']] <- paste(qtl_output_all_snpsig_openatac_occurences_leads[['cell_type_nice']], qtl_output_all_snpsig_openatac_occurences_leads[['in_open_chromatin']])
+qtl_output_all_snpsig_openatac_occurences_only[['celltype_in_open_chromatin']] <- paste(qtl_output_all_snpsig_openatac_occurences_only[['cell_type_nice']], qtl_output_all_snpsig_openatac_occurences_only[['in_open_chromatin_only']])
+qtl_output_all_snpsig_openatac_occurences_leads_only[['celltype_in_open_chromatin']] <- paste(qtl_output_all_snpsig_openatac_occurences_leads_only[['cell_type_nice']], qtl_output_all_snpsig_openatac_occurences_leads_only[['in_open_chromatin_only']])
 # because we ordered by in_open_chromatin before, if we order based on the current order, the chromatin state with the cell type should follow the same order
 qtl_output_all_snpsig_openatac_occurences[['celltype_in_open_chromatin']] <- factor(qtl_output_all_snpsig_openatac_occurences[['celltype_in_open_chromatin']], levels = qtl_output_all_snpsig_openatac_occurences[['celltype_in_open_chromatin']])
 qtl_output_all_snpsig_openatac_occurences_leads[['celltype_in_open_chromatin']] <- factor(qtl_output_all_snpsig_openatac_occurences_leads[['celltype_in_open_chromatin']], levels = qtl_output_all_snpsig_openatac_occurences_leads[['celltype_in_open_chromatin']])
+qtl_output_all_snpsig_openatac_occurences_only[['celltype_in_open_chromatin']] <- factor(qtl_output_all_snpsig_openatac_occurences_only[['celltype_in_open_chromatin']], levels = qtl_output_all_snpsig_openatac_occurences_only[['celltype_in_open_chromatin']])
+qtl_output_all_snpsig_openatac_occurences_leads_only[['celltype_in_open_chromatin']] <- factor(qtl_output_all_snpsig_openatac_occurences_leads_only[['celltype_in_open_chromatin']], levels = qtl_output_all_snpsig_openatac_occurences_leads_only[['celltype_in_open_chromatin']])
 # make these into plots
-p_all_variant_openatac_overlap <- ggplot(data = qtl_output_all_snpsig_openatac_occurences, mapping = aes(x = cell_type, y = Freq, fill = celltype_in_open_chromatin)) +
+p_all_variant_openatac_overlap <- ggplot(data = qtl_output_all_snpsig_openatac_occurences, mapping = aes(x = cell_type_nice, y = Freq, fill = celltype_in_open_chromatin)) +
   # barplots specifically
   geom_bar(stat = 'identity', position = 'stack') +
   # with manual colors
@@ -385,7 +503,38 @@ p_all_variant_openatac_overlap <- ggplot(data = qtl_output_all_snpsig_openatac_o
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
   # and set the label for the SCREEN annotation
   labs(fill = "Open chromatin state")
-p_all_variant_openatac_overlap_lead <- ggplot(data = qtl_output_all_snpsig_openatac_occurences_leads, mapping = aes(x = cell_type, y = Freq, fill = celltype_in_open_chromatin)) +
+p_all_variant_openatac_overlap_lead <- ggplot(data = qtl_output_all_snpsig_openatac_occurences_leads, mapping = aes(x = cell_type_nice, y = Freq, fill = celltype_in_open_chromatin)) +
+  # barplots specifically
+  geom_bar(stat = 'identity', position = 'stack') +
+  # with manual colors
+  scale_fill_manual(values = get_color_coding_dict()) +
+  # labels
+  xlab('Cell type') + 
+  ylab('Number of variants') + 
+  ggtitle('Open chromatin state of lead eSNPs') + 
+  # add more whitespace
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+  # rotate the x axis ticks
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  # and set the label for the SCREEN annotation
+  labs(fill = "Open chromatin state")
+# make these into plots
+p_all_variant_openatac_overlap_only <- ggplot(data = qtl_output_all_snpsig_openatac_occurences_only, mapping = aes(x = cell_type_nice, y = Freq, fill = celltype_in_open_chromatin)) +
+  # barplots specifically
+  geom_bar(stat = 'identity', position = 'stack') +
+  # with manual colors
+  scale_fill_manual(values = get_color_coding_dict()) +
+  # labels
+  xlab('Cell type') + 
+  ylab('Number of variants') + 
+  ggtitle('Open chromatin state of eSNPs') + 
+  # add more whitespace
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+  # rotate the x axis ticks
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  # and set the label for the SCREEN annotation
+  labs(fill = "Open chromatin state")
+p_all_variant_openatac_overlap_lead_only <- ggplot(data = qtl_output_all_snpsig_openatac_occurences_leads_only, mapping = aes(x = cell_type_nice, y = Freq, fill = celltype_in_open_chromatin)) +
   # barplots specifically
   geom_bar(stat = 'identity', position = 'stack') +
   # with manual colors
