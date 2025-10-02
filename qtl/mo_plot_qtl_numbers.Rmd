@@ -1546,7 +1546,7 @@ plot_unique_features_numbers(caqtl_unique_features_per_celltype, pct = T) + ggti
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # make a plot of the numbers
-p_icaqtl_peak_numbers_combined <- egene_numbers_to_plot(icaqtl_peak_numbers, legendless = T, use_color_dict = T, angle_labels = F) +
+p_icaqtl_peak_numbers_combined <- egene_numbers_to_plot(icaqtl_peak_numbers, legendless = T, use_color_dict = T, angle_labels = T) +
   ggtitle('Number of ATAC regions with interaction-caQTL\nin UT vs 24hCA') +
   xlab('Cell type') +
   ylab('Number of ATAC regions') +
@@ -1570,11 +1570,11 @@ ggsave('~/plots/mo_multiome_iepeak_numbers.pdf', width = 8, height = 8, plot = p
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # make a plot of the numbers
-p_ieqtl_gene_numbers_combined <- egene_numbers_to_plot(ieqtl_gene_numbers, legendless = T, use_color_dict = T, angle_labels = F) +
-  ggtitle('Number of genes with interaction-eQTL in UT vs 24hCA') +
+p_ieqtl_gene_numbers_combined <- egene_numbers_to_plot(ieqtl_gene_numbers, legendless = T, use_color_dict = T, angle_labels = T) +
+  ggtitle('Number of genes with interaction-eQTL\nin UT vs 24hCA') +
   xlab('Cell type') +
   ylab('Number of genes') +
-  ylim(c(0, 300)) +
+  ylim(c(0, 200)) +
    # label sizes
   theme(
     axis.title.x = element_text(size = 18),
