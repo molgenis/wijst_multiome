@@ -14,11 +14,50 @@ library(HiClimR)
 library(ggplot2)
 library(ggdendro)
 library(patchwork)
+library(Matrix)
 
 
 ####################
 # Functions        #
 ####################
+
+
+get_closest_flanks <- function(position_table, left_flank_column1, right_flank_column1, left_flank_column2, right_flank_column2) {
+  # get the distance between left flanks
+  dist_left_flank1_to_left_flank2 <- position_table[[left_flank_column1]] - position_table[[left_flank_column2]]
+  # distance between the right flanks
+  dist_right_flank1_to_right_flank2 <- position_table[[right_flank_column1]] - position_table[[right_flank_column2]]
+  # distance between left flank 1 and right flank 2
+  dist_left_flank1_to_right_flank2 <- position_table[[left_flank_column1]] - position_table[[right_flank_column2]]
+  # distance between right flank 1 and left flank 2
+  dist_right_flank1_to_left_flank2 <- position_table[[right_flank_column1]] - position_table[[left_flank_column2]]
+  # put in a table for convenience sake
+  distances_tbl <- data.table(
+    'lf1_to_lf2' = dist_left_flank1_to_left_flank2, 
+    'rf1_to_rf2' = dist_right_flank1_to_right_flank2, 
+    'lf1_to_rf2' = dist_left_flank1_to_right_flank2, 
+    'rf1_to_lf2' = dist_right_flank1_to_left_flank2
+  )
+  # add the minimum absolute distance
+  distances_tbl[['min_dist']] <- apply(distances_tbl, 1, function(x) {
+    return(min(abs(x)))
+  })
+  # but set this to zero if any of the flanks end in the bodies
+  #              -----
+  #                 ++++
+  distances_tbl[(distances_tbl[['lf1_to_lf2']] < 0 & distances_tbl[['lf1_to_rf2']] > 0) |
+                  #                   ----
+                #                 ++++
+                (distances_tbl[['rf1_to_lf2']] > 0 & distances_tbl[['lf1_to_rf2']] < 0) |
+                  #                   ----
+                #                 +++++++++
+                (distances_tbl[['lf1_to_lf2']] > 0 & distances_tbl[['rf1_to_rf2']] < 0) |
+                  #                 ---------
+                #                   ++++
+                (distances_tbl[['lf1_to_lf2']] < 0 & distances_tbl[['rf1_to_rf2']] > 0)
+                , 'min_dist'] <- 0
+  return(distances_tbl)
+}
 
 
 calc_cors <- function(x,
@@ -238,9 +277,10 @@ plot_csi_heatmap <- function(clust_result,
     # make a df to map the features to the clusters
     cluster_df <- data.frame(label = names(clusters),
                              cluster = factor(clusters))
-    # add the dendogram data
-    cluster_df <- merge(cluster_df, dendro_data$labels[,c("label", "x")], by =" label")
     
+    # add the dendogram data
+    cluster_df <- merge(cluster_df, dendro_data$labels[,c("label", "x")], by = "label")
+
     # collect the palette if not supplied
     if (is.null(cluster_palette)) {
       cluster_palette <- scales::hue_pal()(length(unique(clusters)))
@@ -278,3 +318,58 @@ plot_csi_heatmap <- function(clust_result,
 ####################
 # Main code        #
 ####################
+
+# colnames(ucsc_anno) <- c('chrom', 'chromStart', 'chromEnd', 'name', 'score', 'strand', 'thickStart', 'thickEnd', 'itemRgb', 'blockCount', 'blockSizes', 'blockStarts')
+gene_anno_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/genome_annotation.tsv'
+gene_anno <- fread(gene_anno_loc, header = T, sep = '\t')
+# rename columns to be the same as in limix
+colnames(gene_anno) <-c('chrom', 'start', 'end', 'strand', 'gs','Transcription_Start_Site','Transcript_type')
+# read the cpeaks annotation
+cpeaks_anno_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/cPeaks/cPeaks_wscreenv4.tsv.gz'
+cpeaks_anno <- fread(cpeaks_anno_loc, header = T, sep = '\t')
+# add the Signac style name
+cpeaks_anno[['signac_hg38']] <- paste(cpeaks_anno[['chr_hg38']], cpeaks_anno[['start_hg38']], cpeaks_anno[['end_hg38']], sep = '-')
+# as well as the SCENIC+ style name
+cpeaks_anno[['scenic_hg38']] <- paste0(cpeaks_anno[['chr_hg38']], ':', cpeaks_anno[['start_hg38']], '-', cpeaks_anno[['end_hg38']])
+
+# location of the CREs identified by SCENIC
+scenic_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eRegulon_both.tsv.gz'
+# read the scenic output
+scenic_output <- fread(scenic_output_loc, header = T, sep = '\t')
+# add location for the scenic table
+scenic_output <- cbind(scenic_output, cpeaks_anno[match(scenic_output[['Region']], cpeaks_anno[['scenic_hg38']]), c('chr_hg38', 'start_hg38', 'end_hg38')])
+# and the locations of the genes
+scenic_output <- cbind(scenic_output, gene_anno[match(scenic_output[['Gene']], gene_anno[['gs']]), c('chrom', 'start', 'end')])
+# get the distances again
+scenic_distances <- get_closest_flanks(scenic_output, 'start_hg38', 'end_hg38', 'start', 'end')
+# add that to the original table
+scenic_output[['distance']] <- scenic_distances[['min_dist']]
+# remove the entries that are more likely to be false positives
+scenic_output_unfiltered <- scenic_output
+scenic_output <- scenic_output_unfiltered[scenic_output_unfiltered[['Gene_signature_direction']] %in% c('+/+', '-/+'), ]
+# and region-gene overlaps
+scenic_output <- scenic_output[scenic_output[['distance']] > 0, ]
+
+# get the location of eRegulon AUC
+eregulon_auc_mtx_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eregulon_gene_auc.mtx.gz'
+# and the rows and col names
+eruglon_auc_eregnames_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eregulon_gene_auc_eregnames.txt.gz'
+eruglon_auc_barcodes_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eregulon_gene_auc_barcodes.txt.gz'
+# read the files
+eregulon_auc <- Matrix::readMM(eregulon_auc_mtx_loc)
+eruglon_auc_barcodes <- read.table(eruglon_auc_barcodes_loc, header = F)[[1]]
+eruglon_auc_eregnames <- read.table(eruglon_auc_eregnames_loc, header = F)[[1]]
+# set the row and column names
+colnames(eregulon_auc) <- eruglon_auc_barcodes
+rownames(eregulon_auc) <- eruglon_auc_eregnames
+
+# only keep the eregulons we kept in the SCENIC+ output after filtering
+eregulon_auc <- eregulon_auc[rownames(eregulon_auc) %in% scenic_output[['Gene_signature_name']], ]
+# calculate the pairwise correlations
+eregulon_cors <- calc_cors(eregulon_auc)
+# calculate the CSIs
+eregulon_csi <- calc_csi(eregulon_cors)
+# get the hierarchial clusters
+eregulon_clusts <- clust_csi(eregulon_csi, k = 10)
+# plot the clusters
+plot_csi_heatmap(eregulon_clusts)
