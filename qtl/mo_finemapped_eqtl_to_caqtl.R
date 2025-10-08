@@ -473,6 +473,62 @@ get_closest_flanks <- function(position_table, left_flank_column1, right_flank_c
 }
 
 
+# plot the concordance
+plot_concordanace <- function(qtl_effect_table, ca_effect_column='ca_effect', e_effect_column='e_effect', main='Effect sizes of caQTLs versus eQTLs') {
+  # set standardized columns
+  qtl_effect_table[['ca_effect']] <- qtl_effect_table[[ca_effect_column]]
+  qtl_effect_table[['e_effect']] <- qtl_effect_table[[e_effect_column]]
+  
+  # get the concordance
+  con_qtl_effect_table <- sum(sign(qtl_effect_table[['e_effect']]) == sign(qtl_effect_table[['ca_effect']])) / nrow(qtl_effect_table)
+  
+  # get the min and max values on the axis
+  max_beta1 <- max(abs(qtl_effect_table[['ca_effect']]))
+  min_beta1 <- min(abs(qtl_effect_table[['ca_effect']]))
+  max_beta2 <- max(abs(qtl_effect_table[['e_effect']]))
+  min_beta2 <- min(abs(qtl_effect_table[['e_effect']]))
+  
+  # start making the plot
+  plot(x = qtl_effect_table[['ca_effect']], y = qtl_effect_table[['e_effect']], 
+       ylim = c(max_beta2 * -1, max_beta2),
+       xlim = c(max_beta1 * -1, max_beta1),
+       xlab = 'caQTL effect size',
+       ylab = 'eQTL effect size',
+       pch = 16,
+       cex = 0.5,
+       main = main
+  )
+  # the top to bottom rectangle of non-significant effects
+  rect(xleft = -1 * min_beta1, xright = min_beta1, ybottom = -1 * max_beta2, ytop = max_beta2, border = NA, col = rgb(red = 1, green = 1, blue = 1, alpha = 0.5))
+  # the left to right rectangle of non-significant effects
+  rect(xleft = -1 * max_beta1, xright = max_beta1, ybottom = -1 * min_beta2, ytop = min_beta2, border = NA, col = rgb(red = 1, green = 1, blue = 1, alpha = 0.5))
+  # bottom left concordant
+  rect(xleft = -1 * max_beta1, xright = -1 *min_beta1, ybottom = -1 * max_beta2, ytop = -1 * min_beta2, border = NA, col = rgb(red = 0, green = .45, blue = .7, alpha = 0.5))
+  # bottom right disconcordant
+  rect(xleft = min_beta1, xright = max_beta1, ybottom = -1 * max_beta2, ytop = -1 * min_beta2, border = NA, col = rgb(red = .8, green = .4, blue = 0, alpha = 0.5))
+  # top left disconcordant
+  rect(xleft = -1 * max_beta1, xright = -1 *min_beta1, ybottom = min_beta2, ytop = max_beta2, border = NA, col = rgb(red = .8, green = .4, blue = 0, alpha = 0.5))
+  # top right disconcordant
+  rect(xleft = min_beta1, xright = max_beta1, ybottom = min_beta2, ytop = max_beta2, border = NA, col = rgb(red = 0, green = .45, blue = .7, alpha = 0.5))
+  # box to put concordance label in
+  # rect(xleft = max_beta2 * 0.60, xright = max_beta2 * 0.95, ybottom = max_beta2 * -0.8, ytop = max_beta2 * -0.70, col = 'white')
+  rect(xleft = max_beta2 * 0.50, xright = max_beta2 * 1.15, ybottom = max_beta2 * -0.9, ytop = max_beta2 * -0.60, col = 'white')
+  # add concordance label
+  text(x = max_beta1 * 0.75 , y = max_beta2 * -0.75, labels = c(paste('concordance', round(con_qtl_effect_table, digits = 2), sep = ':\n')))
+  # add the annotation of what if concordant and disconcordant
+  #text(x = max_sig_z_venema * 0.75 , y = max_sig_z_eqtlgen * 0.75, labels = c('concordant'), col = rgb(red = 0, green = .45, blue = .7))
+  #text(x = max_sig_z_venema * - 0.75 , y = max_sig_z_eqtlgen * 0.75, labels = c('disconcordant'), col = rgb(red = .8, green = .4, blue = 0))
+  # add dashed lines
+  lines(c(max_beta1 * -1, max_beta1), c(min_beta2 * -1, min_beta2 * -1), type = "l", lty = 2)
+  lines(c(max_beta1 * -1, max_beta1), c(min_beta2, min_beta2), type = "l", lty = 2)
+  lines(c(min_beta1 * -1, min_beta1 * -1), c(max_beta2 * -1, max_beta2), type = "l", lty = 2)
+  lines(c(min_beta1, min_beta1), c(max_beta2 * -1, max_beta2), type = "l", lty = 2)
+  # save the plot
+  # plots/mo_top_eqtl_over_ct_to_caqtl_betas.pdf
+  # 5,5
+}
+
+
 ####################
 # Main Code        #
 ####################
@@ -689,54 +745,24 @@ overlap_complete_distbiggerzero <- overlap_complete[overlap_complete[['distance'
 
 # keep the first entry
 overlap_complete_unique_r2g <- overlap_complete[!duplicated(paste(overlap_complete[['trait1']], overlap_complete[['trait2']])), ]
-# get the concordance
-con_overlap_complete_unique_r2g <- sum(sign(overlap_complete_unique_r2g[['e_effect']]) == sign(overlap_complete_unique_r2g[['ca_effect']])) / nrow(overlap_complete_unique_r2g)
+# # get the concordance
+# con_overlap_complete_unique_r2g <- sum(sign(overlap_complete_unique_r2g[['e_effect']]) == sign(overlap_complete_unique_r2g[['ca_effect']])) / nrow(overlap_complete_unique_r2g)
 # check again, but where there is no physical ATAC and gene overlap
 overlap_complete_unique_distbiggerzero_r2g <- overlap_complete_distbiggerzero[!duplicated(paste(overlap_complete_distbiggerzero[['trait1']], overlap_complete_distbiggerzero[['trait2']])), ]
-# get the concordance again
-con_overlap_complete_unique_distbiggerzero_r2g <- sum(sign(overlap_complete_unique_distbiggerzero_r2g[['e_effect']]) == sign(overlap_complete_unique_distbiggerzero_r2g[['ca_effect']])) / nrow(overlap_complete_unique_distbiggerzero_r2g)
+# # get the concordance again
+# con_overlap_complete_unique_distbiggerzero_r2g <- sum(sign(overlap_complete_unique_distbiggerzero_r2g[['e_effect']]) == sign(overlap_complete_unique_distbiggerzero_r2g[['ca_effect']])) / nrow(overlap_complete_unique_distbiggerzero_r2g)
+# now just for mono
+overlap_complete_unique_r2g_mono <- overlap_complete[overlap_complete[['cell_type']] == 'monocyte', ]
+overlap_complete_unique_r2g_mono <- overlap_complete_unique_r2g_mono[!duplicated(paste(overlap_complete_unique_r2g_mono[['trait1']], overlap_complete_unique_r2g_mono[['trait2']])), ]
+# and CD4T
+overlap_complete_unique_r2g_cd4t <- overlap_complete[overlap_complete[['cell_type']] == 'CD4T', ]
+overlap_complete_unique_r2g_cd4t <- overlap_complete_unique_r2g_cd4t[!duplicated(paste(overlap_complete_unique_r2g_cd4t[['trait1']], overlap_complete_unique_r2g_cd4t[['trait2']])), ]
 
-# get the min and max values on the axis
-max_beta1 <- max(abs(overlap_complete_unique_r2g[['ca_effect']]))
-min_beta1 <- min(abs(overlap_complete_unique_r2g[['ca_effect']]))
-max_beta2 <- max(abs(overlap_complete_unique_r2g[['e_effect']]))
-min_beta2 <- min(abs(overlap_complete_unique_r2g[['e_effect']]))
-
-# start making the plot
-plot(x = overlap_complete_unique_r2g[['ca_effect']], y = overlap_complete_unique_r2g[['e_effect']], 
-     ylim = c(max_beta2 * -1, max_beta2),
-     xlim = c(max_beta1 * -1, max_beta1),
-     xlab = 'caQTL effect size',
-     ylab = 'eQTL effect size',
-     pch = 16,
-     cex = 0.5,
-     main = 'Effect sizes of caQTLs versus eQTLs'
-)
-# the top to bottom rectangle of non-significant effects
-rect(xleft = -1 * min_beta1, xright = min_beta1, ybottom = -1 * max_beta2, ytop = max_beta2, border = NA, col = rgb(red = 1, green = 1, blue = 1, alpha = 0.5))
-# the left to right rectangle of non-significant effects
-rect(xleft = -1 * max_beta1, xright = max_beta1, ybottom = -1 * min_beta2, ytop = min_beta2, border = NA, col = rgb(red = 1, green = 1, blue = 1, alpha = 0.5))
-# bottom left concordant
-rect(xleft = -1 * max_beta1, xright = -1 *min_beta1, ybottom = -1 * max_beta2, ytop = -1 * min_beta2, border = NA, col = rgb(red = 0, green = .45, blue = .7, alpha = 0.5))
-# bottom right disconcordant
-rect(xleft = min_beta1, xright = max_beta1, ybottom = -1 * max_beta2, ytop = -1 * min_beta2, border = NA, col = rgb(red = .8, green = .4, blue = 0, alpha = 0.5))
-# top left disconcordant
-rect(xleft = -1 * max_beta1, xright = -1 *min_beta1, ybottom = min_beta2, ytop = max_beta2, border = NA, col = rgb(red = .8, green = .4, blue = 0, alpha = 0.5))
-# top right disconcordant
-rect(xleft = min_beta1, xright = max_beta1, ybottom = min_beta2, ytop = max_beta2, border = NA, col = rgb(red = 0, green = .45, blue = .7, alpha = 0.5))
-# box to put concordance label in
-# rect(xleft = max_beta2 * 0.60, xright = max_beta2 * 0.95, ybottom = max_beta2 * -0.8, ytop = max_beta2 * -0.70, col = 'white')
-rect(xleft = max_beta2 * 0.50, xright = max_beta2 * 1.15, ybottom = max_beta2 * -0.9, ytop = max_beta2 * -0.60, col = 'white')
-# add concordance label
-text(x = max_beta1 * 0.75 , y = max_beta2 * -0.75, labels = c(paste('concordance', round(con_overlap_complete_unique_r2g, digits = 2), sep = ':\n')))
-# add the annotation of what if concordant and disconcordant
-#text(x = max_sig_z_venema * 0.75 , y = max_sig_z_eqtlgen * 0.75, labels = c('concordant'), col = rgb(red = 0, green = .45, blue = .7))
-#text(x = max_sig_z_venema * - 0.75 , y = max_sig_z_eqtlgen * 0.75, labels = c('disconcordant'), col = rgb(red = .8, green = .4, blue = 0))
-# add dashed lines
-lines(c(max_beta1 * -1, max_beta1), c(min_beta2 * -1, min_beta2 * -1), type = "l", lty = 2)
-lines(c(max_beta1 * -1, max_beta1), c(min_beta2, min_beta2), type = "l", lty = 2)
-lines(c(min_beta1 * -1, min_beta1 * -1), c(max_beta2 * -1, max_beta2), type = "l", lty = 2)
-lines(c(min_beta1, min_beta1), c(max_beta2 * -1, max_beta2), type = "l", lty = 2)
-# save the plot
-# plots/mo_top_eqtl_over_ct_to_caqtl_betas.pdf
-# 5,5
+# plot these
+plot_concordanace(overlap_complete_unique_r2g)
+plot_concordanace(overlap_complete_unique_distbiggerzero_r2g, main = 'Effect sizes of caQTLs versus eQTLs\n(no region/gene overlap)')
+plot_concordanace(overlap_complete_unique_r2g_mono, main = 'Effect sizes of caQTLs versus eQTLs for monocytes')
+plot_concordanace(overlap_complete_unique_r2g_cd4t, main = 'Effect sizes of caQTLs versus eQTLs for CD4+ T')
+plot_concordanace(overlap_complete_unique_distbiggerzero_r2g[!duplicated(overlap_complete_unique_distbiggerzero_r2g[['trait2']]), ], main = 'Effect sizes of caQTLs versus eQTLs\n(no region/gene overlap, top caQTL effect per gene)')
+plot_concordanace(overlap_complete_unique_r2g_mono[!duplicated(overlap_complete_unique_r2g_mono[['trait2']]), ], main = 'Effect sizes of caQTLs versus eQTLs for monocytes\n(top caQTL effect per gene)')
+plot_concordanace(overlap_complete_unique_r2g_cd4t[!duplicated(overlap_complete_unique_r2g_cd4t[['trait2']]), ], main = 'Effect sizes of caQTLs versus eQTLs for CD4+ T(top caQTL effect per gene)')
