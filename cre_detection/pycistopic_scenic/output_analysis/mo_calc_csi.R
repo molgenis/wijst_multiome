@@ -315,6 +315,24 @@ plot_csi_heatmap <- function(clust_result,
   return(combined)
 }
 
+
+rss_table_to_long <- function(rss_table) {
+  # get the categories
+  categories <- rss_table[[1]]
+  # get the regulons
+  regulons <- colnames(rss_table)[-1]
+  # create the new table
+  long_table <- data.frame('regulon' = regulons)
+  # next go through the categories
+  for (category in categories) {
+    # add that to the table
+    long_table[[category]] <- as.vector(unlist(rss_table[rss_table[[1]] == category, c(-1)]))
+  }
+  return(long_table)
+}
+
+
+
 ####################
 # Main code        #
 ####################
@@ -347,6 +365,14 @@ scenic_output[['distance']] <- scenic_distances[['min_dist']]
 # remove the entries that are more likely to be false positives
 scenic_output_unfiltered <- scenic_output
 scenic_output <- scenic_output_unfiltered[scenic_output_unfiltered[['Gene_signature_direction']] %in% c('+/+', '-/+'), ]
+# keep the first eRegulon if it is in both direct and extended
+scenic_output <- scenic_output[order(scenic_output[['is_extended']]), ]
+# grab the unique TFs
+scenic_tfs <- unique(scenic_output[, c('TF', 'eRegulon_name')])
+# remove duplicates, so that would be extended when we already have the direct
+scenic_tfs <- scenic_tfs[!duplicated(scenic_tfs[['TF']]), ]
+# now filter on thos eRegulons
+scenic_output <- scenic_output[scenic_output[['eRegulon_name']] %in% scenic_tfs[['eRegulon_name']], ]
 # and region-gene overlaps
 scenic_output <- scenic_output[scenic_output[['distance']] > 0, ]
 
@@ -370,6 +396,117 @@ eregulon_cors <- calc_cors(eregulon_auc)
 # calculate the CSIs
 eregulon_csi <- calc_csi(eregulon_cors)
 # get the hierarchial clusters
-eregulon_clusts <- clust_csi(eregulon_csi, k = 10)
+eregulon_clusts <- clust_csi(eregulon_csi, k = 8)
 # plot the clusters
 plot_csi_heatmap(eregulon_clusts)
+ggsave(file = '~/plots/mo_ereg_csi_clusters.pdf', width=25, height=25)
+
+# make into long format again
+eregulon_clusts_long <- csi_long_to_matrix(eregulon_csi)
+# get entries that are less than .7
+eregulon_clusts_long_07_entries <- apply(eregulon_clusts_long, 1, function(x) {which(x >= .7)})
+# get the full set that is at some point .7
+eregulon_clusts_long_07_entries_even <- unique(do.call('c', eregulon_clusts_long_07_entries))
+# filter the long matrix
+eregulon_clusts_long_07 <- eregulon_clusts_long[eregulon_clusts_long_07_entries_even, eregulon_clusts_long_07_entries_even]
+# turn back into long format
+# get the hierarchial clusters
+eregulon_clusts_07 <- clust_csi(reshape2::melt(eregulon_clusts_long_07, c("feature_1", "feature_2"), value.name = "CSI"), k = 10)
+# plot the clusters
+plot_csi_heatmap(eregulon_clusts_07)
+
+
+# get the enrichment statistics
+rss_condition_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/tf_to_metadata/mo_tf_rss_condition.tsv.gz'
+rss_cell_type_major_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/tf_to_metadata/mo_tf_rss_cell_type_lowerres.tsv.gz'
+rss_cell_type_major_merged_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/tf_to_metadata/mo_tf_rss_cell_type_lowerres_merged.tsv.gz'
+rss_cell_type_minor_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/tf_to_metadata/mo_tf_rss_cell_type_highres.tsv.gz'
+rss_cell_type_lineage_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/tf_to_metadata/mo_tf_rss_cell_type_lineage.tsv.gz'
+# and enrichments
+rss_condition <- fread(rss_condition_loc, header = T, sep = '\t')
+rss_cell_type_lineage <- fread(rss_cell_type_lineage_loc, header = T, sep = '\t')
+rss_cell_type_major_merged <- fread(rss_cell_type_major_merged_loc, header = T, sep = '\t')
+# convert rss table to a long table
+rss_condition_long <- rss_table_to_long(rss_condition)
+rss_cell_type_lineage_long <- rss_table_to_long(rss_cell_type_lineage)
+rss_cell_type_major_merged_long <- rss_table_to_long(rss_cell_type_major_merged)
+# also make a plottble table
+rss_condition_plottable <- rbind(
+  data.frame('rss' = rss_condition_long[['UT']], 'condition' = rep('UT', times = nrow(rss_condition_long))), 
+  data.frame('rss' = rss_condition_long[['24hCA']], 'condition' = rep('24hCA', times = nrow(rss_condition_long)))
+)
+rss_cell_type_lineage_plottable <- rbind(
+  data.frame('rss' = rss_cell_type_lineage_long[['myeloid']], 'condition' = rep('myeloid', times = nrow(rss_cell_type_lineage_long))), 
+  data.frame('rss' = rss_cell_type_lineage_long[['lymphoid']], 'condition' = rep('lymphoid', times = nrow(rss_cell_type_lineage_long)))
+)
+# calculate the difference between the two lineages
+rss_cell_type_lineage_long[['delta']] <- abs(rss_cell_type_lineage_long[['myeloid']] - rss_cell_type_lineage_long[['lymphoid']])
+rss_cell_type_lineage_long[['diff_mye_lym']] <- (rss_cell_type_lineage_long[['myeloid']] - rss_cell_type_lineage_long[['lymphoid']])
+# calculate the difference between the two conditions
+rss_condition_long[['delta']] <- abs(rss_condition_long[['24hCA']] - rss_condition_long[['UT']])
+rss_condition_long[['diff_24hCA_UT']] <- (rss_condition_long[['24hCA']] - rss_condition_long[['UT']])
+# only keep the RSS in the SCENIC+ output
+rss_cell_type_lineage_long <- rss_cell_type_lineage_long[rss_cell_type_lineage_long[['regulon']] %in% scenic_output[['Gene_signature_name']], ]
+rss_condition_long <- rss_condition_long[rss_condition_long[['regulon']] %in% scenic_output[['Gene_signature_name']], ]
+# add the cluster info
+rss_condition_long[['cluster']] <- as.factor(eregulon_clusts$clusters[rss_condition_long[['regulon']]])
+rss_cell_type_lineage_long[['cluster']] <- as.factor(eregulon_clusts$clusters[rss_cell_type_lineage_long[['regulon']]])
+# plot the delta as wel
+ggplot(data = rss_cell_type_lineage_long, mapping = aes(x = delta, fill = cluster)) +
+  geom_density(alpha = 0.5) +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+  ggtitle('Myeloid and Lymphoid enrichment score deltas') +
+  xlab('RSS eRegulon enrichment score') + 
+  ylab('Density') +
+  labs(fill = 'Lineage Delta RSS')
+ggplot(data = rss_condition_long, mapping = aes(x = delta, fill = cluster)) +
+  geom_density(alpha = 0.5) +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+  ggtitle('UT vs 24hCA enrichment score deltas') +
+  xlab('RSS eRegulon enrichment score') + 
+  ylab('Density') +
+  labs(fill = 'Condition Delta RSS')
+# separately as well
+ggplot(data = rss_cell_type_lineage_long, mapping = aes(x = delta, fill = cluster)) +
+  geom_density(alpha = 1) +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+  ggtitle('Myeloid and Lymphoid enrichment score deltas') +
+  xlab('RSS eRegulon enrichment score') + 
+  ylab('Density') +
+  labs(fill = 'Lineage Delta RSS') +
+  facet_wrap(~cluster)
+ggplot(data = rss_condition_long, mapping = aes(x = delta, fill = cluster)) +
+  geom_density(alpha = 1) +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+  ggtitle('UT vs 24hCA enrichment score deltas') +
+  xlab('RSS eRegulon enrichment score') + 
+  ylab('Density') +
+  labs(fill = 'Condition Delta RSS') +
+  facet_wrap(~cluster)
+# with the diff as well
+ggplot(data = rss_cell_type_lineage_long, mapping = aes(x = diff_mye_lym, fill = cluster)) +
+  geom_density(alpha = 1) +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+  ggtitle('Myeloid and Lymphoid enrichment score differences') +
+  xlab('RSS eRegulon enrichment score') + 
+  ylab('Density') +
+  labs(fill = 'Lineage Diff RSS') +
+  facet_wrap(~cluster)
+ggplot(data = rss_condition_long, mapping = aes(x = diff_24hCA_UT, fill = cluster)) +
+  geom_density(alpha = 1) +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+  ggtitle('UT vs 24hCA enrichment score differences') +
+  xlab('RSS eRegulon enrichment score') + 
+  ylab('Density') +
+  labs(fill = 'Condition Diff RSS') +
+  facet_wrap(~cluster)
+# save outputs
+write.table(rss_condition_long, gzfile('~/tables/mo_rss_condition_clustered.tsv.gz'), row.names = F, col.names = T, sep = '\t')
+write.table(rss_cell_type_lineage_long, gzfile('~/tables/mo_rss_lineage_clustered.tsv.gz'), row.names = F, col.names = T, sep = '\t')
+mdfiver::create_sha256_for_file('~/tables/mo_rss_condition_clustered.tsv.gz')
+mdfiver::create_sha256_for_file('~/tables/mo_rss_lineage_clustered.tsv.gz')
+
+# add information to scenic
+scenic_output[['eRegulon_cluster']] <- as.factor(eregulon_clusts$clusters[scenic_output[['Gene_signature_name']]])
+write.table(scenic_output, gzfile('~/tables/mo_scenic_annotated_tf_cluster.tsv.gz'), row.names = F, col.names = T, sep = '\t')
+

@@ -13,6 +13,7 @@ library(data.table)
 library(susieR)
 library(Rfast) # not in container
 library(coloc)
+library(mdfiver)
 
 ####################
 # Functions        #
@@ -185,7 +186,7 @@ set.seed(7777)
 # location of the finemapped eQTLs
 finemapped_eqtls_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/finemapping/interaction_eqtl/sc-eqtlgen/output/ut_and_24hca_significant/L1/'
 # location of the finemapped caQTLs
-finemapped_caqtls_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/finemapping/interaction_caqtl/sc-eqtlgen/output/combined_significant/L1/'
+finemapped_caqtls_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/finemapping/interaction_caqtl/sc-eqtlgen/output/ut_and_24hca_significant/L1/'
 
 # location of gene annotations
 gene_annotation_loc <- '/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/input/LimixAnnotationFile.txt'
@@ -193,7 +194,7 @@ gene_annotation_loc <- '/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-cons
 region_annotation_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/annotations/pct01/LimixAnnotationFile.tsv.gz'
 
 # where we will save the results
-coloc_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/colocalization/eqtl_caqtl/'
+coloc_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/colocalization/eqtl_caqtl/ut_and_24hca_significant/'
 
 # cell types to consider
 cell_types <- c('B', 'CD4T', 'CD8T', 'DC', 'monocyte', 'NK')

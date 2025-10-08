@@ -2,7 +2,7 @@
 ############################################################################################################################
 # Authors: Roy Oelen
 # Name: mo_overlap_qtl_with_cres.R
-# Function: 
+# Function: overlap eQTLs and caQTLs with CREs detected in SCENIX+ or LIMIX
 ############################################################################################################################
 
 ####################
@@ -247,6 +247,16 @@ get_color_coding_dict <- function() {
     color_coding_dict[[paste(cell_type, 'none')]] <- colorRampPalette(c(color_coding_dict[[cell_type]], "white"))(100)[pct_whitening]
     color_coding_dict[[paste(cell_type, 'unmatched')]] <- colorRampPalette(c(color_coding_dict[[cell_type]], "black"))(100)[pct_whitening]
     color_coding_dict[[paste(cell_type, 'matched only')]] <- colorRampPalette(c(color_coding_dict[[cell_type]], "white"))(50)[pct_whitening]
+    # or when checking for matching CRE
+    color_coding_dict[[paste(cell_type, 'is CRE')]] <- color_coding_dict[[cell_type]]
+    color_coding_dict[[paste(cell_type, 'not CRE')]] <- colorRampPalette(c(color_coding_dict[[cell_type]], "white"))(100)[pct_whitening]
+    # or if in CRE
+    color_coding_dict[[paste(cell_type, 'in CRE')]] <- color_coding_dict[[cell_type]]
+    color_coding_dict[[paste(cell_type, 'not in CRE')]] <- colorRampPalette(c(color_coding_dict[[cell_type]], "white"))(100)[pct_whitening]
+    # if CRE in any tool
+    color_coding_dict[[paste(cell_type, 'both')]] <- color_coding_dict[[cell_type]]
+    color_coding_dict[[paste(cell_type, 'LIMIX')]] <- colorRampPalette(c(color_coding_dict[[cell_type]], "white"))(100)[pct_whitening]
+    color_coding_dict[[paste(cell_type, 'SCENIC+')]] <- colorRampPalette(c(color_coding_dict[[cell_type]], "black"))(100)[pct_whitening]
   }
   # general
   color_coding_dict[['AI']] <- 'darkblue'
@@ -343,6 +353,107 @@ get_closest_flanks <- function(position_table, left_flank_column1, right_flank_c
                 (distances_tbl[['lf1_to_lf2']] < 0 & distances_tbl[['rf1_to_rf2']] > 0)
                 , 'min_dist'] <- 0
   return(distances_tbl)
+}
+
+
+read_pseudobulk_cre_output_per_celltype <- function(pseudobulk_output_folder, cell_types=NULL, filename_output='qtl_results_all.txt.gz', significance_column='empirical_feature_p_value', significance_cutoff=0.05, add_mtc=T, mtc_column='empirical_feature_p_value', feature_mtc_column='feature_id', mtc_column_to_add='feature_q_value', add_global_nominal_threshold=F, add_local_nominal_threshold=F, global_nominal_threshold_column_to_add='pval_nominal_threshold_global', local_nominal_threshold_column_to_add='pval_nominal_threshold_local', alpha_column='alpha_param', beta_column='beta_param', nominal_p_column='p_value', filter_alpha=T, alpha_min=.2, alpha_max=5, filter_significance=T, pad_columns=T) {
+  # list all the files in the directory
+  cell_type_folders <- list.dirs(pseudobulk_output_folder, full.names = F, recursive = F)
+  # intersect the cell type folders with the cell types we are interested in
+  if (!is.null(cell_types)) {
+    cell_type_folders <- intersect(cell_type_folders, cell_types)
+  }
+  # save the results in a list
+  output_per_celltype <- list()
+  # now check each cell type
+  for (cell_type in cell_type_folders) {
+    # paste together the full file path
+    cell_type_output_loc <- paste(pseudobulk_output_folder, cell_type, filename_output, sep = '/')
+    # check if the file exists
+    if (file.exists(cell_type_output_loc)) {
+      # read this file
+      cell_type_output <- fread(cell_type_output_loc, header = T, sep = '\t')
+      # make sure there are no duplicates
+      cell_type_output <- unique(cell_type_output)
+      # filter on alpha if requested
+      if (filter_alpha) {
+        cell_type_output <- cell_type_output[!(cell_type_output[[alpha_column]] > alpha_max | cell_type_output[[alpha_column]] < alpha_min), ]
+      }
+      
+      # get the features and the emperical p value
+      if (add_mtc) {
+        # subset to what we need
+        cell_type_output_features <- NULL
+        # which is a bit if we care about the nominal threshold
+        if (add_global_nominal_threshold) {
+          cell_type_output_features <- cell_type_output[, c(..feature_mtc_column, ..mtc_column, ..nominal_p_column, ..alpha_column, ..beta_column), with = F]
+        }
+        # even less if we don't try to get the nominal threshold as well
+        else {
+          cell_type_output_features <- cell_type_output[, c(..feature_mtc_column, ..mtc_column), with = F]
+        }
+        # remove the wherever we dont have our significance
+        cell_type_output_features <- cell_type_output_features[!is.na(cell_type_output_features[[significance_column]]) & cell_type_output_features[[significance_column]] >= 0, ]
+        # order by significance
+        cell_type_output_features <- cell_type_output_features[order(cell_type_output_features[[mtc_column]]), ]
+        # keep only the first entry
+        cell_type_output_features[!duplicated(cell_type_output_features[[feature_mtc_column]]), ]
+        # set the values that are larger than 1, to be 1, problem with precision
+        cell_type_output_features[cell_type_output_features[[mtc_column]] > 1, mtc_column] <- 1
+        # add multiple testing correction
+        cell_type_output_features[['qvalue']] <- qvalue(cell_type_output_features[[mtc_column]])$qvalues
+        # now add back to the original table
+        cell_type_output[[mtc_column_to_add]] <- cell_type_output_features[match(cell_type_output[[feature_mtc_column]], cell_type_output_features[[feature_mtc_column]]), 'qvalue'][['qvalue']]
+        # based on this MTC column, we can now also add a cuttoff
+        if (add_local_nominal_threshold) {
+          cell_type_output_local_threshold <- calculate_nominal_thresholds(cell_type_output_features, fdr=significance_cutoff, pval_col=nominal_p_column, nominal_threshold_column='nomthres', cutoff_column = 'qvalue', alpha_column = alpha_column, beta_column = beta_column)
+          # now add the nominal threshold to the full table
+          cell_type_output[[local_nominal_threshold_column_to_add]] <- cell_type_output_local_threshold[match(cell_type_output[[feature_mtc_column]], cell_type_output_local_threshold[[feature_mtc_column]]), 'nomthres'][['nomthres']]
+        }
+        if(add_global_nominal_threshold) {
+          # filter the output to significant MTC hits
+          cell_type_output_features_significant <- cell_type_output_features[cell_type_output_features[['qvalue']] < significance_cutoff, ]
+          # and get the maximum significant nominal value
+          global_p_cutoff <- max(cell_type_output_features_significant[[nominal_p_column]])
+          # add that to the table
+          cell_type_output[[global_nominal_threshold_column_to_add]] <- global_p_cutoff
+        }
+      }
+      # filter the file if requested
+      if (filter_significance) {
+        cell_type_output <- cell_type_output[
+          cell_type_output[[significance_column]] < significance_cutoff, 
+        ]
+      }
+      # add the cell type
+      cell_type_output[['cell_type']] <- cell_type
+      # put in the list
+      output_per_celltype[[cell_type]] <- cell_type_output
+    }
+    else {
+      warning(paste('folder exists at', cell_type_output_loc, 'but no file is there'))
+    }
+  }
+  if (pad_columns) {
+    # get all the columns we have
+    columns_unique <- unique(as.vector(unlist(lapply(output_per_celltype, colnames))))
+    # check each output
+    for (ct in names(output_per_celltype)) {
+      # extract that table
+      ct_output <- output_per_celltype[[ct]]
+      # check if we are missing any columns
+      missing_columns <- setdiff(columns_unique, colnames(ct_output))
+      # add those columns
+      for (missing_column in missing_columns) {
+        ct_output[[missing_column]] <- NA
+      }
+      # now make sure they are in the same order always
+      ct_output <- ct_output[, ..columns_unique]
+      # and put back in the list
+      output_per_celltype[[ct]] <- ct_output
+    }
+  }
+  return(output_per_celltype)
 }
 
 
@@ -447,11 +558,325 @@ scenic_output[['distance']] <- scenic_distances[['min_dist']]
 # remove the entries that are more likely to be false positives
 scenic_output_unfiltered <- scenic_output
 scenic_output <- scenic_output_unfiltered[scenic_output_unfiltered[['Gene_signature_direction']] %in% c('+/+', '-/+'), ]
+# keep the first eRegulon if it is in both direct and extended
+scenic_output <- scenic_output[order(scenic_output[['is_extended']]), ]
+# grab the unique TFs
+scenic_tfs <- unique(scenic_output[, c('TF', 'eRegulon_name')])
+# remove duplicates, so that would be extended when we already have the direct
+scenic_tfs <- scenic_tfs[!duplicated(scenic_tfs[['TF']]), ]
+# now filter on thos eRegulons
+scenic_output <- scenic_output[scenic_output[['eRegulon_name']] %in% scenic_tfs[['eRegulon_name']], ]
+# remove the entries that are more likely to be false positives
+scenic_output_unfiltered <- scenic_output
+scenic_output <- scenic_output_unfiltered[scenic_output_unfiltered[['Gene_signature_direction']] %in% c('+/+', '-/+'), ]
 # and region-gene overlaps
 scenic_output <- scenic_output[scenic_output[['distance']] > 0, ]
+scenic_output <- scenic_output[scenic_output[['distance']] <= 150000, ]
 # get the region-gene pairs in the SCENIC+ output
 r2g_scenic <- unique(paste(gsub(':', '-', scenic_output[['Region']]), scenic_output[['Gene']]))
+
 # check overlap with r2g of SCENIC+
 length(intersect(r2g_eqtls, r2g_scenic))
-# [1] 670
+# [1] 609
 
+# annotate QTL output with the variant region being a CRE with the right gene
+qtl_output_all_sig[['matching_cre']] <- !is.na(qtl_output_all_sig[['region']]) & paste(qtl_output_all_sig[['region']], qtl_output_all_sig[['feature_id']]) %in% r2g_scenic
+# get number of QTLs where there is overlap
+qtl_variant_cre <- data.frame(table(qtl_output_all_sig[, c('cell_type', 'matching_cre')]))
+# get the number of top QTLs where there is overlap
+qtl_variant_cre_top <- data.frame(table(qtl_output_all_sig[qtl_output_all_sig[['is_top_variant']], c('cell_type', 'matching_cre')]))
+# order by overlap, to see if any overlap
+qtl_output_all_sig <- qtl_output_all_sig[order(qtl_output_all_sig[['matching_cre']], decreasing = T), ]
+# get the number of QTLs where there is any matching CRE
+qtl_variant_cre_any <- data.frame(table(qtl_output_all_sig[!duplicated(paste(qtl_output_all_sig[['cell_type']], qtl_output_all_sig[['feature_id']])), c('cell_type', 'matching_cre')]))
+# make string cre
+qtl_variant_cre[['CRE']] <- ifelse(as.logical(qtl_variant_cre[['matching_cre']]), 'in CRE', 'not in CRE')
+qtl_variant_cre_top[['CRE']] <- ifelse(as.logical(qtl_variant_cre_top[['matching_cre']]), 'in CRE', 'not in CRE')
+qtl_variant_cre_any[['CRE']] <- ifelse(as.logical(qtl_variant_cre_any[['matching_cre']]), 'in CRE', 'not in CRE')
+# add the cell type to the CRE annotation
+qtl_variant_cre[['CRE_celltype']] <- paste(qtl_variant_cre[['cell_type']], qtl_variant_cre[['CRE']])
+qtl_variant_cre_top[['CRE_celltype']] <- paste(qtl_variant_cre_top[['cell_type']], qtl_variant_cre_top[['CRE']])
+qtl_variant_cre_any[['CRE_celltype']] <- paste(qtl_variant_cre_any[['cell_type']], qtl_variant_cre_any[['CRE']])
+# make the plot
+ggplot(data = qtl_variant_cre, mapping = aes(x = cell_type, y = Freq, fill = CRE_celltype)) +
+  geom_bar(position = 'stack', stat = 'identity') + 
+  scale_fill_manual(values = get_color_coding_dict()) +
+  xlab('Cell type') +
+  ylab('Number of variants') +
+  labs(fill = 'Variant in CRE') + 
+  ggtitle('All eQTL variants in correct CRE') +
+  # add more whitespace
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+  # rotate the x axis ticks
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+ggplot(data = qtl_variant_cre_top, mapping = aes(x = cell_type, y = Freq, fill = CRE_celltype)) +
+  geom_bar(position = 'stack', stat = 'identity') + 
+  scale_fill_manual(values = get_color_coding_dict()) +
+  xlab('Cell type') +
+  ylab('Number of variants') +
+  labs(fill = 'Variant in CRE') + 
+  ggtitle('Top eQTL variant per gene in correct CRE') +
+  # add more whitespace
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+  # rotate the x axis ticks
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+ggplot(data = qtl_variant_cre_any, mapping = aes(x = cell_type, y = Freq, fill = CRE_celltype)) +
+  geom_bar(position = 'stack', stat = 'identity') + 
+  scale_fill_manual(values = get_color_coding_dict()) +
+  xlab('Cell type') +
+  ylab('Number of variants') +
+  labs(fill = 'Variant in CRE') + 
+  ggtitle('Any eQTL variant per gene in correct CRE') +
+  # add more whitespace
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+  # rotate the x axis ticks
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+
+# location of the eQTL output
+caqtl_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/output/L1/combined/'
+# get all the QTL output
+caqtl_output <- get_qtls_per_celltype_limix(caqtl_output_loc)
+# add the top effect information
+caqtl_output <- add_top_effect_annotation(caqtl_output)
+# merge all the results
+caqtl_output_all <- do.call('rbind', caqtl_output)
+# add 'chr' to the chromosome
+caqtl_output_all[['snp_chromosome']] <- paste0('chr', caqtl_output_all[['snp_chromosome']])
+# add overlapping feature to QTL
+caqtl_output_all[['region']] <- qtl_variants_all_cpeaks[match(caqtl_output_all[['snp_id']], qtl_variants_all_cpeaks[['snp_id']]), ][['overlapping_feature']]
+# filter on significance
+caqtl_output_all_sig <- caqtl_output_all[caqtl_output_all[['feature_q_value']] < 0.05 &
+                                       caqtl_output_all[['p_value']] < caqtl_output_all[['pval_nominal_threshold_global']], ]
+# sort by the strongest effect size
+caqtl_output_all_sig <- caqtl_output_all_sig[order(abs(caqtl_output_all_sig[['beta']]), decreasing = T), ]
+# annotate QTL output with the variant region being a CRE with the right gene
+caqtl_output_all_sig[['is_cre']] <- !is.na(caqtl_output_all_sig[['feature_id']]) & caqtl_output_all_sig[['feature_id']] %in% gsub(':', '-', scenic_output[['Region']])
+# get number of QTLs where there is overlap
+caqtl_variant_cre <- data.frame(table(caqtl_output_all_sig[!duplicated(paste(caqtl_output_all_sig[['cell_type']], caqtl_output_all_sig[['feature_id']])), c('cell_type', 'is_cre')]))
+# make overlap into string
+caqtl_variant_cre[['CRE']] <- ifelse(as.logical(caqtl_variant_cre[['is_cre']]), 'is CRE', 'not CRE')
+# add cell type
+caqtl_variant_cre[['CRE_celltype']] <- paste(caqtl_variant_cre[['cell_type']], caqtl_variant_cre[['CRE']])
+# make the plot
+ggplot(data = caqtl_variant_cre, mapping = aes(x = cell_type, y = Freq, fill = CRE_celltype)) +
+  geom_bar(position = 'stack', stat = 'identity') + 
+  scale_fill_manual(values = get_color_coding_dict()) +
+  xlab('Cell type') +
+  ylab('Number of chromatin peaks') +
+  labs(fill = 'Chromatin peak is CRE') + 
+  ggtitle('Chromatin peaks that are CREs') +
+  # add more whitespace
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+  # rotate the x axis ticks
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+# location of the hybrid method
+hybrid_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/'
+# read hybrid method
+hybrid_output_list <- read_pseudobulk_cre_output_per_celltype(hybrid_output_loc, add_mtc = F, filter_alpha = F, add_global_nominal_threshold = F, add_local_nominal_threshold = F, filename_output = 'qtl_results_annotated_all.txt', alpha_min = .8, alpha_max = 1.2, filter_significance = F)
+# get the unique mappings
+hybrid_mappings <- names(hybrid_output_list)
+# extract the pseudobulk ones
+pseudobulk_mappings <- hybrid_mappings[grep('_pb$', hybrid_mappings)]
+# extract those
+pseudobulk_output_list <- hybrid_output_list[pseudobulk_mappings]
+# and remove the append of '_pb'
+names(pseudobulk_output_list) <- gsub('_pb', '', names(pseudobulk_output_list))
+# split those
+hybrid_output_list <- hybrid_output_list[setdiff(hybrid_mappings, pseudobulk_mappings)]
+# merge them
+hybrid_output <- do.call('rbind', hybrid_output_list)
+# add z score
+hybrid_output[['zscore']] <- hybrid_output[['beta']] / hybrid_output[['beta_se']]
+# add a correlation based on the Z score, taking sample size and removing 2 + 10 PCs to get the degrees of freedom
+hybrid_output[['r']] <- hybrid_output[['zscore']] / sqrt(hybrid_output[['zscore']]^2 + (hybrid_output[['n_samples']][1] - 12))
+# add a p based z
+hybrid_output[['z_from_p']] <- qnorm(hybrid_output[['p_value']] / 2) * -1 * sign(hybrid_output[['beta']])
+# add location info
+hybrid_output <- cbind(hybrid_output, cpeaks_anno[match(hybrid_output[['snp_id']], cpeaks_anno[['signac_hg38']]), c('chr_hg38', 'start_hg38', 'end_hg38')])
+# and distance info
+hybrid_distances <- get_closest_flanks(hybrid_output, 'start_hg38', 'end_hg38', 'feature_start', 'feature_end')
+hybrid_output[['distance']] <- hybrid_distances[['min_dist']]
+# get extra annotations for the pseudobulk output
+strand_information_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eQTA/LimixExpAnnotationFile.incStrand.txt'
+strand_information <- fread(strand_information_loc, header = T, sep = '\t')
+# add strand info to the hybrid output as well
+hybrid_output[['strand']] <- strand_information[match(hybrid_output[['feature_id']], strand_information[['feature_id']]), ][['strand']]
+# filter the hybrid one in the same way
+hybrid_output_unfiltered <- hybrid_output
+# check significance threshold
+hybrid_output <- hybrid_output_unfiltered[hybrid_output_unfiltered[['global_significance']] == T, ]
+# and filter on distance
+hybrid_output <- hybrid_output[abs(hybrid_output[['distance']]) > 0, ]
+hybrid_output <- hybrid_output[abs(hybrid_output[['distance']]) <= 150000, ]
+# extract the significant r2g2c
+hybrid_r2g2c <- unique(paste(hybrid_output[['snp_id']], hybrid_output[['feature_id']], hybrid_output[['cell_type']]))
+
+# annotate QTL output with the variant region being a CRE with the right gene and cell type
+qtl_output_all_sig[['matching_cre_limix']] <- !is.na(qtl_output_all_sig[['region']]) & paste(qtl_output_all_sig[['region']], qtl_output_all_sig[['feature_id']], qtl_output_all_sig[['cell_type']]) %in% hybrid_r2g2c
+# get number of QTLs where there is overlap
+qtl_variant_cre_limix <- data.frame(table(qtl_output_all_sig[, c('cell_type', 'matching_cre_limix')]))
+# get the number of top QTLs where there is overlap
+qtl_variant_cre_top_limix <- data.frame(table(qtl_output_all_sig[qtl_output_all_sig[['is_top_variant']], c('cell_type', 'matching_cre_limix')]))
+# order by overlap, to see if any overlap
+qtl_output_all_sig <- qtl_output_all_sig[order(qtl_output_all_sig[['matching_cre_limix']], decreasing = T), ]
+# get the number of QTLs where there is any matching CRE
+qtl_variant_cre_any_limix <- data.frame(table(qtl_output_all_sig[!duplicated(paste(qtl_output_all_sig[['cell_type']], qtl_output_all_sig[['feature_id']])), c('cell_type', 'matching_cre_limix')]))
+# make string cre
+qtl_variant_cre_limix[['CRE']] <- ifelse(as.logical(qtl_variant_cre_limix[['matching_cre_limix']]), 'in CRE', 'not in CRE')
+qtl_variant_cre_top_limix[['CRE']] <- ifelse(as.logical(qtl_variant_cre_top_limix[['matching_cre_limix']]), 'in CRE', 'not in CRE')
+qtl_variant_cre_any_limix[['CRE']] <- ifelse(as.logical(qtl_variant_cre_any_limix[['matching_cre_limix']]), 'in CRE', 'not in CRE')
+# add the cell type to the CRE annotation
+qtl_variant_cre_limix[['CRE_celltype']] <- paste(qtl_variant_cre_limix[['cell_type']], qtl_variant_cre_limix[['CRE']])
+qtl_variant_cre_top_limix[['CRE_celltype']] <- paste(qtl_variant_cre_top_limix[['cell_type']], qtl_variant_cre_top_limix[['CRE']])
+qtl_variant_cre_any_limix[['CRE_celltype']] <- paste(qtl_variant_cre_any_limix[['cell_type']], qtl_variant_cre_any_limix[['CRE']])
+# make the plot
+ggplot(data = qtl_variant_cre_limix, mapping = aes(x = cell_type, y = Freq, fill = CRE_celltype)) +
+  geom_bar(position = 'stack', stat = 'identity') + 
+  scale_fill_manual(values = get_color_coding_dict()) +
+  xlab('Cell type') +
+  ylab('Number of variants') +
+  labs(fill = 'Variant in CRE') + 
+  ggtitle('All eQTL variants in correct LIMIX CRE') +
+  # add more whitespace
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+  # rotate the x axis ticks
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+ggplot(data = qtl_variant_cre_top_limix, mapping = aes(x = cell_type, y = Freq, fill = CRE_celltype)) +
+  geom_bar(position = 'stack', stat = 'identity') + 
+  scale_fill_manual(values = get_color_coding_dict()) +
+  xlab('Cell type') +
+  ylab('Number of variants') +
+  labs(fill = 'Variant in CRE') + 
+  ggtitle('Top eQTL variant per gene in correct LIMIX CRE') +
+  # add more whitespace
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+  # rotate the x axis ticks
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+ggplot(data = qtl_variant_cre_any_limix, mapping = aes(x = cell_type, y = Freq, fill = CRE_celltype)) +
+  geom_bar(position = 'stack', stat = 'identity') + 
+  scale_fill_manual(values = get_color_coding_dict()) +
+  xlab('Cell type') +
+  ylab('Number of variants') +
+  labs(fill = 'Variant in CRE') + 
+  ggtitle('Any eQTL variant per gene in correct LIMIX CRE') +
+  # add more whitespace
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+  # rotate the x axis ticks
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+# annotate QTL output with the variant region being a CRE with the right gene in both methods
+qtl_output_all_sig[['matching_cre_both']] <- qtl_output_all_sig[['matching_cre']] & qtl_output_all_sig[['matching_cre_limix']]
+# get number of QTLs where there is overlap
+qtl_variant_cre_both <- data.frame(table(qtl_output_all_sig[, c('cell_type', 'matching_cre_both')]))
+# get the number of top QTLs where there is overlap
+qtl_variant_cre_top_both <- data.frame(table(qtl_output_all_sig[qtl_output_all_sig[['is_top_variant']], c('cell_type', 'matching_cre_both')]))
+# order by overlap, to see if any overlap
+qtl_output_all_sig <- qtl_output_all_sig[order(qtl_output_all_sig[['matching_cre_both']], decreasing = T), ]
+# get the number of QTLs where there is any matching CRE
+qtl_variant_cre_any_both <- data.frame(table(qtl_output_all_sig[!duplicated(paste(qtl_output_all_sig[['cell_type']], qtl_output_all_sig[['feature_id']])), c('cell_type', 'matching_cre_both')]))
+# make string cre
+qtl_variant_cre_both[['CRE']] <- ifelse(as.logical(qtl_variant_cre_both[['matching_cre_both']]), 'in CRE', 'not in CRE')
+qtl_variant_cre_top_both[['CRE']] <- ifelse(as.logical(qtl_variant_cre_top_both[['matching_cre_both']]), 'in CRE', 'not in CRE')
+qtl_variant_cre_any_both[['CRE']] <- ifelse(as.logical(qtl_variant_cre_any_both[['matching_cre_both']]), 'in CRE', 'not in CRE')
+# add the cell type to the CRE annotation
+qtl_variant_cre_both[['CRE_celltype']] <- paste(qtl_variant_cre_both[['cell_type']], qtl_variant_cre_both[['CRE']])
+qtl_variant_cre_top_both[['CRE_celltype']] <- paste(qtl_variant_cre_top_both[['cell_type']], qtl_variant_cre_top_both[['CRE']])
+qtl_variant_cre_any_both[['CRE_celltype']] <- paste(qtl_variant_cre_any_both[['cell_type']], qtl_variant_cre_any_both[['CRE']])
+# make the plot
+ggplot(data = qtl_variant_cre_both, mapping = aes(x = cell_type, y = Freq, fill = CRE_celltype)) +
+  geom_bar(position = 'stack', stat = 'identity') + 
+  scale_fill_manual(values = get_color_coding_dict()) +
+  xlab('Cell type') +
+  ylab('Number of variants') +
+  labs(fill = 'Variant in CRE') + 
+  ggtitle('All eQTL variants in correct both CRE') +
+  # add more whitespace
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+  # rotate the x axis ticks
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+ggplot(data = qtl_variant_cre_top_both, mapping = aes(x = cell_type, y = Freq, fill = CRE_celltype)) +
+  geom_bar(position = 'stack', stat = 'identity') + 
+  scale_fill_manual(values = get_color_coding_dict()) +
+  xlab('Cell type') +
+  ylab('Number of variants') +
+  labs(fill = 'Variant in CRE') + 
+  ggtitle('Top eQTL variant per gene in correct both CRE') +
+  # add more whitespace
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+  # rotate the x axis ticks
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+ggplot(data = qtl_variant_cre_any_both, mapping = aes(x = cell_type, y = Freq, fill = CRE_celltype)) +
+  geom_bar(position = 'stack', stat = 'identity') + 
+  scale_fill_manual(values = get_color_coding_dict()) +
+  xlab('Cell type') +
+  ylab('Number of variants') +
+  labs(fill = 'Variant in CRE') + 
+  ggtitle('Any eQTL variant per gene in correct both CRE') +
+  # add more whitespace
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+  # rotate the x axis ticks
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+# get which are significant in both
+qtl_output_all_sig_both <- qtl_output_all_sig[qtl_output_all_sig[['matching_cre_both']], ]
+# only SCENIC+
+qtl_output_all_sig_limix_only <- qtl_output_all_sig[!(qtl_output_all_sig[['matching_cre_both']]) & qtl_output_all_sig[['matching_cre_limix']], ]
+# only LIMIX
+qtl_output_all_sig_scenic_only <- qtl_output_all_sig[!(qtl_output_all_sig[['matching_cre_both']]) & qtl_output_all_sig[['matching_cre']], ]
+# get number of QTLs where there is overlap
+qtl_variant_cre_both_scenic_limix <- data.frame(table(qtl_output_all_sig_both[, c('cell_type')]))
+qtl_variant_cre_scenic_only <- data.frame(table(qtl_output_all_sig_scenic_only[, c('cell_type')]))
+qtl_variant_cre_limix_only <- data.frame(table(qtl_output_all_sig_limix_only[, c('cell_type')]))
+# add annotation where this came from
+qtl_variant_cre_both_scenic_limix[['CRE']] <- 'both'
+qtl_variant_cre_scenic_only[['CRE']] <- 'SCENIC+'
+qtl_variant_cre_limix_only[['CRE']] <- 'LIMIX'
+# merge them
+qtl_variant_cre_both_all <- rbind(qtl_variant_cre_both_scenic_limix, qtl_variant_cre_scenic_only, qtl_variant_cre_limix_only)
+# add cell type + method
+qtl_variant_cre_both_all[['CRE_celltype']] <- paste(qtl_variant_cre_both_all[['Var1']], qtl_variant_cre_both_all[['CRE']])
+# make a plot
+ggplot(data = qtl_variant_cre_both_all, mapping = aes(x = Var1, y = Freq, fill = CRE_celltype)) +
+  geom_bar(position = 'stack', stat = 'identity') + 
+  scale_fill_manual(values = get_color_coding_dict()) +
+  xlab('Cell type') +
+  ylab('Number of variants') +
+  labs(fill = 'Variant in CRE') + 
+  ggtitle('Any eQTL variant per gene in correct both CRE') +
+  # add more whitespace
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+  # rotate the x axis ticks
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+# get which are significant in both
+qtl_output_all_sig_both_top <- qtl_output_all_sig[qtl_output_all_sig[['is_top_variant']] & qtl_output_all_sig[['matching_cre_both']], ]
+# only SCENIC+
+qtl_output_all_sig_limix_only_top <- qtl_output_all_sig[qtl_output_all_sig[['is_top_variant']] & !(qtl_output_all_sig[['matching_cre_both']]) & qtl_output_all_sig[['matching_cre_limix']], ]
+# only LIMIX
+qtl_output_all_sig_screen_only_top <- qtl_output_all_sig[qtl_output_all_sig[['is_top_variant']] & !(qtl_output_all_sig[['matching_cre_both']]) & qtl_output_all_sig[['matching_cre']], ]
+# get number of QTLs where there is overlap
+qtl_variant_cre_both_scenic_limix_top <- data.frame(table(qtl_output_all_sig_both_top[, c('cell_type')]))
+qtl_variant_cre_scenic_only_top <- data.frame(table(qtl_output_all_sig_scenic_only_top[, c('cell_type')]))
+qtl_variant_cre_limix_only_top <- data.frame(table(qtl_output_all_sig_limix_only_top[, c('cell_type')]))
+# add annotation where this came from
+qtl_variant_cre_both_scenic_limix_top[['CRE']] <- 'both'
+qtl_variant_cre_scenic_only_top[['CRE']] <- 'SCENIC+'
+qtl_variant_cre_limix_only_top[['CRE']] <- 'LIMIX'
+# merge them
+qtl_variant_cre_both_all_top <- rbind(qtl_variant_cre_both_scenic_limix_top, qtl_variant_cre_scenic_only_top, qtl_variant_cre_limix_only_top)
+# add cell type + method
+qtl_variant_cre_both_all_top[['CRE_celltype']] <- paste(qtl_variant_cre_both_all_top[['Var1']], qtl_variant_cre_both_all_top[['CRE']])
+# make a plot
+ggplot(data = qtl_variant_cre_both_all_top, mapping = aes(x = Var1, y = Freq, fill = CRE_celltype)) +
+  geom_bar(position = 'stack', stat = 'identity') + 
+  scale_fill_manual(values = get_color_coding_dict()) +
+  xlab('Cell type') +
+  ylab('Number of variants') +
+  labs(fill = 'Variant in CRE') + 
+  ggtitle('Top eQTL variant per gene in correct both CRE') +
+  # add more whitespace
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+  # rotate the x axis ticks
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))

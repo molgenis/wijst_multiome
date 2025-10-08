@@ -12,6 +12,7 @@
 library(data.table)
 library(IRanges)
 library(ggplot2)
+library(cowplot)
 
 
 ####################
@@ -550,7 +551,36 @@ p_all_variant_openatac_overlap_lead_only <- ggplot(data = qtl_output_all_snpsig_
   # and set the label for the SCREEN annotation
   labs(fill = "Open chromatin state")
 
-
+# make with a nicer legend
+p_all_variant_openatac_overlap_lead_seplegend <- plot_grid(
+  # plot without a legend
+  p_all_variant_openatac_overlap_lead + theme(legend.position='none') +
+    # label sizes
+    theme(
+      axis.title.x = element_text(size = 18),
+      axis.title.y = element_text(size = 18),
+      axis.text.x = element_text(size = 16),
+      axis.text.y = element_text(size = 16),
+      plot.title = element_text(size = 20)
+    ), 
+  # with a dummy legend
+  plot_grid(
+    cowplot::get_legend(
+      ggplot(
+        data = data.frame('open_chromatin_state' = factor(c('none', 'unmatched', 'matched'), levels = c('none', 'unmatched', 'matched')), 'y' = c(1,2,3)), mapping = aes(x = open_chromatin_state, fill = open_chromatin_state, y = y)
+      ) + 
+        geom_bar(stat = 'identity') + 
+        scale_fill_manual(values = list('none' = 'lightgray', 'unmatched' = 'black', 'matched' = 'darkgray')) + 
+        labs(fill = "Chromatin\nstate") + 
+        theme(legend.title = element_text(size = 18), legend.text = element_text(size = 16))
+    ), 
+    nrow = 2
+  ), 
+  ncol = 2, 
+  rel_widths = c(0.8, 0.2)
+  )
+# save the plot
+ggsave('~/plots/mo_lead_esnp_chromatin_overlap.pdf', width = 8, height = 8, plot = p_all_variant_openatac_overlap_lead_seplegend)
 
 # get the screen matches for each variant
 qtl_variants_all_screen_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/annotations/mo_qtl_variants_tested_screen_overlap.tsv.gz'
