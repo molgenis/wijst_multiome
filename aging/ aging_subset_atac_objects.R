@@ -145,7 +145,7 @@ aging_subset <- fread(aging_subset_loc, header = F, sep = '\t')
 colnames(aging_subset) <- c('lane', 'participant', 'timepoint')
 
 # make a mapping of what the cell type is called, and how it is named in the filesystem
-ct_to_file <- list('B' = 'b', 'CD4T' = 'cd4t', 'CD8T' = 'cd8t', 'DC' = 'dc', 'monocyte' = 'monocyte', 'NK' = 'nk')
+ct_to_file <- list('B' = 'b', 'CD4T' = 'cd4t', 'CD8T' = 'cd8t', 'DC' = 'dc', 'monocyte' = 'monocyte', 'NK' = 'nk', 'plasmablast' = 'plasmablast', 'T_other' = 't_other')
 
 # check each of the cell types
 for (cell_type in names(ct_to_file)) {
