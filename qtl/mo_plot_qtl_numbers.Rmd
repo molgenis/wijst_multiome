@@ -650,9 +650,11 @@ get_ngenes_celltype <- function(feature_object) {
 #' @param xlim the range for the x-axis
 #' @param paper_style use the paper style with more whitespace
 #' @param angle_labels angle the x labels 90 degrees?
+#' @param use_label_dict rename the cell types with the label dict
+#' @param use_colour_dict Logical, whether to use a color dictionary for cell types. Default is TRUE.
 #' @returns a barplot with the number of DE genes per cell type
 #' 
-plot_de_number_vs_celltype_totals <- function(de_numbers, cell_numbers, de_numbers_celltype_column='celltype', cell_numbers_celltype_column='celltype', de_numbers_numbers_column='number', cell_numbers_numbers_column='number', pointless=F, legendless=F, ylim=NULL, xlim=NULL, paper_style=T) {
+plot_de_number_vs_celltype_totals <- function(de_numbers, cell_numbers, de_numbers_celltype_column='celltype', cell_numbers_celltype_column='celltype', de_numbers_numbers_column='number', cell_numbers_numbers_column='number', pointless=F, legendless=F, ylim=NULL, xlim=NULL, paper_style=T, use_label_dict=F, use_colour_dict=F) {
   # subset the DE numbers to what we care about
   de_numbers <- de_numbers[, c(de_numbers_celltype_column, de_numbers_numbers_column)]
   # and harmonize the column names
@@ -663,6 +665,10 @@ plot_de_number_vs_celltype_totals <- function(de_numbers, cell_numbers, de_numbe
   colnames(cell_numbers) <- c('celltype', 'cell_number')
   # now merge
   numbers_both <- merge(cell_numbers, de_numbers, by = 'celltype')
+  # remap names if requested
+  if (use_label_dict) {
+    numbers_both[['celltype']] <- remap_with_label_dict(numbers_both[['celltype']])
+  }
   # finally make the plot
   p <- ggplot(data = numbers_both, mapping = aes(x = cell_number, y = de_number, colour = celltype)) + geom_point()
   # options
@@ -681,6 +687,17 @@ plot_de_number_vs_celltype_totals <- function(de_numbers, cell_numbers, de_numbe
   }
   if (paper_style) {
     p <- p + theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+  }
+  # add colours
+  if (use_colour_dict) {
+    # get colour codes for the cell types
+    cell_type_colours <- get_color_coding_dict()
+    # also get colours for the cell types we don't have colours for
+    cell_type_colours_missing <- get_color_list(setdiff(unique(numbers_both[['celltype']]), names(cell_type_colours)))
+    # and merge them
+    cell_type_colours <- c(cell_type_colours, cell_type_colours_missing)
+    # add the colours
+    p <- p + scale_colour_manual(values = cell_type_colours)
   }
   return(p)
 }
@@ -1283,7 +1300,7 @@ ggsave('~/plots/mo_multiome_epeak_numbers.pdf', width = 8, height = 8, plot = p_
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # get then number of cells
-caqtl_peak_ncells <- get_ncells_celltype('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/L1/UT/')
+caqtl_peak_ncells <- get_ncells_celltype('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_caqtl/sc-eqtlgen/input/L1/')
 # make a plot of the numbers
 p_caqtl_peak_ncells <- egene_numbers_to_plot(caqtl_peak_ncells, legendless = T, use_color_dict = T, angle_labels = F, number_column = 'number') +
   ggtitle('Number of cells used in caQTL mapping') +
@@ -1301,7 +1318,7 @@ p_caqtl_peak_ncells
 ggsave('~/plots/ashg_multiome_epeak_cells.pdf', width = 8, height = 8, plot = p_caqtl_peak_ncells)
 
 # knowing that, let's plot again, but with our order
-p_caqtl_peak_numbers <- egene_numbers_to_plot(caqtl_peak_numbers_maryna, legendless = T, use_color_dict = T, angle_labels = F, x_order = c('Monocyte', 'CD4+ T', 'CD8+ T', 'NK', 'B', 'DC')) +
+p_caqtl_peak_numbers <- egene_numbers_to_plot(caqtl_peak_numbers_combined, legendless = T, use_color_dict = T, angle_labels = F, x_order = c('Monocyte', 'CD4+ T', 'CD8+ T', 'NK', 'B', 'DC')) +
   ggtitle('Number of open chromatin peaks\naffected by genetic variants') +
   xlab('Cell type') +
   ylab('Number of peaks') +
@@ -1315,6 +1332,26 @@ p_caqtl_peak_numbers <- egene_numbers_to_plot(caqtl_peak_numbers_maryna, legendl
   )
 p_caqtl_peak_numbers
 ggsave('~/plots/ashg_multiome_epeak_numbers_ncellorderded.pdf', width = 8, height = 8, plot = p_caqtl_peak_numbers)
+
+# plot the number of cells vs the number of peaks
+p_caqtl_peak_numbers_vs_cells <- plot_de_number_vs_celltype_totals(de_numbers = data.frame(caqtl_peak_numbers_combined), cell_numbers = data.frame(caqtl_peak_ncells), de_numbers_celltype_column = 'cell_type', cell_numbers_celltype_column = 'cell_type', de_numbers_numbers_column = 'nr', cell_numbers_numbers_column = 'number', use_label_dict = T, use_colour_dict = T) +
+  xlab('Number of cells') +
+  ylab('Number of caQTL peaks') +
+  labs('colour' = 'Cell type') +
+  ggtitle('Number of cells vs caQTL peaks') +
+  # label sizes
+  theme(
+    axis.title.x = element_text(size = 18),
+    axis.title.y = element_text(size = 18),
+    axis.text.x = element_text(size = 16),
+    axis.text.y = element_text(size = 16),
+    plot.title = element_text(size = 20), 
+    legend.title=element_text(size=18), 
+    legend.text=element_text(size=16)
+  )
+# show and plot
+p_caqtl_peak_numbers_vs_cells
+ggsave('~/plots/ashg_multiome_ncells_vs_npeaks.pdf', width = 6, height = 6, plot = p_caqtl_peak_numbers_vs_cells)
 
 
 ```
@@ -1333,7 +1370,7 @@ knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 #   xlab('Cell type') +
 #   ylab('Number of genes') +
 #   ylim(c(0, 2100))
-p_eqtl_peak_numbers_combined <- egene_numbers_to_plot(eqtl_gene_numbers_combined, legendless = T, use_color_dict = T, angle_labels = F) +
+p_eqtl_gene_numbers_combined <- egene_numbers_to_plot(eqtl_gene_numbers_combined, legendless = T, use_color_dict = T, angle_labels = F) +
   ggtitle('Number of genes affected by genetic variants') +
   xlab('Cell type') +
   ylab('Number of genes') +
@@ -1349,9 +1386,33 @@ p_eqtl_peak_numbers_combined <- egene_numbers_to_plot(eqtl_gene_numbers_combined
 # show the plots
 # p_eqtl_peak_numbers_ut
 # p_eqtl_peak_numbers_24hca
-p_eqtl_peak_numbers_combined
+p_eqtl_gene_numbers_combined
 
-ggsave('~/plots/mo_multiome_egene_numbers.pdf', width = 8, height = 8, plot = p_eqtl_peak_numbers_combined)
+ggsave('~/plots/mo_multiome_egene_numbers.pdf', width = 8, height = 8, plot = p_eqtl_gene_numbers_combined)
+
+# get then number of cells
+eqtl_peak_ncells <- get_ncells_celltype('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/input/L1/')
+
+# plot the number of cells vs the number of peaks
+p_eqtl_gene_numbers_vs_cells <- plot_de_number_vs_celltype_totals(de_numbers = data.frame(eqtl_gene_numbers_combined), cell_numbers = data.frame(caqtl_peak_ncells), de_numbers_celltype_column = 'cell_type', cell_numbers_celltype_column = 'cell_type', de_numbers_numbers_column = 'nr', cell_numbers_numbers_column = 'number', use_label_dict = T, use_colour_dict = T) +
+  xlab('Number of cells') +
+  ylab('Number of eQTL genes') +
+  labs('colour' = 'Cell type') +
+  ggtitle('Number of cells vs eQTL genes') +
+  # label sizes
+  theme(
+    axis.title.x = element_text(size = 18),
+    axis.title.y = element_text(size = 18),
+    axis.text.x = element_text(size = 16),
+    axis.text.y = element_text(size = 16),
+    plot.title = element_text(size = 20), 
+    legend.title=element_text(size=18), 
+    legend.text=element_text(size=16)
+  )
+# show and plot
+p_eqtl_gene_numbers_vs_cells
+ggsave('~/plots/ashg_multiome_ncells_vs_ngenes.pdf', width = 6, height = 6, plot = p_eqtl_gene_numbers_vs_cells)
+
 
 ```
 
