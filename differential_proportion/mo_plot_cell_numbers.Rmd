@@ -335,28 +335,251 @@ cell_level_metadata_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/on
 cell_level_metadata <- read.table(cell_level_metadata_loc, header = T, sep = '\t')
 
 # get celltype numbers
-celltypes_lane_numbers <- get_celltype_numbers(cell_level_metadata, sample_column = 'lane', cell_type_column = 'predicted.mo_10x_cell_type.lowerres')
+celltypes_lane_numbers <- get_celltype_numbers(cell_level_metadata, sample_column = 'lane', cell_type_column = 'celltype_imputed_lowerres')
 # per stim as well
-celltypes_stim_numbers <- get_celltype_numbers(cell_level_metadata[!is.na(cell_level_metadata[['final_condition']]), ], sample_column = 'final_condition', cell_type_column = 'predicted.mo_10x_cell_type.lowerres')
-celltypes_stim_numbers[['final_condition']] <- factor(celltypes_stim_numbers[['final_condition']], levels = c('UT', '24hCa'))
+celltypes_stim_numbers <- get_celltype_numbers(cell_level_metadata[!is.na(cell_level_metadata[['condition_final']]), ], sample_column = 'condition_final', cell_type_column = 'celltype_imputed_lowerres')
+celltypes_stim_numbers[['condition_final']] <- factor(celltypes_stim_numbers[['condition_final']], levels = c('UT', '24hCA'))
 # and per sample+lane
 cell_level_metadata[['lane_sample']] <- paste(cell_level_metadata[['lane']], cell_level_metadata[['sample_final']])
-celltypes_sample_numbers <- get_celltype_numbers(cell_level_metadata[!is.na(cell_level_metadata[['lane_sample']]), ], sample_column = 'lane_sample', cell_type_column = 'predicted.mo_10x_cell_type.lowerres')
+celltypes_sample_numbers <- get_celltype_numbers(cell_level_metadata[!is.na(cell_level_metadata[['lane_sample']]), ], sample_column = 'lane_sample', cell_type_column = 'celltype_imputed_lowerres')
+# and sample + lane even/uneven
+cell_level_metadata[['lane_both_sample']] <- paste(cell_level_metadata[['lane_both']], cell_level_metadata[['sample_final']])
+celltypes_sample_both_numbers <- get_celltype_numbers(cell_level_metadata[!is.na(cell_level_metadata[['lane_both_sample']]), ], sample_column = 'lane_both_sample', cell_type_column = 'celltype_imputed_lowerres')
 
 # make plots of it
-p_abundance_lowres_lane <- plot_celltype_abundance(celltypes_lane_numbers[!is.na(celltypes_lane_numbers[['predicted.mo_10x_cell_type.lowerres']]),], sample_column = 'lane', cell_type_column = 'predicted.mo_10x_cell_type.lowerres', number_column = 'proportion', angle_x_labels = T)
-p_abundance_lowres_condition <- plot_celltype_abundance(celltypes_stim_numbers[!is.na(celltypes_stim_numbers[['predicted.mo_10x_cell_type.lowerres']]) & !is.na(celltypes_stim_numbers[['final_condition']]),], sample_column = 'final_condition', cell_type_column = 'predicted.mo_10x_cell_type.lowerres', number_column = 'proportion', angle_x_labels = T, legendless = T)
-p_abundance_lowres_lanesample <- plot_celltype_abundance(celltypes_sample_numbers[!is.na(celltypes_sample_numbers[['predicted.mo_10x_cell_type.lowerres']]),], sample_column = 'lane_sample', cell_type_column = 'predicted.mo_10x_cell_type.lowerres', number_column = 'proportion', pointless = T, angle_x_labels = F, legendless = T)
-p_abundance_lowres_lanesample_absolute <- plot_celltype_abundance(celltypes_sample_numbers[!is.na(celltypes_sample_numbers[['predicted.mo_10x_cell_type.lowerres']]),], sample_column = 'lane_sample', cell_type_column = 'predicted.mo_10x_cell_type.lowerres', number_column = 'number', pointless = T, angle_x_labels = F, legendless = T)
+p_abundance_lowres_lane <- plot_celltype_abundance(celltypes_lane_numbers[!is.na(celltypes_lane_numbers[['celltype_imputed_lowerres']]),], sample_column = 'lane', cell_type_column = 'celltype_imputed_lowerres', number_column = 'proportion', angle_x_labels = T, legendless = T) + 
+  xlab('10x experimental lane') +
+  ylab('Proportion of cells') +
+  labs(fill = 'Cell type') + 
+  ggtitle('Proportion of cells per experimental 10x lane') +
+  # label sizes
+  theme(
+    axis.title.x = element_text(size = 18),
+    axis.title.y = element_text(size = 18),
+    axis.text.x = element_text(size = 8),
+    axis.text.y = element_text(size = 16),
+    plot.title = element_text(size = 20)
+  )
+p_abundance_lowres_lane_absolute <- plot_celltype_abundance(celltypes_lane_numbers[!is.na(celltypes_lane_numbers[['celltype_imputed_lowerres']]),], sample_column = 'lane', cell_type_column = 'celltype_imputed_lowerres', number_column = 'number', angle_x_labels = T, legendless = T) + 
+  xlab('10x experimental lane') +
+  ylab('Number of cells') +
+  labs(fill = 'Cell type') + 
+  ggtitle('Number of cells per experimental 10x lane') +
+  # label sizes
+  theme(
+    axis.title.x = element_text(size = 18),
+    axis.title.y = element_text(size = 18),
+    axis.text.x = element_text(size = 8),
+    axis.text.y = element_text(size = 16),
+    plot.title = element_text(size = 20)
+  )
+p_abundance_lowres_condition <- plot_celltype_abundance(celltypes_stim_numbers[!is.na(celltypes_stim_numbers[['celltype_imputed_lowerres']]) & !is.na(celltypes_stim_numbers[['condition_final']]),], sample_column = 'condition_final', cell_type_column = 'celltype_imputed_lowerres', number_column = 'proportion', angle_x_labels = T, legendless = T) + 
+  xlab('Condition') +
+  ylab('Proportion of cells') +
+  labs(fill = 'Cell type') + 
+  ggtitle('Proportion of cells per sample') +
+  # label sizes
+  theme(
+    axis.title.x = element_text(size = 18),
+    axis.title.y = element_text(size = 18),
+    axis.text.x = element_text(size = 16),
+    axis.text.y = element_text(size = 16),
+    plot.title = element_text(size = 20)
+  )
+p_abundance_lowres_lanesample <- plot_celltype_abundance(celltypes_sample_numbers[!is.na(celltypes_sample_numbers[['celltype_imputed_lowerres']]),], sample_column = 'lane_sample', cell_type_column = 'celltype_imputed_lowerres', number_column = 'proportion', pointless = T, angle_x_labels = T, legendless = T) + 
+  xlab('Sample') +
+  ylab('Proportion of cells') +
+  labs(fill = 'Cell type') + 
+  ggtitle('Proportion of cells per sample') +
+  # label sizes
+  theme(
+    axis.title.x = element_text(size = 18),
+    axis.title.y = element_text(size = 18),
+    axis.text.x = element_text(size = 1.5),
+    axis.text.y = element_text(size = 16),
+    plot.title = element_text(size = 20)
+  )
+p_abundance_lowres_lanesample_absolute <- plot_celltype_abundance(celltypes_sample_numbers[!is.na(celltypes_sample_numbers[['celltype_imputed_lowerres']]),], sample_column = 'lane_sample', cell_type_column = 'celltype_imputed_lowerres', number_column = 'number', pointless = T, angle_x_labels = T, legendless = T) + 
+  xlab('Sample') +
+  ylab('Number of cells') +
+  labs(fill = 'Cell type') + 
+  ggtitle('Number of cells per sample') +
+  # label sizes
+  theme(
+    axis.title.x = element_text(size = 18),
+    axis.title.y = element_text(size = 18),
+    axis.text.x = element_text(size = 1.5),
+    axis.text.y = element_text(size = 16),
+    plot.title = element_text(size = 20)
+  )
+p_abundance_lowres_lanebothsample <- plot_celltype_abundance(celltypes_sample_both_numbers[!is.na(celltypes_sample_both_numbers[['celltype_imputed_lowerres']]),], sample_column = 'lane_both_sample', cell_type_column = 'celltype_imputed_lowerres', number_column = 'proportion', pointless = T, angle_x_labels = T, legendless = T) + 
+  xlab('Sample') +
+  ylab('Proportion of cells') +
+  labs(fill = 'Cell type') + 
+  ggtitle('Proportion of cells per sample') +
+  # label sizes
+  theme(
+    axis.title.x = element_text(size = 18),
+    axis.title.y = element_text(size = 18),
+    axis.text.x = element_text(size = 2),
+    axis.text.y = element_text(size = 16),
+    plot.title = element_text(size = 20)
+  )
+p_abundance_lowres_lanebothsample_absolute <- plot_celltype_abundance(celltypes_sample_both_numbers[!is.na(celltypes_sample_both_numbers[['celltype_imputed_lowerres']]),], sample_column = 'lane_both_sample', cell_type_column = 'celltype_imputed_lowerres', number_column = 'number', pointless = T, angle_x_labels = T, legendless = T) + 
+  xlab('Sample') +
+  ylab('Number of cells') +
+  labs(fill = 'Cell type') + 
+  ggtitle('Number of cells per sample') +
+  # label sizes
+  theme(
+    axis.title.x = element_text(size = 18),
+    axis.title.y = element_text(size = 18),
+    axis.text.x = element_text(size = 1.5),
+    axis.text.y = element_text(size = 16),
+    plot.title = element_text(size = 20)
+  )
 
+# show and save plots
 p_abundance_lowres_lane
 ggsave('plots/mo_ncell_lowresct_per_lane.pdf', height=5, width=10)
+p_abundance_lowres_lane_absolute
+ggsave('plots/mo_ncell_lowresct_per_lane_abs.pdf', height=5, width=10)
 p_abundance_lowres_condition
 ggsave('plots/mo_ncell_lowresct_per_condition.pdf', height=5, width=10)
 p_abundance_lowres_lanesample
 ggsave('plots/mo_ncell_lowresct_per_sample.pdf', height=5, width=10)
-p_abundance_lowres_lanesample_absolute + ggtitle('Number of cells per sample') + xlab('Sample') + ylab('Total Number of Cells')
+p_abundance_lowres_lanesample_absolute
 ggsave('plots/mo_ncell_lowresct_per_sample_abs.pdf', height=5, width=10)
+p_abundance_lowres_lanebothsample
+ggsave('plots/mo_ncell_lowresct_per_sample_both.pdf', height=5, width=10)
+p_abundance_lowres_lanebothsample_absolute
+ggsave('plots/mo_ncell_lowresct_per_sample_both_abs.pdf', height=5, width=10)
+
+```
+
+```{r cell_numbers_nounannotated, include=TRUE, fig.width=10, fig.height=10}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# get celltype numbers
+celltypes_lane_numbers <- get_celltype_numbers(cell_level_metadata[!is.na(cell_level_metadata[['celltype_imputed_lowerres']]) & cell_level_metadata[['celltype_imputed_lowerres']] != 'unannotated', ], sample_column = 'lane', cell_type_column = 'celltype_imputed_lowerres')
+# per stim as well
+celltypes_stim_numbers <- get_celltype_numbers(cell_level_metadata[!is.na(cell_level_metadata[['celltype_imputed_lowerres']]) & cell_level_metadata[['celltype_imputed_lowerres']] != 'unannotated' & !is.na(cell_level_metadata[['condition_final']]), ], sample_column = 'condition_final', cell_type_column = 'celltype_imputed_lowerres')
+celltypes_stim_numbers[['condition_final']] <- factor(celltypes_stim_numbers[['condition_final']], levels = c('UT', '24hCA'))
+# and per sample+lane
+cell_level_metadata[['lane_sample']] <- paste(cell_level_metadata[['lane']], cell_level_metadata[['sample_final']])
+celltypes_sample_numbers <- get_celltype_numbers(cell_level_metadata[!is.na(cell_level_metadata[['celltype_imputed_lowerres']]) & cell_level_metadata[['celltype_imputed_lowerres']] != 'unannotated' & !is.na(cell_level_metadata[['lane_sample']]), ], sample_column = 'lane_sample', cell_type_column = 'celltype_imputed_lowerres')
+# and sample + lane even/uneven
+cell_level_metadata[['lane_both_sample']] <- paste(cell_level_metadata[['lane_both']], cell_level_metadata[['sample_final']])
+celltypes_sample_both_numbers <- get_celltype_numbers(cell_level_metadata[!is.na(cell_level_metadata[['celltype_imputed_lowerres']]) & cell_level_metadata[['celltype_imputed_lowerres']] != 'unannotated' & !is.na(cell_level_metadata[['lane_both_sample']]), ], sample_column = 'lane_both_sample', cell_type_column = 'celltype_imputed_lowerres')
+
+# make plots of it
+p_abundance_lowres_lane <- plot_celltype_abundance(celltypes_lane_numbers[!is.na(celltypes_lane_numbers[['celltype_imputed_lowerres']]),], sample_column = 'lane', cell_type_column = 'celltype_imputed_lowerres', number_column = 'proportion', angle_x_labels = T, legendless = T) + 
+  xlab('10x experimental lane') +
+  ylab('Proportion of cells') +
+  labs(fill = 'Cell type') + 
+  ggtitle('Proportion of cells per experimental 10x lane') +
+  # label sizes
+  theme(
+    axis.title.x = element_text(size = 18),
+    axis.title.y = element_text(size = 18),
+    axis.text.x = element_text(size = 8),
+    axis.text.y = element_text(size = 16),
+    plot.title = element_text(size = 20)
+  )
+p_abundance_lowres_lane_absolute <- plot_celltype_abundance(celltypes_lane_numbers[!is.na(celltypes_lane_numbers[['celltype_imputed_lowerres']]),], sample_column = 'lane', cell_type_column = 'celltype_imputed_lowerres', number_column = 'number', angle_x_labels = T, legendless = T) + 
+  xlab('10x experimental lane') +
+  ylab('Number of cells') +
+  labs(fill = 'Cell type') + 
+  ggtitle('Number of cells per experimental 10x lane') +
+  # label sizes
+  theme(
+    axis.title.x = element_text(size = 18),
+    axis.title.y = element_text(size = 18),
+    axis.text.x = element_text(size = 8),
+    axis.text.y = element_text(size = 16),
+    plot.title = element_text(size = 20)
+  )
+p_abundance_lowres_condition <- plot_celltype_abundance(celltypes_stim_numbers[!is.na(celltypes_stim_numbers[['celltype_imputed_lowerres']]) & !is.na(celltypes_stim_numbers[['condition_final']]),], sample_column = 'condition_final', cell_type_column = 'celltype_imputed_lowerres', number_column = 'proportion', angle_x_labels = T, legendless = T) + 
+  xlab('Condition') +
+  ylab('Proportion of cells') +
+  labs(fill = 'Cell type') + 
+  ggtitle('Proportion of cells per sample') +
+  # label sizes
+  theme(
+    axis.title.x = element_text(size = 18),
+    axis.title.y = element_text(size = 18),
+    axis.text.x = element_text(size = 16),
+    axis.text.y = element_text(size = 16),
+    plot.title = element_text(size = 20)
+  )
+p_abundance_lowres_lanesample <- plot_celltype_abundance(celltypes_sample_numbers[!is.na(celltypes_sample_numbers[['celltype_imputed_lowerres']]),], sample_column = 'lane_sample', cell_type_column = 'celltype_imputed_lowerres', number_column = 'proportion', pointless = T, angle_x_labels = T, legendless = T) + 
+  xlab('Sample') +
+  ylab('Proportion of cells') +
+  labs(fill = 'Cell type') + 
+  ggtitle('Proportion of cells per sample') +
+  # label sizes
+  theme(
+    axis.title.x = element_text(size = 18),
+    axis.title.y = element_text(size = 18),
+    axis.text.x = element_text(size = 1.5),
+    axis.text.y = element_text(size = 16),
+    plot.title = element_text(size = 20)
+  )
+p_abundance_lowres_lanesample_absolute <- plot_celltype_abundance(celltypes_sample_numbers[!is.na(celltypes_sample_numbers[['celltype_imputed_lowerres']]),], sample_column = 'lane_sample', cell_type_column = 'celltype_imputed_lowerres', number_column = 'number', pointless = T, angle_x_labels = T, legendless = T) + 
+  xlab('Sample') +
+  ylab('Number of cells') +
+  labs(fill = 'Cell type') + 
+  ggtitle('Number of cells per sample') +
+  # label sizes
+  theme(
+    axis.title.x = element_text(size = 18),
+    axis.title.y = element_text(size = 18),
+    axis.text.x = element_text(size = 1.5),
+    axis.text.y = element_text(size = 16),
+    plot.title = element_text(size = 20)
+  )
+p_abundance_lowres_lanebothsample <- plot_celltype_abundance(celltypes_sample_both_numbers[!is.na(celltypes_sample_both_numbers[['celltype_imputed_lowerres']]),], sample_column = 'lane_both_sample', cell_type_column = 'celltype_imputed_lowerres', number_column = 'proportion', pointless = T, angle_x_labels = T, legendless = T) + 
+  xlab('Sample') +
+  ylab('Proportion of cells') +
+  labs(fill = 'Cell type') + 
+  ggtitle('Proportion of cells per sample') +
+  # label sizes
+  theme(
+    axis.title.x = element_text(size = 18),
+    axis.title.y = element_text(size = 18),
+    axis.text.x = element_text(size = 2),
+    axis.text.y = element_text(size = 16),
+    plot.title = element_text(size = 20)
+  )
+p_abundance_lowres_lanebothsample_absolute <- plot_celltype_abundance(celltypes_sample_both_numbers[!is.na(celltypes_sample_both_numbers[['celltype_imputed_lowerres']]),], sample_column = 'lane_both_sample', cell_type_column = 'celltype_imputed_lowerres', number_column = 'number', pointless = T, angle_x_labels = T, legendless = T) + 
+  xlab('Sample') +
+  ylab('Number of cells') +
+  labs(fill = 'Cell type') + 
+  ggtitle('Number of cells per sample') +
+  # label sizes
+  theme(
+    axis.title.x = element_text(size = 18),
+    axis.title.y = element_text(size = 18),
+    axis.text.x = element_text(size = 1.5),
+    axis.text.y = element_text(size = 16),
+    plot.title = element_text(size = 20)
+  )
+
+# show and save plots
+p_abundance_lowres_lane
+ggsave('plots/mo_ncell_lowresct_per_lane_filt.pdf', height=5, width=10)
+p_abundance_lowres_lane_absolute
+ggsave('plots/mo_ncell_lowresct_per_lane_abs_filt.pdf', height=5, width=10)
+p_abundance_lowres_condition
+ggsave('plots/mo_ncell_lowresct_per_condition_filt.pdf', height=5, width=10)
+p_abundance_lowres_lanesample
+ggsave('plots/mo_ncell_lowresct_per_sample_filt.pdf', height=5, width=10)
+p_abundance_lowres_lanesample_absolute
+ggsave('plots/mo_ncell_lowresct_per_sample_abs_filt.pdf', height=5, width=10)
+p_abundance_lowres_lanebothsample
+ggsave('plots/mo_ncell_lowresct_per_sample_both_filt.pdf', height=5, width=10)
+p_abundance_lowres_lanebothsample_absolute
+ggsave('plots/mo_ncell_lowresct_per_sample_both_abs_filt.pdf', height=5, width=10)
 
 ```
 
@@ -369,8 +592,8 @@ cell_level_metadata_ut <- cell_level_metadata[!is.na(cell_level_metadata[['condi
 celltypes_sample_numbers <- get_celltype_numbers(cell_level_metadata_ut[!is.na(cell_level_metadata_ut[['lane_sample']]), ], sample_column = 'lane_sample', cell_type_column = 'predicted.mo_10x_cell_type.lowerres')
 
 # make plots
-p_abundance_lowres_lanesample_ut <- plot_celltype_abundance(celltypes_sample_numbers[!is.na(celltypes_sample_numbers[['predicted.mo_10x_cell_type.lowerres']]),], sample_column = 'lane_sample', cell_type_column = 'predicted.mo_10x_cell_type.lowerres', number_column = 'proportion', pointless = T, angle_x_labels = F, legendless = T)
-p_abundance_lowres_lanesample_absolute_ut <- plot_celltype_abundance(celltypes_sample_numbers[!is.na(celltypes_sample_numbers[['predicted.mo_10x_cell_type.lowerres']]),], sample_column = 'lane_sample', cell_type_column = 'predicted.mo_10x_cell_type.lowerres', number_column = 'number', pointless = T, angle_x_labels = F, legendless = T)
+p_abundance_lowres_lanesample_ut <- plot_celltype_abundance(celltypes_sample_numbers[!is.na(celltypes_sample_numbers[['celltype_imputed_lowerres']]),], sample_column = 'lane_sample', cell_type_column = 'celltype_imputed_lowerres', number_column = 'proportion', pointless = T, angle_x_labels = F, legendless = T)
+p_abundance_lowres_lanesample_absolute_ut <- plot_celltype_abundance(celltypes_sample_numbers[!is.na(celltypes_sample_numbers[['celltype_imputed_lowerres']]),], sample_column = 'lane_sample', cell_type_column = 'celltype_imputed_lowerres', number_column = 'number', pointless = T, angle_x_labels = F, legendless = T)
 
 # show the plots
 p_abundance_lowres_lanesample_ut + ggtitle('Proportion of cells per sample') + xlab('Sample') + ylab('Proportion of Cells')
