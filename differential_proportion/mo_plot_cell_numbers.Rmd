@@ -1,0 +1,381 @@
+---
+title: "mo_plot_cell_numbers"
+author: "Roy Oelen"
+date: "2025-01-15"
+output: html_document
+---
+
+```{r header, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+#!/usr/bin/env Rscript
+############################################################################################################################
+# Authors: Roy Oelen
+# Name: mo_plot_cell_numbers.Rmd
+# Function: plot the cell numbers for the multiome project
+############################################################################################################################
+```
+
+```{r libraries, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+####################
+# libraries        #
+####################
+
+library(Seurat)
+library(ggplot2)
+library(RColorBrewer)
+
+
+```
+
+```{r functions, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+####################
+# Functions        #
+####################
+
+get_color_coding_dict <- function(){
+  # set the condition colors
+  color_coding <- list()
+  color_coding[["UT"]] <- "lightgrey"
+  color_coding[["24hCA"]] <- "forestgreen"
+  color_coding[["24hCa"]] <- "forestgreen"
+  # set the cell type colors
+  color_coding[["Bulk"]] <- "black"
+  color_coding[["CD4T"]] <- "#153057"
+  color_coding[["CD8T"]] <- "#009DDB"
+  color_coding[["monocyte"]] <- "#EDBA1B"
+  color_coding[["NK"]] <- "#E64B50"
+  color_coding[["B"]] <- "#71BC4B"
+  color_coding[["DC"]] <- "#965EC8"
+  color_coding[["CD4+ T"]] <- "#153057"
+  color_coding[["CD8+ T"]] <- "#009DDB"
+  # other cell type colors
+  color_coding[["HSPC"]] <- "#009E94"
+  color_coding[["platelet"]] <- "#9E1C00"
+  color_coding[["plasmablast"]] <- "#DB8E00"
+  color_coding[["other T"]] <- "#FF63B6"
+  color_coding[["T_other"]] <- "#FF63B6"
+  color_coding[["hemapoietic_stem"]] <- "#8B8000"
+  color_coding[["hemapoietic stem"]] <- "#8B8000"
+  color_coding[["unannotated"]] <- "gray"
+  return(color_coding)
+}
+
+
+
+#' get a vector of as distinct possible colours
+#' 
+#' @param number_of_colours how many colours to return
+#' @param use_sampling whether or not to randomly extract the colours instead of grabbing the first n colours
+#' @param color_indices (optional, not used by default) if specific colours are needed, supply the indices of the colours here. Use 'get_available_colours_grid' to get the colours and their indices
+#' @returns a vector of colours
+#' 
+sample_many_colours <- function(number_of_colours, use_sampling=F, color_indices=NULL) {
+  # get all colours from the 'quality' palettes
+  quality_colour_palettes <- brewer.pal.info[brewer.pal.info[['category']] == 'qual', ]
+  # save each palette
+  colours_per_palette <- list()
+  # apply over each palette
+  for (i in 1:nrow(quality_colour_palettes)) {
+    # get the name of the palette
+    palette_name <- rownames(quality_colour_palettes)[i]
+    # get the number of colours in the palette
+    palette_max_colours <- quality_colour_palettes[i, 'maxcolors']
+    # use brewer.pal to get all colours
+    colours_palette <- brewer.pal(palette_max_colours, palette_name)
+    # put result in the list
+    colours_per_palette[[palette_name]] <- colours_palette
+  }
+  # merge all palettes
+  all_colours <- do.call('c', colours_per_palette)
+  # randomly get colours from the palette
+  max_possible_colours <- length(all_colours)
+  if (is.null(number_of_colours)) {
+    message('no number of colors supplied, assuming color indices have been')
+  }
+  else if (number_of_colours > max_possible_colours) {
+    message(paste('requesting more colours than is possible: ', as.character(number_of_colours), ' vs ', max_possible_colours, ', returning max possible', sep = ''))
+    number_of_colours <- max_possible_colours
+  }
+  colours_to_return <- NULL
+  # specific colours we like (the indices)
+  if (!is.null(color_indices)) {
+    colours_to_return <- all_colours[color_indices]
+  }
+  # or use sampling
+  else if (use_sampling) {
+    colours_to_return <- sample(all_colours, number_of_colours)
+  }
+  # or the first x colours
+  else {
+    colours_to_return <- all_colours[1 : number_of_colours]
+  }
+  return(colours_to_return)
+}
+
+
+#' get a dataframe with the proportons and cell numbers per sample
+#' 
+#' @param metadata the metadata to calculate the cell type numbers and proportions from
+#' @param sample_column the sample denoting the sample
+#' @param cell_type_column the column denoting the cell type
+#' @returns a dataframe with the proportion and number of each cell type per sample
+#' 
+get_celltype_numbers <- function(metadata, sample_column='sample', cell_type_column='cell_type') {
+  # get the numbers in total
+  numbers_totals <- data.frame(table(metadata[, c(sample_column, cell_type_column)]))
+  # init proportion
+  numbers_totals[['prop']] <- 0
+  # now add proportions
+  for (sample_name in unique(metadata[[sample_column]])) {
+    # subset to that sample
+    numbers_sample <- numbers_totals[!is.na(numbers_totals[[sample_column]]) & numbers_totals[[sample_column]] == sample_name, ]
+    # get the total for that sample
+    numbers_sample_total <- sum(numbers_sample[['Freq']])
+    # check each cell type
+    for (cell_type in unique(numbers_sample[[cell_type_column]])) {
+      # get the number
+      numbers_celltype_sample <- numbers_sample[!is.na(numbers_sample[[cell_type_column]]) & numbers_sample[[cell_type_column]] == cell_type, 'Freq']
+      # get the proportion
+      prop_celltype_sample <- numbers_celltype_sample / numbers_sample_total
+      # add to the table
+      numbers_totals[!is.na(numbers_totals[[sample_column]]) & 
+                       numbers_totals[[sample_column]] == sample_name &
+                       !is.na(numbers_totals[[cell_type_column]]) & 
+                       numbers_totals[[cell_type_column]] == cell_type, 'prop'] <- prop_celltype_sample
+    }
+  }
+  # set the column names
+  colnames(numbers_totals) <- c(sample_column, cell_type_column, 'number', 'proportion')
+  return(numbers_totals)
+}
+
+#' get a dataframe with the proportons and cell numbers per sample
+#' 
+#' @param celltype_numbers the metadata to calculate the cell type numbers and proportions from
+#' @param sample_column the sample denoting the sample
+#' @param cell_type_column the column denoting the cell type
+#' @param number_column the column denoting number to plot
+#' @param use_label_dict update labels with nicer ones, using the label dict
+#' @param pointless plot the ticks and names on the x axis
+#' @param legendless plot the legend
+#' @param paper_style use paper style plot, with more whitespace
+#' @param angle_x_labels angle the x label 90 degrees
+#' @param use_colour_coding_dict use colors from the color dict
+#' @returns a plot of cell numbers/proportions per sample
+#' 
+plot_celltype_abundance <- function(celltype_numbers, sample_column='sample', cell_type_column='cell_type', number_column='proportion', use_label_dict=T, pointless=F, legendless=F, paper_style=T, angle_x_labels=F, use_colour_coding_dict=T) {
+  # use some better labels if requested
+  if (use_label_dict) {
+    celltype_numbers[[cell_type_column]] <- as.vector(unlist(label_dict()[as.character(celltype_numbers[[cell_type_column]])]))
+  }
+  # init plot
+  p <- ggplot(data = NULL, mapping = aes(x = celltype_numbers[[sample_column]], y = celltype_numbers[[number_column]], fill = celltype_numbers[[cell_type_column]])) +
+    geom_bar(stat = 'identity', position = 'stack') +
+    xlab(sample_column) +
+    ylab(number_column)
+  
+  # add colours if requested
+  if (use_colour_coding_dict) {
+    p <- p + scale_fill_manual(name = cell_type_column, values = get_color_coding_dict())
+  }
+  
+  # all our options
+  if(pointless){
+    p <- p + theme(axis.text.x=element_blank(), 
+                   axis.ticks = element_blank(),
+                   axis.title.x = element_blank())
+  }
+  if(legendless){
+    p <- p + theme(legend.position = 'none')
+  }
+  if(paper_style){
+    p <- p + theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+  }
+  if(angle_x_labels){
+    p <- p + theme(axis.text.x = element_text(angle = 90))
+  }
+  return(p)
+}
+
+
+label_dict <- function(){
+  label_dict <- list()
+  # condition combinations
+  label_dict[["UT"]] <- "UT"
+  label_dict[["24hCa"]] <- "24hCA"
+  label_dict[["24hCA"]] <- "24hCA"
+  # major cell types
+  label_dict[["Bulk"]] <- "bulk-like"
+  label_dict[["CD4T"]] <- "CD4+ T"
+  label_dict[["CD8T"]] <- "CD8+ T"
+  label_dict[["monocyte"]] <- "monocyte"
+  label_dict[["NK"]] <- "NK"
+  label_dict[["B"]] <- "B"
+  label_dict[["DC"]] <- "DC"
+  label_dict[["HSPC"]] <- "HSPC"
+  label_dict[["plasmablast"]] <- "plasmablast"
+  label_dict[["platelet"]] <- "platelet"
+  label_dict[["T_other"]] <- "other T"
+  label_dict[["hemapoietic_stem"]] <- "hemapoietic stem"
+  # minor cell types
+  label_dict[["CD4_TCM"]] <- "CD4 TCM"
+  label_dict[["Treg"]] <- "T regulatory"
+  label_dict[["CD4_Naive"]] <- "CD4 naive"
+  label_dict[["CD4_CTL"]] <- "CD4 CTL"
+  label_dict[["CD8_TEM"]] <- "CD8 TEM"
+  label_dict[["cMono"]] <- "cMono"
+  label_dict[["CD8_TCM"]] <- "CD8 TCM"
+  label_dict[["ncMono"]] <- "ncMono"
+  label_dict[["cDC2"]] <- "cDC2"
+  label_dict[["B_intermediate"]] <- "B intermediate"
+  label_dict[["NKdim"]] <- "NK dim"
+  label_dict[["pDC"]] <- "pDC"
+  label_dict[["ASDC"]] <- "ASDC"
+  label_dict[["CD8_Naive"]] <- "CD8 naive"
+  label_dict[["MAIT"]] <- "MAIT"
+  label_dict[["CD8_Proliferating"]] <- "CD8 proliferating"
+  label_dict[["CD4_TEM"]] <- "CD4 TEM"
+  label_dict[["B_memory"]] <- "B memory"
+  label_dict[["NKbright"]] <- "NK bright"
+  label_dict[["B_naive"]] <- "B naive"
+  label_dict[["gdT"]] <- "gamma delta T"
+  label_dict[["CD4_Proliferating"]] <- "CD4 proliferating"
+  label_dict[["NK_Proliferating"]] <- "NK proliferating"
+  label_dict[["cDC1"]] <- "cDC1"
+  label_dict[["ILC"]] <- "ILC"
+  label_dict[["dnT"]] <- "double negative T"
+  # unannotated ones
+  label_dict[['unannotated']] <- 'unannotated'
+  return(label_dict)
+}
+
+
+get_colors_10x_groups <- function() {
+  # get shades
+  mono_colors <- roycols::get_color_list_shades(vector_of_names = c('CD14 Mono', 'CD16 Mono'), shades_from = c('gold', 'gold3'))
+  b_colors <- roycols::get_color_list_shades(vector_of_names = c('Memory B', 'Intermediate B', 'Naive B'), shades_from = c('olivedrab2', 'olivedrab4'))
+  nk_colors <- list('NK' = '#E64B50')
+  dc_colors <- roycols::get_color_list_shades(vector_of_names = c('cDC', 'pDC'), shades_from = c('darkorchid2', 'darkorchid4'))
+  cd8_colors <- roycols::get_color_list_shades(vector_of_names = c('CD8 TEM_1', 'CD8 TEM_2', 'CD8 Naive'), shades_from = c('steelblue2', 'steelblue4'))
+  cd4_colors <- roycols::get_color_list_shades(vector_of_names = c('CD4 TEM', 'CD4 TCM', 'CD4 Naive'), shades_from = c('blue2', 'blue4'))
+  hpsc_colors <- list("HSPC" = "#8B8000")
+  plasma_colors <- list('Plasma' = '#DB8E00')
+  unannotated_colors <- list('unannotated' = 'gray')
+  t_others_colors <- roycols::get_color_list_shades(vector_of_names = c('MAIT', 'gdT', 'Treg'), shades_from = c('deeppink1', 'deeppink4'))
+  # merge all of the shades
+  shades_all <- c(mono_colors, b_colors, nk_colors, dc_colors, cd8_colors, cd4_colors, hpsc_colors, plasma_colors, unannotated_colors, t_others_colors)
+  return(shades_all)
+}
+
+
+```
+
+```{r settings, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+####################
+# Settings         #
+####################
+
+set.seed(1337)
+
+```
+
+```{r main, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+####################
+# Main code        #
+####################
+
+```
+
+```{r qc_numbers, include=TRUE, fig.width=10, fig.height=10}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# get the number of cells QC
+rna_filter_table <- data.frame(filter_step = factor(c('cellbender', 'doublet', 'correlation', 'min_200_umi', 'min_200_unique_genes', 'umi_mad', 'unique_gene_mad'), levels = c('cellbender', 'doublet', 'correlation', 'min_200_umi', 'min_200_unique_genes', 'umi_mad', 'unique_gene_mad')), 
+                               cells_left = c(1423526, 1037166, 992701, 914447, 893663, 874201, 874200))
+# get some colours
+colours_rna_filter <- sample_many_colours(n = length(unique(rna_filter_table[['filter_step']])))
+names(colours_rna_filter) <- as.character(unique(rna_filter_table[['filter_step']]))
+# make the plot
+p_qc_steps <- ggplot(data = rna_filter_table, mapping = aes(x = filter_step, y = cells_left, fill = filter_step)) + 
+  # as bar
+  geom_bar(stat = 'identity') + 
+  # add text as well
+  geom_text(mapping = aes(label = cells_left), vjust = 1.6, color = 'black', size = 5) +
+  # with own colours
+  scale_fill_manual(values = colours_rna_filter) + 
+  # with clean background
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) +
+  # no legend
+  theme(legend.position = 'none') +
+  # better x label
+  xlab('filtering step') +
+  # better y label
+  ylab('cells left after filter') +
+  # better title
+  ggtitle('cells left after each filtering step') + 
+  # change x axis text size
+  theme(axis.text = element_text(size = 12), axis.title = element_text(size=14), axis.title.x = element_text(size = 16)) +
+  # angle lables
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+
+p_qc_steps
+```
+```{r cell_numbers, include=TRUE, fig.width=10, fig.height=10}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# read the cell level metadata
+cell_level_metadata_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/metadata/mo_celllevel_metadata.tsv.gz'
+cell_level_metadata <- read.table(cell_level_metadata_loc, header = T, sep = '\t')
+
+# get celltype numbers
+celltypes_lane_numbers <- get_celltype_numbers(cell_level_metadata, sample_column = 'lane', cell_type_column = 'predicted.mo_10x_cell_type.lowerres')
+# per stim as well
+celltypes_stim_numbers <- get_celltype_numbers(cell_level_metadata[!is.na(cell_level_metadata[['final_condition']]), ], sample_column = 'final_condition', cell_type_column = 'predicted.mo_10x_cell_type.lowerres')
+celltypes_stim_numbers[['final_condition']] <- factor(celltypes_stim_numbers[['final_condition']], levels = c('UT', '24hCa'))
+# and per sample+lane
+cell_level_metadata[['lane_sample']] <- paste(cell_level_metadata[['lane']], cell_level_metadata[['sample_final']])
+celltypes_sample_numbers <- get_celltype_numbers(cell_level_metadata[!is.na(cell_level_metadata[['lane_sample']]), ], sample_column = 'lane_sample', cell_type_column = 'predicted.mo_10x_cell_type.lowerres')
+
+# make plots of it
+p_abundance_lowres_lane <- plot_celltype_abundance(celltypes_lane_numbers[!is.na(celltypes_lane_numbers[['predicted.mo_10x_cell_type.lowerres']]),], sample_column = 'lane', cell_type_column = 'predicted.mo_10x_cell_type.lowerres', number_column = 'proportion', angle_x_labels = T)
+p_abundance_lowres_condition <- plot_celltype_abundance(celltypes_stim_numbers[!is.na(celltypes_stim_numbers[['predicted.mo_10x_cell_type.lowerres']]) & !is.na(celltypes_stim_numbers[['final_condition']]),], sample_column = 'final_condition', cell_type_column = 'predicted.mo_10x_cell_type.lowerres', number_column = 'proportion', angle_x_labels = T, legendless = T)
+p_abundance_lowres_lanesample <- plot_celltype_abundance(celltypes_sample_numbers[!is.na(celltypes_sample_numbers[['predicted.mo_10x_cell_type.lowerres']]),], sample_column = 'lane_sample', cell_type_column = 'predicted.mo_10x_cell_type.lowerres', number_column = 'proportion', pointless = T, angle_x_labels = F, legendless = T)
+p_abundance_lowres_lanesample_absolute <- plot_celltype_abundance(celltypes_sample_numbers[!is.na(celltypes_sample_numbers[['predicted.mo_10x_cell_type.lowerres']]),], sample_column = 'lane_sample', cell_type_column = 'predicted.mo_10x_cell_type.lowerres', number_column = 'number', pointless = T, angle_x_labels = F, legendless = T)
+
+p_abundance_lowres_lane
+ggsave('plots/mo_ncell_lowresct_per_lane.pdf', height=5, width=10)
+p_abundance_lowres_condition
+ggsave('plots/mo_ncell_lowresct_per_condition.pdf', height=5, width=10)
+p_abundance_lowres_lanesample
+ggsave('plots/mo_ncell_lowresct_per_sample.pdf', height=5, width=10)
+p_abundance_lowres_lanesample_absolute + ggtitle('Number of cells per sample') + xlab('Sample') + ylab('Total Number of Cells')
+ggsave('plots/mo_ncell_lowresct_per_sample_abs.pdf', height=5, width=10)
+
+```
+
+```{r cell_numbers_ut, include=TRUE, fig.width=10, fig.height=10}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# subset to UT
+cell_level_metadata_ut <- cell_level_metadata[!is.na(cell_level_metadata[['condition_final']]) & cell_level_metadata[['condition_final']] == 'UT', ]
+# numbers per sample and lane
+celltypes_sample_numbers <- get_celltype_numbers(cell_level_metadata_ut[!is.na(cell_level_metadata_ut[['lane_sample']]), ], sample_column = 'lane_sample', cell_type_column = 'predicted.mo_10x_cell_type.lowerres')
+
+# make plots
+p_abundance_lowres_lanesample_ut <- plot_celltype_abundance(celltypes_sample_numbers[!is.na(celltypes_sample_numbers[['predicted.mo_10x_cell_type.lowerres']]),], sample_column = 'lane_sample', cell_type_column = 'predicted.mo_10x_cell_type.lowerres', number_column = 'proportion', pointless = T, angle_x_labels = F, legendless = T)
+p_abundance_lowres_lanesample_absolute_ut <- plot_celltype_abundance(celltypes_sample_numbers[!is.na(celltypes_sample_numbers[['predicted.mo_10x_cell_type.lowerres']]),], sample_column = 'lane_sample', cell_type_column = 'predicted.mo_10x_cell_type.lowerres', number_column = 'number', pointless = T, angle_x_labels = F, legendless = T)
+
+# show the plots
+p_abundance_lowres_lanesample_ut + ggtitle('Proportion of cells per sample') + xlab('Sample') + ylab('Proportion of Cells')
+ggsave('plots/mo_ncell_lowresct_per_sample_ut.pdf', height=5, width=10)
+p_abundance_lowres_lanesample_absolute_ut + ggtitle('Number of cells per sample') + xlab('Sample') + ylab('Total Number of Cells')
+ggsave('plots/mo_ncell_lowresct_per_sample_ut_abs.pdf', height=5, width=10)
+
+```
