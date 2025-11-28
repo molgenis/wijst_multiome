@@ -320,3 +320,100 @@ plot_grid(
   nrow = 3, 
   ncol = 3
 )
+
+# plot the distances per group
+p_snp_gene_interaction_distances <- ggplot(data = qtl_output_all_sig_wi, mapping = aes(x = distance, fill = interaction_direction)) +
+  geom_density(alpha = 0.5) +
+  xlab('Distance between variant and gene') + 
+  ylab('Density') + 
+  ggtitle('Distance between variant and gene\nper interaction category') + 
+  labs(fill = 'interaction\ndirection') +
+  scale_fill_manual(values = list('none' = 'gray', 'positive' = '#386CB0', 'negative' = '#F0027F')) + 
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+p_snp_gene_interaction_distances
+# the same, but only for the top variant per gene
+p_snp_gene_interaction_distances_top <- ggplot(data = qtl_output_all_sig_wi[qtl_output_all_sig_wi[['is_top_variant']], ], mapping = aes(x = distance, fill = interaction_direction)) +
+  geom_density(alpha = 0.5) +
+  xlab('Distance between variant and gene') + 
+  ylab('Density') + 
+  ggtitle('Distance between top variant and gene\nper interaction category') + 
+  labs(fill = 'interaction\ndirection') +
+  scale_fill_manual(values = list('none' = 'gray', 'positive' = '#386CB0', 'negative' = '#F0027F')) + 
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+p_snp_gene_interaction_distances_top
+# now without variant in genes
+p_snp_gene_interaction_distances_distnozero <- ggplot(data = qtl_output_all_sig_wi[qtl_output_all_sig_wi[['distance']] > 0, ], mapping = aes(x = distance, fill = interaction_direction)) +
+  geom_density(alpha = 0.5) +
+  xlab('Distance between variant and gene\n(excluding variants in genes)') + 
+  ylab('Density') + 
+  ggtitle('Distance between variant and gene\nper interaction category (dist>0)') + 
+  labs(fill = 'interaction\ndirection') +
+  scale_fill_manual(values = list('none' = 'gray', 'positive' = '#386CB0', 'negative' = '#F0027F')) + 
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+p_snp_gene_interaction_distances_distnozero
+# and top variants outside of genes
+p_snp_gene_interaction_distances_distnozero_top <- ggplot(data = qtl_output_all_sig_wi[qtl_output_all_sig_wi[['distance']] > 0 & qtl_output_all_sig_wi[['is_top_variant']], ], mapping = aes(x = distance, fill = interaction_direction)) +
+  geom_density(alpha = 0.5) +
+  xlab('Distance between variant and gene\n(excluding variants in genes)') + 
+  ylab('Density') + 
+  ggtitle('Distance between top variant and gene\nper interaction category (dist>0)') + 
+  labs(fill = 'interaction\ndirection') +
+  scale_fill_manual(values = list('none' = 'gray', 'positive' = '#386CB0', 'negative' = '#F0027F')) + 
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+p_snp_gene_interaction_distances_distnozero_top
+# show all together
+p_snp_gene_interaction_all <- plot_grid(
+  p_snp_gene_interaction_distances, 
+  p_snp_gene_interaction_distances_top, 
+  p_snp_gene_interaction_distances_distnozero, 
+  p_snp_gene_interaction_distances_distnozero_top
+)
+p_snp_gene_interaction_all
+
+# get the interacting vs non-interacting distances
+caqtl_distances <- qtl_output_all_sig_wi[, c('feature_id', 'snp_id', 'cell_type', 'interaction_direction', 'is_top_variant', 'distance')]
+# add whether it was in the interactions list
+caqtl_distances[['interaction']] <- 'no_interaction'
+caqtl_distances[!is.na(caqtl_distances[['interaction_direction']]) & (caqtl_distances[['interaction_direction']] == 'positive' | caqtl_distances[['interaction_direction']] == 'negative'), 'interaction'] <- 'interacting'
+
+# plot the distances per group
+p_snp_gene_interaction_distances_nodir <- ggplot(data = caqtl_distances, mapping = aes(x = distance, fill = interaction)) +
+  geom_density(alpha = 0.5) +
+  xlab('Distance between variant and gene') + 
+  ylab('Density') + 
+  ggtitle('Distance between variant and gene\nper interaction category') + 
+  labs(fill = 'interaction\ndirection') +
+  scale_fill_manual(values = list('none' = 'gray', 'positive' = '#386CB0', 'negative' = '#F0027F', 'no_interaction' = 'gray', 'interacting' = 'darkred')) + 
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+p_snp_gene_interaction_distances_top_nodir <- ggplot(data = caqtl_distances[caqtl_distances[['is_top_variant']], ], mapping = aes(x = distance, fill = interaction)) +
+  geom_density(alpha = 0.5) +
+  xlab('Distance between variant and gene') + 
+  ylab('Density') + 
+  ggtitle('Distance between top variant and gene\nper interaction category') + 
+  labs(fill = 'interaction\ndirection') +
+  scale_fill_manual(values = list('none' = 'gray', 'positive' = '#386CB0', 'negative' = '#F0027F', 'no_interaction' = 'gray', 'interacting' = 'darkred')) + 
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+p_snp_gene_interaction_distances_distnozero_nodir <- ggplot(data = caqtl_distances[caqtl_distances[['distance']] > 0, ], mapping = aes(x = distance, fill = interaction)) +
+  geom_density(alpha = 0.5) +
+  xlab('Distance between variant and gene\n(excluding variants in genes)') + 
+  ylab('Density') + 
+  ggtitle('Distance between variant and gene\nper interaction category (dist>0)') + 
+  labs(fill = 'interaction\ndirection') +
+  scale_fill_manual(values = list('none' = 'gray', 'positive' = '#386CB0', 'negative' = '#F0027F', 'no_interaction' = 'gray', 'interacting' = 'darkred')) + 
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+p_snp_gene_interaction_distances_distnozero_top_nodir <- ggplot(data = caqtl_distances[caqtl_distances[['distance']] > 0 & caqtl_distances[['is_top_variant']], ], mapping = aes(x = distance, fill = interaction)) +
+  geom_density(alpha = 0.5) +
+  xlab('Distance between variant and gene\n(excluding variants in genes)') + 
+  ylab('Density') + 
+  ggtitle('Distance between top variant and gene\nper interaction category (dist>0)') + 
+  labs(fill = 'interaction\ndirection') +
+  scale_fill_manual(values = list('none' = 'gray', 'positive' = '#386CB0', 'negative' = '#F0027F', 'no_interaction' = 'gray', 'interacting' = 'darkred')) + 
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+# show all together
+p_snp_gene_interaction_all_nodir <- plot_grid(
+  p_snp_gene_interaction_distances_nodir, 
+  p_snp_gene_interaction_distances_top_nodir, 
+  p_snp_gene_interaction_distances_distnozero_nodir, 
+  p_snp_gene_interaction_distances_distnozero_top_nodir
+)
+p_snp_gene_interaction_all_nodir
