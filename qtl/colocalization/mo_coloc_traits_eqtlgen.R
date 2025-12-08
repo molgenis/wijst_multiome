@@ -5,14 +5,15 @@
 # Function: perform colocalization on two finemapped traits
 # Example: 
 # Rscript ~/mo_coloc_traits_eqtlgen.R \
-#   --dataset1_in /groups/umcg-franke-scrna/tmp02/projects/venema-2022/ongoing/qtl/eqtl/finemapping/output/elmentaite_adult_martin_immune/cell_type_medhigh_inflammationsplit_mincor/unconfined/pcs/CD4_T_cells_merged.tsv.gz \
+#   --dataset1_in /scratch/hb-functionalgenomics/projects/multiome/ongoing/qtl/finemapping/interaction_eqtl/sc-eqtlgen/output/ut_and_24hca_significant/L1/CD4T_finemapped.tsv.gz \
 #   --dataset2_in_directory /scratch/hb-functionalgenomics/projects/eqtlgen-phase2/freeze3/Interpretation/eqtl-gwas-susie-coloc/output_gwas_finemap_all_20250919/GWAS_finemap/ \
 #   --dataset2_in_prepend White_blood_cell_count__ \
 #   --dataset2_in_append ___gwas.txt.gz \
 #   --dataset1_name CD4T \
 #   --dataset2_name White_blood_cell_count \
-#   --output_loc /groups/umcg-franke-scrna/tmp02/projects/venema-2022/ongoing/qtl/eqtl/colocalizations/celltypes/elmentaite_adult_martin_immune/cell_type_medhigh_inflammationsplit_mincor/unconfined/pcs/CD4_T_cells_vs_CD8_T_cells.tsv.gz \
-#   --binary_rds_loc /groups/umcg-franke-scrna/tmp02/projects/venema-2022/ongoing/qtl/eqtl/colocalizations/celltypes/elmentaite_adult_martin_immune/cell_type_medhigh_inflammationsplit_mincor/unconfined/pcs/CD4_T_cells_vs_CD8_T_cells.rds
+#   --output_loc /scratch/hb-functionalgenomics/projects/multiome/ongoing/qtl/colocalization/eqtl_gwas/eqtlgen_processed/White_blood_cell_count/CD4T_cells.tsv.gz \
+#   --binary_rds_loc /scratch/hb-functionalgenomics/projects/multiome/ongoing/qtl/colocalization/eqtl_gwas/eqtlgen_processed/White_blood_cell_count/CD4T_cells.rds \
+#   --variant_mapping_loc /scratch/hb-functionalgenomics/projects/eqtlgen-phase2/processed_data/variants/1000G-30x_index.parquet
 #
 ############################################################################################################################
 
@@ -24,7 +25,10 @@
 library(coloc)
 library(optparse)
 library(mdfiver)
-
+library(arrow)
+# for parallel execution, these are only loaded if the multithread method is used
+# library(foreach)
+# library(doParallel)
 
 ####################
 # Functions        #
@@ -45,8 +49,9 @@ library(mdfiver)
 #' @param cs_columns1 A vector of column indices or names specifying the credible set columns in the first dataset. Default is columns matching '^CS\\d+$'.
 #' @param cs_columns2 A vector of column indices or names specifying the credible set columns in the second dataset. Default is columns matching '^CS\\d+$'.
 #'
-#' @return A list of results for each feature that is present in both datasets. Each element of the list contains:
-#' \item{feature}{The feature being analyzed.}
+#' @return A list of results for each feature combination that is present in the datasets. Each element of the list contains:
+#' \item{feature1}{The feature being analyzed from the first list.}
+#' \item{feature2}{The feature being analyzed from the second list.}
 #' \item{dataset1}{The name of the first dataset.}
 #' \item{dataset2}{The name of the second dataset.}
 #' \item{variants1}{The variants from the first dataset.}
@@ -68,77 +73,79 @@ library(mdfiver)
 #' }
 #'
 coloc_datasets <- function(dataset1_fm_table, 
-                         dataset2_fm_table, 
-                         dataset1_name='dataset1', 
-                         dataset2_name='dataset2', 
-                         feature1_column='feature', 
-                         feature2_column='feature', 
-                         snp1_column='variant', 
-                         snp2_column='variant', 
-                         cs_columns1=grep('^CS\\d+$', colnames(dataset1_fm_table)), 
-                         cs_columns2=grep('^CS\\d+$', colnames(dataset2_fm_table))) {
+                           dataset2_fm_table, 
+                           dataset1_name='dataset1', 
+                           dataset2_name='dataset2', 
+                           feature1_column='feature', 
+                           feature2_column='feature', 
+                           snp1_column='variant', 
+                           snp2_column='variant', 
+                           cs_columns1=grep('^CS\\d+$', colnames(dataset1_fm_table)), 
+                           cs_columns2=grep('^CS\\d+$', colnames(dataset2_fm_table))) {
   # extract the features for table 1
   features_table1 <- unique(dataset1_fm_table[[feature1_column]])
   # and table 2
   features_table2 <- unique(dataset2_fm_table[[feature2_column]])
-  # get the features we have in both
-  features_both <- intersect(features_table1, features_table2)
   # we'll store results per feature
-  coloc_per_feature <- list()
-  # and thus check each features
-  for (feature_both in features_both) {
-    # subset each table to those features
-    table1_feature <- dataset1_fm_table[!is.na(dataset1_fm_table[[feature1_column]]) &
-                                        dataset1_fm_table[[feature1_column]] == feature_both, ]
-    table2_feature <- dataset2_fm_table[!is.na(dataset2_fm_table[[feature2_column]]) &
-                                        dataset2_fm_table[[feature2_column]] == feature_both, ]
-    # extract the variants
-    table1_feature_variants <- table1_feature[[snp1_column]]
-    table2_feature_variants <- table2_feature[[snp2_column]]
-    # get just the credible set information
-    table1_cs <- table1_feature[, cs_columns1]
-    table2_cs <- table2_feature[, cs_columns2]
-    # remove completely NA columns, these can be there due to padding when the finemapped results were aggretated into a single table
-    table1_cs <- table1_cs[, !apply(table1_cs, 2, function(col) all(is.na(col)))]
-    table2_cs <- table2_cs[, !apply(table2_cs, 2, function(col) all(is.na(col)))]
-    # transpose them
-    table1_cs_t <- t(table1_cs)
-    table2_cs_t <- t(table2_cs)
-    # and set the variants as the column names
-    colnames(table1_cs_t) <- table1_feature_variants
-    colnames(table2_cs_t) <- table2_feature_variants
-    # finally do the actual coloc
-    coloc_bfbf <- coloc.bf_bf(table1_cs_t, table2_cs_t)
-    # extract the result table
-    res_table <- as.data.frame(coloc_bfbf[['summary']])
-    # add the variants
-    res_table[['variant1']] <- table1_feature_variants[res_table[['idx1']]]
-    res_table[['variant2']] <- table2_feature_variants[res_table[['idx2']]]
-    # now add the features and the two datasets
-    res_table <- cbind(
-      data.frame(
-        'dataset1' = rep(dataset1_name, times = nrow(res_table)), 
-        'dataset2' = rep(dataset2_name, times = nrow(res_table)), 
-        'trait' = rep(feature_both, times = nrow(res_table))), 
-      res_table
-    )
-    # make a list with the results
-    result_list <- list(
-      'feature' = feature_both, 
-      'dataset1' = dataset1_name, 
-      'dataset2' = dataset2_name, 
-      'variants1' = table1_feature_variants, 
-      'variants2' = table2_feature_variants, 
-      'sets1' = table1_cs_t, 
-      'sets2' = table2_cs_t, 
-      'result' = coloc_bfbf, 
-      'table' = res_table
-    )
-    # and put into the bigger list
-    coloc_per_feature[[feature_both]] <- result_list
+  coloc_per_feature_combination <- list()
+  # now do each feature in dataset 1
+  for (feature1 in features_table1) {
+    # against each feature in dataset 2
+    for (feature2 in features_table2) {
+      # subset each table to those features
+      table1_feature <- dataset1_fm_table[!is.na(dataset1_fm_table[[feature1_column]]) &
+                                            dataset1_fm_table[[feature1_column]] == feature1, ]
+      table2_feature <- dataset2_fm_table[!is.na(dataset2_fm_table[[feature2_column]]) &
+                                            dataset2_fm_table[[feature2_column]] == feature2, ]
+      # extract the variants
+      table1_feature_variants <- table1_feature[[snp1_column]]
+      table2_feature_variants <- table2_feature[[snp2_column]]
+      # get just the credible set information
+      table1_cs <- table1_feature[, cs_columns1]
+      table2_cs <- table2_feature[, cs_columns2]
+      # remove completely NA columns, these can be there due to padding when the finemapped results were aggretated into a single table
+      table1_cs <- table1_cs[, !apply(table1_cs, 2, function(col) all(is.na(col)))]
+      table2_cs <- table2_cs[, !apply(table2_cs, 2, function(col) all(is.na(col)))]
+      # transpose them
+      table1_cs_t <- t(table1_cs)
+      table2_cs_t <- t(table2_cs)
+      # and set the variants as the column names
+      colnames(table1_cs_t) <- table1_feature_variants
+      colnames(table2_cs_t) <- table2_feature_variants
+      # finally do the actual coloc
+      coloc_bfbf <- coloc.bf_bf(table1_cs_t, table2_cs_t)
+      # extract the result table
+      res_table <- as.data.frame(coloc_bfbf[['summary']])
+      # add the variants
+      res_table[['variant1']] <- table1_feature_variants[res_table[['idx1']]]
+      res_table[['variant2']] <- table2_feature_variants[res_table[['idx2']]]
+      # now add the features and the two datasets
+      res_table <- cbind(
+        data.frame(
+          'dataset1' = rep(dataset1_name, times = nrow(res_table)), 
+          'dataset2' = rep(dataset2_name, times = nrow(res_table)), 
+          'trait1' = rep(feature1, times = nrow(res_table)), 
+          'trait2' = rep(feature2, times = nrow(res_table))),
+        res_table
+      )
+      # make a list with the results
+      result_list <- list(
+        'feature1' = feature1,
+        'feature2' = feature2,
+        'dataset1' = dataset1_name, 
+        'dataset2' = dataset2_name, 
+        'variants1' = table1_feature_variants, 
+        'variants2' = table2_feature_variants, 
+        'sets1' = table1_cs_t, 
+        'sets2' = table2_cs_t, 
+        'result' = coloc_bfbf, 
+        'table' = res_table
+      )
+      # and put into the bigger list
+      coloc_per_feature_combination[[paste0(feature1, '_vs_', feature2)]] <- result_list
+    }
   }
-  # return the bigger list
-  return(coloc_per_feature)
+  return(coloc_per_feature_combination)
 }
 
 
@@ -147,43 +154,61 @@ coloc_datasets <- function(dataset1_fm_table,
 ####################
 
 set.seed(7777)
-
+do_multithreading <- F
 
 ####################
 # Debug            #
 ####################
 
-#do_debug()
+#debug <- F
 
 
 ####################
 # Main Code        #
 ####################
 
+# initialize opt
+opt <- NULL
 
-# make command line options
-option_list <- list(
-  make_option(c("-t", "--dataset1_in"), type="character", default=NULL, 
+if(debug) {
+  # instead of using the command line, create a list with preset parameters
+  opt <- list()
+  opt[['dataset1_in']] <- '/scratch/hb-functionalgenomics/projects/multiome/ongoing/qtl/finemapping/interaction_eqtl/sc-eqtlgen/output/ut_and_24hca_significant/L1/CD4T_finemapped.tsv.gz'
+  opt[['dataset2_in_directory']] <- '/scratch/hb-functionalgenomics/projects/eqtlgen-phase2/freeze3/Interpretation/eqtl-gwas-susie-coloc/output_gwas_finemap_all_20250919/GWAS_finemap/'
+  opt[['dataset2_in_prepend']] <- 'White_blood_cell_count__'
+  opt[['dataset2_in_append']] <- '___gwas.txt.gz'
+  opt[['dataset1_name']] <- 'CD4T'
+  opt[['dataset2_name']] <- 'White_blood_cell_count'
+  opt[['output_loc']] <- '/scratch/hb-functionalgenomics/projects/multiome/ongoing/qtl/colocalization/eqtl_gwas/eqtlgen_processed/White_blood_cell_count/CD4T_cells.tsv.gz'
+  opt[['binary_rds_loc']] <- '/scratch/hb-functionalgenomics/projects/multiome/ongoing/qtl/colocalization/eqtl_gwas/eqtlgen_processed/White_blood_cell_count/CD4T_cells.rds'
+  opt[['variant_mapping_loc']] <- '/scratch/hb-functionalgenomics/projects/eqtlgen-phase2/processed_data/variants/1000G-30x_index.parquet'
+} else {
+  # make command line options
+  option_list <- list(
+    make_option(c("-t", "--dataset1_in"), type="character", default=NULL, 
               help="finemapping output file of first dataset", metavar="character"),
-  make_option(c("-d", "--dataset2_in_directory"), type="character", default=NULL, 
+    make_option(c("-d", "--dataset2_in_directory"), type="character", default=NULL, 
               help="finemapping output file of second dataset first part of filename", metavar="character"),
-  make_option(c("-p", "--dataset2_in_prepend"), type="character", default=NULL, 
+    make_option(c("-p", "--dataset2_in_prepend"), type="character", default=NULL, 
               help="finemapping output file of second dataset first part of filename", metavar="character"),
-  make_option(c("-s", "--dataset2_in_append"), type="character", default=NULL, 
+    make_option(c("-s", "--dataset2_in_append"), type="character", default=NULL, 
               help="finemapping output file of second dataset first part of filename", metavar="character"),
-  make_option(c("-n", "--dataset1_name"), type="character", default='dataset1', 
+    make_option(c("-n", "--dataset1_name"), type="character", default='dataset1', 
               help="name of the first dataset, to put in the output [default]", metavar="character"), 
-  make_option(c("-a", "--dataset2_name"), type="character", default='dataset2', 
+    make_option(c("-a", "--dataset2_name"), type="character", default='dataset2', 
               help="name of the second dataset, to put in the output  [default]", metavar="character"),
-  make_option(c("-o", "--output_loc"), type="character", default=NULL, 
+    make_option(c("-o", "--output_loc"), type="character", default=NULL, 
               help="tab separated output location of the colocalization", metavar="character"), 
-  make_option(c("-b", "--binary_rds_loc"), type="character", default=NULL, 
-              help="optional output location of full binary RDS output", metavar="character")
-)
+    make_option(c("-b", "--binary_rds_loc"), type="character", default=NULL, 
+              help="optional output location of full binary RDS output", metavar="character"), 
+    make_option(c("-v", "--variant_mapping_loc"), type="character", default=NULL, 
+              help="location of the arrow file mapping indices to GWAS variants", metavar="character")
+  )
+  # initialize optparser
+  opt_parser <- OptionParser(option_list=option_list)
+  opt <- parse_args(opt_parser)
 
-# initialize optparser
-opt_parser <- OptionParser(option_list=option_list)
-opt <- parse_args(opt_parser)
+}
 
 # initialize some values
 dataset1_in <- NULL
@@ -215,13 +240,18 @@ if (is.null(opt[['dataset2_in_prepend']])) {
 if (is.null(opt[['dataset2_in_append']])) {
   stop(paste('-s/--dataset2_in_append is an obligatory parameter\n'))
 } else {
-  dataset2_in <- opt[['dataset2_in_append']]
+  dataset2_in_append <- opt[['dataset2_in_append']]
 }
 
 if (is.null(opt[['output_loc']])) {
   stop(paste('-o/--output_loc is an obligatory parameter\n'))
 } else {
   output_loc <- opt[['output_loc']]
+}
+if (is.null(opt[['variant_mapping_loc']])) {
+  stop(paste('-v/--variant_mapping_loc is an obligatory parameter\n'))
+} else {
+  variant_mapping_loc <- opt[['variant_mapping_loc']]
 }
 
 # check if the directory for the output exists, otherwise we would fail at the very last step
@@ -264,31 +294,82 @@ if (!is.null(opt[['binary_rds_loc']])) {
 
 # read the files
 dataset1_fm_table <- read.table(dataset1_in, header = T, sep = '\t')
+# read the variant mapping file
+variant_reference <- read_parquet(variant_mapping_loc)
 # make the regex for the dataset2 files
 d2_files_regex <- paste0('^', dataset2_in_prepend, '(.+)', dataset2_in_append, '$')
 # list all files in the directory
 all_d2_files <- list.files(dataset2_in_directory, full.names = F)
 # filter to those matching our regex
 matching_d2_files <- all_d2_files[grepl(d2_files_regex, all_d2_files)]
-# create a list to keep results per file
-all_results_list <- list()
-# loop over the files
-for (d2_file in matching_d2_files) {
-  # paste the full path
-  d2_file_full <- file.path(dataset2_in_directory, d2_file)
-  # read the file
-  dataset2_fm_table <- read.table(dataset2_in, header = T, sep = '\t')
-  # replace some of the column names
-  colnames(dataset1_fm_table) <- gsub('lbf_cs_', 'CS', colnames(dataset1_fm_table))
-  # get the result
-  coloc_bfbf <- coloc_datasets(
-    dataset1_fm_table, 
-    dataset2_fm_table, 
-    dataset1_name, 
-    dataset2_name
-  )
-  # and put into the big list
-  all_results_list[[d2_file]] <- coloc_bfbf
+# this will contain the results
+all_results_list <- NULL
+
+# we can try multithreading
+if (do_multithreading) {
+  # for parallel execution
+  library(foreach)
+  library(doParallel)
+  # do parallel execution for each of the chunks
+  all_results_list <- foreach(i = 1:length(matching_d2_files)) %dopar% {
+    # extract the d2 file
+    d2_file <- matching_d2_files[i]
+    # paste the full path
+    d2_file_full <- file.path(dataset2_in_directory, d2_file)
+    # read the file
+    dataset2_fm_table <- read.table(d2_file_full, header = T, sep = '\t')
+    # replace some of the column names
+    colnames(dataset1_fm_table) <- gsub('lbf_cs_', 'CS', colnames(dataset1_fm_table))
+    # extract the index of the variants in the mapping file
+    d2_index_in_arrow <- match(dataset2_fm_table$variant_index, variant_reference$variant_index)
+    # now add the variant based on chrom:pos:alt:ref
+    dataset2_fm_table[['variant']] <- paste(variant_reference[d2_index_in_arrow, ][['chromosome']], variant_reference[d2_index_in_arrow, ][['bp']], variant_reference[d2_index_in_arrow, ][['eff_allele']], variant_reference[d2_index_in_arrow, ][['non_eff_allele']], sep = ':')
+    # if the dataset does not have a feature, add one
+    if (!('feature' %in% colnames(dataset2_fm_table))) {
+      dataset2_fm_table[['feature']] <- dataset2_name
+    }
+    # get the result
+    coloc_bfbf <- coloc_datasets(
+      dataset1_fm_table, 
+      dataset2_fm_table, 
+      dataset1_name, 
+      dataset2_name
+    )
+    # and return that one
+    return(coloc_bfbf)
+  }
+  # set the names of the files as the keys
+  names(all_results_list) <- matching_d2_files
+} else {
+# or do a singlethread method
+  # create a list to keep results per file
+  all_results_list <- list()
+  # loop over the files
+  for (d2_file in matching_d2_files) {
+    # paste the full path
+    d2_file_full <- file.path(dataset2_in_directory, d2_file)
+    # read the file
+    dataset2_fm_table <- read.table(d2_file_full, header = T, sep = '\t')
+    # replace some of the column names
+    colnames(dataset1_fm_table) <- gsub('lbf_cs_', 'CS', colnames(dataset1_fm_table))
+    # extract the index of the variants in the mapping file
+    d2_index_in_arrow <- match(dataset2_fm_table$variant_index, variant_reference$variant_index)
+    # now add the variant based on chrom:pos:alt:ref
+    dataset2_fm_table[['variant']] <- paste(variant_reference[d2_index_in_arrow, ][['chromosome']], variant_reference[d2_index_in_arrow, ][['bp']], variant_reference[d2_index_in_arrow, ][['eff_allele']], variant_reference[d2_index_in_arrow, ][['non_eff_allele']], sep = ':')
+    # if the dataset does not have a feature, add one
+    if (!('feature' %in% colnames(dataset2_fm_table))) {
+      dataset2_fm_table[['feature']] <- dataset2_name
+    }
+    # get the result
+    coloc_bfbf <- coloc_datasets(
+      dataset1_fm_table, 
+      dataset2_fm_table, 
+      dataset1_name, 
+      dataset2_name
+    )
+    # and put into the big list
+    all_results_list[[d2_file]] <- coloc_bfbf
+  }
 }
 
 # write the rds if we can
