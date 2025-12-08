@@ -6,7 +6,7 @@
 #Args           : location of seurat object, output location of DE, column in the metadata describing cell type, location to put job files
 #Author       	: Roy Oelen
 #example        : ./lc_create_limma_jobs.sh \
-#/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/seurat_preprocess_samples/objects/mo_all_20240619_seuratv5_annotated_agesexcovid_ \
+#/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/seurat_preprocess_samples/objects/mo_all_20250625_seuratv5_annotated_agesexcovid_ \
 #/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/differential_expression/limma_dream/output/LONG_COVID/ \
 #celltype_imputed_lowerres \
 #/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/differential_expression/limma_dream/jobs/LONG_COVID/

@@ -101,11 +101,11 @@ coloc_datasets <- function(dataset1_fm_table,
       table1_feature_variants <- table1_feature[[snp1_column]]
       table2_feature_variants <- table2_feature[[snp2_column]]
       # get just the credible set information
-      table1_cs <- table1_feature[, cs_columns1]
-      table2_cs <- table2_feature[, cs_columns2]
+      table1_cs <- table1_feature[, cs_columns1, drop = F]
+      table2_cs <- table2_feature[, cs_columns2, drop = F]
       # remove completely NA columns, these can be there due to padding when the finemapped results were aggretated into a single table
-      table1_cs <- table1_cs[, !apply(table1_cs, 2, function(col) all(is.na(col)))]
-      table2_cs <- table2_cs[, !apply(table2_cs, 2, function(col) all(is.na(col)))]
+      table1_cs <- table1_cs[, !apply(table1_cs, 2, function(col) all(is.na(col))), drop = F]
+      table2_cs <- table2_cs[, !apply(table2_cs, 2, function(col) all(is.na(col))), drop = F]
       # transpose them
       table1_cs_t <- t(table1_cs)
       table2_cs_t <- t(table2_cs)
@@ -154,7 +154,9 @@ coloc_datasets <- function(dataset1_fm_table,
 ####################
 
 set.seed(7777)
-do_multithreading <- F
+do_multithreading <- T
+nthreads <- 6
+progress_interval <- 20
 
 ####################
 # Debug            #
@@ -310,6 +312,7 @@ if (do_multithreading) {
   # for parallel execution
   library(foreach)
   library(doParallel)
+  registerDoParallel(cores = nthreads)
   # do parallel execution for each of the chunks
   all_results_list <- foreach(i = 1:length(matching_d2_files)) %dopar% {
     # extract the d2 file
@@ -335,6 +338,10 @@ if (do_multithreading) {
       dataset1_name, 
       dataset2_name
     )
+    # report
+    if (i %% progress_interval == 0) {
+      message(paste('processed chunk', as.character(i), '\n'))
+    }
     # and return that one
     return(coloc_bfbf)
   }
