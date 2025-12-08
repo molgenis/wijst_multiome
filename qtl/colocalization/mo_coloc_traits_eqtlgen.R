@@ -263,13 +263,13 @@ if (!(dir.exists(output_dir))) {
 if (dataset1_in == output_loc) {
   stop(paste('output file', output_loc, 'is the same as the dataset1 input file', dataset1_in, '. You should not overwrite your input! Please select a different output file.'))
 }
-if (dataset2_in == output_loc) {
-  stop(paste('output file', output_loc, 'is the same as the dataset2 input file', dataset2_in, '. You should not overwrite your input! Please select a different output file.'))
-}
-# and if we are not looking at exactly the same file
-if (dataset1_in == dataset2_in) {
-  stop(paste('dataset1 file', dataset1_in, 'is the same as the dataset2 input file', dataset2_in, '. You need to supply two different files'))
-}
+# if (dataset2_in == output_loc) {
+#   stop(paste('output file', output_loc, 'is the same as the dataset2 input file', dataset2_in, '. You should not overwrite your input! Please select a different output file.'))
+# }
+# # and if we are not looking at exactly the same file
+# if (dataset1_in == dataset2_in) {
+#   stop(paste('dataset1 file', dataset1_in, 'is the same as the dataset2 input file', dataset2_in, '. You need to supply two different files'))
+# }
 # and finally, check if the names of the datasets are different
 if (dataset1_name == dataset2_name) {
   stop(paste('names of the datasets that were supplied', dataset1_name, 'are the same, either make these different or use the default \'dataset1\' and \'dataset2\''))
@@ -287,9 +287,9 @@ if (!is.null(opt[['binary_rds_loc']])) {
   if (dataset1_in == binary_rds_loc) {
     stop(paste('rds output file', binary_rds_loc, 'is the same as the dataset1 input file', dataset1_in, '. You should not overwrite your input! Please select a different output file.'))
   }
-  if (dataset2_in == binary_rds_loc) {
-    stop(paste('rds output file', binary_rds_loc, 'is the same as the dataset2 input file', dataset2_in, '. You should not overwrite your input! Please select a different output file.'))
-  }
+  # if (dataset2_in == binary_rds_loc) {
+  #   stop(paste('rds output file', binary_rds_loc, 'is the same as the dataset2 input file', dataset2_in, '. You should not overwrite your input! Please select a different output file.'))
+  # }
 }
 
 # read the files
@@ -319,7 +319,7 @@ if (do_multithreading) {
     # read the file
     dataset2_fm_table <- read.table(d2_file_full, header = T, sep = '\t')
     # replace some of the column names
-    colnames(dataset1_fm_table) <- gsub('lbf_cs_', 'CS', colnames(dataset1_fm_table))
+    colnames(dataset2_fm_table) <- gsub('lbf_cs_', 'CS', colnames(dataset2_fm_table))
     # extract the index of the variants in the mapping file
     d2_index_in_arrow <- match(dataset2_fm_table$variant_index, variant_reference$variant_index)
     # now add the variant based on chrom:pos:alt:ref
@@ -351,7 +351,7 @@ if (do_multithreading) {
     # read the file
     dataset2_fm_table <- read.table(d2_file_full, header = T, sep = '\t')
     # replace some of the column names
-    colnames(dataset1_fm_table) <- gsub('lbf_cs_', 'CS', colnames(dataset1_fm_table))
+    colnames(dataset2_fm_table) <- gsub('lbf_cs_', 'CS', colnames(dataset2_fm_table))
     # extract the index of the variants in the mapping file
     d2_index_in_arrow <- match(dataset2_fm_table$variant_index, variant_reference$variant_index)
     # now add the variant based on chrom:pos:alt:ref
@@ -382,9 +382,17 @@ if (!is.null(binary_rds_loc)) {
 tbls <- list()
 for (file_name in names(all_results_list)) {
     for (trait in names(all_results_list[[file_name]])) {
-        tbls[[paste0(file_name, trait)]] <- all_results_list[[file_name]][[trait]][['table']]
-        # add the filename to that table
-        tbls[[paste0(file_name, trait)]][['filename']] <- file_name
+        # extract that table
+        file_trait_table <- all_results_list[[file_name]][[trait]][['table']]
+        # check if it has any results
+        if (nrow(file_trait_table) > 0) {
+          # add the filename to that table
+          file_trait_table[['filename']] <- file_name
+          # put in the list
+          tbls[[paste0(file_name, trait)]] <- file_trait_table
+        } else {
+
+        }
     }
 }
 # merge all these
