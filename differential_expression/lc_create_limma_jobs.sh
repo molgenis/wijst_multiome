@@ -6,10 +6,10 @@
 #Args           : location of seurat object, output location of DE, column in the metadata describing cell type, location to put job files
 #Author       	: Roy Oelen
 #example        : ./lc_create_limma_jobs.sh \
-#/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/seurat_preprocess_samples/objects/mo_all_20240619_seuratv5_annotated_agesexcovid_ \
-#/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/differential_expression/limma_dream/output/LONG_COVID/ \
+#/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/seurat_preprocess_samples/objects/mo_all_20240619_seuratv5_annotated_agesexcovid_ \
+#/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/differential_expression/limma_dream/output/LONG_COVID/ \
 #celltype_imputed_lowerres \
-#/groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/differential_expression/limma_dream/jobs/LONG_COVID/
+#/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/differential_expression/limma_dream/jobs/LONG_COVID/
 ###################################################################
 
 # standard parameters
@@ -19,13 +19,13 @@ TMP_SIZE='512mb'
 RUNTIME='23:59:59'
 
 # location to the R script
-script_loc='/groups/umcg-franke-scrna/tmp03/users/umcg-roelen/singularity/rstudio-server/simulated_home/lc_differential_expression_limma_parameterised.R'
+script_loc='/groups/umcg-franke-scrna/tmp04/users/umcg-roelen/singularity/rstudio-server/simulated_home/lc_differential_expression_limma_parameterised.R'
 
 # the seurat object
-seurat_objects_loc=$1 # like /groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/seurat_preprocess_samples/objects/mo_all_20240619_seuratv5_annotated_agesexcovid_
-output_loc=$2 # like /groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/differential_expression/limma_dream/output/LONG_COVID/
+seurat_objects_loc=$1 # like /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/seurat_preprocess_samples/objects/mo_all_20240619_seuratv5_annotated_agesexcovid_
+output_loc=$2 # like /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/differential_expression/limma_dream/output/LONG_COVID/
 cell_type_column=$3 # celltype_imputed_lowerres
-jobs_loc=$4 # /groups/umcg-franke-scrna/tmp03/projects/multiome/ongoing/differential_expression/limma_dream/jobs/LONG_COVID/
+jobs_loc=$4 # /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/differential_expression/limma_dream/jobs/LONG_COVID/
 
 # create the regex for the seurat objects
 REGEX_SEURAT_OBJECTS=${seurat_objects_loc}'*.rds'
