@@ -188,7 +188,7 @@ eff_first <- F
 # Debug            #
 ####################
 
-debug <- T
+debug <- F
 
 
 ####################
@@ -201,14 +201,14 @@ opt <- NULL
 if(debug) {
   # instead of using the command line, create a list with preset parameters
   opt <- list()
-  opt[['dataset1_in']] <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/finemapping/interaction_eqtl/sc-eqtlgen/output/ut_and_24hca_significant/L1/CD4T_finemapped.tsv.gz'
-  opt[['dataset2_in_directory']] <- '/groups/umcg-franke-scrna/tmp04/external_datasets/GWAS/eqtlgen_phase2_processed/Multiple_sclerosis/'
-  opt[['dataset2_in_prepend']] <- 'PASS_Multiple_sclerosis2019__'
+  opt[['dataset1_in']] <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/finemapping/interaction_eqtl/sc-eqtlgen/output/ut_and_24hca_significant/L1/monocyte_finemapped.tsv.gz'
+  opt[['dataset2_in_directory']] <- '/groups/umcg-franke-scrna/tmp04/external_datasets/GWAS/eqtlgen_phase2_processed/Rheumatoid_Arthritis/'
+  opt[['dataset2_in_prepend']] <- 'PASS_Rheumatoid_Arthritis__'
   opt[['dataset2_in_append']] <- '___gwas.txt.gz'
-  opt[['dataset1_name']] <- 'CD4T'
+  opt[['dataset1_name']] <- 'monocyte'
   opt[['dataset2_name']] <- 'Rheumatoid_Arthritis'
-  opt[['output_loc']] <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/colocalization/eqtl_gwas/eqtlgen_processed/Multiple_sclerosis/CD4T_cells.tsv.gz'
-  opt[['binary_rds_loc']] <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/colocalization/eqtl_gwas/eqtlgen_processed/Multiple_sclerosis/CD4T_cells.rds'
+  opt[['output_loc']] <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/colocalization/eqtl_gwas/eqtlgen_processed/Rheumatoid_Arthritis/monocyte.tsv.gz'
+  opt[['binary_rds_loc']] <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/colocalization/eqtl_gwas/eqtlgen_processed/Rheumatoid_Arthritis/monocyte.rds'
   opt[['variant_mapping_loc']] <- '/groups/umcg-franke-scrna/tmp04/external_datasets/GWAS/eqtlgen_phase2_processed/1000G-30x_index.parquet'
 } else {
   # make command line options
