@@ -149,20 +149,46 @@ coloc_datasets <- function(dataset1_fm_table,
 }
 
 
+get_all_variants <- function(d2_files, variant_reference, eff_first=T) {
+  allsnps <- list()
+  # loop over the files
+  for (d2_file in matching_d2_files) {
+    # paste the full path
+    d2_file_full <- file.path(dataset2_in_directory, d2_file)
+    # read the file
+    dataset2_fm_table <- read.table(d2_file_full, header = T, sep = '\t')
+    # replace some of the column names
+    colnames(dataset2_fm_table) <- gsub('lbf_cs_', 'CS', colnames(dataset2_fm_table))
+    # extract the index of the variants in the mapping file
+    d2_index_in_arrow <- match(dataset2_fm_table$variant_index, variant_reference$variant_index)
+    # now add the variant based on chrom:pos:alt:ref
+    if (eff_first) {
+      dataset2_fm_table[['variant']] <- paste(variant_reference[d2_index_in_arrow, ][['chromosome']], variant_reference[d2_index_in_arrow, ][['bp']], variant_reference[d2_index_in_arrow, ][['eff_allele']], variant_reference[d2_index_in_arrow, ][['non_eff_allele']], sep = ':')
+    }
+    else {
+      dataset2_fm_table[['variant']] <- paste(variant_reference[d2_index_in_arrow, ][['chromosome']], variant_reference[d2_index_in_arrow, ][['bp']], variant_reference[d2_index_in_arrow, ][['non_eff_allele']], variant_reference[d2_index_in_arrow, ][['eff_allele']], sep = ':')
+    }
+    allsnps[[d2_file]] <- dataset2_fm_table[['variant']]
+  }
+  allsnps_vector <- do.call('c', allsnps)
+  return(as.vector(unlist(allsnps_vector)))
+}
+
 ####################
 # Settings        #
 ####################
 
 set.seed(7777)
-do_multithreading <- T
+do_multithreading <- F
 nthreads <- 6
 progress_interval <- 20
+eff_first <- F
 
 ####################
 # Debug            #
 ####################
 
-#debug <- F
+debug <- T
 
 
 ####################
@@ -175,41 +201,41 @@ opt <- NULL
 if(debug) {
   # instead of using the command line, create a list with preset parameters
   opt <- list()
-  opt[['dataset1_in']] <- '/scratch/hb-functionalgenomics/projects/multiome/ongoing/qtl/finemapping/interaction_eqtl/sc-eqtlgen/output/ut_and_24hca_significant/L1/CD4T_finemapped.tsv.gz'
-  opt[['dataset2_in_directory']] <- '/scratch/hb-functionalgenomics/projects/eqtlgen-phase2/freeze3/Interpretation/eqtl-gwas-susie-coloc/output_gwas_finemap_all_20250919/GWAS_finemap/'
-  opt[['dataset2_in_prepend']] <- 'White_blood_cell_count__'
+  opt[['dataset1_in']] <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/finemapping/interaction_eqtl/sc-eqtlgen/output/ut_and_24hca_significant/L1/CD4T_finemapped.tsv.gz'
+  opt[['dataset2_in_directory']] <- '/groups/umcg-franke-scrna/tmp04/external_datasets/GWAS/eqtlgen_phase2_processed/Multiple_sclerosis/'
+  opt[['dataset2_in_prepend']] <- 'PASS_Multiple_sclerosis2019__'
   opt[['dataset2_in_append']] <- '___gwas.txt.gz'
   opt[['dataset1_name']] <- 'CD4T'
-  opt[['dataset2_name']] <- 'White_blood_cell_count'
-  opt[['output_loc']] <- '/scratch/hb-functionalgenomics/projects/multiome/ongoing/qtl/colocalization/eqtl_gwas/eqtlgen_processed/White_blood_cell_count/CD4T_cells.tsv.gz'
-  opt[['binary_rds_loc']] <- '/scratch/hb-functionalgenomics/projects/multiome/ongoing/qtl/colocalization/eqtl_gwas/eqtlgen_processed/White_blood_cell_count/CD4T_cells.rds'
-  opt[['variant_mapping_loc']] <- '/scratch/hb-functionalgenomics/projects/eqtlgen-phase2/processed_data/variants/1000G-30x_index.parquet'
+  opt[['dataset2_name']] <- 'Rheumatoid_Arthritis'
+  opt[['output_loc']] <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/colocalization/eqtl_gwas/eqtlgen_processed/Multiple_sclerosis/CD4T_cells.tsv.gz'
+  opt[['binary_rds_loc']] <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/colocalization/eqtl_gwas/eqtlgen_processed/Multiple_sclerosis/CD4T_cells.rds'
+  opt[['variant_mapping_loc']] <- '/groups/umcg-franke-scrna/tmp04/external_datasets/GWAS/eqtlgen_phase2_processed/1000G-30x_index.parquet'
 } else {
   # make command line options
   option_list <- list(
     make_option(c("-t", "--dataset1_in"), type="character", default=NULL, 
-              help="finemapping output file of first dataset", metavar="character"),
+                help="finemapping output file of first dataset", metavar="character"),
     make_option(c("-d", "--dataset2_in_directory"), type="character", default=NULL, 
-              help="finemapping output file of second dataset first part of filename", metavar="character"),
+                help="finemapping output file of second dataset first part of filename", metavar="character"),
     make_option(c("-p", "--dataset2_in_prepend"), type="character", default=NULL, 
-              help="finemapping output file of second dataset first part of filename", metavar="character"),
+                help="finemapping output file of second dataset first part of filename", metavar="character"),
     make_option(c("-s", "--dataset2_in_append"), type="character", default=NULL, 
-              help="finemapping output file of second dataset first part of filename", metavar="character"),
+                help="finemapping output file of second dataset first part of filename", metavar="character"),
     make_option(c("-n", "--dataset1_name"), type="character", default='dataset1', 
-              help="name of the first dataset, to put in the output [default]", metavar="character"), 
+                help="name of the first dataset, to put in the output [default]", metavar="character"), 
     make_option(c("-a", "--dataset2_name"), type="character", default='dataset2', 
-              help="name of the second dataset, to put in the output  [default]", metavar="character"),
+                help="name of the second dataset, to put in the output  [default]", metavar="character"),
     make_option(c("-o", "--output_loc"), type="character", default=NULL, 
-              help="tab separated output location of the colocalization", metavar="character"), 
+                help="tab separated output location of the colocalization", metavar="character"), 
     make_option(c("-b", "--binary_rds_loc"), type="character", default=NULL, 
-              help="optional output location of full binary RDS output", metavar="character"), 
+                help="optional output location of full binary RDS output", metavar="character"), 
     make_option(c("-v", "--variant_mapping_loc"), type="character", default=NULL, 
-              help="location of the arrow file mapping indices to GWAS variants", metavar="character")
+                help="location of the arrow file mapping indices to GWAS variants", metavar="character")
   )
   # initialize optparser
   opt_parser <- OptionParser(option_list=option_list)
   opt <- parse_args(opt_parser)
-
+  
 }
 
 # initialize some values
@@ -326,7 +352,12 @@ if (do_multithreading) {
     # extract the index of the variants in the mapping file
     d2_index_in_arrow <- match(dataset2_fm_table$variant_index, variant_reference$variant_index)
     # now add the variant based on chrom:pos:alt:ref
-    dataset2_fm_table[['variant']] <- paste(variant_reference[d2_index_in_arrow, ][['chromosome']], variant_reference[d2_index_in_arrow, ][['bp']], variant_reference[d2_index_in_arrow, ][['eff_allele']], variant_reference[d2_index_in_arrow, ][['non_eff_allele']], sep = ':')
+    if (eff_first) {
+      dataset2_fm_table[['variant']] <- paste(variant_reference[d2_index_in_arrow, ][['chromosome']], variant_reference[d2_index_in_arrow, ][['bp']], variant_reference[d2_index_in_arrow, ][['eff_allele']], variant_reference[d2_index_in_arrow, ][['non_eff_allele']], sep = ':')
+    }
+    else {
+      dataset2_fm_table[['variant']] <- paste(variant_reference[d2_index_in_arrow, ][['chromosome']], variant_reference[d2_index_in_arrow, ][['bp']], variant_reference[d2_index_in_arrow, ][['non_eff_allele']], variant_reference[d2_index_in_arrow, ][['eff_allele']], sep = ':')
+    }
     # if the dataset does not have a feature, add one
     if (!('feature' %in% colnames(dataset2_fm_table))) {
       dataset2_fm_table[['feature']] <- dataset2_name
@@ -348,7 +379,10 @@ if (do_multithreading) {
   # set the names of the files as the keys
   names(all_results_list) <- matching_d2_files
 } else {
-# or do a singlethread method
+  # or do a singlethread method with a progress bar
+  pb = txtProgressBar(min = 0, max = length(matching_d2_files), initial = 0)
+  # init step
+  pb_step <- 0
   # create a list to keep results per file
   all_results_list <- list()
   # loop over the files
@@ -362,7 +396,12 @@ if (do_multithreading) {
     # extract the index of the variants in the mapping file
     d2_index_in_arrow <- match(dataset2_fm_table$variant_index, variant_reference$variant_index)
     # now add the variant based on chrom:pos:alt:ref
-    dataset2_fm_table[['variant']] <- paste(variant_reference[d2_index_in_arrow, ][['chromosome']], variant_reference[d2_index_in_arrow, ][['bp']], variant_reference[d2_index_in_arrow, ][['eff_allele']], variant_reference[d2_index_in_arrow, ][['non_eff_allele']], sep = ':')
+    if (eff_first) {
+      dataset2_fm_table[['variant']] <- paste(variant_reference[d2_index_in_arrow, ][['chromosome']], variant_reference[d2_index_in_arrow, ][['bp']], variant_reference[d2_index_in_arrow, ][['eff_allele']], variant_reference[d2_index_in_arrow, ][['non_eff_allele']], sep = ':')
+    }
+    else {
+      dataset2_fm_table[['variant']] <- paste(variant_reference[d2_index_in_arrow, ][['chromosome']], variant_reference[d2_index_in_arrow, ][['bp']], variant_reference[d2_index_in_arrow, ][['non_eff_allele']], variant_reference[d2_index_in_arrow, ][['eff_allele']], sep = ':')
+    }
     # if the dataset does not have a feature, add one
     if (!('feature' %in% colnames(dataset2_fm_table))) {
       dataset2_fm_table[['feature']] <- dataset2_name
@@ -376,7 +415,13 @@ if (do_multithreading) {
     )
     # and put into the big list
     all_results_list[[d2_file]] <- coloc_bfbf
+    # update the step
+    pb_step <- pb_step + 1
+    # and update the progress bar
+    setTxtProgressBar(pb, pb_step)
   }
+  # close the progress bar
+  close(pb)
 }
 
 # write the rds if we can
@@ -388,19 +433,19 @@ if (!is.null(binary_rds_loc)) {
 # next extract all the tables
 tbls <- list()
 for (file_name in names(all_results_list)) {
-    for (trait in names(all_results_list[[file_name]])) {
-        # extract that table
-        file_trait_table <- all_results_list[[file_name]][[trait]][['table']]
-        # check if it has any results
-        if (nrow(file_trait_table) > 0) {
-          # add the filename to that table
-          file_trait_table[['filename']] <- file_name
-          # put in the list
-          tbls[[paste0(file_name, trait)]] <- file_trait_table
-        } else {
-
-        }
+  for (trait in names(all_results_list[[file_name]])) {
+    # extract that table
+    file_trait_table <- all_results_list[[file_name]][[trait]][['table']]
+    # check if it has any results
+    if (nrow(file_trait_table) > 0) {
+      # add the filename to that table
+      file_trait_table[['filename']] <- file_name
+      # put in the list
+      tbls[[paste0(file_name, trait)]] <- file_trait_table
+    } else {
+      
     }
+  }
 }
 # merge all these
 results_table_all <- do.call('rbind', tbls)
