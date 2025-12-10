@@ -31,6 +31,5 @@ for CT in ${CTS}
     --dataset1_name ${CT} \
     --dataset2_name ${DS2_NAME} \
     --output_loc /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/colocalization/eqtl_gwas/eqtlgen_processed/${DS2_NAME}/${CT}.tsv.gz \
-    --binary_rds_loc /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/colocalization/eqtl_gwas/eqtlgen_processed/${DS2_NAME}/${CT}.rds \
     --variant_mapping_loc /groups/umcg-franke-scrna/tmp04/external_datasets/GWAS/eqtlgen_phase2_processed/1000G-30x_index.parquet
 done
