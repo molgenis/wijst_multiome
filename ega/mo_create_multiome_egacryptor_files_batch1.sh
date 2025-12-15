@@ -60,8 +60,8 @@ for lane in ${LANES[*]}
     full_atac_encrypted_loc=${ATAC_LANES_ENCRYPTED_LOC}'/'${lane}'/'
     
     # generate the commands
-    rna_command='java -jar '${EGACRYPTOR_LOC}' -i '${full_rna_loc}' -o '${full_rna_encrypted_loc}
-    atac_command='java -jar '${EGACRYPTOR_LOC}' -i '${full_atac_loc}' -o '${full_atac_encrypted_loc}
+    rna_command='java -jar '${EGACRYPTOR_LOC}' -i '${full_rna_loc}' -o '${full_rna_encrypted_loc}' -t '${CORES}
+    atac_command='java -jar '${EGACRYPTOR_LOC}' -i '${full_atac_loc}' -o '${full_atac_encrypted_loc}' -t '${CORES}
     
     # name the job
     JOB_NAME='mo_egacrypt_'${lane}
