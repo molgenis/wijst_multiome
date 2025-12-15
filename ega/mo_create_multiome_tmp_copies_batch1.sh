@@ -71,9 +71,11 @@ for lane in ${LANES[*]}
         # paste the copy operation
         copy_operation_rna='cp '${object}' '${object_new_loc}
         # and echo this into the script
-        echo ${copy_operation_rna}'
-' >> ${copy_script_loc}
+        echo ${copy_operation_rna} >> ${copy_script_loc}
     done
+    # echo a newline
+    echo '
+' >> ${copy_script_loc}
     # create the regex for the ATAC files
     REGEX_ATAC=${full_rna_loc}'*'
     # check each file
@@ -86,7 +88,6 @@ for lane in ${LANES[*]}
         # paste the copy operation
         copy_operation_atac='cp '${object}' '${object_new_loc}
         # and echo this into the script
-        echo ${copy_operation_atac}'
-' >> ${copy_script_loc}
+        echo ${copy_operation_atac} >> ${copy_script_loc}
     done
 done
