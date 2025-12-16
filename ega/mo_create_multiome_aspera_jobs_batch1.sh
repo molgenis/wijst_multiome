@@ -61,8 +61,8 @@ for lane in ${LANES[*]}
     full_atac_encrypted_loc=${ATAC_LANES_ENCRYPTED_LOC}'/'${lane}'/'
     
     # generate the commands
-    rna_command='ASPERA_SCP_PASS='${ASPERA_SCP_PASS}' '${ASPERA_CMD}' '${full_rna_encrypted_loc}'/* '${EGA_BOX}'@'${EGA_URL}':'${EGA_DIR}
-    atac_command='ASPERA_SCP_PASS='${ASPERA_SCP_PASS}' '${ASPERA_CMD}' '${full_atac_encrypted_loc}'/* '${EGA_BOX}'@'${EGA_URL}':'${EGA_DIR}
+    rna_command="ASPERA_SCP_PASS=${ASPERA_SCP_PASS} ${ASPERA_CMD} ${full_rna_encrypted_loc}'* '${EGA_BOX}@${EGA_URL}:${EGA_DIR}"
+    atac_command="ASPERA_SCP_PASS=${ASPERA_SCP_PASS} ${ASPERA_CMD} ${full_atac_encrypted_loc}'* '${EGA_BOX}@${EGA_URL}:${EGA_DIR}"
 
     # name the job
     JOB_NAME='mo_asperup_'${lane}
@@ -86,6 +86,6 @@ for lane in ${LANES[*]}
 ' > ${JOB_LOC}
     
     # send the upload commands
-    echo ${rna_command} >> ${JOB_LOC}
-    echo ${atac_command} >> ${JOB_LOC}
+    echo "${rna_command}" >> ${JOB_LOC}
+    echo "${atac_command}" >> ${JOB_LOC}
 done
