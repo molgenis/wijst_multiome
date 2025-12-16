@@ -13,8 +13,8 @@ ATAC_LANES_LOC='/groups/umcg-franke-scrna/prm02/projects/multiome/raw/atac/seque
 RNA_LANES_COPIED_LOC='/groups/umcg-franke-scrna/tmp02/projects/multiome/raw/ega/rna/sequence_data_unencrypted/'
 ATAC_LANES_COPIED_LOC='/groups/umcg-franke-scrna/tmp02/projects/multiome/raw/ega/atac/sequence_data_unencrypted/'
 # to be able to distinguish the ATAC and RNA files, we have to add a prepend to them
-RNA_LANES_PREPEND='RNA_'
-ATAC_LANES_PREPEND='ATAC'
+RNA_LANES_PREPEND='MO_RNA_'
+ATAC_LANES_PREPEND='MO_ATAC_'
 # add we'll make a script per lane so we can do the copies in batches
 COPY_SCRIPTS_LOC='/groups/umcg-franke-scrna/tmp02/projects/multiome/raw/ega/scripts/copy_scripts/'
 # these are the lanes with sequence data
