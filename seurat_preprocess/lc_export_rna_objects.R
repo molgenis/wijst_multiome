@@ -64,7 +64,7 @@ mo <- mo[, !is.na(mo@meta.data[['condition_final']]) & mo@meta.data[['condition_
 # and keep only the assigned long covid samples
 mo <- mo[, !is.na(mo@meta.data[['LONG_COVID_method']]) & mo@meta.data[['LONG_COVID_method']] == 'assigned']
 # remove some columns
-mo@meta.data[, c('condition_imputed', 'celltype_imputed', 'final_condition', 'condition_sheet', 'condition_prev', 'LONG_COVID_method', 'sample_final')] <- NULL
+mo@meta.data[, c('condition_imputed', 'celltype_imputed', 'final_condition', 'condition_sheet', 'condition_prev', 'LONG_COVID_method', 'sample_final', 'best_match_sample', 'second_match_sample', 'confined_best_match_sample', 'confined_second_match_sample', 'unconfined_best_match_sample', 'unconfined_second_match_sample')] <- NULL
 
 # create a sample mapping
 s_mapping <- create_anonymized_mapping(mo@meta.data, 'realid', 'snumber', 's')
@@ -108,7 +108,7 @@ mo_metadata_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/se
 Matrix::writeMM(mo_counts_raw, mo_counts_raw_loc)
 write.table(data.frame(x = mo_genes_raw), gzfile(mo_genes_raw_loc), row.names = F, col.names = F, quote = F)
 write.table(data.frame(x = mo_cells), gzfile(mo_cells_loc), row.names = F, col.names = F, quote = F)
-write.table(data.frame(x = mo_metadata), gzfile(mo_metadata_loc), row.names = F, col.names = T, quote = F)
+write.table(mo_metadata, gzfile(mo_metadata_loc), row.names = F, col.names = T, quote = F, sep = '\t')
 # zip the file
 gzip(filename = mo_counts_raw_loc)
 # do also for the normalized data
@@ -123,4 +123,10 @@ Matrix::writeMM(mo_counts_sct, mo_counts_sct_loc)
 write.table(data.frame(x = mo_genes_sct), gzfile(mo_genes_sct_loc), row.names = F, col.names = F, quote = F)
 # zip the file
 gzip(filename = mo_counts_sct_loc)
-
+# make checksums
+mdfiver::create_sha256_for_file(paste0(mo_counts_raw_loc, '.gz'))
+mdfiver::create_sha256_for_file(paste0(mo_counts_sct_loc, '.gz'))
+mdfiver::create_sha256_for_file(mo_genes_raw_loc)
+mdfiver::create_sha256_for_file(mo_genes_sct_loc)
+mdfiver::create_sha256_for_file(mo_cells_loc)
+mdfiver::create_sha256_for_file(mo_metadata_loc)
