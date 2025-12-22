@@ -2,10 +2,10 @@
 
 ############################################################################################################################
 # Authors: Roy Oelen
-# Name: mo_create_ega_pairing_file.sh
+# Name: mo_create_multiome_ega_pairing_file_batch1.sh
 # Function: create pairing file of checksums for EGA
 # Arguments: location of pairing file to create
-# Example: ./mo_create_ega_pairing_file.sh /groups/umcg-franke-scrna/tmp02/projects/multiome/raw/ega/mo_pairing_file_lanes.csv
+# Example: ./mo_create_multiome_ega_pairing_file_batch1.sh /groups/umcg-franke-scrna/tmp02/projects/multiome/raw/ega/mo_pairing_file_lanes.csv
 ############################################################################################################################
 
 
