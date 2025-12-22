@@ -12,6 +12,7 @@
 
 library(Seurat)
 library(mdfiver)
+library(R.utils)
 
 
 ####################
@@ -84,6 +85,42 @@ mo_object_covid_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoin
 # export
 write.table(s_mapping, gzfile(mo_sample_mapping_loc), row.names = F, col.names = T, sep = '\t', quote = F)
 saveRDS(mo, mo_object_covid_loc)
-# and make sum checksum
+# and make checksum
 mdfiver::create_sha256_for_file(mo_sample_mapping_loc)
 mdfiver::create_sha256_for_file(mo_object_covid_loc)
+
+# also disassemble
+mo_counts_raw <- mo@assays$RNA@layers$counts
+# with genes
+mo_genes_raw_df <- mo@assays$RNA@features
+# keeping what is in the counts slow
+mo_genes_raw <- rownames(mo_genes_raw_df[mo_genes_raw_df[['counts']] == T, , drop = F])
+# and metadata
+mo_metadata <- mo@meta.data
+# and cells
+mo_cells <- colnames(mo)
+# write these
+mo_counts_raw_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/seurat_preprocess_samples/objects/mo_rna_lc_study_only_20251217_raw_counts.mtx'
+mo_genes_raw_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/seurat_preprocess_samples/objects/mo_rna_lc_study_only_20251217_raw_features.tsv.gz'
+mo_cells_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/seurat_preprocess_samples/objects/mo_rna_lc_study_only_20251217_barcodes.tsv.gz'
+mo_metadata_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/seurat_preprocess_samples/objects/mo_rna_lc_study_only_20251217_metadata.tsv.gz'
+# to files
+Matrix::writeMM(mo_counts_raw, mo_counts_raw_loc)
+write.table(data.frame(x = mo_genes_raw), gzfile(mo_genes_raw_loc), row.names = F, col.names = F, quote = F)
+write.table(data.frame(x = mo_cells), gzfile(mo_cells_loc), row.names = F, col.names = F, quote = F)
+write.table(data.frame(x = mo_metadata), gzfile(mo_metadata_loc), row.names = F, col.names = T, quote = F)
+# zip the file
+gzip(filename = mo_counts_raw_loc)
+# do also for the normalized data
+mo_counts_sct <- mo@assays$SCT@counts
+# keeping what is in the counts slow
+mo_genes_sct <- rownames(mo_counts_sct)
+# write these
+mo_counts_sct_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/seurat_preprocess_samples/objects/mo_rna_lc_study_only_20251217_sctnormalized_counts.mtx'
+mo_genes_sct_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/seurat_preprocess_samples/objects/mo_rna_lc_study_only_20251217_sctnormalized_features.tsv.gz'
+# to files
+Matrix::writeMM(mo_counts_sct, mo_counts_sct_loc)
+write.table(data.frame(x = mo_genes_sct), gzfile(mo_genes_sct_loc), row.names = F, col.names = F, quote = F)
+# zip the file
+gzip(filename = mo_counts_sct_loc)
+
