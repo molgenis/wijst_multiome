@@ -1,7 +1,7 @@
 ---
-title: "mo_check_eqtl_correlations_celltypes"
+title: "mo_check_caqtl_correlations_celltypes"
 author: "Roy Oelen"
-date: "2025-04-30"
+date: "2025-12-23"
 output: html_document
 ---
 
@@ -11,7 +11,7 @@ knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 #!/usr/bin/env Rscript
 ############################################################################################################################
 # Authors: Roy Oelen, Marc-Jan Bonder, Ting Qi
-# Name: mo_check_eqtl_correlations_celltypes.Rmd
+# Name: mo_check_caqtl_correlations_celltypes.Rmd
 # Function: plot replication of sc-eQTLs in OneK1K and sc-eQTLgen
 ############################################################################################################################
 ```
@@ -982,66 +982,81 @@ knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 # Main Code        #
 ####################
 
-# location of eQTL
-eqtl_output_combined_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/sc-eqtlgen/output/L1/combined/'
+# location of caQTL
+caqtl_output_combined_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/output/L1/combined/'
 # location of caQTL output
-eqtl_output_ut_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/sc-eqtlgen/output/L1/UT_20perm/'
+caqtl_output_ut_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/output/L1/UT/'
+
 
 ```
 
-```{r eqtl_combined_replication, include=FALSE}
+```{r caqtl_combined_replication, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # check replication in caQTLs across cell types
-eqtl_combined_celltype_replication <- match_qtl_outputs_each(
-  eqtl_output_combined_loc, 
-  eqtl_output_combined_loc
+caqtl_combined_celltype_replication <- match_qtl_outputs_each(
+  caqtl_output_combined_loc, 
+  caqtl_output_combined_loc
 )
 
 ```
 
-```{r eqtl_combined_replication_save, include=FALSE}
+```{r caqtl_combined_replication_save, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # check replication in caQTLs across cell types
-saveRDS(eqtl_combined_celltype_replication, '~/rds/eqtl_combined_celltype_replication.rds')
-mdfiver::create_md5_for_file('~/rds/eqtl_combined_celltype_replication.rds')
- for(replication_name in names(eqtl_combined_celltype_replication)) {
-   replication_save_loc <- paste0('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/replication/celltypes/mo_matched_eqtl_', replication_name, '.tsv.gz')
-   write.table(eqtl_combined_celltype_replication[[replication_save_loc]], gzfile(replication_save_loc), row.names = F, col.names = T, sep = '\t')
-   mdfiver::create_md5_for_file(replication_save_loc)
- }
+#saveRDS(caqtl_combined_celltype_replication, '~/rds/caqtl_combined_celltype_replication.rds')
+# for(replication_name in names(caqtl_combined_celltype_replication)) {
+#   replication_save_loc <- paste0('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/replication/celltypes/mo_matched_caqtl_', replication_name, '.tsv.gz')
+#   write.table(caqtl_combined_celltype_replication[[replication_save_loc]], gzfile(replication_save_loc), row.names = F, col.names = T, sep = '\t')
+#   mdfiver::create_md5_for_file(replication_save_loc)
+# }
 
 ```
 
-```{r eqtl_combined_replication_stats, include=FALSE}
+```{r caqtl_combined_replication_read, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # check replication in caQTLs across cell types
-eqtl_combined_celltype_stats <- get_stats_qtl_matches(eqtl_combined_celltype_replication)
+#caqtl_combined_celltype_replication <- readRDS('~/rds/caqtl_combined_celltype_replication.rds')
 
 ```
 
-```{r eqtl_combined_replication_save, include=FALSE}
+```{r caqtl_combined_replication_stats, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # check replication in caQTLs across cell types
-saveRDS(eqtl_combined_celltype_stats, '~/eqtl_combined_celltype_stats.rds')
-mdfiver::create_md5_for_file('~/eqtl_combined_celltype_stats.rds')
-eqtl_replication_stats_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/replication/celltypes/mo_eqtl_replication_stats.tsv.gz'
-write.table(eqtl_combined_celltype_stats, gzfile(eqtl_replication_stats_loc), row.names = F, col.names = T, sep = '\t')
-mdfiver::create_md5_for_file(eqtl_replication_stats_loc)
+caqtl_combined_celltype_stats <- get_stats_qtl_matches(caqtl_combined_celltype_replication)
 
 ```
 
-```{r eqtl_combined_replication_plot, include=TRUE, fig.width=8, fig.height=8}
+```{r caqtl_combined_replication_save, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # check replication in caQTLs across cell types
-eqtl_combined_celltype_stat_p <- plot_replication_stats(eqtl_combined_celltype_stats, mid_value = 0.5, comparing_value_to_text=list('n_sig_both' = 'N sig: ', 'n_sig_tested' = 'N test: ', 'rb_emp_all' = 'Rb: '), colour_column = 'rb_emp_all', category_plot_order = c('B', 'CD4+ T', 'CD8+ T', 'NK', 'DC', 'Monocyte'), text_size = 4, legendless = T) +
+#saveRDS(caqtl_combined_celltype_stats, '~/caqtl_combined_celltype_stats.rds')
+caqtl_replication_stats_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/replication/celltypes/mo_caqtl_replication_stats.tsv.gz'
+# write.table(caqtl_combined_celltype_stats, gzfile(caqtl_replication_stats_loc), row.names = F, col.names = T, sep = '\t')
+# mdfiver::create_md5_for_file(caqtl_replication_stats_loc)
+
+```
+
+```{r caqtl_combined_replication_read, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# check replication in caQTLs across cell types
+caqtl_combined_celltype_stats <- fread(caqtl_replication_stats_loc, row.names = F, header = T, sep = '\t')
+
+```
+
+```{r caqtl_combined_replication_plot, include=TRUE, fig.width=8, fig.height=8}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# check replication in caQTLs across cell types
+caqtl_combined_celltype_stat_p <- plot_replication_stats(caqtl_combined_celltype_stats, mid_value = 0.5, comparing_value_to_text=list('n_sig_both' = 'N sig: ', 'n_sig_tested' = 'N test: ', 'rb_emp_all' = 'Rb: '), colour_column = 'rb_emp_all', category_plot_order = c('B', 'CD4+ T', 'CD8+ T', 'NK', 'DC', 'Monocyte'), text_size = 4, legendless = T) +
   xlab('Cell type replicating') +
   ylab('Cell type replicating in') +
-  ggtitle('Replication of eQTLs') +
+  ggtitle('Replication of caQTLs') +
   labs(fill="Rb") +
   theme(
     # X label font size
@@ -1057,9 +1072,9 @@ eqtl_combined_celltype_stat_p <- plot_replication_stats(eqtl_combined_celltype_s
   )
 
 # save the figure
-ggsave('~/plots/mo_eqtl_celltype_replication.pdf', plot = eqtl_combined_celltype_stat_p, width = 8, height = 8)
+ggsave('~/plots/mo_caqtl_celltype_replication.pdf', plot = caqtl_combined_celltype_stat_p, width = 8, height = 8)
 
 # display the figure
-eqtl_combined_celltype_stat_p
+caqtl_combined_celltype_stat_p
 
 ```
