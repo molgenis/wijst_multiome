@@ -487,6 +487,98 @@ egene_numbers_to_plot <- function(egene_numbers, celltype_column='cell_type', nu
 }
 
 
+match_to_lcl_replication <- function(caqtl_output_loc, lcl_output_loc, cts=c('B', 'CD4T', 'CD8T', 'DC', 'monocyte', 'NK')) {
+  # we'll store matched info per cell type
+  lcl_per_ct <- list()
+  # check each cell type
+  for (ct in cts) {
+    # location of the combined B caQTLs
+    b_combined_caqtl_significant_loc <- paste(caqtl_output_loc, ct, '/qtl_results_all_qval_allchroms_fdr005_significant.txt.gz', sep = '/')
+    # read the b combined caqtl ocombinedpcombined
+    b_combined_caqtl_significant <- fread(b_combined_caqtl_significant_loc, header = T, sep = '\t')
+    # order by significance
+    b_combined_caqtl_significant <- b_combined_caqtl_significant[order(b_combined_caqtl_significant[['p_value']]), ]
+    # and get just top effects
+    b_combined_caqtl_significant_top <- b_combined_caqtl_significant[!duplicated(b_combined_caqtl_significant[['feature_id']]), ]
+    # and order that per chromosome and position, so it easy to look these up in the LCL data
+    b_combined_caqtl_significant_top <- b_combined_caqtl_significant_top[order(b_combined_caqtl_significant_top[['feature_chromosome']], b_combined_caqtl_significant_top[['feature_start']]), ]
+    # add the QTL explicitly
+    b_combined_caqtl_significant_top[['qtl']] <- paste0(b_combined_caqtl_significant_top[['feature_id']], '_', b_combined_caqtl_significant_top[['snp_chromosome']], ':', b_combined_caqtl_significant_top[['snp_position']])
+    # the featuresa are all significant, these are all significante, so let's denote that
+    b_combined_caqtl_significant_top[['significant']] <- b_combined_caqtl_significant_top[['p_value']] < 0.05
+    # add the Zscore
+    b_combined_caqtl_significant_top[['zscore']] <- b_combined_caqtl_significant_top[['beta']] / b_combined_caqtl_significant_top[['beta_se']]
+    # let's reduce the data to what is strictly necessary
+    b_combined_caqtl_significant_top <- b_combined_caqtl_significant_top[, c('qtl', 'zscore', 'assessed_allele', 'significant', 'beta', 'beta_se', 'p_value')]
+    # and rename columns so they don't conflict with the lcl data
+    colnames(b_combined_caqtl_significant_top) <- c('qtl', 'mo_zscore', 'mo_assessed_allele', 'mo_significant', 'mo_beta', 'mo_se', 'mo_p')
+    
+    # we'll read the LCL ocombinedpcombined per chromosome, so we'll store that in a list first
+    lcl_per_chromosome <- list()
+    # we'll check each chromosome
+    for (chromosome in 1:22) {
+      # progress
+      message(paste('doing chromosome', chromosome))
+      # paste together the path
+      lcl_chromosome_loc <- paste0(lcl_output_loc, '/qtl_results_all_qval_', chromosome, '.txt.gz')
+      # read this ocombinedpcombined
+      lcl_chromosome <- fread(lcl_chromosome_loc, header = T, sep = '\t')
+      # harmonize region name
+      lcl_chromosome[['feature_id']] <- paste('chr', gsub(':', '-', lcl_chromosome[['feature_id']]), sep = '')
+      # # get only positions for this chromosome
+      lcl_chromosome_positions <- unique(lcl_chromosome[, c('feature_id', 'feature_start', 'feature_end')])
+      # get the ranges
+      lcl_chromosome_iranges <- IRanges(start = lcl_chromosome_positions[['feature_start']], end = lcl_chromosome_positions[['feature_end']])
+      # get only this chromosome
+      b_combined_caqtl_significant_chromosome_positions <- unique(b_combined_caqtl_significant[b_combined_caqtl_significant[['feature_chromosome']] == chromosome, c('feature_id', 'feature_start', 'feature_end')])
+      # and make those iranges
+      b_combined_caqtl_significant_chromosome_iranges <- IRanges(b_combined_caqtl_significant_chromosome_positions[['feature_start']], end = b_combined_caqtl_significant_chromosome_positions[['feature_end']])
+      # find overlaps
+      feature_chromosome_overlaps <- findOverlaps(b_combined_caqtl_significant_chromosome_iranges, lcl_chromosome_iranges)
+      # extract overlapping ranges
+      overlapping_ranges <- pintersect(lcl_chromosome_iranges[subjectHits(feature_chromosome_overlaps)], b_combined_caqtl_significant_chromosome_iranges[queryHits(feature_chromosome_overlaps)])
+      # create a  table for the overlaps
+      overlaps_table <- data.table(
+        'feature_id' = lcl_chromosome_positions[['feature_id']][subjectHits(feature_chromosome_overlaps)],
+        'overlap_start' = start(overlapping_ranges),
+        'overlap_end' = end(overlapping_ranges)
+      )
+      # add these positions
+      lcl_chromosome <- merge(lcl_chromosome, overlaps_table, by = 'feature_id', all.x = T, allow.cartesian=TRUE)
+      # remove the ones we cannot remap
+      lcl_chromosome <- lcl_chromosome[!is.na(lcl_chromosome[['overlap_start']]), ]
+      # # add the qtl column
+      lcl_chromosome[['qtl']] <- paste0('chr', lcl_chromosome[['feature_chromosome']], '-', lcl_chromosome[['overlap_start']], '-', lcl_chromosome[['overlap_end']], '_', lcl_chromosome[['snp_chromosome']], ':', lcl_chromosome[['snp_position']])
+      # keep only what we already have in the multiome data
+      lcl_chromosome <- lcl_chromosome[lcl_chromosome[['qtl']] %in% b_combined_caqtl_significant_top[['qtl']], ]
+      # add column denoting significance
+      lcl_chromosome[['significant']] <- lcl_chromosome[['qtl_q_value']] < 0.05
+      # calculate the Z
+      lcl_chromosome[['zscore']] <- lcl_chromosome[['beta']] / lcl_chromosome[['beta_se']]
+      # order by that z
+      lcl_chromosome <- lcl_chromosome[order(abs(lcl_chromosome[['zscore']]), decreasing = T), ]
+      # if there were multiple overlapping ranges, keep the most significant one
+      lcl_chromosome <- lcl_chromosome[!duplicated(lcl_chromosome[['qtl']]), ]
+      # subset to the column we want
+      lcl_chromosome <- lcl_chromosome[, c('qtl', 'zscore', 'assessed_allele', 'significant', 'beta', 'beta_se', 'p_value')]
+      # and rename columns so they don't conflict with the lcl data
+      colnames(lcl_chromosome) <- c('qtl', 'lcl_zscore', 'lcl_assessed_allele', 'lcl_significant', 'lcl_beta', 'lcl_se', 'lcl_p')
+      # and pcombined in the list
+      lcl_per_chromosome[[paste0('chr', chromosome)]] <- lcl_chromosome
+    }
+    # merge all the lcl chromosomes
+    lcl_caqtls <- do.call('rbind', lcl_per_chromosome)
+    
+    # now merge the two tables
+    b_combined_top_and_lcl_caqtl <- merge(x = b_combined_caqtl_significant_top, y = lcl_caqtls, by = 'qtl')
+    # and flip the z score if in the opposite direction
+    b_combined_top_and_lcl_caqtl[['lcl_zscore_signed']] <- b_combined_top_and_lcl_caqtl[['lcl_zscore']]
+    b_combined_top_and_lcl_caqtl[b_combined_top_and_lcl_caqtl[['mo_assessed_allele']] != b_combined_top_and_lcl_caqtl[['lcl_assessed_allele']], 'lcl_zscore_signed'] <- -1 * b_combined_top_and_lcl_caqtl[b_combined_top_and_lcl_caqtl[['mo_assessed_allele']] != b_combined_top_and_lcl_caqtl[['lcl_assessed_allele']], 'lcl_zscore']
+    # put in the list
+    lcl_per_ct[[ct]] <- b_combined_top_and_lcl_caqtl
+  }
+  return(lcl_per_ct)
+}
 
 ```
 
@@ -498,168 +590,45 @@ knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 ####################
 
 # location of caQTL
-caqtl_output_combined_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/output/L1/combined/'
-# location of caQTL output
-caqtl_output_ut_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/combined_output_50kb/L1/UT/'
-caqtl_output_24hca_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/combined_output_50kb/L1/24hCA/'
-
-```
-
-```{r get_lcl_ut_overlap, include=FALSE}
-knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
-
-# location of the UT B caQTLs
-b_ut_caqtl_significant_loc <- paste(caqtl_output_ut_loc, 'B/qtl_results_all_qval_allchroms_fdr005_significant.txt.gz', sep = '/')
+caqtl_output_combined_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/output/L1/combined/'
 # location of the LCL caQTLs
-lcl_caqtl_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/replication//lcl/'
-
-# read the b ut caqtl output
-b_ut_caqtl_significant <- fread(b_ut_caqtl_significant_loc, header = T, sep = '\t')
-# order by significance
-b_ut_caqtl_significant <- b_ut_caqtl_significant[order(b_ut_caqtl_significant[['p_value']]), ]
-# and get just top effects
-b_ut_caqtl_significant_top <- b_ut_caqtl_significant[!duplicated(b_ut_caqtl_significant[['feature_id']]), ]
-# and order that per chromosome and position, so it easy to look these up in the LCL data
-b_ut_caqtl_significant_top <- b_ut_caqtl_significant_top[order(b_ut_caqtl_significant_top[['feature_chromosome']], b_ut_caqtl_significant_top[['feature_start']]), ]
-# add the QTL explicitly
-b_ut_caqtl_significant_top[['qtl']] <- paste0(b_ut_caqtl_significant_top[['feature_id']], '_', b_ut_caqtl_significant_top[['snp_chromosome']], ':', b_ut_caqtl_significant_top[['snp_position']])
-# the featuresa are all significant, these are all significante, so let's denote that
-b_ut_caqtl_significant_top[['significant']] <- b_ut_caqtl_significant_top[['p_value']] < 0.05
-# add the Zscore
-b_ut_caqtl_significant_top[['zscore']] <- b_ut_caqtl_significant_top[['beta']] / b_ut_caqtl_significant_top[['beta_se']]
-# let's reduce the data to what is strictly necessary
-b_ut_caqtl_significant_top <- b_ut_caqtl_significant_top[, c('qtl', 'zscore', 'assessed_allele', 'significant')]
-# and rename columns so they don't conflict with the lcl data
-colnames(b_ut_caqtl_significant_top) <- c('qtl', 'mo_zscore', 'mo_assesed_allele', 'mo_significant')
-
-# we'll read the LCL output per chromosome, so we'll store that in a list first
-lcl_per_chromosome <- list()
-# we'll check each chromosome
-for (chromosome in 1:22) {
-  # progress
-  message(paste('doing chromosome', chromosome))
-  # paste together the path
-  lcl_chromosome_loc <- paste0(lcl_caqtl_loc, '/qtl_results_all_qval_', chromosome, '.txt.gz')
-  # read this output
-  lcl_chromosome <- fread(lcl_chromosome_loc, header = T, sep = '\t')
-  # harmonize region name
-  lcl_chromosome[['feature_id']] <- paste('chr', gsub(':', '-', lcl_chromosome[['feature_id']]), sep = '')
-  # # get only positions for this chromosome
-  lcl_chromosome_positions <- unique(lcl_chromosome[, c('feature_id', 'feature_start', 'feature_end')])
-  # get the ranges
-  lcl_chromosome_iranges <- IRanges(start = lcl_chromosome_positions[['feature_start']], end = lcl_chromosome_positions[['feature_end']])
-  # get only this chromosome
-  b_ut_caqtl_significant_chromosome_positions <- unique(b_ut_caqtl_significant[b_ut_caqtl_significant[['feature_chromosome']] == chromosome, c('feature_id', 'feature_start', 'feature_end')])
-  # and make those iranges
-  b_ut_caqtl_significant_chromosome_iranges <- IRanges(b_ut_caqtl_significant_chromosome_positions[['feature_start']], end = b_ut_caqtl_significant_chromosome_positions[['feature_end']])
-  # find overlaps
-  feature_chromosome_overlaps <- findOverlaps(b_ut_caqtl_significant_chromosome_iranges, lcl_chromosome_iranges)
-  # extract overlapping ranges
-  overlapping_ranges <- pintersect(lcl_chromosome_iranges[subjectHits(feature_chromosome_overlaps)], b_ut_caqtl_significant_chromosome_iranges[queryHits(feature_chromosome_overlaps)])
-  # create a  table for the overlaps
-  overlaps_table <- data.table(
-    'feature_id' = lcl_chromosome_positions[['feature_id']][subjectHits(feature_chromosome_overlaps)],
-    'overlap_start' = start(overlapping_ranges),
-    'overlap_end' = end(overlapping_ranges)
-  )
-  # add these positions
-  lcl_chromosome <- merge(lcl_chromosome, overlaps_table, by = 'feature_id', all.x = T, allow.cartesian=TRUE)
-  # remove the ones we cannot remap
-  lcl_chromosome <- lcl_chromosome[!is.na(lcl_chromosome[['overlap_start']]), ]
-  # # add the qtl column
-  lcl_chromosome[['qtl']] <- paste0('chr', lcl_chromosome[['feature_chromosome']], '-', lcl_chromosome[['overlap_start']], '-', lcl_chromosome[['overlap_end']], '_', lcl_chromosome[['snp_chromosome']], ':', lcl_chromosome[['snp_position']])
-  # keep only what we already have in the multiome data
-  lcl_chromosome <- lcl_chromosome[lcl_chromosome[['qtl']] %in% b_ut_caqtl_significant_top[['qtl']], ]
-  # add column denoting significance
-  lcl_chromosome[['significant']] <- lcl_chromosome[['qtl_q_value']] < 0.05
-  # calculate the Z
-  lcl_chromosome[['zscore']] <- lcl_chromosome[['beta']] / lcl_chromosome[['beta_se']]
-  # order by that z
-  lcl_chromosome <- lcl_chromosome[order(abs(lcl_chromosome[['zscore']]), decreasing = T), ]
-  # if there were multiple overlapping ranges, keep the most significant one
-  lcl_chromosome <- lcl_chromosome[!duplicated(lcl_chromosome[['qtl']]), ]
-  # subset to the column we want
-  lcl_chromosome <- lcl_chromosome[, c('qtl', 'zscore', 'assessed_allele', 'significant')]
-  # and rename columns so they don't conflict with the lcl data
-  colnames(lcl_chromosome) <- c('qtl', 'lcl_zscore', 'lcl_assesed_allele', 'lcl_significant')
-  # and put in the list
-  lcl_per_chromosome[[paste0('chr', chromosome)]] <- lcl_chromosome
-}
-# merge all the lcl chromosomes
-lcl_caqtls <- do.call('rbind', lcl_per_chromosome)
-
-# now merge the two tables
-b_ut_top_and_lcl_caqtl <- merge(x = b_ut_caqtl_significant_top, y = lcl_caqtls, by = 'qtl')
-# and flip the z score if in the opposite direction
-b_ut_top_and_lcl_caqtl[['lcl_zscore_signed']] <- b_ut_top_and_lcl_caqtl[['lcl_zscore']]
-b_ut_top_and_lcl_caqtl[b_ut_top_and_lcl_caqtl[['mo_assesed_allele']] != b_ut_top_and_lcl_caqtl[['lcl_assesed_allele']], 'lcl_zscore_signed'] <- -1 * b_ut_top_and_lcl_caqtl[b_ut_top_and_lcl_caqtl[['mo_assesed_allele']] != b_ut_top_and_lcl_caqtl[['lcl_assesed_allele']], 'lcl_zscore']
+lcl_caqtl_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/caqtl/replication//lcl/'
 
 ```
 
-```{r plot_lcl_ut_overlap, include=TRUE, fig.width=5, fig.height=5}
+```{r get_lcl_combined_overlap, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
-# get the minimal significant z for lcl
-min_sig_z_lcl <- min(abs(b_ut_top_and_lcl_caqtl[b_ut_top_and_lcl_caqtl[['lcl_significant']] == T, 'lcl_zscore_signed']))
-min_sig_z_mo <- min(abs(b_ut_top_and_lcl_caqtl[b_ut_top_and_lcl_caqtl[['mo_significant']] == T, 'mo_zscore']))
-# and the max z
-max_sig_z_lcl <- max(abs(b_ut_top_and_lcl_caqtl[b_ut_top_and_lcl_caqtl[['lcl_significant']] == T, 'lcl_zscore_signed']))
-max_sig_z_mo <- max(abs(b_ut_top_and_lcl_caqtl[b_ut_top_and_lcl_caqtl[['mo_significant']] == T, 'mo_zscore']))
+# get overlap per ct
+combined_caqtl_to_lcl <- match_to_lcl_replication(caqtl_output_combined_loc, lcl_caqtl_loc)
 
-# calculate concordance
-n_significant_both <- sum(b_ut_top_and_lcl_caqtl[['lcl_significant']] == T & b_ut_top_and_lcl_caqtl[['mo_significant']] == T)
-n_significant_directed_both <- sum(b_ut_top_and_lcl_caqtl[['lcl_significant']] == T & b_ut_top_and_lcl_caqtl[['mo_significant']] == T &
-                                     sign(b_ut_top_and_lcl_caqtl[['lcl_zscore_signed']]) == sign(b_ut_top_and_lcl_caqtl[['mo_zscore']]))
-concordance <- round(n_significant_directed_both / n_significant_both, digits = 3)
+```
 
-# plot the concordance of the two
-p <- ggplot(data = b_ut_top_and_lcl_caqtl, mapping = aes(x = mo_zscore, y = lcl_zscore_signed)) + 
-  geom_point(size = 0.2) + 
-  xlim(c(max_sig_z_mo * -1, max_sig_z_mo * 1)) +
-  ylim(c(max_sig_z_lcl * -1, max_sig_z_lcl * 1)) + 
-  # left to right block of non-significant effects
-  geom_rect(aes(xmin = -1 * max_sig_z_mo, xmax = max_sig_z_mo, ymin = -1 * min_sig_z_lcl, ymax = min_sig_z_lcl), 
-            fill = "white", alpha = 0.005) +
-  # bottom to top block of non-significant effects
-  geom_rect(aes(xmin = -1 * min_sig_z_mo, xmax = min_sig_z_mo, ymin = -1 * max_sig_z_lcl, ymax = max_sig_z_lcl), 
-            fill = "white", alpha = 0.005) +
-  # bottom left block
-  geom_rect(aes(xmin = -1 * max_sig_z_mo, xmax = -1 *min_sig_z_mo, ymin = -1 * max_sig_z_lcl, ymax = -1 * min_sig_z_lcl), 
-            fill = "#0072B2", alpha = 0.01) +
-  # bottom right block
-  geom_rect(aes(xmin = min_sig_z_mo, xmax = max_sig_z_mo, ymin = -1 * max_sig_z_lcl, ymax = -1 * min_sig_z_lcl), 
-            fill = "#D55E00", alpha = 0.01) +
-  # top left block
-  geom_rect(aes(xmin = -1 * max_sig_z_mo, xmax = -1 *min_sig_z_mo, ymin = min_sig_z_lcl, ymax = max_sig_z_lcl), 
-            fill = "#D55E00", alpha = 0.01) + 
-  # top right block
-  geom_rect(aes(xmin = min_sig_z_mo, xmax = max_sig_z_mo, ymin = max_sig_z_lcl, ymax = min_sig_z_lcl), 
-            fill = "#0072B2", alpha = 0.01) + 
-  # labels for x and y axis
-  xlab('Z-score in multi-omics caQTLs') +
-  ylab('Z-score in LCL caQTLs') +
-  # vertical negative z cutoff line
-  geom_vline(xintercept=c(-1 *min_sig_z_mo), color="black", size=0.5, linetype = "dashed") +
-	# horizonal negative z cutoff line
-  geom_hline(yintercept=c(-1 *min_sig_z_lcl), color="black", size=0.5, linetype="dashed") +
-  # vertical positive z cutoff line
-  geom_vline(xintercept=c(min_sig_z_mo), color="black", size=0.5, linetype = "dashed") +
-	# horizonal positive z cutoff line
-  geom_hline(yintercept=c(min_sig_z_lcl), color="black", size=0.5, linetype="dashed") +
-  # make backgrounds white
-  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
-  # add the concordance
-  annotate("label", x = max_sig_z_mo * 0.75 , y = max_sig_z_lcl * -0.75, label = paste('concordance', concordance, sep = ':\n')) +
-  # add the names of the concordant and non-concordant blocks
-  annotate("text", x = max_sig_z_mo * -0.70 , y = max_sig_z_lcl * 0.75, label = 'disconcordant', colour = '#D55E00', fontface = 'bold') +
-  # add the names of the concordant and non-concordant blocks
-  annotate("text", x = max_sig_z_mo * 0.70 , y = max_sig_z_lcl * 0.75, label = 'concordant', colour = '#0072B2', fontface = 'bold') +
-  # add the title
-  ggtitle('Concordance of caQTL effects between LCL\nand multi-omics Bs in UT')
-p
+```{r save_lcl_combined_overlap, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
-# save this plot
-ggsave('~/plots/mo_scatter_mo_b_ut_vs_lcl_caqtl.pdf', width=5, height=5)
+# save the object to easier load later
+saveRDS(combined_caqtl_to_lcl, '~/rds/caqtl_all_combined_lcl_replication.rds')
+
+```
+
+```{r reformat_lcl_combined_overlap, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# save in a new list
+combined_caqtl_to_lcl_reformatted <- list()
+# check each cell type
+for (ct in names(combined_caqtl_to_lcl)) {
+  # extract the table
+  ct_table <- combined_caqtl_to_lcl[[ct]]
+  # replace 'mo_' with the cell type
+  colnames(ct_table) <- gsub('^mo_', ct, colnames(ct_table))
+  # fix this stupid typo
+  # colnames(ct_table) <- gsub('assesed', 'assessed', colnames(ct_table))
+  # put it back into the list as LCL vs ct
+  combined_caqtl_to_lcl_reformatted[[paste('LCL', 'vs', ct, sep = '_')]] <- ct_table
+}
+
 
 ```
 
@@ -668,8 +637,6 @@ knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # location of the combined B caQTLs
 b_combined_caqtl_significant_loc <- paste(caqtl_output_combined_loc, 'B/qtl_results_all_qval_allchroms_fdr005_significant.txt.gz', sep = '/')
-# location of the LCL caQTLs
-lcl_caqtl_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/replication//lcl/'
 
 # read the b combined caqtl ocombinedpcombined
 b_combined_caqtl_significant <- fread(b_combined_caqtl_significant_loc, header = T, sep = '\t')
@@ -688,7 +655,7 @@ b_combined_caqtl_significant_top[['zscore']] <- b_combined_caqtl_significant_top
 # let's reduce the data to what is strictly necessary
 b_combined_caqtl_significant_top <- b_combined_caqtl_significant_top[, c('qtl', 'zscore', 'assessed_allele', 'significant', 'beta', 'beta_se', 'p_value')]
 # and rename columns so they don't conflict with the lcl data
-colnames(b_combined_caqtl_significant_top) <- c('qtl', 'mo_zscore', 'mo_assesed_allele', 'mo_significant', 'mo_beta', 'mo_se', 'mo_p')
+colnames(b_combined_caqtl_significant_top) <- c('qtl', 'mo_zscore', 'mo_assessed_allele', 'mo_significant', 'mo_beta', 'mo_se', 'mo_p')
 
 # we'll read the LCL ocombinedpcombined per chromosome, so we'll store that in a list first
 lcl_per_chromosome <- list()
@@ -739,7 +706,7 @@ for (chromosome in 1:22) {
   # subset to the column we want
   lcl_chromosome <- lcl_chromosome[, c('qtl', 'zscore', 'assessed_allele', 'significant', 'beta', 'beta_se', 'p_value')]
   # and rename columns so they don't conflict with the lcl data
-  colnames(lcl_chromosome) <- c('qtl', 'lcl_zscore', 'lcl_assesed_allele', 'lcl_significant', 'lcl_beta', 'lcl_se', 'lcl_p')
+  colnames(lcl_chromosome) <- c('qtl', 'lcl_zscore', 'lcl_assessed_allele', 'lcl_significant', 'lcl_beta', 'lcl_se', 'lcl_p')
   # and pcombined in the list
   lcl_per_chromosome[[paste0('chr', chromosome)]] <- lcl_chromosome
 }
@@ -750,7 +717,7 @@ lcl_caqtls <- do.call('rbind', lcl_per_chromosome)
 b_combined_top_and_lcl_caqtl <- merge(x = b_combined_caqtl_significant_top, y = lcl_caqtls, by = 'qtl')
 # and flip the z score if in the opposite direction
 b_combined_top_and_lcl_caqtl[['lcl_zscore_signed']] <- b_combined_top_and_lcl_caqtl[['lcl_zscore']]
-b_combined_top_and_lcl_caqtl[b_combined_top_and_lcl_caqtl[['mo_assesed_allele']] != b_combined_top_and_lcl_caqtl[['lcl_assesed_allele']], 'lcl_zscore_signed'] <- -1 * b_combined_top_and_lcl_caqtl[b_combined_top_and_lcl_caqtl[['mo_assesed_allele']] != b_combined_top_and_lcl_caqtl[['lcl_assesed_allele']], 'lcl_zscore']
+b_combined_top_and_lcl_caqtl[b_combined_top_and_lcl_caqtl[['mo_assessed_allele']] != b_combined_top_and_lcl_caqtl[['lcl_assessed_allele']], 'lcl_zscore_signed'] <- -1 * b_combined_top_and_lcl_caqtl[b_combined_top_and_lcl_caqtl[['mo_assessed_allele']] != b_combined_top_and_lcl_caqtl[['lcl_assessed_allele']], 'lcl_zscore']
 
 ```
 
