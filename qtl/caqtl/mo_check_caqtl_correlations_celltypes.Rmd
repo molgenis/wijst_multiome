@@ -983,10 +983,7 @@ knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 ####################
 
 # location of caQTL
-caqtl_output_combined_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/output/L1/combined/'
-# location of caQTL output
-caqtl_output_ut_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/output/L1/UT/'
-
+caqtl_output_combined_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/output/L1/combined/'
 
 ```
 
@@ -1018,7 +1015,7 @@ knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # check replication in caQTLs across cell types
-#caqtl_combined_celltype_replication <- readRDS('~/rds/caqtl_combined_celltype_replication.rds')
+caqtl_combined_celltype_replication <- readRDS('~/rds/caqtl_combined_celltype_replication.rds')
 
 ```
 
@@ -1035,7 +1032,7 @@ knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # check replication in caQTLs across cell types
 #saveRDS(caqtl_combined_celltype_stats, '~/caqtl_combined_celltype_stats.rds')
-caqtl_replication_stats_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/replication/celltypes/mo_caqtl_replication_stats.tsv.gz'
+caqtl_replication_stats_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/eqtl/replication/celltypes/mo_caqtl_replication_stats.tsv.gz'
 # write.table(caqtl_combined_celltype_stats, gzfile(caqtl_replication_stats_loc), row.names = F, col.names = T, sep = '\t')
 # mdfiver::create_md5_for_file(caqtl_replication_stats_loc)
 
@@ -1045,15 +1042,54 @@ caqtl_replication_stats_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiom
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # check replication in caQTLs across cell types
-caqtl_combined_celltype_stats <- fread(caqtl_replication_stats_loc, row.names = F, header = T, sep = '\t')
+caqtl_combined_celltype_stats <- fread(caqtl_replication_stats_loc, header = T, sep = '\t')
 
 ```
+
+```{r caqtl_combined_replication_testedfrac, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# add the fraction tested
+caqtl_combined_celltype_stats[['frac_tested']] <- apply(caqtl_combined_celltype_stats, 1, function(x) {
+  # get what we are replicating
+  replicating <- x[['replicating']]
+  # get the significant number for that one, which is against itself
+  replicating_sig_n <- caqtl_combined_celltype_stats[
+    caqtl_combined_celltype_stats[['replicating']] == replicating &
+    caqtl_combined_celltype_stats[['replicating_in']] == replicating  , ][['n_sig_both']][1]
+  # get the number tested for this combination
+  tested_n <- x[['n_sig_tested']]
+  # and calculate the tested fraction
+  tested_frac <- as.numeric(tested_n) / as.numeric(replicating_sig_n)
+  return(tested_frac)
+})
+
+```
+
 
 ```{r caqtl_combined_replication_plot, include=TRUE, fig.width=8, fig.height=8}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
+# # check replication in caQTLs across cell types
+caqtl_combined_celltype_stat_p_sup <- plot_replication_stats(caqtl_combined_celltype_stats, mid_value = 0.5, comparing_value_to_text=list('n_sig_tested' = 'test: ', 'n_sig_both' = 'sig: '), colour_column = 'frac_tested', category_plot_order = c('B', 'CD4+ T', 'CD8+ T', 'NK', 'DC', 'Monocyte'), text_size = 5, legendless = T, matching_value_to_text=list('n_sig_tested' = 'sig: ')) + 
+xlab('Cell type replicating') +
+  ylab('Cell type replicating in') +
+  ggtitle('Replication of caQTLs') +
+  labs(fill="Fraction tested") +
+  theme(
+    # X label font size
+    axis.title.x = element_text(size = 24), 
+    # Y label font size
+    axis.title.y = element_text(size = 24), 
+    # X tick font size
+    axis.text.x = element_text(size = 19), 
+    # Y tick font size
+    axis.text.y = element_text(size = 19), 
+    # title size
+    title = element_text(size = 28)
+  )
 # check replication in caQTLs across cell types
-caqtl_combined_celltype_stat_p <- plot_replication_stats(caqtl_combined_celltype_stats, mid_value = 0.5, comparing_value_to_text=list('n_sig_both' = 'N sig: ', 'n_sig_tested' = 'N test: ', 'rb_emp_all' = 'Rb: '), colour_column = 'rb_emp_all', category_plot_order = c('B', 'CD4+ T', 'CD8+ T', 'NK', 'DC', 'Monocyte'), text_size = 4, legendless = T) +
+caqtl_combined_celltype_stat_p <- plot_replication_stats(caqtl_combined_celltype_stats, mid_value = 0.5, comparing_value_to_text=list('rb_emp_all' = 'Rb: '), colour_column = 'rb_emp_all', category_plot_order = c('B', 'CD4+ T', 'CD8+ T', 'NK', 'DC', 'Monocyte'), text_size = 4, legendless = T) +
   xlab('Cell type replicating') +
   ylab('Cell type replicating in') +
   ggtitle('Replication of caQTLs') +
@@ -1070,11 +1106,33 @@ caqtl_combined_celltype_stat_p <- plot_replication_stats(caqtl_combined_celltype
     # title size
     title = element_text(size = 24)
   )
+# check replication in caQTLs across cell types
+caqtl_combined_celltype_stat_p_alt <- plot_replication_stats(caqtl_combined_celltype_stats, mid_value = 0.5, comparing_value_to_text=list('rb_emp_all' = ''), colour_column = 'rb_emp_all', category_plot_order = c('B', 'CD4+ T', 'CD8+ T', 'NK', 'DC', 'Monocyte'), text_size = 8, legendless = T, matching_value_to_text=list('n_sig_tested' = '')) +
+  xlab('Cell type replicating') +
+  ylab('Cell type replicating in') +
+  ggtitle('Replication of caQTLs') +
+  labs(fill="Rb") +
+  theme(
+    # X label font size
+    axis.title.x = element_text(size = 24), 
+    # Y label font size
+    axis.title.y = element_text(size = 24), 
+    # X tick font size
+    axis.text.x = element_text(size = 19), 
+    # Y tick font size
+    axis.text.y = element_text(size = 19), 
+    # title size
+    title = element_text(size = 28)
+  )
 
-# save the figure
+# save the figures
 ggsave('~/plots/mo_caqtl_celltype_replication.pdf', plot = caqtl_combined_celltype_stat_p, width = 8, height = 8)
+ggsave('~/plots/mo_caqtl_celltype_replication_alt.pdf', plot = caqtl_combined_celltype_stat_p_alt, width = 8, height = 8)
+ggsave('~/plots/mo_caqtl_celltype_replication_sup.pdf', plot = caqtl_combined_celltype_stat_p_sup, width = 8, height = 8)
 
 # display the figure
 caqtl_combined_celltype_stat_p
+caqtl_combined_celltype_stat_p_alt
+caqtl_combined_celltype_stat_p_sup
 
 ```
