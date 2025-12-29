@@ -1135,4 +1135,11 @@ caqtl_combined_celltype_stat_p
 caqtl_combined_celltype_stat_p_alt
 caqtl_combined_celltype_stat_p_sup
 
+# extract legends as well
+caqtl_combined_celltype_stat_p_alt_legend <- get_legend(plot_replication_stats(caqtl_combined_celltype_stats, mid_value = 0.5, colour_column = 'rb_emp_all', legendless = F) + labs(fill="Rb"))
+caqtl_combined_celltype_stat_p_sup_legend <- get_legend(plot_replication_stats(caqtl_combined_celltype_stats, mid_value = 0.5, colour_column = 'frac_tested', legendless = F) + labs(fill="Fraction\nTested"))
+# and save those
+ggsave('~/plots/mo_caqtl_celltype_replication_alt_legend.pdf', plot = caqtl_combined_celltype_stat_p_alt_legend, width = 1, height = 2)
+ggsave('~/plots/mo_caqtl_celltype_replication_sup_legend.pdf', plot = caqtl_combined_celltype_stat_p_sup_legend, width = 1, height = 2)
+
 ```
