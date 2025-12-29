@@ -1028,9 +1028,39 @@ knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 # check replication in caQTLs across cell types
 saveRDS(eqtl_combined_celltype_stats, '~/eqtl_combined_celltype_stats.rds')
 mdfiver::create_md5_for_file('~/eqtl_combined_celltype_stats.rds')
-eqtl_replication_stats_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/replication/celltypes/mo_eqtl_replication_stats.tsv.gz'
+eqtl_replication_stats_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/eqtl/replication/celltypes/mo_eqtl_replication_stats.tsv.gz'
 write.table(eqtl_combined_celltype_stats, gzfile(eqtl_replication_stats_loc), row.names = F, col.names = T, sep = '\t')
 mdfiver::create_md5_for_file(eqtl_replication_stats_loc)
+
+```
+
+```{r eqtl_combined_replication_read, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# check replication in caQTLs across cell types
+eqtl_combined_celltype_stats <- fread(eqtl_replication_stats_loc, header = T, sep = '\t')
+
+```
+
+```{r eqtl_combined_replication_testedfrac, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# add the fraction tested
+eqtl_combined_celltype_stats[['frac_tested']] <- apply(eqtl_combined_celltype_stats, 1, function(x) {
+  # get what we are replicating
+  replicating_ct <- x[['replicating']]
+  replicating_in_ct <- x[['replicating_in']]
+  # get the significant number for that one, which is against itself
+  replicating_sig_n <- eqtl_combined_celltype_stats[
+    .(replicating_ct, replicating_ct),
+    on = .(replicating, replicating_in),
+  ][['n_sig_both']][1]
+  # get the number tested for this combination
+  tested_n <- x[['n_sig_tested']]
+  # and calculate the tested fraction
+  tested_frac <- as.numeric(tested_n) / as.numeric(replicating_sig_n)
+  return(tested_frac)
+})
 
 ```
 
@@ -1038,7 +1068,25 @@ mdfiver::create_md5_for_file(eqtl_replication_stats_loc)
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # check replication in caQTLs across cell types
-eqtl_combined_celltype_stat_p <- plot_replication_stats(eqtl_combined_celltype_stats, mid_value = 0.5, comparing_value_to_text=list('n_sig_both' = 'N sig: ', 'n_sig_tested' = 'N test: ', 'rb_emp_all' = 'Rb: '), colour_column = 'rb_emp_all', category_plot_order = c('B', 'CD4+ T', 'CD8+ T', 'NK', 'DC', 'Monocyte'), text_size = 4, legendless = T) +
+eqtl_combined_celltype_stat_p_sup <- plot_replication_stats(eqtl_combined_celltype_stats, mid_value = 0.5, comparing_value_to_text=list('n_sig_tested' = 'test: ', 'n_sig_both' = 'sig: '), colour_column = 'frac_tested', category_plot_order = c('B', 'CD4+ T', 'CD8+ T', 'NK', 'DC', 'Monocyte'), text_size = 5, legendless = T, matching_value_to_text=list('n_sig_tested' = 'sig: ')) + 
+xlab('Cell type replicating') +
+  ylab('Cell type replicating in') +
+  ggtitle('Replication of eQTLs') +
+  labs(fill="Fraction tested") +
+  theme(
+    # X label font size
+    axis.title.x = element_text(size = 24), 
+    # Y label font size
+    axis.title.y = element_text(size = 24), 
+    # X tick font size
+    axis.text.x = element_text(size = 19), 
+    # Y tick font size
+    axis.text.y = element_text(size = 19), 
+    # title size
+    title = element_text(size = 28)
+  )
+# check replication in eQTLs across cell types
+eqtl_combined_celltype_stat_p <- plot_replication_stats(eqtl_combined_celltype_stats, mid_value = 0.5, comparing_value_to_text=list('rb_emp_all' = 'Rb: '), colour_column = 'rb_emp_all', category_plot_order = c('B', 'CD4+ T', 'CD8+ T', 'NK', 'DC', 'Monocyte'), text_size = 4, legendless = T) +
   xlab('Cell type replicating') +
   ylab('Cell type replicating in') +
   ggtitle('Replication of eQTLs') +
@@ -1056,10 +1104,40 @@ eqtl_combined_celltype_stat_p <- plot_replication_stats(eqtl_combined_celltype_s
     title = element_text(size = 24)
   )
 
-# save the figure
+# check replication in eQTLs across cell types, less text
+eqtl_combined_celltype_stat_p_alt <- plot_replication_stats(eqtl_combined_celltype_stats, mid_value = 0.5, comparing_value_to_text=list('rb_emp_all' = ''), colour_column = 'rb_emp_all', category_plot_order = c('B', 'CD4+ T', 'CD8+ T', 'NK', 'DC', 'Monocyte'), text_size = 8, legendless = T, matching_value_to_text=list('n_sig_tested' = '')) +
+  xlab('Cell type replicating') +
+  ylab('Cell type replicating in') +
+  ggtitle('Replication of eQTLs') +
+  labs(fill="Rb") +
+  theme(
+    # X label font size
+    axis.title.x = element_text(size = 24), 
+    # Y label font size
+    axis.title.y = element_text(size = 24), 
+    # X tick font size
+    axis.text.x = element_text(size = 19), 
+    # Y tick font size
+    axis.text.y = element_text(size = 19), 
+    # title size
+    title = element_text(size = 28)
+  )
+
+# save the figures
 ggsave('~/plots/mo_eqtl_celltype_replication.pdf', plot = eqtl_combined_celltype_stat_p, width = 8, height = 8)
+ggsave('~/plots/mo_eqtl_celltype_replication_alt.pdf', plot = eqtl_combined_celltype_stat_p_alt, width = 8, height = 8)
+ggsave('~/plots/mo_eqtl_celltype_replication_sup.pdf', plot = eqtl_combined_celltype_stat_p_sup, width = 8, height = 8)
 
 # display the figure
 eqtl_combined_celltype_stat_p
+eqtl_combined_celltype_stat_p_alt
+eqtl_combined_celltype_stat_p_sup
+
+# extract legends as well
+eqtl_combined_celltype_stat_p_alt_legend <- get_legend(plot_replication_stats(eqtl_combined_celltype_stats, mid_value = 0.5, colour_column = 'rb_emp_all', legendless = F) + labs(fill="Rb"))
+eqtl_combined_celltype_stat_p_sup_legend <- get_legend(plot_replication_stats(eqtl_combined_celltype_stats, mid_value = 0.5, colour_column = 'frac_tested', legendless = F) + labs(fill="Fraction\nTested"))
+# and save those
+ggsave('~/plots/mo_eqtl_celltype_replication_alt_legend.pdf', plot = eqtl_combined_celltype_stat_p_alt_legend, width = 1, height = 2)
+ggsave('~/plots/mo_eqtl_celltype_replication_sup_legend.pdf', plot = eqtl_combined_celltype_stat_p_sup_legend, width = 1, height = 2)
 
 ```

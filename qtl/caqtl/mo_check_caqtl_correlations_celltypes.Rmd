@@ -1052,11 +1052,13 @@ knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 # add the fraction tested
 caqtl_combined_celltype_stats[['frac_tested']] <- apply(caqtl_combined_celltype_stats, 1, function(x) {
   # get what we are replicating
-  replicating <- x[['replicating']]
+  replicating_ct <- x[['replicating']]
+  replicating_in_ct <- x[['replicating_in']]
   # get the significant number for that one, which is against itself
   replicating_sig_n <- caqtl_combined_celltype_stats[
-    caqtl_combined_celltype_stats[['replicating']] == replicating &
-    caqtl_combined_celltype_stats[['replicating_in']] == replicating  , ][['n_sig_both']][1]
+    .(replicating_ct, replicating_ct),
+    on = .(replicating, replicating_in),
+  ][['n_sig_both']][1]
   # get the number tested for this combination
   tested_n <- x[['n_sig_tested']]
   # and calculate the tested fraction
