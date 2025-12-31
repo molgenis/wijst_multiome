@@ -73,6 +73,7 @@ get_label_dict <- function() {
   label_dict[['Transit_amplifying_cells']] <- 'Transit amplifying cells'
   label_dict[['AI']] <- 'Actively Inflamed'
   label_dict[['NI']] <- 'Non-Inflamed'
+  label_dict[['lcl']] <- 'LCL'
   return(label_dict)
 }
 
@@ -580,6 +581,402 @@ match_to_lcl_replication <- function(caqtl_output_loc, lcl_output_loc, cts=c('B'
   return(lcl_per_ct)
 }
 
+
+#' Function for Rb analysis
+#'
+#' @param b1 Beta from first dataset.
+#' @param se1 Standard error of beta from first dataset.
+#' @param b2 Beta from second dataset.
+#' @param se2 Standard error of beta from second dataset.
+#' @param theta Variable representing sample overlap between two datasets. Should be set 0 if no sample overlap.
+#'
+#' @return Data frame with Rb, SE(Rb) and corresponding P-value.
+#' @export
+#'
+#' @note This function is slightly adapted from the script shared by Ting Qi.
+#'
+#' @examples
+calcu_cor_true <- function(b1, se1, b2, se2, theta=1) {
+  idx <- which(is.infinite(b1) | is.infinite(b2) | is.infinite(se1) | is.infinite(se2))
+  if (length(idx) > 0) {
+    b1 <- b1[-idx]
+    se1 <- se1[-idx]
+    b2 <- b2[-idx]
+    se2 <- se2[-idx]
+    theta <- theta[-idx]
+  }
+  # when there are no finite values in any of these, we need to return NA
+  if (length(b1) == 0 | length(b2) == 0 | length(se2) == 0 | length(se2) == 0) {
+    warning(paste('no finite values present in one of vectors, will return NA. 
+  b1:', as.character(length(b1))), '
+  b2:', as.character(length(b2)), '
+  se1:', as.character(length(se1)), '
+  se2:', as.character(length(se2)))
+    return(matrix(c(NA, NA, NA), nrow = 1, ncol = 3, dimnames = list(NA, c('r', 'se_r', 'p'))))
+  }
+
+  var_b1 <- var(b1, na.rm = T) - mean(se1^2, na.rm = T)
+  var_b2 <- var(b2, na.rm = T) - mean(se2^2, na.rm = T)
+  if (var_b1 < 0) {
+    var_b1 <- var(b1, na.rm = T)
+  }
+  if (var_b2 < 0) {
+    var_b2 <- var(b2, na.rm = T)
+  }
+  cov_b1_b2 <- cov(b1, b2, use = "complete.obs") - mean(theta, na.rm = T) * sqrt(mean(se1^2, na.rm = T) * mean(se2^2, na.rm = T))
+  r <- cov_b1_b2 / sqrt(var_b1 * var_b2)
+
+  r_jack <- c()
+  n <- length(b1)
+  for (k in 1:n) {
+    b1_jack <- b1[-k]
+    se1_jack <- se1[-k]
+    var_b1_jack <- var(b1_jack, na.rm = T) - mean(se1_jack^2, na.rm = T)
+    b2_jack <- b2[-k]
+    se2_jack <- se2[-k]
+    var_b2_jack <- var(b2_jack, na.rm = T) - mean(se2_jack^2, na.rm = T)
+    if (var_b1_jack < 0) {
+      var_b1_jack <- var(b1_jack, na.rm = T)
+    }
+    if (var_b2_jack < 0) {
+      var_b2_jack <- var(b2_jack, na.rm = T)
+    }
+    theta_jack <- theta[-k]
+    cov_e1_jack_e2_jack <- mean(theta_jack, na.rm = T) * sqrt(mean(se1_jack^2, na.rm = T) * mean(se2_jack^2, na.rm = T))
+    cov_b1_b2_jack <- cov(b1_jack, b2_jack, use = "complete.obs") - cov_e1_jack_e2_jack
+    r_tmp <- cov_b1_b2_jack / sqrt(var_b1_jack * var_b2_jack)
+    r_jack <- c(r_jack, r_tmp)
+  }
+  r_mean <- mean(r_jack, na.rm = T)
+  idx <- which(is.na(r_jack))
+  if (length(idx) > 0) {
+    se_r <- sqrt((n - 1) / n * sum((r_jack[-idx] - r_mean)^2))
+  } else {
+    se_r <- sqrt((n - 1) / n * sum((r_jack - r_mean)^2))
+  }
+
+  p <- pchisq((r / se_r)**2, df = 1, lower.tail = FALSE)
+
+  res <- cbind(r, se_r, p)
+  return(res)
+}
+
+
+get_stats_qtl_matches <- function(table_per_match, name_split='_vs_', 
+                                  significance_column_replicating_emperical='fdr', 
+                                  significance_column_replicating_nominal='p',
+                                  significance_column_replicating_in_emperical='fdr',
+                                  significance_column_replicating_in_nominal='p',
+                                  significance_cutoff_replicating_emperical=0.05, 
+                                  significance_cutoff_replicating_nominal=0.05, 
+                                  significance_cutoff_replicating_in_emperical=0.05, 
+                                  significance_cutoff_replicating_in_nominal=0.05, 
+                                  score_column_replicating='zscore', 
+                                  score_column_replicating_in='zscore', 
+                                  beta_column_replicating='beta', 
+                                  beta_column_replicating_in='beta', 
+                                  se_column_replicating='se', 
+                                  se_column_replicating_in='se', 
+                                  allele_column_replicating='assessed_allele', 
+                                  allele_column_replicating_in='assessed_allele', 
+                                  cor_method='spearman') {
+  # prepare a list of tables of all the comparisons
+  stats_per_combination <- list()
+  # check each of the tables
+  for (combination in names(table_per_match)) {
+    print(combination)
+    # extract the two names
+    replicating_name <- strsplit(combination, name_split)[[1]][1]
+    replicating_in_name <- strsplit(combination, name_split)[[1]][2]
+    # extract the table
+    replication_table <- table_per_match[[combination]]
+    # init variables
+    replicated_emperical_emperical_in_replicating <- NA
+    nominal_to_nominal_zscore_correlation <- NA
+    emperical_to_nominal_zscore_correlation <- NA
+    emperical_to_emperical_zscore_correlation <- NA
+    nominal_to_nominal_concordance <- NA
+    emperical_to_nominal_concordance <- NA
+    emperical_to_emperical_concordance <- NA
+    nominal_to_nominal_rb <- NA
+    emperical_to_nominal_rb <- NA
+    emperical_to_all_rb <- NA
+    emperical_to_emperical_rb <- NA
+    # if they are the same, we don't have to do much
+    if (replicating_name == replicating_in_name) {
+      # we check how many are significant
+      n_sig <- NULL
+      if (isTRUE(significance_cutoff_replicating_emperical)) {
+        n_sig <- nrow(replication_table[
+          replication_table[[paste0(replicating_name, '_', significance_column_replicating_emperical, '.x')]] == T, ])
+      } else {
+        n_sig <- nrow(replication_table[
+          replication_table[[paste0(replicating_name, '_', significance_column_replicating_emperical, '.x')]] < significance_cutoff_replicating_emperical, ])
+      }
+      # and then all of these will be the same
+      replicated_emperical_emperical_in_replicating <- n_sig
+      replicated_emperical_nominal_in_replicating <- n_sig
+      replicated_emperical_tested_in_replicating <- n_sig
+      replicated_emperical_nominal_in_replicating <- n_sig
+      # these will all be one
+      nominal_to_nominal_zscore_correlation <- 1
+      emperical_to_nominal_zscore_correlation <- 1
+      emperical_to_emperical_zscore_correlation <- 1
+      nominal_to_nominal_concordance <- 1
+      emperical_to_nominal_concordance <- 1
+      emperical_to_emperical_concordance <- 1
+      nominal_to_nominal_rb <- 1
+      emperical_to_nominal_rb <- 1
+      emperical_to_all_rb <- 1
+      emperical_to_emperical_rb <- 1
+    }
+    else {
+      # check how many significant in replicating, are present in the other
+      replicated_emperical_tested_in_replicating <- NULL
+      # using the boolean value in the column if it was a boolean
+      if (isTRUE(significance_cutoff_replicating_emperical)) {
+        replicated_emperical_tested_in_replicating <- nrow(replication_table[
+          replication_table[[paste(replicating_name, significance_column_replicating_emperical, sep = '_')]] == T, ])
+      } else {
+        # otherwise use it as a cutoff
+        replicated_emperical_tested_in_replicating <- nrow(replication_table[
+          replication_table[[paste(replicating_name, significance_column_replicating_emperical, sep = '_')]] < significance_cutoff_replicating_emperical, ])
+      }
+      
+      # subset to emperical only in where we are replicating
+      replication_table_emp_to_all <- NULL
+      # if the significance cutoff is a T/F we don't use it as a cutoff
+      if (isTRUE(significance_cutoff_replicating_emperical)) {
+        replication_table_emp_to_all <- replication_table[
+          replication_table[[paste(replicating_name, significance_column_replicating_emperical, sep = '_')]] == T, 
+        ]
+      } else {
+        replication_table_emp_to_all <- replication_table[
+          replication_table[[paste(replicating_name, significance_column_replicating_emperical, sep = '_')]] < significance_cutoff_replicating_emperical, 
+        ]
+      }
+      # and the beta
+      beta_replicating_in <- replication_table_emp_to_all[[paste(replicating_in_name, beta_column_replicating_in, sep = '_')]]
+      # check which have the same allelic direction
+      alleles_differ_locs <- which(replication_table_emp_to_all[[paste(replicating_name, allele_column_replicating, sep = '_')]] != replication_table_emp_to_all[[paste(replicating_in_name, allele_column_replicating_in, sep = '_')]])
+      # and flip direction of betas to reflect this
+      beta_replicating_in[alleles_differ_locs] <- -1 * beta_replicating_in[alleles_differ_locs]
+      # calculate Rb
+     emp_to_all_rb_table <- calcu_cor_true(b1 = replication_table_emp_to_all[[paste(replicating_name, beta_column_replicating, sep = '_')]], se1 = replication_table_emp_to_all[[paste(replicating_name, se_column_replicating, sep = '_')]], b2 = beta_replicating_in, se2 = replication_table_emp_to_all[[paste(replicating_in_name, se_column_replicating_in, sep = '_')]])
+      emperical_to_all_rb <- emp_to_all_rb_table[1, 'r']
+      
+      # subset to nominal in both
+      replication_table <- replication_table[
+          replication_table[[paste(replicating_name, significance_column_replicating_nominal, sep = '_')]] < significance_cutoff_replicating_nominal &
+          replication_table[[paste(replicating_in_name, significance_column_replicating_in_nominal, sep = '_')]] < significance_cutoff_replicating_in_nominal, 
+      ]
+      # get the Z scores
+      zscore_replicating <- replication_table[[paste(replicating_name, score_column_replicating, sep = '_')]]
+      zscore_replicating_in <- replication_table[[paste(replicating_in_name, score_column_replicating_in, sep = '_')]]
+      # and the beta
+      beta_replicating_in <- replication_table[[paste(replicating_in_name, beta_column_replicating_in, sep = '_')]]
+      # check which have the same allelic direction
+      alleles_differ_locs <- which(replication_table[[paste(replicating_name, allele_column_replicating, sep = '_')]] != replication_table[[paste(replicating_in_name, allele_column_replicating_in, sep = '_')]])
+      # and flip direction of z score and betas to reflect this
+      zscore_replicating_in[alleles_differ_locs] <- -1 * zscore_replicating_in[alleles_differ_locs]
+      beta_replicating_in[alleles_differ_locs] <- -1 * beta_replicating_in[alleles_differ_locs]
+      # get the correlation of the two
+      nominal_to_nominal_zscore_correlation <- cor(zscore_replicating, zscore_replicating_in, method = cor_method)
+      # and concordance
+      nominal_to_nominal_concordance <- sum(sign(zscore_replicating) == sign(zscore_replicating_in)) / length(zscore_replicating)
+      # and the rb
+      #nominal_to_nominal_rb <- 1 - mean(abs(((zscore_replicating_in - zscore_replicating) / zscore_replicating)))
+      nominal_to_nominal_rb_table <- calcu_cor_true(b1 = replication_table[[paste(replicating_name, beta_column_replicating, sep = '_')]], se1 = replication_table[[paste(replicating_name, se_column_replicating, sep = '_')]], b2 = beta_replicating_in, se2 = replication_table[[paste(replicating_in_name, se_column_replicating_in, sep = '_')]])
+      nominal_to_nominal_rb <- nominal_to_nominal_rb_table[1, 'r']
+      
+      # subset the replicating to emperical for replicating
+      if (isTRUE(significance_cutoff_replicating_emperical)) {
+        # if the cutoff is just a 'T' value, we use that as the filter
+        replication_table <- replication_table[
+          replication_table[[paste(replicating_name, significance_column_replicating_emperical, sep = '_')]] == T &
+          replication_table[[paste(replicating_in_name, significance_column_replicating_in_nominal, sep = '_')]] < significance_cutoff_replicating_in_nominal, 
+        ]
+      } else {
+        replication_table <- replication_table[
+          replication_table[[paste(replicating_name, significance_column_replicating_emperical, sep = '_')]] < significance_cutoff_replicating_emperical &
+          replication_table[[paste(replicating_in_name, significance_column_replicating_in_nominal, sep = '_')]] < significance_cutoff_replicating_in_nominal, 
+        ]
+      }
+      
+      # check how many significant in replicating, are nominally significant in the other
+      replicated_emperical_nominal_in_replicating <- nrow(replication_table)
+      # get the Z scores
+      zscore_replicating <- replication_table[[paste(replicating_name, score_column_replicating, sep = '_')]]
+      zscore_replicating_in <- replication_table[[paste(replicating_in_name, score_column_replicating_in, sep = '_')]]
+      # and the beta
+      beta_replicating_in <- replication_table[[paste(replicating_in_name, beta_column_replicating_in, sep = '_')]]
+      # check which have the same allelic direction
+      alleles_differ_locs <- which(replication_table[[paste(replicating_name, allele_column_replicating, sep = '_')]] != replication_table[[paste(replicating_in_name, allele_column_replicating_in, sep = '_')]])
+      # and flip direction of z score to reflect this
+      zscore_replicating_in[alleles_differ_locs] <- -1 * zscore_replicating_in[alleles_differ_locs]
+      beta_replicating_in[alleles_differ_locs] <- -1 * beta_replicating_in[alleles_differ_locs]
+      # get the correlation of the two
+      emperical_to_nominal_zscore_correlation <- cor(zscore_replicating, zscore_replicating_in, method = cor_method)
+      # and concordance
+      emperical_to_nominal_concordance <- sum(sign(zscore_replicating) == sign(zscore_replicating_in)) / length(zscore_replicating)
+      # and the rb
+      #emperical_to_nominal_rb <- 1 - mean(abs(((zscore_replicating_in - zscore_replicating) / zscore_replicating)))
+      emperical_to_nominal_rb_table <- calcu_cor_true(b1 = replication_table[[paste(replicating_name, beta_column_replicating, sep = '_')]], se1 = replication_table[[paste(replicating_name, se_column_replicating, sep = '_')]], b2 = beta_replicating_in, se2 = replication_table[[paste(replicating_in_name, se_column_replicating_in, sep = '_')]])
+      emperical_to_nominal_rb <- emperical_to_nominal_rb_table[1, 'r']
+      
+      # subset the replicating to emperical for both
+      if (isTRUE(significance_cutoff_replicating_emperical) & isTRUE(significance_cutoff_replicating_in_emperical)) {
+        # subset both just on that T value
+        replication_table <- replication_table[
+          replication_table[[paste(replicating_name, significance_column_replicating_emperical, sep = '_')]] == T &
+          replication_table[[paste(replicating_in_name, significance_column_replicating_in_emperical, sep = '_')]] == T, 
+        ]
+      }
+      else if(isTRUE(significance_cutoff_replicating_emperical)) {
+        # or only one
+        replication_table <- replication_table[
+          replication_table[[paste(replicating_name, significance_column_replicating_emperical, sep = '_')]] == T &
+          replication_table[[paste(replicating_in_name, significance_column_replicating_in_emperical, sep = '_')]] < significance_cutoff_replicating_in_emperical, 
+        ]
+      }
+      else if(isTRUE(significance_cutoff_replicating_in_emperical)) {
+        # or the other
+        replication_table <- replication_table[
+          replication_table[[paste(replicating_name, significance_column_replicating_emperical, sep = '_')]] < significance_cutoff_replicating_emperical &
+          replication_table[[paste(replicating_in_name, significance_column_replicating_in_emperical, sep = '_')]] == T, 
+        ]
+      }
+      else {
+        # or on actual values
+        replication_table <- replication_table[
+          replication_table[[paste(replicating_name, significance_column_replicating_emperical, sep = '_')]] < significance_cutoff_replicating_emperical &
+          replication_table[[paste(replicating_in_name, significance_column_replicating_in_emperical, sep = '_')]] < significance_cutoff_replicating_in_emperical, 
+        ]
+      }
+      
+      # check how many significant in replicating, are also significant in the other
+      replicated_emperical_emperical_in_replicating <- nrow(replication_table)
+      # get the Z scores
+      zscore_replicating <- replication_table[[paste(replicating_name, score_column_replicating, sep = '_')]]
+      zscore_replicating_in <- replication_table[[paste(replicating_in_name, score_column_replicating_in, sep = '_')]]
+      # and the beta
+      beta_replicating_in <- replication_table[[paste(replicating_in_name, beta_column_replicating_in, sep = '_')]]
+      # check which have the same allelic direction
+      alleles_differ_locs <- which(replication_table[[paste(replicating_name, allele_column_replicating, sep = '_')]] != replication_table[[paste(replicating_in_name, allele_column_replicating_in, sep = '_')]])
+      # and flip direction of z score to reflect this
+      zscore_replicating_in[alleles_differ_locs] <- -1 * zscore_replicating_in[alleles_differ_locs]
+      beta_replicating_in[alleles_differ_locs] <- -1 * beta_replicating_in[alleles_differ_locs]
+      # get the correlation of the two
+      emperical_to_emperical_zscore_correlation <- cor(zscore_replicating, zscore_replicating_in, method = cor_method)
+      # and concordance
+      emperical_to_emperical_concordance <- sum(sign(zscore_replicating) == sign(zscore_replicating_in)) / length(zscore_replicating)
+      # and the rb
+      #emperical_to_emperical_rb <- 1 - mean(abs(((zscore_replicating_in - zscore_replicating) / zscore_replicating)))
+      emperical_to_emperical_rb_table <- calcu_cor_true(b1 = replication_table[[paste(replicating_name, beta_column_replicating, sep = '_')]], se1 = replication_table[[paste(replicating_name, se_column_replicating, sep = '_')]], b2 = beta_replicating_in, se2 = replication_table[[paste(replicating_in_name, se_column_replicating_in, sep = '_')]])
+       emperical_to_emperical_rb <- emperical_to_emperical_rb_table[1, 'r']
+      
+    }
+    # put it all in a table
+      stats_combination <- data.frame(
+        'replicating' = c(replicating_name), 
+        'replicating_in' = c(replicating_in_name), 
+        'n_sig_tested' = c(replicated_emperical_tested_in_replicating), 
+        'n_sig_nom' = c(replicated_emperical_nominal_in_replicating), 
+        'n_sig_both' = c(replicated_emperical_emperical_in_replicating), 
+        'cor_nom_nom' = c(nominal_to_nominal_zscore_correlation), 
+        'cor_emp_nom' = c(emperical_to_nominal_zscore_correlation), 
+        'cor_emp_emp' = c(emperical_to_emperical_zscore_correlation), 
+        'con_nom_nom' = c(nominal_to_nominal_concordance), 
+        'con_emp_nom' = c(emperical_to_nominal_concordance), 
+        'con_emp_emp' = c(emperical_to_emperical_concordance), 
+        'rb_nom_nom' = c(nominal_to_nominal_rb), 
+        'rb_emp_nom' = c(emperical_to_nominal_rb), 
+        'rb_emp_emp' = c(emperical_to_emperical_rb), 
+        'rb_emp_all' = c(emperical_to_all_rb))
+      # put in the list
+      stats_per_combination[[combination]] <- stats_combination
+  }
+  # merge all tables
+  stats_combination_all <- do.call('rbind', stats_per_combination)
+  return(stats_combination_all)
+}
+
+
+plot_replication_stats <- function(replication_stats, replicating_column='replicating', replicating_in_column='replicating_in', matching_value_to_text=list('n_sig_tested' = 'N sig:'), comparing_value_to_text=list('n_sig_both' = 'N sig both:', 'n_sig_tested' = 'N test both:', 'cor_emp_nom' = 'nom cor:'), colour_column='cor_emp_nom', angle_labels=F, use_label_dict=T, legendless=F, paper_style=T, round_decimals=2, low_color='blue', mid_color='white', high_color='red', mid_value=0, category_plot_order=NULL, text_size=6) {
+  # round values if required
+  if (!is.null(round_decimals)) {
+    for (col in colnames(replication_stats)) {
+      if (is.numeric(replication_stats[[col]])) {
+        replication_stats[[col]] <- round(replication_stats[[col]], digits = round_decimals)
+      }
+    }
+  }
+  # check each row of this table
+  replication_stats[['display_text']] <- apply(replication_stats, 1, FUN = function(x) {
+    # get the replicating cell type
+    replicating <- x[[replicating_column]]
+    # and what we are replicating in
+    replicating_in <- x[[replicating_in_column]]
+    # create the text
+    final_text <- NULL
+    # check if they are the same
+    if (replicating == replicating_in) {
+      # then we use this list
+      list_to_check <- matching_value_to_text
+    }
+    else {
+      # otherwise we use the other list
+      list_to_check <- comparing_value_to_text
+    }
+    # check each column in the matching list
+    for (column_to_check in names(list_to_check)) {
+      # make the new piece of text by getting the matching text, and the value from the table
+      display_text_part <- paste0(list_to_check[[column_to_check]], as.character(x[[column_to_check]]))
+      # check if we have any text
+      if (is.null(final_text)) {
+        final_text <- display_text_part
+      }
+      else {
+        # if we have, paste together
+        final_text <- paste(final_text, display_text_part, sep = '\n')
+      }
+    }
+    return(final_text)
+  })
+  # remap names if requested
+  if (use_label_dict) {
+    replication_stats[[replicating_column]] <- remap_with_label_dict(replication_stats[[replicating_column]])
+    replication_stats[[replicating_in_column]] <- remap_with_label_dict(replication_stats[[replicating_in_column]])
+  }
+  # order labels if requested
+  if (!is.null(category_plot_order)) {
+    # double check if we have the labels
+    all_labels <- unique(c(replication_stats[[replicating_column]], replication_stats[[replicating_in_column]]))
+    # check if there is any difference between what we have and the categories
+    labels_missing <- setdiff(all_labels, category_plot_order)
+    # and stop it there are
+    if (length(labels_missing) > 0) {
+      stop(paste('category_plot_order does not contain all values in categories, missing are:', paste(labels_missing, sep = ',')))
+    }
+    replication_stats[[replicating_column]] <- factor(replication_stats[[replicating_column]], levels = category_plot_order)
+    replication_stats[[replicating_in_column]] <- factor(replication_stats[[replicating_in_column]], levels = category_plot_order)
+  }
+  # now make the plot (use the !! rlang::sym(variable_name) synthax to be able to use a variable for ggplot)
+  p <- ggplot(data=replication_stats, aes(x=!! rlang::sym(replicating_column), y=!! rlang::sym(replicating_in_column), fill=!! rlang::sym(colour_column))) + geom_tile() + scale_fill_gradient2(low=low_color, mid = mid_color, high=high_color, midpoint = mid_value) + geom_text(aes(label=display_text), size = text_size)
+  # some options
+  if(legendless){
+    p <- p + theme(legend.position = 'none')
+  }
+  if (paper_style) {
+    p <- p + theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+  }
+  if (angle_labels) {
+    p <- p + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+  }
+  return(p)
+}
+
+
 ```
 
 ```{r path_setup, include=FALSE}
@@ -622,126 +1019,65 @@ for (ct in names(combined_caqtl_to_lcl)) {
   # extract the table
   ct_table <- combined_caqtl_to_lcl[[ct]]
   # replace 'mo_' with the cell type
-  colnames(ct_table) <- gsub('^mo_', ct, colnames(ct_table))
+  colnames(ct_table) <- gsub('^mo_', paste0(ct, '_'), colnames(ct_table))
   # fix this stupid typo
   # colnames(ct_table) <- gsub('assesed', 'assessed', colnames(ct_table))
   # put it back into the list as LCL vs ct
-  combined_caqtl_to_lcl_reformatted[[paste('LCL', 'vs', ct, sep = '_')]] <- ct_table
+  combined_caqtl_to_lcl_reformatted[[paste('lcl', 'vs', ct, sep = '_')]] <- ct_table
 }
-
 
 ```
 
-```{r get_lcl_combined_overlap, include=FALSE}
+```{r lcl_replication_stats, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
-# location of the combined B caQTLs
-b_combined_caqtl_significant_loc <- paste(caqtl_output_combined_loc, 'B/qtl_results_all_qval_allchroms_fdr005_significant.txt.gz', sep = '/')
+# check replication in caQTLs across cell types
+lcl_celltype_stats <- get_stats_qtl_matches(combined_caqtl_to_lcl_reformatted, significance_column_replicating_emperical = 'significant', significance_cutoff_replicating_in_emperical = 'significant')
 
-# read the b combined caqtl ocombinedpcombined
-b_combined_caqtl_significant <- fread(b_combined_caqtl_significant_loc, header = T, sep = '\t')
-# order by significance
-b_combined_caqtl_significant <- b_combined_caqtl_significant[order(b_combined_caqtl_significant[['p_value']]), ]
-# and get just top effects
-b_combined_caqtl_significant_top <- b_combined_caqtl_significant[!duplicated(b_combined_caqtl_significant[['feature_id']]), ]
-# and order that per chromosome and position, so it easy to look these up in the LCL data
-b_combined_caqtl_significant_top <- b_combined_caqtl_significant_top[order(b_combined_caqtl_significant_top[['feature_chromosome']], b_combined_caqtl_significant_top[['feature_start']]), ]
-# add the QTL explicitly
-b_combined_caqtl_significant_top[['qtl']] <- paste0(b_combined_caqtl_significant_top[['feature_id']], '_', b_combined_caqtl_significant_top[['snp_chromosome']], ':', b_combined_caqtl_significant_top[['snp_position']])
-# the featuresa are all significant, these are all significante, so let's denote that
-b_combined_caqtl_significant_top[['significant']] <- b_combined_caqtl_significant_top[['p_value']] < 0.05
-# add the Zscore
-b_combined_caqtl_significant_top[['zscore']] <- b_combined_caqtl_significant_top[['beta']] / b_combined_caqtl_significant_top[['beta_se']]
-# let's reduce the data to what is strictly necessary
-b_combined_caqtl_significant_top <- b_combined_caqtl_significant_top[, c('qtl', 'zscore', 'assessed_allele', 'significant', 'beta', 'beta_se', 'p_value')]
-# and rename columns so they don't conflict with the lcl data
-colnames(b_combined_caqtl_significant_top) <- c('qtl', 'mo_zscore', 'mo_assessed_allele', 'mo_significant', 'mo_beta', 'mo_se', 'mo_p')
+```
 
-# we'll read the LCL ocombinedpcombined per chromosome, so we'll store that in a list first
-lcl_per_chromosome <- list()
-# we'll check each chromosome
-for (chromosome in 1:22) {
-  # progress
-  message(paste('doing chromosome', chromosome))
-  # paste together the path
-  lcl_chromosome_loc <- paste0(lcl_caqtl_loc, '/qtl_results_all_qval_', chromosome, '.txt.gz')
-  # read this ocombinedpcombined
-  lcl_chromosome <- fread(lcl_chromosome_loc, header = T, sep = '\t')
-  # harmonize region name
-  lcl_chromosome[['feature_id']] <- paste('chr', gsub(':', '-', lcl_chromosome[['feature_id']]), sep = '')
-  # # get only positions for this chromosome
-  lcl_chromosome_positions <- unique(lcl_chromosome[, c('feature_id', 'feature_start', 'feature_end')])
-  # get the ranges
-  lcl_chromosome_iranges <- IRanges(start = lcl_chromosome_positions[['feature_start']], end = lcl_chromosome_positions[['feature_end']])
-  # get only this chromosome
-  b_combined_caqtl_significant_chromosome_positions <- unique(b_combined_caqtl_significant[b_combined_caqtl_significant[['feature_chromosome']] == chromosome, c('feature_id', 'feature_start', 'feature_end')])
-  # and make those iranges
-  b_combined_caqtl_significant_chromosome_iranges <- IRanges(b_combined_caqtl_significant_chromosome_positions[['feature_start']], end = b_combined_caqtl_significant_chromosome_positions[['feature_end']])
-  # find overlaps
-  feature_chromosome_overlaps <- findOverlaps(b_combined_caqtl_significant_chromosome_iranges, lcl_chromosome_iranges)
-  # extract overlapping ranges
-  overlapping_ranges <- pintersect(lcl_chromosome_iranges[subjectHits(feature_chromosome_overlaps)], b_combined_caqtl_significant_chromosome_iranges[queryHits(feature_chromosome_overlaps)])
-  # create a  table for the overlaps
-  overlaps_table <- data.table(
-    'feature_id' = lcl_chromosome_positions[['feature_id']][subjectHits(feature_chromosome_overlaps)],
-    'overlap_start' = start(overlapping_ranges),
-    'overlap_end' = end(overlapping_ranges)
+```{r plot_lcl_combined_overlap, include=TRUE, fig.width=3, fig.height=8}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# check replication in caQTLs across cell types
+caqtl_lcl_celltype_stat_p_alt <- plot_replication_stats(lcl_celltype_stats, mid_value = 0.5, comparing_value_to_text=list('rb_emp_all' = ''), colour_column = 'rb_emp_all', category_plot_order = c('LCL', 'B', 'CD4+ T', 'CD8+ T', 'NK', 'DC', 'Monocyte'), text_size = 8, legendless = T, matching_value_to_text=list('n_sig_tested' = '')) +
+  xlab('Cell type replicating') +
+  ylab('Cell type replicating in') +
+  ggtitle('LCL replication') +
+  labs(fill="Rb") +
+  theme(
+    # X label font size
+    axis.title.x = element_text(size = 24), 
+    # Y label font size
+    axis.title.y = element_text(size = 24), 
+    # X tick font size
+    axis.text.x = element_text(size = 19), 
+    # Y tick font size
+    axis.text.y = element_text(size = 19), 
+    # title size
+    title = element_text(size = 28)
   )
-  # add these positions
-  lcl_chromosome <- merge(lcl_chromosome, overlaps_table, by = 'feature_id', all.x = T, allow.cartesian=TRUE)
-  # remove the ones we cannot remap
-  lcl_chromosome <- lcl_chromosome[!is.na(lcl_chromosome[['overlap_start']]), ]
-  # # add the qtl column
-  lcl_chromosome[['qtl']] <- paste0('chr', lcl_chromosome[['feature_chromosome']], '-', lcl_chromosome[['overlap_start']], '-', lcl_chromosome[['overlap_end']], '_', lcl_chromosome[['snp_chromosome']], ':', lcl_chromosome[['snp_position']])
-  # keep only what we already have in the multiome data
-  lcl_chromosome <- lcl_chromosome[lcl_chromosome[['qtl']] %in% b_combined_caqtl_significant_top[['qtl']], ]
-  # add column denoting significance
-  lcl_chromosome[['significant']] <- lcl_chromosome[['qtl_q_value']] < 0.05
-  # calculate the Z
-  lcl_chromosome[['zscore']] <- lcl_chromosome[['beta']] / lcl_chromosome[['beta_se']]
-  # order by that z
-  lcl_chromosome <- lcl_chromosome[order(abs(lcl_chromosome[['zscore']]), decreasing = T), ]
-  # if there were multiple overlapping ranges, keep the most significant one
-  lcl_chromosome <- lcl_chromosome[!duplicated(lcl_chromosome[['qtl']]), ]
-  # subset to the column we want
-  lcl_chromosome <- lcl_chromosome[, c('qtl', 'zscore', 'assessed_allele', 'significant', 'beta', 'beta_se', 'p_value')]
-  # and rename columns so they don't conflict with the lcl data
-  colnames(lcl_chromosome) <- c('qtl', 'lcl_zscore', 'lcl_assessed_allele', 'lcl_significant', 'lcl_beta', 'lcl_se', 'lcl_p')
-  # and pcombined in the list
-  lcl_per_chromosome[[paste0('chr', chromosome)]] <- lcl_chromosome
-}
-# merge all the lcl chromosomes
-lcl_caqtls <- do.call('rbind', lcl_per_chromosome)
 
-# now merge the two tables
-b_combined_top_and_lcl_caqtl <- merge(x = b_combined_caqtl_significant_top, y = lcl_caqtls, by = 'qtl')
-# and flip the z score if in the opposite direction
-b_combined_top_and_lcl_caqtl[['lcl_zscore_signed']] <- b_combined_top_and_lcl_caqtl[['lcl_zscore']]
-b_combined_top_and_lcl_caqtl[b_combined_top_and_lcl_caqtl[['mo_assessed_allele']] != b_combined_top_and_lcl_caqtl[['lcl_assessed_allele']], 'lcl_zscore_signed'] <- -1 * b_combined_top_and_lcl_caqtl[b_combined_top_and_lcl_caqtl[['mo_assessed_allele']] != b_combined_top_and_lcl_caqtl[['lcl_assessed_allele']], 'lcl_zscore']
+# display image
+caqtl_lcl_celltype_stat_p_alt
+# save the image
+ggsave('~/plots/mo_caqtl_lcl_replication_alt.pdf', plot = caqtl_lcl_celltype_stat_p_alt, width = 3, height = 8)
+
+# extract legends as well
+caqtl_lcl_celltype_stat_p_alt_legend <- get_legend(plot_replication_stats(lcl_celltype_stats, mid_value = 0.5, colour_column = 'rb_emp_all', legendless = F) + labs(fill="Rb"))
+# and save those
+ggsave('~/plots/mo_caqtl_lcl_replication_alt_legend.pdf', plot = caqtl_lcl_celltype_stat_p_alt_legend, width = 1, height = 2)
 
 ```
 
-```{r save_lcl_combined_overlap, include=FALSE}
+```{r plot_lcl_combined_overlap, include=TRUE, fig.width=8, fig.height=8}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
-# save the object to easier load later
-saveRDS(b_combined_top_and_lcl_caqtl, '~/rds/caqtl_b_combined_lcl_replication.rds')
-
-```
-
-```{r load_lcl_combined_overlap, include=FALSE}
-knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
-
-# save the object to easier load later
-# b_combined_top_and_lcl_caqtl <- readRDS('~/rds/caqtl_b_combined_lcl_replication.rds')
-
-```
-
-```{r plot_lcl_combined_overlap, include=TRUE, fig.width=5, fig.height=5}
-knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+# extract B against LCL
+b_combined_top_and_lcl_caqtl <- combined_caqtl_to_lcl_reformatted[['lcl_vs_B']]
 
 # subset the mo to what is significant in our data
-b_combined_top_and_lcl_caqtl_mosig <- b_combined_top_and_lcl_caqtl[b_combined_top_and_lcl_caqtl[['mo_significant']] == T, ]
+b_combined_top_and_lcl_caqtl_mosig <- b_combined_top_and_lcl_caqtl[b_combined_top_and_lcl_caqtl[['B_significant']] == T, ]
 # then redo the multiple testing correction on those pairs in the LCL data
 b_combined_top_and_lcl_caqtl_mosig[['lcl_bh']] <- p.adjust(b_combined_top_and_lcl_caqtl_mosig[['lcl_p']], method = 'BH')
 # and use that for significance of the LCL caQTLs
@@ -750,23 +1086,23 @@ b_combined_top_and_lcl_caqtl_mosig[['lfc_significant']] <- b_combined_top_and_lc
 # keep only what is significant
 b_combined_top_and_lcl_caqtl_mosig <- b_combined_top_and_lcl_caqtl_mosig[
   b_combined_top_and_lcl_caqtl_mosig[['lcl_significant']] == T &
-  b_combined_top_and_lcl_caqtl_mosig[['mo_significant']] == T, ]
+  b_combined_top_and_lcl_caqtl_mosig[['B_significant']] == T, ]
 
 # get the minimal significant z for lcl
 min_sig_z_lcl <- min(abs(b_combined_top_and_lcl_caqtl_mosig[b_combined_top_and_lcl_caqtl_mosig[['lcl_significant']] == T, 'lcl_zscore_signed']))
-min_sig_z_mo <- min(abs(b_combined_top_and_lcl_caqtl_mosig[b_combined_top_and_lcl_caqtl_mosig[['mo_significant']] == T, 'mo_zscore']))
+min_sig_z_mo <- min(abs(b_combined_top_and_lcl_caqtl_mosig[b_combined_top_and_lcl_caqtl_mosig[['B_significant']] == T, 'B_zscore']))
 # and the max z
 max_sig_z_lcl <- max(abs(b_combined_top_and_lcl_caqtl_mosig[b_combined_top_and_lcl_caqtl_mosig[['lcl_significant']] == T, 'lcl_zscore_signed']))
-max_sig_z_mo <- max(abs(b_combined_top_and_lcl_caqtl_mosig[b_combined_top_and_lcl_caqtl_mosig[['mo_significant']] == T, 'mo_zscore']))
+max_sig_z_mo <- max(abs(b_combined_top_and_lcl_caqtl_mosig[b_combined_top_and_lcl_caqtl_mosig[['B_significant']] == T, 'B_zscore']))
 
 # calculate concordance
-n_significant_both <- sum(b_combined_top_and_lcl_caqtl_mosig[['lcl_significant']] == T & b_combined_top_and_lcl_caqtl_mosig[['mo_significant']] == T)
-n_significant_directed_both <- sum(b_combined_top_and_lcl_caqtl_mosig[['lcl_significant']] == T & b_combined_top_and_lcl_caqtl_mosig[['mo_significant']] == T &
-                                     sign(b_combined_top_and_lcl_caqtl_mosig[['lcl_zscore_signed']]) == sign(b_combined_top_and_lcl_caqtl_mosig[['mo_zscore']]))
+n_significant_both <- sum(b_combined_top_and_lcl_caqtl_mosig[['lcl_significant']] == T & b_combined_top_and_lcl_caqtl_mosig[['B_significant']] == T)
+n_significant_directed_both <- sum(b_combined_top_and_lcl_caqtl_mosig[['lcl_significant']] == T & b_combined_top_and_lcl_caqtl_mosig[['B_significant']] == T &
+                                     sign(b_combined_top_and_lcl_caqtl_mosig[['lcl_zscore_signed']]) == sign(b_combined_top_and_lcl_caqtl_mosig[['B_zscore']]))
 concordance <- round(n_significant_directed_both / n_significant_both, digits = 3)
 
 # plot the concordance of the two
-p <- ggplot(data = b_combined_top_and_lcl_caqtl_mosig, mapping = aes(x = mo_zscore, y = lcl_zscore_signed)) + 
+p <- ggplot(data = b_combined_top_and_lcl_caqtl_mosig, mapping = aes(x = B_zscore, y = lcl_zscore_signed)) + 
   geom_point(size = 0.2) + 
   xlim(c(max_sig_z_mo * -1, max_sig_z_mo * 1)) +
   ylim(c(max_sig_z_lcl * -1, max_sig_z_lcl * 1)) + 
@@ -789,7 +1125,7 @@ p <- ggplot(data = b_combined_top_and_lcl_caqtl_mosig, mapping = aes(x = mo_zsco
   geom_rect(aes(xmin = min_sig_z_mo, xmax = max_sig_z_mo, ymin = max_sig_z_lcl, ymax = min_sig_z_lcl), 
             fill = "#0072B2", alpha = 0.01) + 
   # labels for x and y axis
-  xlab('Z-score in multi-omics caQTLs') +
+  xlab('Z-score in multi-omics B caQTLs') +
   ylab('Z-score in LCL caQTLs') +
   # vertical negative z ccombinedoff line
   geom_vline(xintercept=c(-1 *min_sig_z_mo), color="black", size=0.5, linetype = "dashed") +
@@ -802,26 +1138,30 @@ p <- ggplot(data = b_combined_top_and_lcl_caqtl_mosig, mapping = aes(x = mo_zsco
   # make backgrounds white
   theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
   # add the concordance
-  annotate("label", x = max_sig_z_mo * 0.75 , y = max_sig_z_lcl * -0.75, label = paste('concordance', concordance, sep = ':\n')) +
+  annotate("label", x = max_sig_z_mo * 0.75 , y = max_sig_z_lcl * -0.75, label = paste('concordance', concordance, sep = ':\n'),  size = 18/.pt) +
   # add the names of the concordant and non-concordant blocks
-  annotate("text", x = max_sig_z_mo * -0.70 , y = max_sig_z_lcl * 0.75, label = 'discordant', colour = '#D55E00', fontface = 'bold') +
+  annotate("text", x = max_sig_z_mo * -0.70 , y = max_sig_z_lcl * 0.75, label = 'discordant', colour = '#D55E00', fontface = 'bold', size = 18/.pt) +
   # add the names of the concordant and non-concordant blocks
-  annotate("text", x = max_sig_z_mo * 0.70 , y = max_sig_z_lcl * 0.75, label = 'concordant', colour = '#0072B2', fontface = 'bold') +
+  annotate("text", x = max_sig_z_mo * 0.70 , y = max_sig_z_lcl * 0.75, label = 'concordant', colour = '#0072B2', fontface = 'bold',  size = 18/.pt) +
   # add the title
-  ggtitle('Concordance of caQTL effects between LCL\nand multi-omics B cells')
+  ggtitle('Concordance of caQTLs between\nLCL and multi-omics B cells') + 
+  # increase legend sizes
+  theme(
+    # X label font size
+    axis.title.x = element_text(size = 24), 
+    # Y label font size
+    axis.title.y = element_text(size = 24), 
+    # X tick font size
+    axis.text.x = element_text(size = 19), 
+    # Y tick font size
+    axis.text.y = element_text(size = 19), 
+    # title size
+    title = element_text(size = 28)
+  )
+
 p
 
 # save this plot
-ggsave('~/plots/mo_scatter_mo_b_combined_vs_lcl_caqtl.pdf', width=5, height=5)
-
-```
-```{r save_lcl_combined_overlap, include=TRUE, fig.width=5, fig.height=5}
-knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
-
-# where to save
-lcl_combined_overlap_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/replication/lcl/mo_matched_caqtl_b_vs_lcl.tsv.gz'
-
-# save the file
-write.table(b_combined_top_and_lcl_caqtl, lcl_combined_overlap_loc, row.names = F, col.names = T, sep = '\t', quote = F)
+ggsave('~/plots/mo_caqtl_scatter_mo_b_combined_vs_lcl.pdf', width=8, height=8)
 
 ```
