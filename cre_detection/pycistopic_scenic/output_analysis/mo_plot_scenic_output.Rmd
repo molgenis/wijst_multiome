@@ -1,0 +1,573 @@
+---
+title: "mo_plot_scenic_output"
+author: "Roy Oelen"
+date: "2025-05-15"
+output: html_document
+---
+
+```{r header, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+#!/usr/bin/env Rscript
+############################################################################################################################
+# Authors: Roy Oelen
+# Name: mo_plot_scenic_output.Rmd
+# Function: plot SCENIC+ output
+############################################################################################################################
+```
+
+```{r libraries, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+####################
+# libraries        #
+####################
+
+library(data.table)
+library(ggplot2)
+library(ggvenn)
+library(cowplot)
+
+
+```
+
+```{r functions, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+####################
+# Functions        #
+####################
+
+
+#' get the eGenes per cell type from QTL output
+#' 
+#' @param qtl_output_loc base location of the QTL output per cell type
+#' @param output_file which output file to read for the results
+#' @param gene_column which column to use as the gene identifier
+#' @returns a list with the egenes per cell type
+#' 
+get_egenes_per_celltype_limix <- function(qtl_output_loc, output_file='qtl_results_all.txt.gz', gene_column='feature_id', significance_column='feature_q_value', significance_cutoff=0.05, verbose=T) {
+  # get the folders in the directory, which should be the cell types
+  cell_types <- list.dirs(qtl_output_loc, full.names = F, recursive = F)
+  # we will store the results in a list for now
+  egenes_per_celltype <- list()
+  # check each cell type
+  for (cell_type in cell_types) {
+    # paste together the full path
+    full_cell_type_path <- paste(qtl_output_loc, '/', cell_type, '/', output_file, sep = '')
+    # log if requested
+    if (verbose) {
+      print(paste('reading', full_cell_type_path))
+    }
+    # read the file
+    cell_type_output <- read.table(full_cell_type_path, sep = '\t', header = T)
+    # filter the results on significance
+    if (!is.null(significance_column)) {
+      # print progress if requested
+      if (verbose) {
+        print(paste('variant+phenotype before filtering', nrow(cell_type_output)))
+      }
+      # filter
+      cell_type_output <- cell_type_output[
+        !is.na(cell_type_output[[significance_column]]) &
+          cell_type_output[[significance_column]] < significance_cutoff, 
+      ]
+      if (verbose) {
+        print(paste('variant+phenotype after filtering', nrow(cell_type_output)))
+      }
+    }
+    # get the unique genes in this file
+    unique_genes <- unique(cell_type_output[[gene_column]])
+    # add to the list
+    egenes_per_celltype[[cell_type]] <- unique_genes
+  }
+  # turn into a dataframe
+  return(egenes_per_celltype)
+}
+
+
+add_region_qtl_info <- function(table_to_annotate, group_to_regions_list, to_annotate_region_column='Region', column_to_add='caqtl_celltypes') {
+  # extrac the unique regions
+  regions <- table_to_annotate[[to_annotate_region_column]]
+  # create table to put results
+  region_to_groups <- data.frame('region' = regions)
+  # add the groups to the table
+  region_to_groups[[column_to_add]] <- apply(region_to_groups, 1, function(x) {
+    # grab the region
+    region <- gsub(':', '-', x[['region']])
+    # initialize the results
+    groups_string <- NA
+    # check each of the vectors in the list
+    for (group in names(group_to_regions_list)) {
+      # check if the region is in there
+      if (region %in% group_to_regions_list[[group]]) {
+        # if the value was NA, it will be this one
+        if (is.na(groups_string)) {
+          groups_string <- group
+        }
+        # otherwise add it
+        else {
+          groups_string <- paste(groups_string, group, sep = ',')
+        }
+      }
+    }
+    return(groups_string)
+  })
+  # add this info to the table
+  table_to_annotate[[column_to_add]] <- region_to_groups[match(table_to_annotate[[to_annotate_region_column]], region_to_groups[['region']]), ][[column_to_add]]
+  return(table_to_annotate)
+}
+
+
+get_regions_from_beds <- function(topic_dar_bed_loc, chrom_sep=':', region_sep='-', interested_regions=NULL) {
+  # list the files in the topic directory
+  topic_files <- list.files(topic_dar_bed_loc, recursive = F, full.names = F)
+  # we will only keep the bed files
+  topic_file_regex <- '.*\\.bed$'
+  # filter on those
+  topic_files <- topic_files[grep(topic_file_regex, topic_files)]
+  # store in a list first
+  topic_tables_per_bed <- list()
+  # check each file
+  for (topic_file in topic_files) {
+    # read the topic files
+    topic_table <- fread(paste0(topic_dar_bed_loc, '/',  topic_file), header = F, sep = '\t')
+    # create a new region name vector
+    topic_table_regions <- paste0(topic_table[['V1']], chrom_sep, topic_table[['V2']], region_sep, topic_table[['V3']])
+    # extract topic from file name
+    topic_name <- gsub('\\.bed', '', topic_file)
+    # subset regions we are interested in
+    if (!is.null(interested_regions)) {
+      topic_table_regions <- topic_table_regions[topic_table_regions %in% interested_regions]
+    }
+    # name the columns of the bed file
+    colnames(topic_table) <- c('chromosome', 'start', 'end')
+    # add the name of the region as well
+    topic_table[['name']] <- topic_table_regions
+    # and the name of the file
+    topic_table[['set']] <- topic_name
+    # put in the list
+    topic_tables_per_bed[[topic_name]] <- topic_table
+  }
+  # merge all
+  topic_tables_all <- do.call('rbind', topic_tables_per_bed)
+  return(topic_tables_all)
+}
+
+
+
+```
+
+```{r path_setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+####################
+# Main Code        #
+####################
+
+# save this file somewhere
+scenic_output_region_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eRegulon_both.tsv.gz'
+# read the table
+scenic_output <- fread(scenic_output_region_loc, header = T, sep = '\t')
+
+```
+
+```{r qtl_setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# location of eQTL
+eqtl_output_combined_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/finemapping/eqtl/sc-eqtlgen/combined_with_qtl/combined/L1'
+# location of caQTL output
+caqtl_output_combined_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/finemapping/caqtl/sc-eqtlgen/combined_with_qtl/combined/L1/'
+# get regions and genes that have eGenes or ePeaks
+eqtl_egenes_combined <- get_egenes_per_celltype_limix(eqtl_output_combined_loc, output_file = 'qtl_results_all_qval_allchroms_fdr005_significant_cs.tsv.gz')
+caqtl_epeaks_combined <- get_egenes_per_celltype_limix(caqtl_output_combined_loc, output_file = 'qtl_results_all_qval_allchroms_fdr005_significant_cs.tsv.gz')
+
+```
+
+```{r qtl_tested_genes, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# save which genes are present in each celltype
+genes_celltypes <- list()
+# get the gene present in the eQTL matrices
+for (celltype in c('B', 'CD4T', 'CD8T', 'DC', 'monocyte', 'NK')) {
+  # get the path
+  top_qtl_results_ct_loc <- paste0('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/sc-eqtlgen/output/L1/combined/', '/', celltype, '/', 'top_qtl_results_all.txt')
+  # read the table
+  top_qtl_results_ct <- fread(top_qtl_results_ct_loc, header = T, sep = '\t')
+  # and get the genes to put into the list
+  genes_celltypes[[celltype]] <- top_qtl_results_ct[['feature_id']]
+}
+# merge all of those genes
+eqtl_genes_tested <- do.call('c', genes_celltypes)
+# and make unique
+eqtl_genes_tested <- unique(eqtl_genes_tested)
+
+# save which genes are present in each celltype
+epeaks_celltypes <- list()
+# get the gene present in the eQTL matrices
+for (celltype in c('B', 'CD4T', 'CD8T', 'DC', 'monocyte', 'NK')) {
+  # get the path
+  top_qtl_results_ct_loc <- paste0('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/output/L1/combined/', '/', celltype, '/', 'top_qtl_results_all.txt')
+  # this is the table we'll have
+  top_qtl_results_ct <- NULL
+  # sometimes we don't have this top file
+  if (file.exists(top_qtl_results_ct_loc)) {
+    # read the table
+    top_qtl_results_ct <- fread(top_qtl_results_ct_loc, header = T, sep = '\t')
+  }
+  else {
+    top_qtl_results_ct_loc <- paste0('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/output/L1/combined/', '/', celltype, '/', 'qtl_results_all.txt.gz')
+    # read the table
+    top_qtl_results_ct <- fread(top_qtl_results_ct_loc, header = T, sep = '\t')
+  }
+  
+  # and get the genes to put into the list
+  epeaks_celltypes[[celltype]] <- unique(top_qtl_results_ct[['feature_id']])
+}
+# merge all of those genes
+epeak_genes_tested <- do.call('c', epeaks_celltypes)
+# and make unique
+epeak_genes_tested <- unique(epeak_genes_tested)
+
+```
+
+```{r qtl_comparison, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# get the total number of eGenes
+n_egenes <- length(unique(do.call('c', eqtl_egenes_combined)))
+n_epeaks <- length(unique(do.call('c', caqtl_epeaks_combined)))
+# check how many rows in the scenic output are tested as egenes
+n_egene_tested <- nrow(scenic_output[scenic_output[['Gene']] %in% eqtl_genes_tested, ])
+n_epeak_tested <- nrow(scenic_output[gsub(':', '-', scenic_output[['Region']]) %in% epeak_genes_tested, ])
+
+# make a table
+scenic_qtl_overlap <- data.frame(
+  'set' = c('ereg_total', 'ereg_tested_eqtl', 'ereg_tested_caqtl', 'ereg_with_caqtl', 'ereg_with_eqtl', 'ereg_with_any_qtl', 'ereg_with_both_qtl'), 
+  'number' = c(
+    nrow(scenic_output), 
+    n_egene_tested, 
+    n_epeak_tested,
+    nrow(scenic_output[!is.na(scenic_output[['caqtl_celltype']]), ]), 
+    nrow(scenic_output[!is.na(scenic_output[['eqtl_celltype']]), ]), 
+    nrow(scenic_output[!is.na(scenic_output[['eqtl_celltype']]) | !is.na(scenic_output[['caqtl_celltype']]), ]), 
+    nrow(scenic_output[!is.na(scenic_output[['eqtl_celltype']]) & !is.na(scenic_output[['caqtl_celltype']]), ])
+  )
+)
+# make a factor
+scenic_qtl_overlap[['set']] <- factor(scenic_qtl_overlap[['set']], levels = c('ereg_total', 'ereg_tested_eqtl', 'ereg_with_eqtl', 'ereg_tested_caqtl', 'ereg_with_caqtl', 'ereg_with_any_qtl', 'ereg_with_both_qtl'))
+
+# now if we do this without considering the TFs
+scenic_output_onlyregions <- unique(scenic_output[, c('Region', 'Gene', 'caqtl_celltype', 'eqtl_celltype')])
+# check again how many rows in the scenic output are tested as egenes or epeaks
+n_egene_tested_rg <- nrow(scenic_output_onlyregions[scenic_output_onlyregions[['Gene']] %in% eqtl_genes_tested, ])
+n_epeak_tested_rg <- nrow(scenic_output_onlyregions[gsub(':', '-', scenic_output_onlyregions[['Region']]) %in% epeak_genes_tested, ])
+
+# make table again
+scenic_qtl_overlap_notf <- data.frame(
+  'set' = c('ereg_total', 'ereg_tested_eqtl', 'ereg_tested_caqtl', 'ereg_with_caqtl', 'ereg_with_eqtl', 'ereg_with_any_qtl', 'ereg_with_both_qtl'), 
+  'number' = c(
+    nrow(scenic_output_onlyregions), 
+    n_egene_tested_rg, 
+    n_epeak_tested_rg, 
+    nrow(scenic_output_onlyregions[!is.na(scenic_output_onlyregions[['caqtl_celltype']]), ]), 
+    nrow(scenic_output_onlyregions[!is.na(scenic_output_onlyregions[['eqtl_celltype']]), ]), 
+    nrow(scenic_output_onlyregions[!is.na(scenic_output_onlyregions[['eqtl_celltype']]) | !is.na(scenic_output_onlyregions[['caqtl_celltype']]), ]), 
+    nrow(scenic_output_onlyregions[!is.na(scenic_output_onlyregions[['eqtl_celltype']]) & !is.na(scenic_output_onlyregions[['caqtl_celltype']]), ])
+  )
+)
+# make a factor
+scenic_qtl_overlap_notf[['set']] <- factor(scenic_qtl_overlap_notf[['set']], levels = c('ereg_total', 'ereg_tested_eqtl', 'ereg_with_eqtl', 'ereg_tested_caqtl', 'ereg_with_caqtl', 'ereg_with_any_qtl', 'ereg_with_both_qtl'))
+
+```
+
+```{r scenic_number, include=TRUE, fig.width=12, fig.height=8}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# make the plot of CREs with QTLs overlapped (including TFs)
+p_cre_qtl_overlap_wtf <- ggplot(
+  data = scenic_qtl_overlap, 
+  mapping = aes(
+    x = set, y = number, fill = set
+  )
+) +
+  geom_bar(stat = 'identity') +
+  scale_fill_manual(values = roycols::get_color_list(scenic_qtl_overlap[['set']])) +
+  xlab('Set') + 
+  ylab('Number of eRegulons') + 
+  ggtitle('SCENIC+ eRegulons numbers') + 
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+
+# make the plot of CREs with QTLs overlapped (including TFs)
+p_cre_qtl_overlap_notf <- ggplot(
+  data = scenic_qtl_overlap_notf, 
+  mapping = aes(
+    x = set, y = number, fill = set
+  )
+) +
+  geom_bar(stat = 'identity') +
+  scale_fill_manual(values = roycols::get_color_list(scenic_qtl_overlap_notf[['set']])) +
+  xlab('Set') + 
+  ylab('Number of region-gene links') + 
+  ggtitle('SCENIC+ region-gene links') + 
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+
+
+# show the plot
+p_cre_qtl_overlap_wtf
+p_cre_qtl_overlap_notf
+
+```
+
+```{r scenic_number, include=TRUE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# get the egenes and epeaks
+egenes <- unique(do.call('c', eqtl_egenes_combined))
+epeaks <- unique(do.call('c', caqtl_epeaks_combined))
+# and check how many overlap
+egenes_in_eregulons <- egenes[egenes %in% scenic_output[['Gene']]]
+epeaks_in_eregulons <- epeaks[epeaks %in% gsub(':', '-', scenic_output[['Region']])]
+# also for what was tested
+egene_tested_in_eregulons <- eqtl_genes_tested[eqtl_genes_tested %in% scenic_output[['Gene']]]
+epeak_tested_in_eregulons <- epeak_genes_tested[epeak_genes_tested %in% gsub(':', '-', scenic_output[['Region']])]
+
+
+# make into a table
+egene_number_table <- data.frame('set' = c('n tested eGenes', 'n tested eGenes in eReg', 'n significant eGenes', 'n significant eGenes in eReg'), 'nr' = c(length(eqtl_genes_tested), length(egene_tested_in_eregulons), length(egenes), length(egenes_in_eregulons)))
+epeak_number_table <- data.frame('set' = c('n tested ePeaks', 'n tested ePeaks in eReg', 'n significant ePeaks', 'n significant ePeaks in eReg'), 'nr' = c(length(epeak_genes_tested), length(epeak_tested_in_eregulons), length(epeaks), length(epeaks_in_eregulons)))
+# order the levels
+egene_number_table[['set']] <- factor(egene_number_table[['set']], levels = c('n tested eGenes', 'n tested eGenes in eReg', 'n significant eGenes', 'n significant eGenes in eReg'))
+epeak_number_table[['set']] <- factor(epeak_number_table[['set']], levels = c('n tested ePeaks', 'n tested ePeaks in eReg', 'n significant ePeaks', 'n significant ePeaks in eReg'))
+
+# make into a plot
+ggplot(data = egene_number_table, mapping = aes(x = set, y = nr, fill = set)) +
+  geom_bar(stat = 'identity') +
+  scale_fill_manual(values = roycols::get_color_list(egene_number_table[['set']])) +
+  xlab('Set') + 
+  ylab('Number of eQTL genes') + 
+  ggtitle('Number of eQTL genes found in eRegulons') + 
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+  theme(legend.position="none")
+# and the other plot
+ggplot(data = epeak_number_table, mapping = aes(x = set, y = nr, fill = set)) +
+  geom_bar(stat = 'identity') +
+  scale_fill_manual(values = roycols::get_color_list(epeak_number_table[['set']])) +
+  xlab('Set') + 
+  ylab('Number of eQTL genes') + 
+  ggtitle('Number of caQTL genes found in eRegulons') + 
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+  theme(legend.position="none")
+
+
+```
+
+```{r check_distances, include=TRUE, fig.width=12, fig.height=8}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# read the distance table
+distance_table_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/search_space.tsv'
+# read that table
+distance_table <- fread(distance_table_loc, header = T, sep = '\t')
+# remove the brackets around the number
+distance_table[['Distance_numeric']] <- gsub('\\[|\\]', '', distance_table[['Distance']])
+# make numeric
+distance_table[['Distance_numeric']] <- as.numeric(distance_table[['Distance_numeric']])
+# and add the absolute distance
+distance_table[['Distance_numeric_abs']] <- abs(distance_table[['Distance_numeric']])
+
+# add the distances
+scenic_output[['Distance_numeric_abs']] <- distance_table[match(
+  paste(scenic_output[['Region']], scenic_output[['Gene']]), 
+  paste(distance_table[['Name']], distance_table[['Gene']])
+), ][['Distance_numeric_abs']]
+
+# check per region directions
+p_region_direction_distances <- ggplot(
+  data = scenic_output, 
+  mapping = aes(
+    x = Distance_numeric_abs, 
+    fill = Region_signature_direction
+  )
+) + 
+  geom_density(alpha = 0.5) +
+  scale_fill_manual(values = roycols::get_color_list(scenic_output[['Region_signature_direction']])) +
+  xlab('Distance between region and gene') + 
+  ylab('Density') + 
+  ggtitle('Distance between region and gene per direction') + 
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+
+# and per gene
+p_gene_direction_distances <- ggplot(
+  data = scenic_output, 
+  mapping = aes(
+    x = Distance_numeric_abs, 
+    fill = Gene_signature_direction
+  )
+) + 
+  geom_density(alpha = 0.5) +
+  scale_fill_manual(values = roycols::get_color_list(scenic_output[['Gene_signature_direction']])) +
+  xlab('Distance between region and gene') + 
+  ylab('Density') + 
+  ggtitle('Distance between region and gene per direction') + 
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+
+# show the plots
+p_region_direction_distances
+p_gene_direction_distances
+
+```
+
+```{r check_small_scenic, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# check the small SCENIC+ run
+scenic_small_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/10x_multiome_10k_pbmcs/scenic/outs/eRegulons_both.tsv.gz'
+scenic_small <- fread(scenic_small_loc, header = T, sep = '\t')
+
+```
+
+```{r plot_small_scenic_overlap, include=TRUE, fig.width=12, fig.height=8}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# plot multiple
+p_overlap_small <- plot_grid(
+  # check overlap of regions
+  ggvenn::ggvenn(
+    data = list('multiome' = unique(scenic_output[['Region']]), '10x10k' = unique(scenic_small[['Region']]))
+  ) + ggtitle('Overlap of ATAC regions between multiome and 10x10k'), 
+  # check overlap of genes
+  ggvenn::ggvenn(
+    data = list('multiome' = unique(scenic_output[['Gene']]), '10x10k' = unique(scenic_small[['Gene']]))
+  ) + ggtitle('Overlap of genes between multiome and 10x10k'), 
+  # check overlap of region-gene pairs
+  ggvenn::ggvenn(
+    data = list('multiome' = unique(paste(scenic_output[['Gene']], scenic_output[['Region']])), '10x10k' = unique(paste(scenic_small[['Gene']], scenic_small[['Region']])))
+  ) + ggtitle('Overlap of region-gene pairs between multiome and 10x10k'), 
+  ggvenn::ggvenn(
+    data = list('multiome' = unique(paste(scenic_output[['Gene']], scenic_output[['Region']], scenic_output[['TF']])), '10x10k' = unique(paste(scenic_small[['Gene']], scenic_small[['Region']], scenic_small[['TF']])))
+  ) + ggtitle('Overlap of regulatory triplets between multiome and 10x10k'), 
+  nrow = 2, 
+  ncol = 2
+)
+
+# show the plot
+p_overlap_small
+
+```
+
+```{r read_dars, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# get the DAR output for the multiome scenic run
+scenic_dar_mo_table_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/pycistopic/dar_detection/merged_major_and_minor_celltypes_120topics/wilcoxon/merged_major_and_minor_celltypes_120topics_dars.tsv.gz'
+
+# and the 10x10k one
+scenic_dar_10x10k_table_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/10x_multiome_10k_pbmcs/pycistopic/dar_detection/10k_10_topics_dars.tsv.gz'
+
+# read the two tables
+scenic_dar_mo_table <- fread(scenic_dar_mo_table_loc, header = T, sep = '\t')
+scenic_dar_10x10k_table <- fread(scenic_dar_10x10k_table_loc, header = T, sep = '\t')
+
+```
+
+```{r plot_small_dar_overlap, include=TRUE, fig.width=6, fig.height=4}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+ggvenn::ggvenn(
+    data = list('multiome' = unique(scenic_dar_mo_table[['region']]), '10x10k' = unique(scenic_dar_10x10k_table[['region']]))
+  ) + ggtitle('Overlap of DARs between multiome and 10x10k')
+
+```
+```{r read_ct_dars, include=TRUE, fig.width=6, fig.height=4}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# also read the celtype DARs, which we only have in the 10x10k
+scenic_dar_10x10k_ct_table_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/10x_multiome_10k_pbmcs/pycistopic/dar_detection/10k_l1celltypes_dars.tsv.gz'
+scenic_dar_10x10k_ct_table <- fread(scenic_dar_10x10k_ct_table_loc, header = T, sep = '\t')
+
+# now check how it looks if you add these
+ggvenn::ggvenn(
+    data = list('multiome' = unique(scenic_dar_mo_table[['region']]), '10x10k' = unique(c(scenic_dar_10x10k_table[['region']], scenic_dar_10x10k_ct_table[['region']])))
+  ) + ggtitle('Overlap of DARs between multiome and 10x10k')
+
+```
+
+```{r read_topic_memberships, include=TRUE, fig.width=6, fig.height=4}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# locations of the membership beds
+scenic_mo_membership_beds_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/pycistopic/dar_detection/merged_major_and_minor_celltypes_120topics/wilcoxon/beds/'
+scenic_10k_membership_beds_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/10x_multiome_10k_pbmcs/pycistopic/binarization/topic_beds/Topics_otsu/'
+
+# get the regions for both
+scenic_mo_memberships <- get_regions_from_beds(scenic_mo_membership_beds_loc)
+scenic_10k_membership <- get_regions_from_beds(scenic_10k_membership_beds_loc)
+
+# now check the memberships
+ggvenn::ggvenn(
+    data = list('multiome' = unique(scenic_mo_memberships[['name']]), '10x10k' = unique(scenic_10k_membership[['name']]))
+  ) + ggtitle('Overlap of region memberships between multiome and 10x10k')
+
+```
+
+```{r plot_r2g, include=TRUE, fig.width=6, fig.height=6}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# get unique region-gene links from scenic outputs
+scenic_output_r2g <- unique(scenic_output[, c('Region', 'Gene', 'importance_R2G', 'rho_R2G')])
+scenic_small_r2g <- unique(scenic_small[, c('Region', 'Gene', 'importance_R2G', 'rho_R2G')])
+# merge the two
+scenic_r2g_both <- merge(scenic_output_r2g, scenic_small_r2g, by = c('Region', 'Gene'))
+
+# and plot the importance
+ggplot(data = scenic_r2g_both, mapping = aes(x = importance_R2G.x, y = importance_R2G.y)) + 
+  geom_point() +
+  xlab('R2G importance score in multiome') + 
+  ylab('R2G importance score in 10x10k') + 
+  ggtitle('R2G importance scores in multiome vs 10x10k') + 
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+
+# calculate the concordance
+mo_10x_rho_concordance <- sum(sign(scenic_r2g_both[['rho_R2G.x']]) == sign(scenic_r2g_both[['rho_R2G.y']])) / nrow(scenic_r2g_both)
+# get the minimal and maximum correlations
+min_sig_rho_10x <- min(abs(scenic_r2g_both[['rho_R2G.y']]))
+min_sig_rho_mo <- min(abs(scenic_r2g_both[['rho_R2G.x']]))
+max_sig_rho_10x <- max(abs(scenic_r2g_both[['rho_R2G.y']]))
+max_sig_rho_mo <- max(abs(scenic_r2g_both[['rho_R2G.x']]))
+# plot the correlations
+ggplot(data = scenic_r2g_both, mapping = aes(x = rho_R2G.x, y = rho_R2G.y)) + 
+  geom_point() +
+  xlab('R2G Rho in multiome') + 
+  ylab('R2G Rho in 10x10k') + 
+  ggtitle('R2G correlations in multiome vs 10x10k') + 
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+  # left to right block of non-significant effects
+  geom_rect(aes(xmin = -1 * max_sig_rho_mo, xmax = max_sig_rho_mo, ymin = -1 * min_sig_rho_10x, ymax = min_sig_rho_10x), 
+            fill = "white", alpha = 0.005) +
+  # bottom to top block of non-significant effects
+  geom_rect(aes(xmin = -1 * min_sig_rho_mo, xmax = min_sig_rho_mo, ymin = -1 * max_sig_rho_10x, ymax = max_sig_rho_10x), 
+            fill = "white", alpha = 0.005) +
+  # bottom left block
+  geom_rect(aes(xmin = -1 * max_sig_rho_mo, xmax = -1 *min_sig_rho_mo, ymin = -1 * max_sig_rho_10x, ymax = -1 * min_sig_rho_10x), 
+            fill = "#0072B2", alpha = 0.01) +
+  # bottom right block
+  geom_rect(aes(xmin = min_sig_rho_mo, xmax = max_sig_rho_mo, ymin = -1 * max_sig_rho_10x, ymax = -1 * min_sig_rho_10x), 
+            fill = "#D55E00", alpha = 0.01) +
+  # top left block
+  geom_rect(aes(xmin = -1 * max_sig_rho_mo, xmax = -1 *min_sig_rho_mo, ymin = min_sig_rho_10x, ymax = max_sig_rho_10x), 
+            fill = "#D55E00", alpha = 0.01) + 
+  # top right block
+  geom_rect(aes(xmin = min_sig_rho_mo, xmax = max_sig_rho_mo, ymin = max_sig_rho_10x, ymax = min_sig_rho_10x), 
+            fill = "#0072B2", alpha = 0.01) + 
+  # add the concordance
+  annotate("label", x = max_sig_rho_mo * 0.75 , y = max_sig_rho_10x * -0.75, label = paste('concordance', round(mo_10x_rho_concordance, digits = 2), sep = ':\n')) +
+  # add the names of the concordant and non-concordant blocks
+  annotate("text", x = max_sig_rho_mo * -0.70 , y = max_sig_rho_10x * 0.75, label = 'disconcordant', colour = '#D55E00', fontface = 'bold') +
+  # add the names of the concordant and non-concordant blocks
+  annotate("text", x = max_sig_rho_mo * 0.70 , y = max_sig_rho_10x * 0.75, label = 'concordant', colour = '#0072B2', fontface = 'bold')
+
+
+```
+

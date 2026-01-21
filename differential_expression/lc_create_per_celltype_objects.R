@@ -2,7 +2,7 @@
 ############################################################################################################################
 # Authors: Roy Oelen
 # Name: lc_create_per_celltype_objects.R
-# Function: 
+# Function: create an RNA Seurat object for each cell type, to use in DE analysis for the LONG-COVID data
 ############################################################################################################################
 
 

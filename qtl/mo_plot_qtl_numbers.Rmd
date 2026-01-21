@@ -650,9 +650,11 @@ get_ngenes_celltype <- function(feature_object) {
 #' @param xlim the range for the x-axis
 #' @param paper_style use the paper style with more whitespace
 #' @param angle_labels angle the x labels 90 degrees?
+#' @param use_label_dict rename the cell types with the label dict
+#' @param use_colour_dict Logical, whether to use a color dictionary for cell types. Default is TRUE.
 #' @returns a barplot with the number of DE genes per cell type
 #' 
-plot_de_number_vs_celltype_totals <- function(de_numbers, cell_numbers, de_numbers_celltype_column='celltype', cell_numbers_celltype_column='celltype', de_numbers_numbers_column='number', cell_numbers_numbers_column='number', pointless=F, legendless=F, ylim=NULL, xlim=NULL, paper_style=T) {
+plot_de_number_vs_celltype_totals <- function(de_numbers, cell_numbers, de_numbers_celltype_column='celltype', cell_numbers_celltype_column='celltype', de_numbers_numbers_column='number', cell_numbers_numbers_column='number', pointless=F, legendless=F, ylim=NULL, xlim=NULL, paper_style=T, use_label_dict=F, use_colour_dict=F) {
   # subset the DE numbers to what we care about
   de_numbers <- de_numbers[, c(de_numbers_celltype_column, de_numbers_numbers_column)]
   # and harmonize the column names
@@ -663,6 +665,10 @@ plot_de_number_vs_celltype_totals <- function(de_numbers, cell_numbers, de_numbe
   colnames(cell_numbers) <- c('celltype', 'cell_number')
   # now merge
   numbers_both <- merge(cell_numbers, de_numbers, by = 'celltype')
+  # remap names if requested
+  if (use_label_dict) {
+    numbers_both[['celltype']] <- remap_with_label_dict(numbers_both[['celltype']])
+  }
   # finally make the plot
   p <- ggplot(data = numbers_both, mapping = aes(x = cell_number, y = de_number, colour = celltype)) + geom_point()
   # options
@@ -681,6 +687,17 @@ plot_de_number_vs_celltype_totals <- function(de_numbers, cell_numbers, de_numbe
   }
   if (paper_style) {
     p <- p + theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+  }
+  # add colours
+  if (use_colour_dict) {
+    # get colour codes for the cell types
+    cell_type_colours <- get_color_coding_dict()
+    # also get colours for the cell types we don't have colours for
+    cell_type_colours_missing <- get_color_list(setdiff(unique(numbers_both[['celltype']]), names(cell_type_colours)))
+    # and merge them
+    cell_type_colours <- c(cell_type_colours, cell_type_colours_missing)
+    # add the colours
+    p <- p + scale_colour_manual(values = cell_type_colours)
   }
   return(p)
 }
@@ -1198,14 +1215,16 @@ knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 # location of eQTL
 eqtl_output_ut_loc <- '/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/output/L1/UT/'
 eqtl_output_24hca_loc <- '/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/output/L1/24hCA/'
-eqtl_output_combined_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/sc-eqtlgen/output/L1/combined_50k/'
+eqtl_output_combined_50k_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/sc-eqtlgen/output/L1/combined_50k/'
+eqtl_output_combined_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/sc-eqtlgen/output/L1/combined/'
+eqtl_output_combined_20perm_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/sc-eqtlgen/output/L1/combined_20perm/'
 # location of caQTL output
 caqtl_output_ut_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/combined_output_50kb/L1/UT/'
 caqtl_output_24hca_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/combined_output_50kb/L1/24hCA/'
 caqtl_output_combined_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/output/L1/combined/'
 
 # location of interaction-eQTLs
-
+ieqtl_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/output/ut_and_24hca_significant/L1/'
 # location of interaction-caQTLs
 icaqtl_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_caqtl/sc-eqtlgen/output/combined_significant/L1/'
 
@@ -1215,8 +1234,8 @@ icaqtl_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # get the number of ca peaks
-caqtl_peak_numbers_ut <- get_egene_numbers_per_celltype_limix(caqtl_output_ut_loc, output_file = 'qtl_results_all_qval_allchroms_fdr005_significant.txt.gz')
-caqtl_peak_numbers_24hca <- get_egene_numbers_per_celltype_limix(caqtl_output_24hca_loc, output_file = 'qtl_results_all_qval_allchroms_fdr005_significant.txt.gz')
+# caqtl_peak_numbers_ut <- get_egene_numbers_per_celltype_limix(caqtl_output_ut_loc, output_file = 'qtl_results_all_qval_allchroms_fdr005_significant.txt.gz')
+# caqtl_peak_numbers_24hca <- get_egene_numbers_per_celltype_limix(caqtl_output_24hca_loc, output_file = 'qtl_results_all_qval_allchroms_fdr005_significant.txt.gz')
 caqtl_peak_numbers_combined <- get_egene_numbers_per_celltype_limix(caqtl_output_combined_loc, output_file = 'qtl_results_all_qval_allchroms_fdr005_significant.txt.gz')
 
 ```
@@ -1224,10 +1243,12 @@ caqtl_peak_numbers_combined <- get_egene_numbers_per_celltype_limix(caqtl_output
 ```{r get_egene_numbers, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
-# get the number of ca peaks
-eqtl_gene_numbers_ut <- get_egene_numbers_per_celltype_limix(eqtl_output_ut_loc, output_file = 'qtl_results_all_qval_allchroms_fdr005_significant.txt.gz')
-eqtl_gene_numbers_24hca <- get_egene_numbers_per_celltype_limix(eqtl_output_24hca_loc, output_file = 'qtl_results_all_qval_allchroms_fdr005_significant.txt.gz')
+# get the number of egenes
+# eqtl_gene_numbers_ut <- get_egene_numbers_per_celltype_limix(eqtl_output_ut_loc, output_file = 'qtl_results_all_qval_allchroms_fdr005_significant.txt.gz')
+# eqtl_gene_numbers_24hca <- get_egene_numbers_per_celltype_limix(eqtl_output_24hca_loc, output_file = 'qtl_results_all_qval_allchroms_fdr005_significant.txt.gz')
 eqtl_gene_numbers_combined <- get_egene_numbers_per_celltype_limix(eqtl_output_combined_loc, output_file = 'qtl_results_all_qval_allchroms_fdr005_significant.txt.gz')
+# eqtl_gene_numbers_combined_50k <- get_egene_numbers_per_celltype_limix(eqtl_output_combined_50k_loc, output_file = 'qtl_results_all_qval_allchroms_fdr005_significant.txt.gz')
+# eqtl_gene_numbers_combined_20perm <- get_egene_numbers_per_celltype_limix(eqtl_output_combined_20perm_loc, output_file = 'qtl_results_all_qval_allchroms_fdr005_significant.txt.gz')
 
 ```
 
@@ -1240,18 +1261,26 @@ icaqtl_peak_numbers <- get_egene_numbers_per_celltype_limix(icaqtl_output_loc, o
 
 ```
 
+```{r get_icapeak_numbers, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# get the number of interactions with eQTLs
+ieqtl_gene_numbers <- get_egene_numbers_per_celltype_limix(ieqtl_output_loc, output_file = 'inflammation_final/iqtl_results_all_eigenmt_qval.tsv.gz', significance_column = 'feature_q_value', gene_column = 'feature', significance_cutoff = 0.05)
+
+```
+
 ```{r get_capeak_numbers_plots, include=TRUE, fig.width=8, fig.height=6}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # instead get the numbers that Maryna reported
-caqtl_peak_numbers_maryna <- data.frame(
-  cell_type = c('B', 'CD4T', 'CD8T', 'DC', 'monocyte', 'NK'), 
-  nr = c(1915, 6042, 2935, 1390, 11596, 3063)
-)
+# caqtl_peak_numbers_maryna <- data.frame(
+#   cell_type = c('B', 'CD4T', 'CD8T', 'DC', 'monocyte', 'NK'), 
+#   nr = c(1915, 6042, 2935, 1390, 11596, 3063)
+# )
 
 # make a plot of the numbers
-p_caqtl_peak_numbers <- egene_numbers_to_plot(caqtl_peak_numbers_maryna, legendless = T, use_color_dict = T, angle_labels = F) +
-  ggtitle('Number of open chromatin peaks affected by genetic variants') +
+p_caqtl_peak_numbers <- egene_numbers_to_plot(caqtl_peak_numbers_combined, legendless = T, use_color_dict = T, angle_labels = F) +
+  ggtitle('Number of open chromatin peaks affected\nby genetic variants') +
   xlab('Cell type') +
   ylab('Number of peaks') +
   # label sizes
@@ -1263,7 +1292,7 @@ p_caqtl_peak_numbers <- egene_numbers_to_plot(caqtl_peak_numbers_maryna, legendl
     plot.title = element_text(size = 20)
   )
 p_caqtl_peak_numbers
-ggsave('~/ashg_multiome_epeak_numbers.pdf', width = 8, height = 8, plot = p_caqtl_peak_numbers)
+ggsave('~/plots/mo_multiome_epeak_numbers.pdf', width = 8, height = 8, plot = p_caqtl_peak_numbers)
 
 ```
 
@@ -1271,7 +1300,7 @@ ggsave('~/ashg_multiome_epeak_numbers.pdf', width = 8, height = 8, plot = p_caqt
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # get then number of cells
-caqtl_peak_ncells <- get_ncells_celltype('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/L1/UT/')
+caqtl_peak_ncells <- get_ncells_celltype('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_caqtl/sc-eqtlgen/input/L1/')
 # make a plot of the numbers
 p_caqtl_peak_ncells <- egene_numbers_to_plot(caqtl_peak_ncells, legendless = T, use_color_dict = T, angle_labels = F, number_column = 'number') +
   ggtitle('Number of cells used in caQTL mapping') +
@@ -1286,10 +1315,10 @@ p_caqtl_peak_ncells <- egene_numbers_to_plot(caqtl_peak_ncells, legendless = T, 
     plot.title = element_text(size = 20)
   )
 p_caqtl_peak_ncells
-ggsave('~/ashg_multiome_epeak_cells.pdf', width = 8, height = 8, plot = p_caqtl_peak_ncells)
+ggsave('~/plots/ashg_multiome_epeak_cells.pdf', width = 8, height = 8, plot = p_caqtl_peak_ncells)
 
 # knowing that, let's plot again, but with our order
-p_caqtl_peak_numbers <- egene_numbers_to_plot(caqtl_peak_numbers_maryna, legendless = T, use_color_dict = T, angle_labels = F, x_order = c('Monocyte', 'CD4+ T', 'CD8+ T', 'NK', 'B', 'DC')) +
+p_caqtl_peak_numbers <- egene_numbers_to_plot(caqtl_peak_numbers_combined, legendless = T, use_color_dict = T, angle_labels = F, x_order = c('Monocyte', 'CD4+ T', 'CD8+ T', 'NK', 'B', 'DC')) +
   ggtitle('Number of open chromatin peaks\naffected by genetic variants') +
   xlab('Cell type') +
   ylab('Number of peaks') +
@@ -1302,34 +1331,88 @@ p_caqtl_peak_numbers <- egene_numbers_to_plot(caqtl_peak_numbers_maryna, legendl
     plot.title = element_text(size = 20)
   )
 p_caqtl_peak_numbers
-ggsave('~/ashg_multiome_epeak_numbers_ncellorderded.pdf', width = 8, height = 8, plot = p_caqtl_peak_numbers)
+ggsave('~/plots/ashg_multiome_epeak_numbers_ncellorderded.pdf', width = 8, height = 8, plot = p_caqtl_peak_numbers)
+
+# plot the number of cells vs the number of peaks
+p_caqtl_peak_numbers_vs_cells <- plot_de_number_vs_celltype_totals(de_numbers = data.frame(caqtl_peak_numbers_combined), cell_numbers = data.frame(caqtl_peak_ncells), de_numbers_celltype_column = 'cell_type', cell_numbers_celltype_column = 'cell_type', de_numbers_numbers_column = 'nr', cell_numbers_numbers_column = 'number', use_label_dict = T, use_colour_dict = T) +
+  xlab('Number of cells') +
+  ylab('Number of caQTL peaks') +
+  labs('colour' = 'Cell type') +
+  ggtitle('Number of cells vs caQTL peaks') +
+  # label sizes
+  theme(
+    axis.title.x = element_text(size = 18),
+    axis.title.y = element_text(size = 18),
+    axis.text.x = element_text(size = 16),
+    axis.text.y = element_text(size = 16),
+    plot.title = element_text(size = 20), 
+    legend.title=element_text(size=18), 
+    legend.text=element_text(size=16)
+  )
+# show and plot
+p_caqtl_peak_numbers_vs_cells
+ggsave('~/plots/ashg_multiome_ncells_vs_npeaks.pdf', width = 6, height = 6, plot = p_caqtl_peak_numbers_vs_cells)
 
 
 ```
 
-```{r get_egene_numbers_plots, include=TRUE, fig.width=7, fig.height=7}
+```{r get_egene_numbers_plots, include=TRUE, fig.width=8, fig.height=6}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # make a plot of the numbers
-p_eqtl_peak_numbers_ut <- egene_numbers_to_plot(eqtl_gene_numbers_ut, legendless = T, use_color_dict = T) +
-  ggtitle('Number of genes affected by genetic variants in UT') +
+# p_eqtl_peak_numbers_ut <- egene_numbers_to_plot(eqtl_gene_numbers_ut, legendless = T, use_color_dict = T) +
+#   ggtitle('Number of genes affected by genetic variants in UT') +
+#   xlab('Cell type') +
+#   ylab('Number of genes') +
+#   ylim(c(0, 2100))
+# p_eqtl_peak_numbers_24hca <- egene_numbers_to_plot(eqtl_gene_numbers_24hca, legendless = T, use_color_dict = T) +
+#   ggtitle('Number of genes affected by genetic variants in 24hCA') +
+#   xlab('Cell type') +
+#   ylab('Number of genes') +
+#   ylim(c(0, 2100))
+p_eqtl_gene_numbers_combined <- egene_numbers_to_plot(eqtl_gene_numbers_combined, legendless = T, use_color_dict = T, angle_labels = F) +
+  ggtitle('Number of genes affected by genetic variants') +
   xlab('Cell type') +
   ylab('Number of genes') +
-  ylim(c(0, 2100))
-p_eqtl_peak_numbers_24hca <- egene_numbers_to_plot(eqtl_gene_numbers_24hca, legendless = T, use_color_dict = T) +
-  ggtitle('Number of genes affected by genetic variants in 24hCA') +
-  xlab('Cell type') +
-  ylab('Number of genes') +
-  ylim(c(0, 2100))
-p_eqtl_peak_numbers_combined <- egene_numbers_to_plot(eqtl_gene_numbers_combined, legendless = T, use_color_dict = T) +
-  ggtitle('Number of genes affected by genetic variants in UT+24hCA') +
-  xlab('Cell type') +
-  ylab('Number of genes') +
-  ylim(c(0, 2100))
+  ylim(c(0, 2100)) +
+   # label sizes
+  theme(
+    axis.title.x = element_text(size = 18),
+    axis.title.y = element_text(size = 18),
+    axis.text.x = element_text(size = 16),
+    axis.text.y = element_text(size = 16),
+    plot.title = element_text(size = 20)
+  )
 # show the plots
-p_eqtl_peak_numbers_ut
-p_eqtl_peak_numbers_24hca
-p_eqtl_peak_numbers_combined
+# p_eqtl_peak_numbers_ut
+# p_eqtl_peak_numbers_24hca
+p_eqtl_gene_numbers_combined
+
+ggsave('~/plots/mo_multiome_egene_numbers.pdf', width = 8, height = 8, plot = p_eqtl_gene_numbers_combined)
+
+# get then number of cells
+eqtl_peak_ncells <- get_ncells_celltype('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/input/L1/')
+
+# plot the number of cells vs the number of peaks
+p_eqtl_gene_numbers_vs_cells <- plot_de_number_vs_celltype_totals(de_numbers = data.frame(eqtl_gene_numbers_combined), cell_numbers = data.frame(caqtl_peak_ncells), de_numbers_celltype_column = 'cell_type', cell_numbers_celltype_column = 'cell_type', de_numbers_numbers_column = 'nr', cell_numbers_numbers_column = 'number', use_label_dict = T, use_colour_dict = T) +
+  xlab('Number of cells') +
+  ylab('Number of eQTL genes') +
+  labs('colour' = 'Cell type') +
+  ggtitle('Number of cells vs eQTL genes') +
+  # label sizes
+  theme(
+    axis.title.x = element_text(size = 18),
+    axis.title.y = element_text(size = 18),
+    axis.text.x = element_text(size = 16),
+    axis.text.y = element_text(size = 16),
+    plot.title = element_text(size = 20), 
+    legend.title=element_text(size=18), 
+    legend.text=element_text(size=16)
+  )
+# show and plot
+p_eqtl_gene_numbers_vs_cells
+ggsave('~/plots/ashg_multiome_ncells_vs_ngenes.pdf', width = 6, height = 6, plot = p_eqtl_gene_numbers_vs_cells)
+
 
 ```
 
@@ -1337,36 +1420,36 @@ p_eqtl_peak_numbers_combined
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # get the egenes for each cell type in UT
-eqtl_egenes_ut <- get_egenes_per_celltype_limix(eqtl_output_ut_loc, output_file = 'qtl_results_all_qval_allchroms_fdr005_significant.txt.gz')
-eqtl_egenes_24hca <- get_egenes_per_celltype_limix(eqtl_output_24hca_loc, output_file = 'qtl_results_all_qval_allchroms_fdr005_significant.txt.gz')
+# eqtl_egenes_ut <- get_egenes_per_celltype_limix(eqtl_output_ut_loc, output_file = 'qtl_results_all_qval_allchroms_fdr005_significant.txt.gz')
+# eqtl_egenes_24hca <- get_egenes_per_celltype_limix(eqtl_output_24hca_loc, output_file = 'qtl_results_all_qval_allchroms_fdr005_significant.txt.gz')
 eqtl_egenes_combined <- get_egenes_per_celltype_limix(eqtl_output_combined_loc, output_file = 'qtl_results_all_qval_allchroms_fdr005_significant.txt.gz')
 
 # rename the labels to something nicer
-names(eqtl_egenes_ut) <- rename_labels(names(eqtl_egenes_ut))
-names(eqtl_egenes_24hca) <- rename_labels(names(eqtl_egenes_24hca))
+# names(eqtl_egenes_ut) <- rename_labels(names(eqtl_egenes_ut))
+# names(eqtl_egenes_24hca) <- rename_labels(names(eqtl_egenes_24hca))
 names(eqtl_egenes_combined) <- rename_labels(names(eqtl_egenes_combined))
 
 # plot the overlaps per condition
-plot_sharing_per_celltype(eqtl_egenes_ut[unique(names(eqtl_egenes_ut))], use_label_dict = F, use_color_dict = T)
-grid.text("Sharing of eGenes in UT", x = 0.65, y = 0.95, gp = gpar(fontsize = 20))
-plot_sharing_per_celltype(eqtl_egenes_24hca, use_label_dict = F, use_color_dict = T, n_intersects = 25)
-grid.text("Sharing of eGenes in 24hCA", x = 0.65, y = 0.95, gp = gpar(fontsize = 20))
+# plot_sharing_per_celltype(eqtl_egenes_ut[unique(names(eqtl_egenes_ut))], use_label_dict = F, use_color_dict = T)
+# grid.text("Sharing of eGenes in UT", x = 0.65, y = 0.95, gp = gpar(fontsize = 20))
+# plot_sharing_per_celltype(eqtl_egenes_24hca, use_label_dict = F, use_color_dict = T, n_intersects = 25)
+# grid.text("Sharing of eGenes in 24hCA", x = 0.65, y = 0.95, gp = gpar(fontsize = 20))
 plot_sharing_per_celltype(eqtl_egenes_combined, use_label_dict = F, use_color_dict = T, n_intersects = 25)
-grid.text("Sharing of eGenes in combined", x = 0.65, y = 0.95, gp = gpar(fontsize = 20))
+grid.text("Sharing of eGenes between cell types", x = 0.65, y = 0.95, gp = gpar(fontsize = 20))
 
 # add the condition
-names(eqtl_egenes_ut) <- paste(names(eqtl_egenes_ut), 'UT')
-names(eqtl_egenes_24hca) <- paste(names(eqtl_egenes_24hca), '24hCA')
-names(eqtl_egenes_combined) <- paste(names(eqtl_egenes_combined), 'combined')
+# names(eqtl_egenes_ut) <- paste(names(eqtl_egenes_ut), 'UT')
+# names(eqtl_egenes_24hca) <- paste(names(eqtl_egenes_24hca), '24hCA')
+# names(eqtl_egenes_combined) <- paste(names(eqtl_egenes_combined), 'combined')
 
 # merge the lists
-eqtl_egenes_all <- c(eqtl_egenes_ut, eqtl_egenes_24hca, eqtl_egenes_combined)
+# eqtl_egenes_all <- c(eqtl_egenes_ut, eqtl_egenes_24hca, eqtl_egenes_combined)
 # remove ones that were duplicated
-eqtl_egenes_all <- eqtl_egenes_all[unique(names(eqtl_egenes_all))]
+# eqtl_egenes_all <- eqtl_egenes_all[unique(names(eqtl_egenes_all))]
 
 # and make the plot
-plot_sharing_per_celltype(eqtl_egenes_all, use_label_dict = F, use_color_dict = T, n_intersects = 25)
-grid.text("Sharing of eGenes across mappings", x = 0.65, y = 0.95, gp = gpar(fontsize = 20))
+# plot_sharing_per_celltype(eqtl_egenes_all, use_label_dict = F, use_color_dict = T, n_intersects = 25)
+# grid.text("Sharing of eGenes across mappings", x = 0.65, y = 0.95, gp = gpar(fontsize = 20))
 
 ```
 ```{r get_egene_overlaps, include=TRUE, fig.width=10, fig.height=10}
@@ -1408,29 +1491,40 @@ plot_unique_features_numbers(eqtl_unique_features_per_celltype, pct = T) + ggtit
 
 ```
 
-```{r get_capeak_numbers_plots2, include=TRUE, fig.width=7, fig.height=7}
+```{r get_capeak_numbers_plots2, include=TRUE, fig.width=8, fig.height=6}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # make a plot of the numbers
-p_caqtl_peak_numbers_ut <- egene_numbers_to_plot(caqtl_peak_numbers_ut, legendless = T, use_color_dict = T) +
-  ggtitle('Number of ATAC regions affected by genetic variants in UT') +
-  xlab('Cell type') +
-  ylab('Number of ATAC regions') +
-  ylim(c(0, 18000))
-p_caqtl_peak_numbers_24hca <- egene_numbers_to_plot(caqtl_peak_numbers_24hca, legendless = T, use_color_dict = T) +
-  ggtitle('Number of ATAC regions affected by genetic variants in 24hCA') +
-  xlab('Cell type') +
-  ylab('Number of ATAC regions') +
-  ylim(c(0, 18000))
-p_caqtl_peak_numbers_combined <- egene_numbers_to_plot(caqtl_peak_numbers_combined, legendless = T, use_color_dict = T) +
+# p_caqtl_peak_numbers_ut <- egene_numbers_to_plot(caqtl_peak_numbers_ut, legendless = T, use_color_dict = T) +
+#   ggtitle('Number of ATAC regions affected by genetic variants in UT') +
+#   xlab('Cell type') +
+#   ylab('Number of ATAC regions') +
+#   ylim(c(0, 18000))
+# p_caqtl_peak_numbers_24hca <- egene_numbers_to_plot(caqtl_peak_numbers_24hca, legendless = T, use_color_dict = T) +
+#   ggtitle('Number of ATAC regions affected by genetic variants in 24hCA') +
+#   xlab('Cell type') +
+#   ylab('Number of ATAC regions') +
+#   ylim(c(0, 18000))
+p_caqtl_peak_numbers_combined <- egene_numbers_to_plot(caqtl_peak_numbers_combined, legendless = T, use_color_dict = T, angle_labels = F) +
   ggtitle('Number of ATAC regions affected by genetic variants in UT+24hCA') +
   xlab('Cell type') +
   ylab('Number of ATAC regions') +
-  ylim(c(0, 18000))
+  ylim(c(0, 18000)) +
+   # label sizes
+  theme(
+    axis.title.x = element_text(size = 18),
+    axis.title.y = element_text(size = 18),
+    axis.text.x = element_text(size = 16),
+    axis.text.y = element_text(size = 16),
+    plot.title = element_text(size = 20)
+  )
 # show the plots
-p_caqtl_peak_numbers_ut
-p_caqtl_peak_numbers_24hca
+# p_caqtl_peak_numbers_ut
+# p_caqtl_peak_numbers_24hca
 p_caqtl_peak_numbers_combined
+ggsave('~/plots/mo_multiome_epeak_numbers.pdf', width = 8, height = 8, plot = p_caqtl_peak_numbers_combined)
+
+
 
 ```
 
@@ -1438,36 +1532,36 @@ p_caqtl_peak_numbers_combined
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # get the egenes for each cell type in UT
-caqtl_epeaks_ut <- get_egenes_per_celltype_limix(caqtl_output_ut_loc, output_file = 'qtl_results_all_qval_allchroms_fdr005_significant.txt.gz')
-caqtl_epeaks_24hca <- get_egenes_per_celltype_limix(caqtl_output_24hca_loc, output_file = 'qtl_results_all_qval_allchroms_fdr005_significant.txt.gz')
+# caqtl_epeaks_ut <- get_egenes_per_celltype_limix(caqtl_output_ut_loc, output_file = 'qtl_results_all_qval_allchroms_fdr005_significant.txt.gz')
+# caqtl_epeaks_24hca <- get_egenes_per_celltype_limix(caqtl_output_24hca_loc, output_file = 'qtl_results_all_qval_allchroms_fdr005_significant.txt.gz')
 caqtl_epeaks_combined <- get_egenes_per_celltype_limix(caqtl_output_combined_loc, output_file = 'qtl_results_all_qval_allchroms_fdr005_significant.txt.gz')
 
 # rename the labels to something nicer
-names(caqtl_epeaks_ut) <- rename_labels(names(caqtl_epeaks_ut))
-names(caqtl_epeaks_24hca) <- rename_labels(names(caqtl_epeaks_24hca))
+# names(caqtl_epeaks_ut) <- rename_labels(names(caqtl_epeaks_ut))
+# names(caqtl_epeaks_24hca) <- rename_labels(names(caqtl_epeaks_24hca))
 names(caqtl_epeaks_combined) <- rename_labels(names(caqtl_epeaks_combined))
 
 # plot the overlaps per condition
-plot_sharing_per_celltype(caqtl_epeaks_ut, use_label_dict = F, use_color_dict = T, n_intersects = 25)
-grid.text("Sharing of ePeaks in UT", x = 0.65, y = 0.95, gp = gpar(fontsize = 20))
-plot_sharing_per_celltype(caqtl_epeaks_24hca, use_label_dict = F, use_color_dict = T, n_intersects = 25)
-grid.text("Sharing of ePeaks in 24hCA", x = 0.65, y = 0.95, gp = gpar(fontsize = 20))
+# plot_sharing_per_celltype(caqtl_epeaks_ut, use_label_dict = F, use_color_dict = T, n_intersects = 25)
+# grid.text("Sharing of ePeaks in UT", x = 0.65, y = 0.95, gp = gpar(fontsize = 20))
+# plot_sharing_per_celltype(caqtl_epeaks_24hca, use_label_dict = F, use_color_dict = T, n_intersects = 25)
+# grid.text("Sharing of ePeaks in 24hCA", x = 0.65, y = 0.95, gp = gpar(fontsize = 20))
 plot_sharing_per_celltype(caqtl_epeaks_combined, use_label_dict = F, use_color_dict = T, n_intersects = 25)
-grid.text("Sharing of ePeaks in combined", x = 0.65, y = 0.95, gp = gpar(fontsize = 20))
+grid.text("Sharing of ePeaks across cell types", x = 0.65, y = 0.95, gp = gpar(fontsize = 20))
 
 # add the condition
-names(caqtl_epeaks_ut) <- paste(names(caqtl_epeaks_ut), 'UT')
-names(caqtl_epeaks_24hca) <- paste(names(caqtl_epeaks_24hca), '24hCA')
-names(caqtl_epeaks_combined) <- paste(names(caqtl_epeaks_combined), 'combined')
+# names(caqtl_epeaks_ut) <- paste(names(caqtl_epeaks_ut), 'UT')
+# names(caqtl_epeaks_24hca) <- paste(names(caqtl_epeaks_24hca), '24hCA')
+# names(caqtl_epeaks_combined) <- paste(names(caqtl_epeaks_combined), 'combined')
 
 # merge the lists
-caqtl_epeaks_all <- c(caqtl_epeaks_ut, caqtl_epeaks_24hca, caqtl_epeaks_combined)
+# caqtl_epeaks_all <- c(caqtl_epeaks_ut, caqtl_epeaks_24hca, caqtl_epeaks_combined)
 # remove ones that were duplicated
-caqtl_epeaks_all <- caqtl_epeaks_all[unique(names(caqtl_epeaks_all))]
+# caqtl_epeaks_all <- caqtl_epeaks_all[unique(names(caqtl_epeaks_all))]
 
 # and make the plot
-plot_sharing_per_celltype(caqtl_epeaks_all, use_label_dict = F, use_color_dict = T, n_intersects = 25)
-grid.text("Sharing of ePeaks across mappings", x = 0.65, y = 0.95, gp = gpar(fontsize = 20))
+# plot_sharing_per_celltype(caqtl_epeaks_all, use_label_dict = F, use_color_dict = T, n_intersects = 25)
+# grid.text("Sharing of ePeaks across mappings", x = 0.65, y = 0.95, gp = gpar(fontsize = 20))
 
 ```
 
@@ -1509,17 +1603,51 @@ plot_unique_features_numbers(caqtl_unique_features_per_celltype, pct = T) + ggti
 
 ```
 
-```{r get_icapeak_numbers_plots, include=TRUE, fig.width=7, fig.height=7}
+```{r get_icapeak_numbers_plots, include=TRUE, fig.width=8, fig.height=6}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # make a plot of the numbers
-p_icaqtl_peak_numbers_combined <- egene_numbers_to_plot(icaqtl_peak_numbers, legendless = T, use_color_dict = T) +
-  ggtitle('Number of ATAC regions with interaction-caQTL in UT vs 24hCA') +
+p_icaqtl_peak_numbers_combined <- egene_numbers_to_plot(icaqtl_peak_numbers, legendless = T, use_color_dict = T, angle_labels = T) +
+  ggtitle('Number of ATAC regions with interaction-caQTL\nin UT vs 24hCA') +
   xlab('Cell type') +
   ylab('Number of ATAC regions') +
-  ylim(c(0, 1300))
+  ylim(c(0, 1300)) +
+   # label sizes
+  theme(
+    axis.title.x = element_text(size = 18),
+    axis.title.y = element_text(size = 18),
+    axis.text.x = element_text(size = 16),
+    axis.text.y = element_text(size = 16),
+    plot.title = element_text(size = 20)
+  )
 # show the plots
 p_icaqtl_peak_numbers_combined
+ggsave('~/plots/mo_multiome_iepeak_numbers.pdf', width = 8, height = 8, plot = p_icaqtl_peak_numbers_combined)
+
+
+```
+
+```{r get_iegene_numbers_plots, include=TRUE, fig.width=8, fig.height=6}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# make a plot of the numbers
+p_ieqtl_gene_numbers_combined <- egene_numbers_to_plot(ieqtl_gene_numbers, legendless = T, use_color_dict = T, angle_labels = T) +
+  ggtitle('Number of genes with interaction-eQTL\nin UT vs 24hCA') +
+  xlab('Cell type') +
+  ylab('Number of genes') +
+  ylim(c(0, 200)) +
+   # label sizes
+  theme(
+    axis.title.x = element_text(size = 18),
+    axis.title.y = element_text(size = 18),
+    axis.text.x = element_text(size = 16),
+    axis.text.y = element_text(size = 16),
+    plot.title = element_text(size = 20)
+  )
+# show the plots
+p_ieqtl_gene_numbers_combined
+ggsave('~/plots/mo_multiome_iegene_numbers.pdf', width = 8, height = 8, plot = p_ieqtl_gene_numbers_combined)
+
 
 ```
 

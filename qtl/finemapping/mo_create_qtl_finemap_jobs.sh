@@ -5,10 +5,10 @@
 #Args           : location of the QTL output folders, location to store the finemapping results, location to store the sbatch job files
 #Author       	: Roy Oelen
 #example        : 
-# mo_create_qtl_finemap_jobs.sh \
-#   /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/output/nominal_condition/L1/ \
-#   /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/finemapping/interaction_eqtl/sc-eqtlgen/output/nominal_condition/L1/ \
-#   /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/finemapping/interaction_eqtl/sc-eqtlgen/jobs/nominal_condition/L1/ \
+# ./mo_create_qtl_finemap_jobs.sh \
+#   /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/output/combined_significant/L1/ \
+#   /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/finemapping/interaction_eqtl/sc-eqtlgen/output/combined_significant/L1/ \
+#   /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/finemapping/interaction_eqtl/sc-eqtlgen/jobs/combined_significant/L1/ \
 #   /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/genotype/imputed_hg38_all_anc
 ###################################################################
 

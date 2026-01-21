@@ -16,8 +16,8 @@ for celltype in ${CELL_TYPES[*]}; do
         --cell_type ${celltype} \
         --cell_type_column celltype_imputed_lowerres \
         --seurat_object_path /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/seurat_preprocess_samples/objects/mo_multimodal_${celltype}_1_80_20240521.rds \
-        --cre_pairs_loc /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/cre_eqtl/eqtl_caqtl_overlap/confinements/region_to_peak_variant_overlaps.tsv.gz \
+        --cre_pairs_loc /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/cre_eqtl/eqtl_caqtl_overlap/combined/confinements/region_to_peak_variant_overlaps.tsv.gz \
         --seurat_assignment_column sample_final,lane,condition_final \
-        --output_folder /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/cre_eqtl/eqtl_caqtl_overlap/matrices/
+        --output_folder /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/cre_eqtl/eqtl_caqtl_overlap/combined/matrices/
 
 done

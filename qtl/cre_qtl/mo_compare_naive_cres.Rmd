@@ -1,0 +1,195 @@
+---
+title: "mo_compare_naive_cres"
+author: "Roy Oelen"
+date: "2025-06-05"
+output: html_document
+---
+
+```{r header, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+#!/usr/bin/env Rscript
+############################################################################################################################
+# Authors: Roy Oelen
+# Name: mo_compare_naive_cres.Rmd
+# Function: plot naive CRE comparison
+############################################################################################################################
+```
+
+```{r libraries, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+####################
+# libraries        #
+####################
+
+library(data.table)
+library(ggplot2)
+library(ggvenn)
+library(cowplot)
+
+
+```
+
+```{r functions, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+####################
+# Functions        #
+####################
+
+
+load_cre_each <- function(cre_mo_loc, filename='meta_result.tsv.gz', filter_column='meta_q', significance_cutoff=0.05) {
+  # list all of the folders
+  celltypes <- list.dirs(cre_mo_loc, full.names = F, recursive = F)
+  # we'll store the results for each cell type
+  results_per_cell_type <- list()
+  # and check each cell type
+  for (cell_type in celltypes) {
+    # paste together the full path
+    cell_type_loc <- paste0(cre_mo_loc, '/', cell_type, '/', filename)
+    # read the file
+    cell_type_output <- fread(cell_type_loc, header = T, sep = '\t')
+    # filter
+    if (!is.null(filter_column)) {
+      cell_type_output <- cell_type_output[!is.na(cell_type_output[[filter_column]]) & cell_type_output[[filter_column]] < significance_cutoff, ]
+    }
+    # put in the list
+    results_per_cell_type[[cell_type]] <- cell_type_output
+  }
+  return(results_per_cell_type)
+}
+
+```
+
+```{r settings, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+###################
+# Settings        #
+###################
+
+
+
+```
+
+```{r path_setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+####################
+# Main Code        #
+####################
+
+# location of the 10k CRE mapping
+cres_10k_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/10x_multiome_10k_pbmcs/naive_cres/'
+# location of the other CREs
+cres_mo_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/cre_eqtl/eqtl_caqtl_overlap/betas_ps/'
+
+```
+
+```{r load_data, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# load the 10k10x one
+cres_10k <- load_cre_each(cres_10k_loc, filename = '10k_merged.tsv.gz', filter_column = 'qvalue')
+# and the multiome ones
+cres_mo <- load_cre_each(cres_mo_loc)
+
+```
+
+```{r add_regio_to_gene, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# add region to gene column in 10k10x
+for (ct in names(cres_10k)) {
+  cres_10k[[ct]][['region_to_gene']] <- paste(cres_10k[[ct]][['region']], cres_10k[[ct]][['gene']], sep = '-')
+}
+# and to the multiome ones
+for (ct in names(cres_mo)) {
+  cres_mo[[ct]][['region_to_gene']] <- paste(cres_mo[[ct]][['region']], cres_mo[[ct]][['gene']], sep = '-')
+}
+
+```
+
+```{r compare_regions, include=TRUE, fig.width=9, fig.height=9}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# now check how it looks if you add these
+plot_grid(
+  ggvenn::ggvenn(
+    data = list('multiome' = unique(cres_mo[['B']][['region']]), '10x10k' = unique(cres_10k[['B']][['region']]))
+  ) + ggtitle('B overlap of CREs'), 
+  ggvenn::ggvenn(
+    data = list('multiome' = unique(cres_mo[['CD4T']][['region']]), '10x10k' = unique(cres_10k[['CD4_T']][['region']]))
+  ) + ggtitle('CD4T overlap of CREs'), 
+  ggvenn::ggvenn(
+    data = list('multiome' = unique(cres_mo[['CD8T']][['region']]), '10x10k' = unique(cres_10k[['CD8_T']][['region']]))
+  ) + ggtitle('CD8T overlap of CREs'), 
+  ggvenn::ggvenn(
+    data = list('multiome' = unique(cres_mo[['monocyte']][['region']]), '10x10k' = unique(cres_10k[['Mono']][['region']]))
+  ) + ggtitle('monocyte overlap of CREs'), 
+  ggvenn::ggvenn(
+    data = list('multiome' = unique(cres_mo[['NK']][['region']]), '10x10k' = unique(cres_10k[['NK']][['region']]))
+  ) + ggtitle('NK overlap of CREs'),
+  ggvenn::ggvenn(
+    data = list('multiome' = unique(do.call('rbind', cres_mo)[['region']]), '10x10k' = unique(cres_10k[['all']][['region']]))
+  ) + ggtitle('all overlap of CREs'),
+  nrow = 2, ncol = 3
+)
+
+
+```
+
+```{r compare_genes, include=TRUE, fig.width=9, fig.height=9}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# now check how it looks if you add these
+plot_grid(
+  ggvenn::ggvenn(
+    data = list('multiome' = unique(cres_mo[['B']][['gene']]), '10x10k' = unique(cres_10k[['B']][['gene']]))
+  ) + ggtitle('B overlap of CREs'), 
+  ggvenn::ggvenn(
+    data = list('multiome' = unique(cres_mo[['CD4T']][['gene']]), '10x10k' = unique(cres_10k[['CD4_T']][['gene']]))
+  ) + ggtitle('CD4T overlap of CREs'), 
+  ggvenn::ggvenn(
+    data = list('multiome' = unique(cres_mo[['CD8T']][['gene']]), '10x10k' = unique(cres_10k[['CD8_T']][['gene']]))
+  ) + ggtitle('CD8T overlap of CREs'), 
+  ggvenn::ggvenn(
+    data = list('multiome' = unique(cres_mo[['monocyte']][['gene']]), '10x10k' = unique(cres_10k[['Mono']][['gene']]))
+  ) + ggtitle('monocyte overlap of CREs'), 
+  ggvenn::ggvenn(
+    data = list('multiome' = unique(cres_mo[['NK']][['gene']]), '10x10k' = unique(cres_10k[['NK']][['gene']]))
+  ) + ggtitle('NK overlap of CREs'),
+  ggvenn::ggvenn(
+    data = list('multiome' = unique(do.call('rbind', cres_mo)[['gene']]), '10x10k' = unique(cres_10k[['all']][['gene']]))
+  ) + ggtitle('all overlap of CREs'),
+  nrow = 2, ncol = 3
+)
+
+```
+
+```{r compare_region_to_genes, include=TRUE, fig.width=9, fig.height=9}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# now check how it looks if you add these
+plot_grid(
+  ggvenn::ggvenn(
+    data = list('multiome' = unique(cres_mo[['B']][['region_to_gene']]), '10x10k' = unique(cres_10k[['B']][['region_to_gene']]))
+  ) + ggtitle('B overlap of CREs'), 
+  ggvenn::ggvenn(
+    data = list('multiome' = unique(cres_mo[['CD4T']][['region_to_gene']]), '10x10k' = unique(cres_10k[['CD4_T']][['region_to_gene']]))
+  ) + ggtitle('CD4T overlap of CREs'), 
+  ggvenn::ggvenn(
+    data = list('multiome' = unique(cres_mo[['CD8T']][['region_to_gene']]), '10x10k' = unique(cres_10k[['CD8_T']][['region_to_gene']]))
+  ) + ggtitle('CD8T overlap of CREs'), 
+  ggvenn::ggvenn(
+    data = list('multiome' = unique(cres_mo[['monocyte']][['region_to_gene']]), '10x10k' = unique(cres_10k[['Mono']][['region_to_gene']]))
+  ) + ggtitle('monocyte overlap of CREs'), 
+  ggvenn::ggvenn(
+    data = list('multiome' = unique(cres_mo[['NK']][['region_to_gene']]), '10x10k' = unique(cres_10k[['NK']][['region_to_gene']]))
+  ) + ggtitle('NK overlap of CREs'),
+  ggvenn::ggvenn(
+    data = list('multiome' = unique(do.call('rbind', cres_mo)[['region_to_gene']]), '10x10k' = unique(cres_10k[['all']][['region_to_gene']]))
+  ) + ggtitle('all overlap of CREs'),
+  nrow = 2, ncol = 3
+)
+
+```

@@ -1,0 +1,270 @@
+---
+title: "mo_scenic_vs_granie_claringbould"
+author: "Roy Oelen"
+date: "2025-05-27"
+output: html_document
+---
+
+```{r header, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+#!/usr/bin/env Rscript
+############################################################################################################################
+# Authors: Roy Oelen
+# Name: mo_scenic_vs_granie_claringbould.Rmd
+# Function: plot SCENIC+ output
+############################################################################################################################
+```
+
+```{r libraries, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+####################
+# libraries        #
+####################
+
+library(data.table)
+library(ggplot2)
+library(ggvenn)
+library(cowplot)
+library(stringr)
+library(IRanges)
+
+
+```
+
+```{r functions, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+####################
+# Functions        #
+####################
+
+
+chromatin_feature_to_positions <- function(feature_names, split_regex='-|:') {
+  # make sure to have no duplicates
+  feature_names <- unique(feature_names)
+  # create table of locations
+  feature_locations_table <- data.frame(
+    'feature_id' = feature_names, 
+    'chromosome' = rep(NA, times = length(feature_names)), 
+    'start' = rep(NA, times = length(feature_names)), 
+    'end' = rep(NA, times = length(feature_names))
+  )
+  # now split the features to get the locations
+  feature_locations_table[c('chromosome', 'start', 'end')] <- str_split_fixed(feature_names, split_regex, 3)
+  # and make the start and end numeric
+  feature_locations_table[['start']] <- as.numeric(feature_locations_table[['start']])
+  feature_locations_table[['end']] <- as.numeric(feature_locations_table[['end']])
+  return(feature_locations_table)
+}
+
+
+overlap_all_regions <- function(region_table1, region_table2, feature_id_column1='feature_id', feature_id_column2='feature_id', chromosome_column1='chromosome', chromosome_column2='chromosome', start_column1='start', start_column2='start', end_column1='end', end_column2='end'){
+  # make chromsomes characters
+  region_table1[[chromosome_column1]] <- as.character(region_table1[[chromosome_column1]])
+  region_table2[[chromosome_column2]] <- as.character(region_table2[[chromosome_column2]])
+  # make data framke
+  region_table1 <- data.frame(region_table1)
+  region_table2 <- data.frame(region_table2)
+  # get the unique chromosomes
+  chromosomes <- intersect(unique(region_table1[[chromosome_column1]]), unique(region_table2[[chromosome_column2]]))
+  # we'll read the LCL output per chromosome, so we'll store that in a list first
+  overlap_per_chromosome <- list()
+  # we'll check each chromosome
+  for (chromosome in chromosomes) {
+    # subset to this chromosome
+    table1_regions_chromosome <- region_table1[!is.na(region_table1[[chromosome_column1]]) & region_table1[[chromosome_column1]] == chromosome, ]
+    table2_regions_chromosome <- region_table2[!is.na(region_table2[[chromosome_column2]]) & region_table2[[chromosome_column2]] == chromosome, , ]
+    # turn into iranges objects
+    table1_chromosome_iranges <- IRanges(start = table1_regions_chromosome[[start_column1]], end = table1_regions_chromosome[[end_column1]])
+    table2_chromosome_iranges <- IRanges(start = table2_regions_chromosome[[start_column2]], end = table2_regions_chromosome[[end_column2]])
+    # find overlaps
+    feature_chromosome_overlaps <- findOverlaps(table1_chromosome_iranges, table2_chromosome_iranges)
+    # extract overlapping ranges
+    overlapping_ranges <- pintersect(table2_chromosome_iranges[subjectHits(feature_chromosome_overlaps)], table1_chromosome_iranges[queryHits(feature_chromosome_overlaps)])
+    # create a  table for the overlaps
+    overlaps_table <- data.table(
+      'feature_id' = table2_regions_chromosome[[feature_id_column2]][subjectHits(feature_chromosome_overlaps)],
+      'overlapping_feature' = table1_regions_chromosome[[feature_id_column1]][queryHits(feature_chromosome_overlaps)],
+      'overlap_start' = start(overlapping_ranges),
+      'overlap_end' = end(overlapping_ranges)
+    )
+    # add these positions
+    table2_regions_chromosome <- merge(table2_regions_chromosome, overlaps_table, by.x = feature_id_column2, by.y = 'feature_id', all.x = T, allow.cartesian=TRUE)
+    # and put in the list
+    overlap_per_chromosome[[as.character(chromosome)]] <- table2_regions_chromosome
+  }
+  overlap_all <- do.call('rbind', overlap_per_chromosome)
+  return(overlap_all)
+}
+
+
+```
+
+```{r settings, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+###################
+# Settings        #
+###################
+
+
+```
+
+```{r path_setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+####################
+# Main Code        #
+####################
+
+# location of the GRANIE outputs
+gr_infected_macros_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/overlaps/claringbould/GRANIE_infectedMacrophages_supplTable3.tsv.gz'
+gr_primed_macros_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/overlaps/claringbould/GRANIE_primedMacrophages_suppTable2.tsv.gz'
+gr_naive_macros_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/overlaps/claringbould/GRANIE_naiveMacrophages_supplTable1.tsv.gz'
+gr_union_macros_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/overlaps/claringbould/GRANIE_unionNaive-infectedMacrophages_SupplTable4.tsv.gz'
+
+# location of our scenic+ output
+scenic_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eRegulon_both.tsv.gz'
+# and cpeaks annotation we used
+cpeaks_annotation_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/cPeaks/cPeaks_info.tsv'
+
+```
+
+```{r path_setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# read the tables
+gr_infected_macros <- fread(gr_infected_macros_loc, header = T, sep = '\t')
+gr_primed_macros <- fread(gr_primed_macros_loc, header = T, sep = '\t')
+gr_naive_macros <- fread(gr_naive_macros_loc, header = T, sep = '\t')
+gr_union_macros <- fread(gr_union_macros_loc, header = T, sep = '\t')
+
+# get the scenic+ table
+scenic_output <- fread(scenic_output_loc, header = T, sep = '\t')
+
+```
+
+```{r table_reads, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# extract the regions present in the GRANIE output
+gr_all_regions <- unique(
+  c(gr_infected_macros[['peak.ID']], 
+    gr_primed_macros[['peak.ID']], 
+    gr_naive_macros[['peak.ID']], 
+    gr_union_macros[['peak.ID']])
+)
+
+# and the ones in the scenic output
+scenic_feature_locations <- fread(cpeaks_annotation_loc, header = T, sep = ' ')
+# which we will subset to what we need
+scenic_feature_locations <- scenic_feature_locations[, c('chr_hg38', 'start_hg38', 'end_hg38')]
+# rename columns
+colnames(scenic_feature_locations) <- c('chromosome', 'start', 'end')
+# add feature ID
+scenic_feature_locations[['feature_id']] <- paste0(scenic_all_regions[['chromosome']], ':', scenic_all_regions[['start']], '-', scenic_all_regions[['end']])
+# and these are the features
+scenic_all_regions <- unique(scenic_all_regions[['feature_id']])
+
+```
+
+```{r name_to_region, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# create a table to store the feature locations
+granie_feature_locations <- chromatin_feature_to_positions(gr_all_regions)
+
+# order
+granie_feature_locations <- granie_feature_locations[order(granie_feature_locations[['feature_id']]), ]
+scenic_feature_locations <- scenic_feature_locations[order(scenic_feature_locations[['feature_id']]), ]
+
+# write this to a file
+granie_features_grch37_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/overlaps/claringbould/GRANIE_atac_peaks_grch37.bed'
+write.table(granie_feature_locations[, c('chromosome', 'start', 'end', 'feature_id')], granie_features_grch37_loc, row.names = F, col.names = F, sep = '\t', quote = F)
+
+# do the lift
+# /groups/umcg-franke-scrna/tmp04/software/ucsc/liftOver \
+# /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/overlaps/claringbould/GRANIE_atac_peaks_grch37.bed \
+# /groups/umcg-franke-scrna/tmp04/external_datasets/liftover/hg19ToHg38.over.chain.gz \
+# /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/overlaps/claringbould/GRANIE_atac_peaks_grch38.bed \
+# /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/overlaps/claringbould/GRANIE_atac_peaks_grch38_unlifted.bed
+
+# location of our updated locations
+granie_features_grch38_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/overlaps/claringbould/GRANIE_atac_peaks_grch38.bed'
+# reread this
+granie_feature_locations <- fread(granie_features_grch38_loc, header = F, sep = '\t')
+# and rename columns
+colnames(granie_feature_locations) <- c('chromosome', 'start', 'end', 'feature_id')
+
+```
+
+```{r region_overlaps, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# get matched regions
+granie_to_mo_regions <- overlap_all_regions(scenic_feature_locations, granie_feature_locations)
+mo_to_granie_regions <- overlap_all_regions(granie_feature_locations, scenic_feature_locations)
+
+```
+
+```{r add_region_overlap, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# get matched regions
+gr_infected_macros <- merge(gr_infected_macros, granie_to_mo_regions[, c('feature_id', 'overlapping_feature')], all.x = T, by.x = 'peak.ID', by.y = 'feature_id')
+gr_primed_macros <- merge(gr_primed_macros, granie_to_mo_regions[, c('feature_id', 'overlapping_feature')], all.x = T, by.x = 'peak.ID', by.y = 'feature_id')
+gr_naive_macros <- merge(gr_naive_macros, granie_to_mo_regions[, c('feature_id', 'overlapping_feature')], all.x = T, by.x = 'peak.ID', by.y = 'feature_id')
+gr_union_macros <- merge(gr_union_macros, granie_to_mo_regions[, c('feature_id', 'overlapping_feature')], all.x = T, by.x = 'peak.ID', by.y = 'feature_id')
+
+```
+
+```{r write_region_overlap, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# write GRANIE output with the overlapping cpeaks region info
+gr_infected_macros_overlapped_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/overlaps/claringbould/GRANIE_infectedMacrophages_supplTable3_overlapped.tsv.gz'
+gr_primed_macros_overlapped_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/overlaps/claringbould/GRANIE_primedMacrophages_suppTable2_overlapped.tsv.gz'
+gr_naive_macros_overlapped_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/overlaps/claringbould/GRANIE_naiveMacrophages_supplTable1_overlapped.tsv.gz'
+gr_union_macros_overlapped_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/overlaps/claringbould/GRANIE_unionNaive-infectedMacrophages_SupplTable4_overlapped.tsv.gz'
+write.table(gr_infected_macros, gzfile(gr_infected_macros_overlapped_loc), row.names = F, col.names = T, sep = '\t')
+write.table(gr_primed_macros, gzfile(gr_primed_macros_overlapped_loc), row.names = F, col.names = T, sep = '\t')
+write.table(gr_naive_macros, gzfile(gr_naive_macros_overlapped_loc), row.names = F, col.names = T, sep = '\t')
+write.table(gr_union_macros, gzfile(gr_union_macros_overlapped_loc), row.names = F, col.names = T, sep = '\t')
+# with checksums
+mdfiver::create_md5_for_file(gr_infected_macros_overlapped_loc)
+mdfiver::create_md5_for_file(gr_primed_macros_overlapped_loc)
+mdfiver::create_md5_for_file(gr_naive_macros_overlapped_loc)
+mdfiver::create_md5_for_file(gr_union_macros_overlapped_loc)
+
+```
+
+```{r compare_regions, include=TRUE, fig.width=6, fig.height=4}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# now check how it looks if you add these
+ggvenn::ggvenn(
+    data = list('multiome' = unique(scenic_output[['Region']]), 'GRANIE' = unique(gr_union_macros[['overlapping_feature']]))
+  ) + ggtitle('Overlap of CREs between multiome and GRANIE')
+
+```
+
+```{r compare_genes, include=TRUE, fig.width=6, fig.height=4}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# now check how it looks if you add these
+ggvenn::ggvenn(
+    data = list('multiome' = unique(scenic_output[['Gene']]), 'GRANIE' = unique(gr_union_macros[['gene.name']]))
+  ) + ggtitle('Overlap of CRE genes between multiome and GRANIE')
+
+```
+
+```{r compare_genes, include=TRUE, fig.width=6, fig.height=4}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# now check how it looks if you add these
+ggvenn::ggvenn(
+    data = list('multiome' = unique(paste(scenic_output[['Region']], scenic_output[['Gene']])), 'GRANIE' = unique(paste(gr_union_macros[['overlapping_feature']], gr_union_macros[['gene.name']])))
+  ) + ggtitle('Overlap of region-gene links between multiome and GRANIE')
+
+```
+
