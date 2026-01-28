@@ -1058,10 +1058,8 @@ knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 # Main Code        #
 ####################
 
-# location of eQTL
+# location of eQTL output
 eqtl_output_combined_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/sc-eqtlgen/output/L1/combined/'
-# # location of caQTL output
-# eqtl_output_ut_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/sc-eqtlgen/output/L1/UT_20perm/'
 
 ```
 
@@ -1070,8 +1068,6 @@ knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # same for OneK1K, the one to compare against
 onek1k_loc <- '/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_oneK1k/output/L1/'
-# get the table with OneK1K vs UT
-onek1k_vs_ut <- match_qtl_outputs_all(eqtl_output_ut_loc, onek1k_loc, replicating_name='mo', replicating_in_name='k1')
 # and vs combined
 onek1k_vs_combined <- match_qtl_outputs_all(eqtl_output_combined_loc, onek1k_loc, replicating_name='mo', replicating_in_name='k1')
 
@@ -1080,16 +1076,6 @@ onek1k_vs_combined <- match_qtl_outputs_all(eqtl_output_combined_loc, onek1k_loc
 ```{r save_onek1k_overlap, include=TRUE, fig.width=10, fig.height=10}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
-# check each cell type, and add the celltype to the table
-for (cell_type in names(onek1k_vs_ut)) {
-  onek1k_vs_ut[[cell_type]][['cell_type']] <- cell_type
-  # and add the mo condition
-  onek1k_vs_ut[[cell_type]][['mo_condition']] <- 'UT'
-  # save these tables
-  onek1k_vs_ut_tbl_ct_loc <- paste0('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/replication/onek1k/L1/UT/mo_ut_vs_onek1k_', cell_type, '_eqtls.tsv.gz')
-  write.table(onek1k_vs_ut[[cell_type]], gzfile(onek1k_vs_ut_tbl_ct_loc), row.names = F, col.names = T, sep = '\t')
-  mdfiver::create_md5_for_file(onek1k_vs_ut_tbl_ct_loc)
-}
 # do the same for the combined one
 for (cell_type in names(onek1k_vs_combined)) {
   onek1k_vs_combined[[cell_type]][['cell_type']] <- cell_type
@@ -1106,18 +1092,6 @@ for (cell_type in names(onek1k_vs_combined)) {
 ```{r reload_onek1k_overlap, include=TRUE, fig.width=10, fig.height=10}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
-# initialize new list
-onek1k_vs_ut_reloaded <- list()
-# these are the cell types we'll do
-cell_types_ut <- c('B', 'CD4T', 'CD8T', 'DC', 'monocyte', 'NK')
-# check each cell type, and add the celltype to the table
-for (cell_type in cell_types_ut) {
-  # location of the table
-  onek1k_vs_ut_tbl_ct_loc <- paste0('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/replication/onek1k/L1/UT/mo_ut_vs_onek1k_', cell_type, '_eqtls.tsv.gz')
-  # read the table into the list
-  onek1k_vs_ut_reloaded[[cell_type]] <- fread(onek1k_vs_ut_tbl_ct_loc, header = T, sep = '\t')
-}
-
 # initialize the combined list as well
 onek1k_vs_combined_reloaded <- list()
 # these are the cell types we'll do
@@ -1131,168 +1105,9 @@ for (cell_type in cell_types_combined) {
 }
 
 # set these as the new variables
-onek1k_vs_ut <- onek1k_vs_ut_reloaded
 onek1k_vs_combined <- onek1k_vs_combined_reloaded
 # and remove temporary lists
-rm(onek1k_vs_ut_reloaded)
 rm(onek1k_vs_combined_reloaded)
-
-```
-
-```{r plot_onek1k_overlap, include=TRUE, fig.width=5, fig.height=5}
-knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
-
-# extract specifically mono UT to make the plot
-mono_ut_top_eqtl_onek1k <- onek1k_vs_ut[['monocyte']]
-# subset to what is significant for our data
-mono_ut_top_eqtl_onek1k <- mono_ut_top_eqtl_onek1k[mono_ut_top_eqtl_onek1k[['mo_significant']] == T, ]
-# # add z based p
-# mono_ut_top_eqtl_onek1k[['k1_p_z']] <- pnorm(abs(mono_ut_top_eqtl_onek1k[['k1_zscore_signed']]), lower.tail = F)
-# then redo the multiple testing correction on the 
-mono_ut_top_eqtl_onek1k[['BH']] <- p.adjust(mono_ut_top_eqtl_onek1k[['k1_p']], method = 'BH')
-# and use that for significance
-mono_ut_top_eqtl_onek1k[['k1_significant']] <- mono_ut_top_eqtl_onek1k[['k1_p']] < 0.05
-
-
-# get the minimal significant z for k1
-min_sig_z_k1 <- min(abs(mono_ut_top_eqtl_onek1k[mono_ut_top_eqtl_onek1k[['k1_significant']] == T, 'k1_zscore_signed']))
-min_sig_z_mo <- min(abs(mono_ut_top_eqtl_onek1k[mono_ut_top_eqtl_onek1k[['mo_significant']] == T, 'mo_zscore']))
-# and the max z
-max_sig_z_k1 <- max(abs(mono_ut_top_eqtl_onek1k[mono_ut_top_eqtl_onek1k[['k1_significant']] == T, 'k1_zscore_signed']))
-max_sig_z_mo <- max(abs(mono_ut_top_eqtl_onek1k[mono_ut_top_eqtl_onek1k[['mo_significant']] == T, 'mo_zscore']))
-
-# calculate concordance
-n_significant_both <- sum(mono_ut_top_eqtl_onek1k[['k1_significant']] == T & mono_ut_top_eqtl_onek1k[['mo_significant']] == T)
-n_significant_directed_both <- sum(mono_ut_top_eqtl_onek1k[['k1_significant']] == T & mono_ut_top_eqtl_onek1k[['mo_significant']] == T &
-                                     sign(mono_ut_top_eqtl_onek1k[['k1_zscore_signed']]) == sign(mono_ut_top_eqtl_onek1k[['mo_zscore']]))
-concordance <- round(n_significant_directed_both / n_significant_both, digits = 3)
-
-# plot the concordance of the two
-p <- ggplot(data = mono_ut_top_eqtl_onek1k, mapping = aes(x = mo_zscore, y = k1_zscore_signed)) + 
-  geom_point(size = 0.2) + 
-  xlim(c(max_sig_z_mo * -1, max_sig_z_mo * 1)) +
-  ylim(c(max_sig_z_k1 * -1, max_sig_z_k1 * 1)) + 
-  # left to right block of non-significant effects
-  geom_rect(aes(xmin = -1 * max_sig_z_mo, xmax = max_sig_z_mo, ymin = -1 * min_sig_z_k1, ymax = min_sig_z_k1), 
-            fill = "white", alpha = 0.005) +
-  # bottom to top block of non-significant effects
-  geom_rect(aes(xmin = -1 * min_sig_z_mo, xmax = min_sig_z_mo, ymin = -1 * max_sig_z_k1, ymax = max_sig_z_k1), 
-            fill = "white", alpha = 0.005) +
-  # bottom left block
-  geom_rect(aes(xmin = -1 * max_sig_z_mo, xmax = -1 *min_sig_z_mo, ymin = -1 * max_sig_z_k1, ymax = -1 * min_sig_z_k1), 
-            fill = "#0072B2", alpha = 0.01) +
-  # bottom right block
-  geom_rect(aes(xmin = min_sig_z_mo, xmax = max_sig_z_mo, ymin = -1 * max_sig_z_k1, ymax = -1 * min_sig_z_k1), 
-            fill = "#D55E00", alpha = 0.01) +
-  # top left block
-  geom_rect(aes(xmin = -1 * max_sig_z_mo, xmax = -1 *min_sig_z_mo, ymin = min_sig_z_k1, ymax = max_sig_z_k1), 
-            fill = "#D55E00", alpha = 0.01) + 
-  # top right block
-  geom_rect(aes(xmin = min_sig_z_mo, xmax = max_sig_z_mo, ymin = max_sig_z_k1, ymax = min_sig_z_k1), 
-            fill = "#0072B2", alpha = 0.01) + 
-  # labels for x and y axis
-  xlab('Z-score in multi-omics eQTLs') +
-  ylab('Z-score in OneK1K eQTLs') +
-  # vertical negative z cutoff line
-  geom_vline(xintercept=c(-1 *min_sig_z_mo), color="black", size=0.5, linetype = "dashed") +
-	# horizonal negative z cutoff line
-  geom_hline(yintercept=c(-1 *min_sig_z_k1), color="black", size=0.5, linetype="dashed") +
-  # vertical positive z cutoff line
-  geom_vline(xintercept=c(min_sig_z_mo), color="black", size=0.5, linetype = "dashed") +
-	# horizonal positive z cutoff line
-  geom_hline(yintercept=c(min_sig_z_k1), color="black", size=0.5, linetype="dashed") +
-  # make backgrounds white
-  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
-  # add the concordance
-  annotate("label", x = max_sig_z_mo * 0.75 , y = max_sig_z_k1 * -0.75, label = paste('concordance', concordance, sep = ':\n')) +
-  # add the names of the concordant and non-concordant blocks
-  annotate("text", x = max_sig_z_mo * -0.70 , y = max_sig_z_k1 * 0.75, label = 'disconcordant', colour = '#D55E00', fontface = 'bold') +
-  # add the names of the concordant and non-concordant blocks
-  annotate("text", x = max_sig_z_mo * 0.70 , y = max_sig_z_k1 * 0.75, label = 'concordant', colour = '#0072B2', fontface = 'bold') +
-  # add the title
-  ggtitle('Concordance of eQTL effects between OneK1K\nand multi-omics monocytes in UT')
-p
-
-# save this plot
-ggsave('~/plots/mo_scatter_mo_mono_ut_vs_onek1k_eqtl.pdf', width=5, height=5)
-
-```
-```{r plot_onek1k_overlap, include=TRUE, fig.width=5, fig.height=5}
-knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
-
-# extract specifically mono combined to make the plot
-mono_combined_top_eqtl_onek1k <- onek1k_vs_combined[['monocyte']]
-# subset to what is significant for our data
-mono_combined_top_eqtl_onek1k <- mono_combined_top_eqtl_onek1k[mono_combined_top_eqtl_onek1k[['mo_significant']] == T, ]
-# # add z based p
-# mono_ut_top_eqtl_onek1k[['k1_p_z']] <- pnorm(abs(mono_ut_top_eqtl_onek1k[['k1_zscore_signed']]), lower.tail = F)
-# then redo the multiple testing correction on the
-mono_combined_top_eqtl_onek1k[['BH']] <- p.adjust(mono_combined_top_eqtl_onek1k[['k1_p']], method = 'BH')
-# and use that for significance
-mono_combined_top_eqtl_onek1k[['k1_significant']] <- mono_combined_top_eqtl_onek1k[['k1_p']] < 0.05
-
-
-# get the minimal significant z for k1
-min_sig_z_k1 <- min(abs(mono_combined_top_eqtl_onek1k[mono_combined_top_eqtl_onek1k[['k1_significant']] == T, 'k1_zscore_signed']))
-min_sig_z_mo <- min(abs(mono_combined_top_eqtl_onek1k[mono_combined_top_eqtl_onek1k[['mo_significant']] == T, 'mo_zscore']))
-# and the max z
-max_sig_z_k1 <- max(abs(mono_combined_top_eqtl_onek1k[mono_combined_top_eqtl_onek1k[['k1_significant']] == T, 'k1_zscore_signed']))
-max_sig_z_mo <- max(abs(mono_combined_top_eqtl_onek1k[mono_combined_top_eqtl_onek1k[['mo_significant']] == T, 'mo_zscore']))
-
-# calculate concordance
-n_significant_both <- sum(mono_combined_top_eqtl_onek1k[['k1_significant']] == T & mono_combined_top_eqtl_onek1k[['mo_significant']] == T)
-n_significant_directed_both <- sum(mono_combined_top_eqtl_onek1k[['k1_significant']] == T & mono_combined_top_eqtl_onek1k[['mo_significant']] == T &
-                                     sign(mono_combined_top_eqtl_onek1k[['k1_zscore_signed']]) == sign(mono_combined_top_eqtl_onek1k[['mo_zscore']]))
-concordance <- round(n_significant_directed_both / n_significant_both, digits = 3)
-
-# plot the concordance of the two
-p <- ggplot(data = mono_combined_top_eqtl_onek1k, mapping = aes(x = mo_zscore, y = k1_zscore_signed)) + 
-  geom_point(size = 0.2) + 
-  xlim(c(max_sig_z_mo * -1, max_sig_z_mo * 1)) +
-  ylim(c(max_sig_z_k1 * -1, max_sig_z_k1 * 1)) + 
-  # left to right block of non-significant effects
-  geom_rect(aes(xmin = -1 * max_sig_z_mo, xmax = max_sig_z_mo, ymin = -1 * min_sig_z_k1, ymax = min_sig_z_k1), 
-            fill = "white", alpha = 0.005) +
-  # bottom to top block of non-significant effects
-  geom_rect(aes(xmin = -1 * min_sig_z_mo, xmax = min_sig_z_mo, ymin = -1 * max_sig_z_k1, ymax = max_sig_z_k1), 
-            fill = "white", alpha = 0.005) +
-  # bottom left block
-  geom_rect(aes(xmin = -1 * max_sig_z_mo, xmax = -1 *min_sig_z_mo, ymin = -1 * max_sig_z_k1, ymax = -1 * min_sig_z_k1), 
-            fill = "#0072B2", alpha = 0.01) +
-  # bottom right block
-  geom_rect(aes(xmin = min_sig_z_mo, xmax = max_sig_z_mo, ymin = -1 * max_sig_z_k1, ymax = -1 * min_sig_z_k1), 
-            fill = "#D55E00", alpha = 0.01) +
-  # top left block
-  geom_rect(aes(xmin = -1 * max_sig_z_mo, xmax = -1 *min_sig_z_mo, ymin = min_sig_z_k1, ymax = max_sig_z_k1), 
-            fill = "#D55E00", alpha = 0.01) + 
-  # top right block
-  geom_rect(aes(xmin = min_sig_z_mo, xmax = max_sig_z_mo, ymin = max_sig_z_k1, ymax = min_sig_z_k1), 
-            fill = "#0072B2", alpha = 0.01) + 
-  # labels for x and y axis
-  xlab('Z-score in multi-omics eQTLs') +
-  ylab('Z-score in OneK1K eQTLs') +
-  # vertical negative z ccombinedoff line
-  geom_vline(xintercept=c(-1 *min_sig_z_mo), color="black", size=0.5, linetype = "dashed") +
-	# horizonal negative z ccombinedoff line
-  geom_hline(yintercept=c(-1 *min_sig_z_k1), color="black", size=0.5, linetype="dashed") +
-  # vertical positive z ccombinedoff line
-  geom_vline(xintercept=c(min_sig_z_mo), color="black", size=0.5, linetype = "dashed") +
-	# horizonal positive z ccombinedoff line
-  geom_hline(yintercept=c(min_sig_z_k1), color="black", size=0.5, linetype="dashed") +
-  # make backgrounds white
-  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
-  # add the concordance
-  annotate("label", x = max_sig_z_mo * 0.75 , y = max_sig_z_k1 * -0.75, label = paste('concordance', concordance, sep = ':\n')) +
-  # add the names of the concordant and non-concordant blocks
-  annotate("text", x = max_sig_z_mo * -0.70 , y = max_sig_z_k1 * 0.75, label = 'disconcordant', colour = '#D55E00', fontface = 'bold') +
-  # add the names of the concordant and non-concordant blocks
-  annotate("text", x = max_sig_z_mo * 0.70 , y = max_sig_z_k1 * 0.75, label = 'concordant', colour = '#0072B2', fontface = 'bold') +
-  # add the title
-  ggtitle('Concordance of eQTL effects between OneK1K\nand multi-omics monocytes in UT+24hCA')
-p
-
-# save this plot
-ggsave('~/plots/mo_scatter_mo_mono_combined_vs_onek1k_eqtl.pdf', width=5, height=5)
 
 ```
 
@@ -1302,13 +1117,15 @@ knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 # extract specifically cd4t combined to make the plot
 cd4t_combined_top_eqtl_onek1k <- onek1k_vs_combined[['CD4T']]
 # subset to what is significant for our data
-cd4t_combined_top_eqtl_onek1k <- cd4t_combined_top_eqtl_onek1k[cd4t_combined_top_eqtl_onek1k[['mo_significant']] == T, ]
+# cd4t_combined_top_eqtl_onek1k <- cd4t_combined_top_eqtl_onek1k[cd4t_combined_top_eqtl_onek1k[['mo_significant']] == T, ]
+cd4t_combined_top_eqtl_onek1k <- cd4t_combined_top_eqtl_onek1k[cd4t_combined_top_eqtl_onek1k[['k1_significant']] == T, ]
 # # add z based p
 # cd4t_ut_top_eqtl_onek1k[['k1_p_z']] <- pnorm(abs(cd4t_ut_top_eqtl_onek1k[['k1_zscore_signed']]), lower.tail = F)
 # then redo the multiple testing correction on the
-cd4t_combined_top_eqtl_onek1k[['BH']] <- p.adjust(cd4t_combined_top_eqtl_onek1k[['k1_p']], method = 'BH')
+# cd4t_combined_top_eqtl_onek1k[['BH']] <- p.adjust(cd4t_combined_top_eqtl_onek1k[['k1_p']], method = 'BH')
+cd4t_combined_top_eqtl_onek1k[['mo_BH']] <- p.adjust(cd4t_combined_top_eqtl_onek1k[['mo_p']], method = 'BH')
 # and use that for significance
-cd4t_combined_top_eqtl_onek1k[['k1_significant']] <- cd4t_combined_top_eqtl_onek1k[['k1_p']] < 0.05
+cd4t_combined_top_eqtl_onek1k[['mo_significant']] <- cd4t_combined_top_eqtl_onek1k[['mo_BH']] < 0.05
 
 # now only keep what is significant in both
 cd4t_combined_top_eqtl_onek1k <- cd4t_combined_top_eqtl_onek1k[
@@ -1378,6 +1195,14 @@ p
 # save this plot
 ggsave('~/plots/mo_scatter_mo_cd4t_combined_vs_onek1k_eqtl.pdf', width=5, height=5)
 
+# make a backup of the plot
+p_onek1k <- p
+# and minimal significant mo Z
+min_sig_z_mo_onek1k <- min_sig_z_mo
+# and max
+max_sig_z_mo_onek1k <- max_sig_z_mo
+
+
 ```
 
 ```{r onek1k_overlap_replication_stats, include=FALSE}
@@ -1445,184 +1270,6 @@ onek1k_combined_celltype_stat_p
 
 ```
 
-```{r get_sceqtlgen_overlap, include=FALSE}
-knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
-
-# same for sc-eQTLgen, the one to compare against
-sceqtlgen_loc <- '/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/Meta_20250212_freeze1//'
-# get the table with OneK1K vs UT
-sceqtlgen_vs_ut <- match_qtl_outputs_all(eqtl_output_ut_loc, sceqtlgen_loc, replicating_name='mo', replicating_in_name='sce')
-# and vs combined
-sceqtlgen_vs_combined <- match_qtl_outputs_all(eqtl_output_combined_loc, sceqtlgen_loc, replicating_name='mo', replicating_in_name='sce')
-
-```
-
-```{r save_sceqtlgen_overlap, include=TRUE, fig.width=10, fig.height=10}
-knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
-
-# check each cell type, and add the celltype to the table
-for (cell_type in names(sceqtlgen_vs_ut)) {
-  sceqtlgen_vs_ut[[cell_type]][['cell_type']] <- cell_type
-  # and add the mo condition
-  sceqtlgen_vs_ut[[cell_type]][['mo_condition']] <- 'UT'
-  # save these tables
-  sceqtlgen_vs_ut_ct_loc <- paste0('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/replication/sceqtlgen/L1/UT/mo_ut_vs_sceqtlgen_', cell_type, '_eqtls.tsv.gz')
-  write.table(sceqtlgen_vs_ut[[cell_type]], gzfile(sceqtlgen_vs_ut_ct_loc), row.names = F, col.names = T, sep = '\t')
-  mdfiver::create_md5_for_file(sceqtlgen_vs_ut_ct_loc)
-}
-# do the same for the combined one
-for (cell_type in names(sceqtlgen_vs_combined)) {
-  sceqtlgen_vs_combined[[cell_type]][['cell_type']] <- cell_type
-  # and add the mo condition
-  sceqtlgen_vs_combined[[cell_type]][['mo_condition']] <- 'combined'
-  # save these tables
-  sceqtlgen_vs_combined_ct_loc <- paste0('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/replication/sceqtlgen/L1/combined/mo_combined_vs_sceqtlgen_', cell_type, '_eqtls.tsv.gz')
-  write.table(sceqtlgen_vs_combined[[cell_type]], gzfile(sceqtlgen_vs_combined_ct_loc), row.names = F, col.names = T, sep = '\t')
-  mdfiver::create_md5_for_file(sceqtlgen_vs_combined_ct_loc)
-}
-
-```
-
-```{r plot_sceqtlgen_overlap, include=TRUE, fig.width=5, fig.height=5}
-knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
-
-# extract specifically CD4T UT to make the plot
-cd4t_ut_top_eqtl_sceqtlgen <- sceqtlgen_vs_ut[['CD4T']]
-
-# get the minimal significant z for k1
-min_sig_z_sce <- min(abs(cd4t_ut_top_eqtl_sceqtlgen[cd4t_ut_top_eqtl_sceqtlgen[['sce_significant']] == T, 'sce_zscore_signed']))
-min_sig_z_mo <- min(abs(cd4t_ut_top_eqtl_sceqtlgen[cd4t_ut_top_eqtl_sceqtlgen[['mo_significant']] == T, 'mo_zscore']))
-# and the max z
-max_sig_z_sce <- max(abs(cd4t_ut_top_eqtl_sceqtlgen[cd4t_ut_top_eqtl_sceqtlgen[['sce_significant']] == T, 'sce_zscore_signed']))
-max_sig_z_mo <- max(abs(cd4t_ut_top_eqtl_sceqtlgen[cd4t_ut_top_eqtl_sceqtlgen[['mo_significant']] == T, 'mo_zscore']))
-
-# calculate concordance
-n_significant_both <- sum(cd4t_ut_top_eqtl_sceqtlgen[['sce_significant']] == T & cd4t_ut_top_eqtl_sceqtlgen[['mo_significant']] == T)
-n_significant_directed_both <- sum(cd4t_ut_top_eqtl_sceqtlgen[['sce_significant']] == T & cd4t_ut_top_eqtl_sceqtlgen[['mo_significant']] == T &
-                                     sign(cd4t_ut_top_eqtl_sceqtlgen[['sce_zscore_signed']]) == sign(cd4t_ut_top_eqtl_sceqtlgen[['mo_zscore']]))
-concordance <- round(n_significant_directed_both / n_significant_both, digits = 3)
-
-# plot the concordance of the two
-p <- ggplot(data = cd4t_ut_top_eqtl_sceqtlgen, mapping = aes(x = mo_zscore, y = sce_zscore_signed)) + 
-  geom_point(size = 0.2) + 
-  xlim(c(max_sig_z_mo * -1, max_sig_z_mo * 1)) +
-  ylim(c(max_sig_z_sce * -1, max_sig_z_sce * 1)) + 
-  # left to right block of non-significant effects
-  geom_rect(aes(xmin = -1 * max_sig_z_mo, xmax = max_sig_z_mo, ymin = -1 * min_sig_z_sce, ymax = min_sig_z_sce), 
-            fill = "white", alpha = 0.005) +
-  # bottom to top block of non-significant effects
-  geom_rect(aes(xmin = -1 * min_sig_z_mo, xmax = min_sig_z_mo, ymin = -1 * max_sig_z_sce, ymax = max_sig_z_sce), 
-            fill = "white", alpha = 0.005) +
-  # bottom left block
-  geom_rect(aes(xmin = -1 * max_sig_z_mo, xmax = -1 *min_sig_z_mo, ymin = -1 * max_sig_z_sce, ymax = -1 * min_sig_z_sce), 
-            fill = "#0072B2", alpha = 0.01) +
-  # bottom right block
-  geom_rect(aes(xmin = min_sig_z_mo, xmax = max_sig_z_mo, ymin = -1 * max_sig_z_sce, ymax = -1 * min_sig_z_sce), 
-            fill = "#D55E00", alpha = 0.01) +
-  # top left block
-  geom_rect(aes(xmin = -1 * max_sig_z_mo, xmax = -1 *min_sig_z_mo, ymin = min_sig_z_sce, ymax = max_sig_z_sce), 
-            fill = "#D55E00", alpha = 0.01) + 
-  # top right block
-  geom_rect(aes(xmin = min_sig_z_mo, xmax = max_sig_z_mo, ymin = max_sig_z_sce, ymax = min_sig_z_sce), 
-            fill = "#0072B2", alpha = 0.01) + 
-  # labels for x and y axis
-  xlab('Z-score in multi-omics eQTLs') +
-  ylab('Z-score in sceqtlgen eQTLs') +
-  # vertical negative z cutoff line
-  geom_vline(xintercept=c(-1 *min_sig_z_mo), color="black", size=0.5, linetype = "dashed") +
-	# horizonal negative z cutoff line
-  geom_hline(yintercept=c(-1 *min_sig_z_sce), color="black", size=0.5, linetype="dashed") +
-  # vertical positive z cutoff line
-  geom_vline(xintercept=c(min_sig_z_mo), color="black", size=0.5, linetype = "dashed") +
-	# horizonal positive z cutoff line
-  geom_hline(yintercept=c(min_sig_z_sce), color="black", size=0.5, linetype="dashed") +
-  # make backgrounds white
-  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
-  # add the concordance
-  annotate("label", x = max_sig_z_mo * 0.75 , y = max_sig_z_sce * -0.75, label = paste('concordance', concordance, sep = ':\n')) +
-  # add the names of the concordant and non-concordant blocks
-  annotate("text", x = max_sig_z_mo * -0.70 , y = max_sig_z_sce * 0.75, label = 'disconcordant', colour = '#D55E00', fontface = 'bold') +
-  # add the names of the concordant and non-concordant blocks
-  annotate("text", x = max_sig_z_mo * 0.70 , y = max_sig_z_sce * 0.75, label = 'concordant', colour = '#0072B2', fontface = 'bold') +
-  # add the title
-  ggtitle('Concordance of eQTL effects between sceqtlgen\nand multi-omics CD4+ T cells in UT')
-p
-
-# save this plot
-ggsave('~/plots/mo_scatter_mo_cd4t_ut_vs_sceqtlgen_eqtl.pdf', width=5, height=5)
-
-```
-
-```{r plot_sceqtlgen_overlap, include=TRUE, fig.width=5, fig.height=5}
-knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
-
-# extract specifically CD4T combined to make the plot
-cd4t_combined_top_eqtl_sceqtlgen <- sceqtlgen_vs_combined[['CD4T']]
-
-# get the minimal significant z for k1
-min_sig_z_sce <- min(abs(cd4t_combined_top_eqtl_sceqtlgen[cd4t_combined_top_eqtl_sceqtlgen[['sce_significant']] == T, 'sce_zscore_signed']))
-min_sig_z_mo <- min(abs(cd4t_combined_top_eqtl_sceqtlgen[cd4t_combined_top_eqtl_sceqtlgen[['mo_significant']] == T, 'mo_zscore']))
-# and the max z
-max_sig_z_sce <- max(abs(cd4t_combined_top_eqtl_sceqtlgen[cd4t_combined_top_eqtl_sceqtlgen[['sce_significant']] == T, 'sce_zscore_signed']))
-max_sig_z_mo <- max(abs(cd4t_combined_top_eqtl_sceqtlgen[cd4t_combined_top_eqtl_sceqtlgen[['mo_significant']] == T, 'mo_zscore']))
-
-# calculate concordance
-n_significant_both <- sum(cd4t_combined_top_eqtl_sceqtlgen[['sce_significant']] == T & cd4t_combined_top_eqtl_sceqtlgen[['mo_significant']] == T)
-n_significant_directed_both <- sum(cd4t_combined_top_eqtl_sceqtlgen[['sce_significant']] == T & cd4t_combined_top_eqtl_sceqtlgen[['mo_significant']] == T &
-                                     sign(cd4t_combined_top_eqtl_sceqtlgen[['sce_zscore_signed']]) == sign(cd4t_combined_top_eqtl_sceqtlgen[['mo_zscore']]))
-concordance <- round(n_significant_directed_both / n_significant_both, digits = 3)
-
-# plot the concordance of the two
-p <- ggplot(data = cd4t_combined_top_eqtl_sceqtlgen, mapping = aes(x = mo_zscore, y = sce_zscore_signed)) + 
-  geom_point(size = 0.2) + 
-  xlim(c(max_sig_z_mo * -1, max_sig_z_mo * 1)) +
-  ylim(c(max_sig_z_sce * -1, max_sig_z_sce * 1)) + 
-  # left to right block of non-significant effects
-  geom_rect(aes(xmin = -1 * max_sig_z_mo, xmax = max_sig_z_mo, ymin = -1 * min_sig_z_sce, ymax = min_sig_z_sce), 
-            fill = "white", alpha = 0.005) +
-  # bottom to top block of non-significant effects
-  geom_rect(aes(xmin = -1 * min_sig_z_mo, xmax = min_sig_z_mo, ymin = -1 * max_sig_z_sce, ymax = max_sig_z_sce), 
-            fill = "white", alpha = 0.005) +
-  # bottom left block
-  geom_rect(aes(xmin = -1 * max_sig_z_mo, xmax = -1 *min_sig_z_mo, ymin = -1 * max_sig_z_sce, ymax = -1 * min_sig_z_sce), 
-            fill = "#0072B2", alpha = 0.01) +
-  # bottom right block
-  geom_rect(aes(xmin = min_sig_z_mo, xmax = max_sig_z_mo, ymin = -1 * max_sig_z_sce, ymax = -1 * min_sig_z_sce), 
-            fill = "#D55E00", alpha = 0.01) +
-  # top left block
-  geom_rect(aes(xmin = -1 * max_sig_z_mo, xmax = -1 *min_sig_z_mo, ymin = min_sig_z_sce, ymax = max_sig_z_sce), 
-            fill = "#D55E00", alpha = 0.01) + 
-  # top right block
-  geom_rect(aes(xmin = min_sig_z_mo, xmax = max_sig_z_mo, ymin = max_sig_z_sce, ymax = min_sig_z_sce), 
-            fill = "#0072B2", alpha = 0.01) + 
-  # labels for x and y axis
-  xlab('Z-score in multi-omics eQTLs') +
-  ylab('Z-score in sceqtlgen eQTLs') +
-  # vertical negative z ccombinedoff line
-  geom_vline(xintercept=c(-1 *min_sig_z_mo), color="black", size=0.5, linetype = "dashed") +
-	# horizonal negative z ccombinedoff line
-  geom_hline(yintercept=c(-1 *min_sig_z_sce), color="black", size=0.5, linetype="dashed") +
-  # vertical positive z ccombinedoff line
-  geom_vline(xintercept=c(min_sig_z_mo), color="black", size=0.5, linetype = "dashed") +
-	# horizonal positive z ccombinedoff line
-  geom_hline(yintercept=c(min_sig_z_sce), color="black", size=0.5, linetype="dashed") +
-  # make backgrounds white
-  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
-  # add the concordance
-  annotate("label", x = max_sig_z_mo * 0.75 , y = max_sig_z_sce * -0.75, label = paste('concordance', concordance, sep = ':\n')) +
-  # add the names of the concordant and non-concordant blocks
-  annotate("text", x = max_sig_z_mo * -0.70 , y = max_sig_z_sce * 0.75, label = 'disconcordant', colour = '#D55E00', fontface = 'bold') +
-  # add the names of the concordant and non-concordant blocks
-  annotate("text", x = max_sig_z_mo * 0.70 , y = max_sig_z_sce * 0.75, label = 'concordant', colour = '#0072B2', fontface = 'bold') +
-  # add the title
-  ggtitle('Concordance of eQTL effects between sceqtlgen\nand multi-omics CD4+ T cells in combined')
-p
-
-# save this plot
-ggsave('~/plots/mo_scatter_mo_cd4t_combined_vs_sceqtlgen_eqtl.pdf', width=5, height=5)
-
-```
-
 ```{r get_bulkeqtlgen_overlap, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
@@ -1682,21 +1329,10 @@ mdfiver::create_sha256_for_file(eqtlgen_filtered_loc)
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # get replication table for that one
-# eqtlgen_vs_ut <- match_qtl_outputs_one_to_all(eqtlgen_filtered, eqtl_output_ut_loc, replicating_chrom_column = 'SNPChr', replicating_name = 'eQTLgen', replicating_in_name = 'mo', replicating_qtl_pval_column = 'Pvalue', replicating_qtl_feature_column = 'GeneSymbol', replicating_qtl_variant_column = 'snp_b38', replicating_qtl_fdr_column = 'FDR', replicating_qtl_aa_column = 'A1', replicating_qtl_fdr_cutoff = 0.05, replicating_qtl_beta_column = 'EFFECT', replicating_qtl_se_column = 'se')
-# and combined
 eqtlgen_vs_combined <- match_qtl_outputs_one_to_all(eqtlgen_filtered, eqtl_output_combined_loc, replicating_chrom_column = 'SNPChr', replicating_name = 'eQTLgen', replicating_in_name = 'mo', replicating_qtl_pval_column = 'Pvalue', replicating_qtl_feature_column = 'GeneSymbol', replicating_qtl_variant_column = 'snp_b38', replicating_qtl_fdr_column = 'FDR', replicating_qtl_aa_column = 'A1', replicating_qtl_fdr_cutoff = 0.05, replicating_qtl_beta_column = 'EFFECT', replicating_qtl_se_column = 'se')
 
 # check each cell type
 for (ct in names(eqtlgen_vs_combined)) {
-  # # get where the alleles were different
-  # allele_ut_diff <- eqtlgen_vs_ut[[ct]][['eQTLgen_assessed_allele']] != eqtlgen_vs_ut[[ct]][['mo_assessed_allele']]
-  # # get the z score
-  # ut_z <- eqtlgen_vs_combined[[ct]][['mo_zscore']]
-  # # multiply by -1 for where it is different
-  # ut_z[allele_ut_diff] <- -1 * ut_z[allele_ut_diff]
-  # # and put the new one in
-  # eqtlgen_vs_ut[[ct]][['mo_zscore_signed']] <- ut_z
-  
   # get where the alleles were different
   allele_combined_diff <- eqtlgen_vs_combined[[ct]][['eqtlgen_assessed_allele']] != eqtlgen_vs_combined[[ct]][['mo_assessed_allele']]
   # get the z score
@@ -1713,13 +1349,6 @@ for (ct in names(eqtlgen_vs_combined)) {
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # # check each cell type, and add the celltype to the table
-# for (cell_type in names(eqtlgen_vs_ut)) {
-#   eqtlgen_vs_ut[[cell_type]][['cell_type']] <- cell_type
-#   # and add the mo condition
-#   eqtlgen_vs_ut[[cell_type]][['mo_condition']] <- 'UT'
-#   print(paste(cell_type, ncol(eqtlgen_vs_ut[[cell_type]])))
-# }
-# do the same for the combined one
 for (cell_type in names(eqtlgen_vs_combined)) {
   eqtlgen_vs_combined[[cell_type]][['cell_type']] <- cell_type
   # and add the mo condition
@@ -1727,14 +1356,7 @@ for (cell_type in names(eqtlgen_vs_combined)) {
   print(paste(cell_type, ncol(eqtlgen_vs_combined[[cell_type]])))
 }
 # merge the tables per folder
-# eqtlgen_vs_ut_tbl <- do.call('rbind', eqtlgen_vs_ut[c('B', 'CD4T', 'CD8T', 'DC', 'monocyte', 'NK')])
 eqtlgen_vs_combined_tbl <- do.call('rbind', eqtlgen_vs_combined)
-
-# # save these tables
-# eqtlgen_vs_ut_tbl_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/replication/onek1k/L1/UT/mo_ut_vs_eqtlgen_eqtls.tsv.gz'
-# write.table(eqtlgen_vs_ut_tbl, gzfile(eqtlgen_vs_ut_tbl_loc), row.names = F, col.names = T, sep = '\t')
-# # with a checksum
-# mdfiver::create_md5_for_file(eqtlgen_vs_ut_tbl_loc)
 
 # save the table
 eqtlgen_vs_combined_tbl_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/replication/eqtlgen/L1/combined/mo_combined_vs_eqtlgen_eqtls.tsv.gz'
@@ -1858,88 +1480,25 @@ eqtlgen_combined_celltype_stat_simple_p
 ```{r plot_eqtlgen_overlap, include=TRUE, fig.width=5, fig.height=5}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
-# extract specifically CD4T UT to make the plot
-# cd4t_ut_top_eqtl_eqtlgen <- eqtlgen_vs_ut[['CD4T']]
-cd4t_ut_top_eqtl_eqtlgen <- eqtlgen_vs_ut_tbl[eqtlgen_vs_ut_tbl[['cell_type']] == 'CD4T', ]
-# remove any empty entries
-cd4t_ut_top_eqtl_eqtlgen <- cd4t_ut_top_eqtl_eqtlgen[!is.na(cd4t_ut_top_eqtl_eqtlgen[['mo_zscore']]) & !is.na(cd4t_ut_top_eqtl_eqtlgen[['eQTLgen_zscore']]), ]
-# fix the zscore
-cd4t_ut_top_eqtl_eqtlgen[['mo_zscore_signed']] <- cd4t_ut_top_eqtl_eqtlgen[['mo_zscore']]
-cd4t_ut_top_eqtl_eqtlgen[cd4t_ut_top_eqtl_eqtlgen[['eQTLgen_assessed_allele']] != cd4t_ut_top_eqtl_eqtlgen[['mo_assessed_allele']], ][['mo_zscore_signed']] <- -1 * cd4t_ut_top_eqtl_eqtlgen[cd4t_ut_top_eqtl_eqtlgen[['eQTLgen_assessed_allele']] != cd4t_ut_top_eqtl_eqtlgen[['mo_assessed_allele']], ][['mo_zscore_signed']]
-
-
-# get the minimal significant z for k1
-min_sig_z_eqtlgen <- min(abs(cd4t_ut_top_eqtl_eqtlgen[cd4t_ut_top_eqtl_eqtlgen[['eQTLgen_significant']] == T, 'eQTLgen_zscore']))
-min_sig_z_mo <- min(abs(cd4t_ut_top_eqtl_eqtlgen[cd4t_ut_top_eqtl_eqtlgen[['mo_significant']] == T, 'mo_zscore_signed']))
-# and the max z
-max_sig_z_eqtlgen <- max(abs(cd4t_ut_top_eqtl_eqtlgen[cd4t_ut_top_eqtl_eqtlgen[['eQTLgen_significant']] == T, 'eQTLgen_zscore']))
-max_sig_z_mo <- max(abs(cd4t_ut_top_eqtl_eqtlgen[cd4t_ut_top_eqtl_eqtlgen[['mo_significant']] == T, 'mo_zscore_signed']))
-
-# calculate concordance
-n_significant_both <- sum(cd4t_ut_top_eqtl_eqtlgen[['eQTLgen_significant']] == T & cd4t_ut_top_eqtl_eqtlgen[['mo_significant']] == T)
-n_significant_directed_both <- sum(cd4t_ut_top_eqtl_eqtlgen[['eQTLgen_significant']] == T & cd4t_ut_top_eqtl_eqtlgen[['mo_significant']] == T &
-                                     sign(cd4t_ut_top_eqtl_eqtlgen[['eQTLgen_zscore']]) == sign(cd4t_ut_top_eqtl_eqtlgen[['mo_zscore_signed']]))
-concordance <- round(n_significant_directed_both / n_significant_both, digits = 3)
-
-# plot the concordance of the two
-p <- ggplot(data = cd4t_ut_top_eqtl_eqtlgen, mapping = aes(x = mo_zscore_signed, y = eQTLgen_zscore)) + 
-  geom_point(size = 0.2) + 
-  xlim(c(max_sig_z_mo * -1, max_sig_z_mo * 1)) +
-  ylim(c(max_sig_z_eqtlgen * -1, max_sig_z_eqtlgen * 1)) + 
-  # left to right block of non-significant effects
-  geom_rect(aes(xmin = -1 * max_sig_z_mo, xmax = max_sig_z_mo, ymin = -1 * min_sig_z_eqtlgen, ymax = min_sig_z_eqtlgen), 
-            fill = "white", alpha = 0.005) +
-  # bottom to top block of non-significant effects
-  geom_rect(aes(xmin = -1 * min_sig_z_mo, xmax = min_sig_z_mo, ymin = -1 * max_sig_z_eqtlgen, ymax = max_sig_z_eqtlgen), 
-            fill = "white", alpha = 0.005) +
-  # bottom left block
-  geom_rect(aes(xmin = -1 * max_sig_z_mo, xmax = -1 *min_sig_z_mo, ymin = -1 * max_sig_z_eqtlgen, ymax = -1 * min_sig_z_eqtlgen), 
-            fill = "#0072B2", alpha = 0.01) +
-  # bottom right block
-  geom_rect(aes(xmin = min_sig_z_mo, xmax = max_sig_z_mo, ymin = -1 * max_sig_z_eqtlgen, ymax = -1 * min_sig_z_eqtlgen), 
-            fill = "#D55E00", alpha = 0.01) +
-  # top left block
-  geom_rect(aes(xmin = -1 * max_sig_z_mo, xmax = -1 *min_sig_z_mo, ymin = min_sig_z_eqtlgen, ymax = max_sig_z_eqtlgen), 
-            fill = "#D55E00", alpha = 0.01) + 
-  # top right block
-  geom_rect(aes(xmin = min_sig_z_mo, xmax = max_sig_z_mo, ymin = max_sig_z_eqtlgen, ymax = min_sig_z_eqtlgen), 
-            fill = "#0072B2", alpha = 0.01) + 
-  # labels for x and y axis
-  xlab('Z-score in multi-omics eQTLs') +
-  ylab('Z-score in eqtlgen eQTLs') +
-  # vertical negative z cutoff line
-  geom_vline(xintercept=c(-1 *min_sig_z_mo), color="black", size=0.5, linetype = "dashed") +
-	# horizonal negative z cutoff line
-  geom_hline(yintercept=c(-1 *min_sig_z_eqtlgen), color="black", size=0.5, linetype="dashed") +
-  # vertical positive z cutoff line
-  geom_vline(xintercept=c(min_sig_z_mo), color="black", size=0.5, linetype = "dashed") +
-	# horizonal positive z cutoff line
-  geom_hline(yintercept=c(min_sig_z_eqtlgen), color="black", size=0.5, linetype="dashed") +
-  # make backgrounds white
-  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
-  # add the concordance
-  annotate("label", x = max_sig_z_mo * 0.75 , y = max_sig_z_eqtlgen * -0.75, label = paste('concordance', concordance, sep = ':\n')) +
-  # add the names of the concordant and non-concordant blocks
-  annotate("text", x = max_sig_z_mo * -0.70 , y = max_sig_z_eqtlgen * 0.75, label = 'disconcordant', colour = '#D55E00', fontface = 'bold') +
-  # add the names of the concordant and non-concordant blocks
-  annotate("text", x = max_sig_z_mo * 0.70 , y = max_sig_z_eqtlgen * 0.75, label = 'concordant', colour = '#0072B2', fontface = 'bold') +
-  # add the title
-  ggtitle('Concordance of eQTL effects between eqtlgen\nand multi-omics CD4+ T cells in UT')
-p
-
-# save this plot
-ggsave('~/plots/mo_scatter_mo_cd4t_ut_vs_eqtlgen_eqtl.pdf', width=5, height=5)
-
-```
-
-```{r plot_eqtlgen_overlap, include=TRUE, fig.width=5, fig.height=5}
-knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
-
 # extract specifically CD4T combined to make the plot
 # cd4t_combined_top_eqtl_eqtlgen <- eqtlgen_vs_combined[['CD4T']]
 cd4t_combined_top_eqtl_eqtlgen <- eqtlgen_vs_combined_tbl[eqtlgen_vs_combined_tbl[['cell_type']] == 'CD4T', ]
 # remove any empty entries
 cd4t_combined_top_eqtl_eqtlgen <- cd4t_combined_top_eqtl_eqtlgen[!is.na(cd4t_combined_top_eqtl_eqtlgen[['mo_zscore']]) & !is.na(cd4t_combined_top_eqtl_eqtlgen[['eQTLgen_zscore']]), ]
+
+# cd4t_combined_top_eqtl_onek1k <- cd4t_combined_top_eqtl_onek1k[cd4t_combined_top_eqtl_onek1k[['mo_significant']] == T, ]
+cd4t_combined_top_eqtl_eqtlgen <- cd4t_combined_top_eqtl_eqtlgen[cd4t_combined_top_eqtl_eqtlgen[['eQTLgen_significant']] == T, ]
+# then redo the multiple testing correction on the
+cd4t_combined_top_eqtl_eqtlgen[['mo_BH']] <- p.adjust(cd4t_combined_top_eqtl_eqtlgen[['mo_p']], method = 'BH')
+# and use that for significance
+cd4t_combined_top_eqtl_eqtlgen[['mo_significant']] <- cd4t_combined_top_eqtl_eqtlgen[['mo_BH']] < 0.05
+
+# now only keep what is significant in both
+cd4t_combined_top_eqtl_eqtlgen <- cd4t_combined_top_eqtl_eqtlgen[
+  cd4t_combined_top_eqtl_eqtlgen[['mo_significant']] == T &
+  cd4t_combined_top_eqtl_eqtlgen[['eQTLgen_significant']] == T, 
+]
+
 # fix the zscore
 cd4t_combined_top_eqtl_eqtlgen[['mo_zscore_signed']] <- cd4t_combined_top_eqtl_eqtlgen[['mo_zscore']]
 cd4t_combined_top_eqtl_eqtlgen[cd4t_combined_top_eqtl_eqtlgen[['eQTLgen_assessed_allele']] != cd4t_combined_top_eqtl_eqtlgen[['mo_assessed_allele']], ][['mo_zscore_signed']] <- -1 * cd4t_combined_top_eqtl_eqtlgen[cd4t_combined_top_eqtl_eqtlgen[['eQTLgen_assessed_allele']] != cd4t_combined_top_eqtl_eqtlgen[['mo_assessed_allele']], ][['mo_zscore_signed']]
@@ -2007,36 +1566,200 @@ p
 # save this plot
 ggsave('~/plots/mo_scatter_mo_cd4t_combined_vs_eqtlgen_eqtl.pdf', width=5, height=5)
 
-```
+# make a backup of the plot
+p_eqtlgen <- p
+# and minimal significant mo Z
+min_sig_z_mo_eqtlgen <- min_sig_z_mo
+# and max
+max_sig_z_mo_eqtlgen <- max_sig_z_mo
 
-```{r onek1k_overlap_replication_stats, include=FALSE}
+```
+```{r get_smallest_x_onek1k_eqtlgen, include=TRUE, fig.width=5, fig.height=5}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
-# we'll store stats per cell type first
-stats_per_ct_eqtlgen_l <- list()
-# check each cell type
-for (ct in unique(eqtlgen_vs_combined_tbl[['cell_type']])) {
-  # extract the table
-  eqtlgen_vs_combined_tbl_ct <- eqtlgen_vs_combined_tbl[eqtlgen_vs_combined_tbl[['cell_type']] == ct, ]
-  # subset to what is significant in combined
-  eqtlgen_vs_combined_tbl_ct <- eqtlgen_vs_combined_tbl_ct[eqtlgen_vs_combined_tbl_ct[['mo_significant']] == T, ]
-  # then do FDR correction on the onek1k
-  eqtlgen_vs_combined_tbl_ct[['eQTLgen_fdr']] <- p.adjust(eqtlgen_vs_combined_tbl_ct[['eQTLgen_p']], method = 'BH')
-  # and update the significance
-  eqtlgen_vs_combined_tbl_ct[['eQTLgen_significant']] <- eqtlgen_vs_combined_tbl_ct[['eQTLgen_fdr']] < 0.05
-  # put that into a list
-  eqtlgen_vs_combined_replicating_list <- list()
-  eqtlgen_vs_combined_replicating_list[[paste('mo', 'eQTLgen', sep = '_vs_')]] <- eqtlgen_vs_combined_tbl_ct
-  # check replication in caQTLs across cell types
-  eqtlgen_vs_combined_celltype_stats <- get_stats_qtl_matches(eqtlgen_vs_combined_replicating_list)
-  # now replace the name
-  eqtlgen_vs_combined_celltype_stats[['replicating_in']] <- ct
-  # put in the list
-  stats_per_ct_eqtlgen_l[[ct]] <- eqtlgen_vs_combined_celltype_stats
-}
-# merge all now
-stats_per_ct_eqtlgen <- do.call('rbind', stats_per_ct_eqtlgen_l)
-# rename replicating, not because it is what we are replicating, but because it is what we are replicating in
-stats_per_ct_eqtlgen[['replicating']] <- 'eQTLgen'
+# get the smallest z from either of the comparisons
+min_z_eqtlgen_and_onek1k <- min(c(min_sig_z_mo_eqtlgen, min_sig_z_mo_onek1k))
+max_z_eqtlgen_and_onek1k <- max(c(max_sig_z_mo_eqtlgen, max_sig_z_mo_onek1k))
+
+```
+
+```{r plot_onek1k_overlap_sameaxis, include=TRUE, fig.width=5, fig.height=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# extract specifically cd4t combined to make the plot
+cd4t_combined_top_eqtl_onek1k <- onek1k_vs_combined[['CD4T']]
+# subset to what is significant for our data
+# cd4t_combined_top_eqtl_onek1k <- cd4t_combined_top_eqtl_onek1k[cd4t_combined_top_eqtl_onek1k[['mo_significant']] == T, ]
+cd4t_combined_top_eqtl_onek1k <- cd4t_combined_top_eqtl_onek1k[cd4t_combined_top_eqtl_onek1k[['k1_significant']] == T, ]
+# then redo the multiple testing correction on the
+# cd4t_combined_top_eqtl_onek1k[['BH']] <- p.adjust(cd4t_combined_top_eqtl_onek1k[['k1_p']], method = 'BH')
+cd4t_combined_top_eqtl_onek1k[['mo_BH']] <- p.adjust(cd4t_combined_top_eqtl_onek1k[['mo_p']], method = 'BH')
+# and use that for significance
+cd4t_combined_top_eqtl_onek1k[['mo_significant']] <- cd4t_combined_top_eqtl_onek1k[['mo_BH']] < 0.05
+
+# now only keep what is significant in both
+cd4t_combined_top_eqtl_onek1k <- cd4t_combined_top_eqtl_onek1k[
+  cd4t_combined_top_eqtl_onek1k[['mo_significant']] == T &
+  cd4t_combined_top_eqtl_onek1k[['k1_significant']] == T, 
+]
+
+# get the minimal significant z for k1
+min_sig_z_k1 <- min(abs(cd4t_combined_top_eqtl_onek1k[cd4t_combined_top_eqtl_onek1k[['k1_significant']] == T, 'k1_zscore_signed']))
+min_sig_z_mo <- min_z_eqtlgen_and_onek1k
+# and the max z
+max_sig_z_k1 <- max(abs(cd4t_combined_top_eqtl_onek1k[cd4t_combined_top_eqtl_onek1k[['k1_significant']] == T, 'k1_zscore_signed']))
+max_sig_z_mo <- max_z_eqtlgen_and_onek1k
+
+# calculate concordance
+n_significant_both <- sum(cd4t_combined_top_eqtl_onek1k[['k1_significant']] == T & cd4t_combined_top_eqtl_onek1k[['mo_significant']] == T)
+n_significant_directed_both <- sum(cd4t_combined_top_eqtl_onek1k[['k1_significant']] == T & cd4t_combined_top_eqtl_onek1k[['mo_significant']] == T &
+                                     sign(cd4t_combined_top_eqtl_onek1k[['k1_zscore_signed']]) == sign(cd4t_combined_top_eqtl_onek1k[['mo_zscore']]))
+concordance <- round(n_significant_directed_both / n_significant_both, digits = 3)
+
+# plot the concordance of the two
+p <- ggplot(data = cd4t_combined_top_eqtl_onek1k, mapping = aes(x = mo_zscore, y = k1_zscore_signed)) + 
+  geom_point(size = 0.2) + 
+  xlim(c(max_sig_z_mo * -1, max_sig_z_mo * 1)) +
+  ylim(c(max_sig_z_k1 * -1, max_sig_z_k1 * 1)) + 
+  # left to right block of non-significant effects
+  geom_rect(aes(xmin = -1 * max_sig_z_mo, xmax = max_sig_z_mo, ymin = -1 * min_sig_z_k1, ymax = min_sig_z_k1), 
+            fill = "white", alpha = 0.005) +
+  # bottom to top block of non-significant effects
+  geom_rect(aes(xmin = -1 * min_sig_z_mo, xmax = min_sig_z_mo, ymin = -1 * max_sig_z_k1, ymax = max_sig_z_k1), 
+            fill = "white", alpha = 0.005) +
+  # bottom left block
+  geom_rect(aes(xmin = -1 * max_sig_z_mo, xmax = -1 *min_sig_z_mo, ymin = -1 * max_sig_z_k1, ymax = -1 * min_sig_z_k1), 
+            fill = "#0072B2", alpha = 0.01) +
+  # bottom right block
+  geom_rect(aes(xmin = min_sig_z_mo, xmax = max_sig_z_mo, ymin = -1 * max_sig_z_k1, ymax = -1 * min_sig_z_k1), 
+            fill = "#D55E00", alpha = 0.01) +
+  # top left block
+  geom_rect(aes(xmin = -1 * max_sig_z_mo, xmax = -1 *min_sig_z_mo, ymin = min_sig_z_k1, ymax = max_sig_z_k1), 
+            fill = "#D55E00", alpha = 0.01) + 
+  # top right block
+  geom_rect(aes(xmin = min_sig_z_mo, xmax = max_sig_z_mo, ymin = max_sig_z_k1, ymax = min_sig_z_k1), 
+            fill = "#0072B2", alpha = 0.01) + 
+  # labels for x and y axis
+  xlab('Z-score in multi-omics eQTLs') +
+  ylab('Z-score in OneK1K eQTLs') +
+  # vertical negative z ccombinedoff line
+  geom_vline(xintercept=c(-1 *min_sig_z_mo), color="black", size=0.5, linetype = "dashed") +
+	# horizonal negative z ccombinedoff line
+  geom_hline(yintercept=c(-1 *min_sig_z_k1), color="black", size=0.5, linetype="dashed") +
+  # vertical positive z ccombinedoff line
+  geom_vline(xintercept=c(min_sig_z_mo), color="black", size=0.5, linetype = "dashed") +
+	# horizonal positive z ccombinedoff line
+  geom_hline(yintercept=c(min_sig_z_k1), color="black", size=0.5, linetype="dashed") +
+  # make backgrounds white
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+  # add the concordance
+  annotate("label", x = max_sig_z_mo * 0.75 , y = max_sig_z_k1 * -0.75, label = paste('concordance', concordance, sep = ':\n')) +
+  # add the names of the concordant and non-concordant blocks
+  annotate("text", x = max_sig_z_mo * -0.70 , y = max_sig_z_k1 * 0.75, label = 'discordant', colour = '#D55E00', fontface = 'bold') +
+  # add the names of the concordant and non-concordant blocks
+  annotate("text", x = max_sig_z_mo * 0.70 , y = max_sig_z_k1 * 0.75, label = 'concordant', colour = '#0072B2', fontface = 'bold') +
+  # add the title
+  ggtitle('Concordance of eQTL effects between OneK1K\nand multi-omics in CD4+ T cells')
+p
+
+# save this plot
+ggsave('~/plots/mo_scatter_mo_cd4t_combined_vs_onek1k_eqtl_sameaxis.pdf', width=5, height=5)
+
+# make a backup of the plot
+p_onek1k_samex <- p
+
+```
+
+```{r plot_eqtlgen_overlap_sameaxis, include=TRUE, fig.width=5, fig.height=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# extract specifically CD4T combined to make the plot
+# cd4t_combined_top_eqtl_eqtlgen <- eqtlgen_vs_combined[['CD4T']]
+cd4t_combined_top_eqtl_eqtlgen <- eqtlgen_vs_combined_tbl[eqtlgen_vs_combined_tbl[['cell_type']] == 'CD4T', ]
+# remove any empty entries
+cd4t_combined_top_eqtl_eqtlgen <- cd4t_combined_top_eqtl_eqtlgen[!is.na(cd4t_combined_top_eqtl_eqtlgen[['mo_zscore']]) & !is.na(cd4t_combined_top_eqtl_eqtlgen[['eQTLgen_zscore']]), ]
+
+# cd4t_combined_top_eqtl_onek1k <- cd4t_combined_top_eqtl_onek1k[cd4t_combined_top_eqtl_onek1k[['mo_significant']] == T, ]
+cd4t_combined_top_eqtl_eqtlgen <- cd4t_combined_top_eqtl_eqtlgen[cd4t_combined_top_eqtl_eqtlgen[['eQTLgen_significant']] == T, ]
+# then redo the multiple testing correction on the
+cd4t_combined_top_eqtl_eqtlgen[['mo_BH']] <- p.adjust(cd4t_combined_top_eqtl_eqtlgen[['mo_p']], method = 'BH')
+# and use that for significance
+cd4t_combined_top_eqtl_eqtlgen[['mo_significant']] <- cd4t_combined_top_eqtl_eqtlgen[['mo_BH']] < 0.05
+
+# now only keep what is significant in both
+cd4t_combined_top_eqtl_eqtlgen <- cd4t_combined_top_eqtl_eqtlgen[
+  cd4t_combined_top_eqtl_eqtlgen[['mo_significant']] == T &
+  cd4t_combined_top_eqtl_eqtlgen[['eQTLgen_significant']] == T, 
+]
+
+# fix the zscore
+cd4t_combined_top_eqtl_eqtlgen[['mo_zscore_signed']] <- cd4t_combined_top_eqtl_eqtlgen[['mo_zscore']]
+cd4t_combined_top_eqtl_eqtlgen[cd4t_combined_top_eqtl_eqtlgen[['eQTLgen_assessed_allele']] != cd4t_combined_top_eqtl_eqtlgen[['mo_assessed_allele']], ][['mo_zscore_signed']] <- -1 * cd4t_combined_top_eqtl_eqtlgen[cd4t_combined_top_eqtl_eqtlgen[['eQTLgen_assessed_allele']] != cd4t_combined_top_eqtl_eqtlgen[['mo_assessed_allele']], ][['mo_zscore_signed']]
+
+
+# get the minimal significant z for k1
+min_sig_z_eqtlgen <- min(abs(cd4t_combined_top_eqtl_eqtlgen[cd4t_combined_top_eqtl_eqtlgen[['eQTLgen_significant']] == T, 'eQTLgen_zscore']))
+min_sig_z_mo <- min_z_eqtlgen_and_onek1k
+# and the max z
+max_sig_z_eqtlgen <- max(abs(cd4t_combined_top_eqtl_eqtlgen[cd4t_combined_top_eqtl_eqtlgen[['eQTLgen_significant']] == T, 'eQTLgen_zscore']))
+max_sig_z_mo <- max_z_eqtlgen_and_onek1k
+
+# calculate concordance
+n_significant_both <- sum(cd4t_combined_top_eqtl_eqtlgen[['eQTLgen_significant']] == T & cd4t_combined_top_eqtl_eqtlgen[['mo_significant']] == T)
+n_significant_directed_both <- sum(cd4t_combined_top_eqtl_eqtlgen[['eQTLgen_significant']] == T & cd4t_combined_top_eqtl_eqtlgen[['mo_significant']] == T &
+                                     sign(cd4t_combined_top_eqtl_eqtlgen[['eQTLgen_zscore']]) == sign(cd4t_combined_top_eqtl_eqtlgen[['mo_zscore_signed']]))
+concordance <- round(n_significant_directed_both / n_significant_both, digits = 3)
+
+# plot the concordance of the two
+p <- ggplot(data = cd4t_combined_top_eqtl_eqtlgen, mapping = aes(x = mo_zscore_signed, y = eQTLgen_zscore)) + 
+  geom_point(size = 0.2) + 
+  xlim(c(max_sig_z_mo * -1, max_sig_z_mo * 1)) +
+  ylim(c(max_sig_z_eqtlgen * -1, max_sig_z_eqtlgen * 1)) + 
+  # left to right block of non-significant effects
+  geom_rect(aes(xmin = -1 * max_sig_z_mo, xmax = max_sig_z_mo, ymin = -1 * min_sig_z_eqtlgen, ymax = min_sig_z_eqtlgen), 
+            fill = "white", alpha = 0.005) +
+  # bottom to top block of non-significant effects
+  geom_rect(aes(xmin = -1 * min_sig_z_mo, xmax = min_sig_z_mo, ymin = -1 * max_sig_z_eqtlgen, ymax = max_sig_z_eqtlgen), 
+            fill = "white", alpha = 0.005) +
+  # bottom left block
+  geom_rect(aes(xmin = -1 * max_sig_z_mo, xmax = -1 *min_sig_z_mo, ymin = -1 * max_sig_z_eqtlgen, ymax = -1 * min_sig_z_eqtlgen), 
+            fill = "#0072B2", alpha = 0.01) +
+  # bottom right block
+  geom_rect(aes(xmin = min_sig_z_mo, xmax = max_sig_z_mo, ymin = -1 * max_sig_z_eqtlgen, ymax = -1 * min_sig_z_eqtlgen), 
+            fill = "#D55E00", alpha = 0.01) +
+  # top left block
+  geom_rect(aes(xmin = -1 * max_sig_z_mo, xmax = -1 *min_sig_z_mo, ymin = min_sig_z_eqtlgen, ymax = max_sig_z_eqtlgen), 
+            fill = "#D55E00", alpha = 0.01) + 
+  # top right block
+  geom_rect(aes(xmin = min_sig_z_mo, xmax = max_sig_z_mo, ymin = max_sig_z_eqtlgen, ymax = min_sig_z_eqtlgen), 
+            fill = "#0072B2", alpha = 0.01) + 
+  # labels for x and y axis
+  xlab('Z-score in multi-omics eQTLs') +
+  ylab('Z-score in eqtlgen eQTLs') +
+  # vertical negative z ccombinedoff line
+  geom_vline(xintercept=c(-1 *min_sig_z_mo), color="black", size=0.5, linetype = "dashed") +
+	# horizonal negative z ccombinedoff line
+  geom_hline(yintercept=c(-1 *min_sig_z_eqtlgen), color="black", size=0.5, linetype="dashed") +
+  # vertical positive z ccombinedoff line
+  geom_vline(xintercept=c(min_sig_z_mo), color="black", size=0.5, linetype = "dashed") +
+	# horizonal positive z ccombinedoff line
+  geom_hline(yintercept=c(min_sig_z_eqtlgen), color="black", size=0.5, linetype="dashed") +
+  # make backgrounds white
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+  # add the concordance
+  annotate("label", x = max_sig_z_mo * 0.75 , y = max_sig_z_eqtlgen * -0.75, label = paste('concordance', concordance, sep = ':\n')) +
+  # add the names of the concordant and non-concordant blocks
+  annotate("text", x = max_sig_z_mo * -0.70 , y = max_sig_z_eqtlgen * 0.75, label = 'discordant', colour = '#D55E00', fontface = 'bold') +
+  # add the names of the concordant and non-concordant blocks
+  annotate("text", x = max_sig_z_mo * 0.70 , y = max_sig_z_eqtlgen * 0.75, label = 'concordant', colour = '#0072B2', fontface = 'bold') +
+  # add the title
+  ggtitle('Concordance of eQTL effects between eQTLgen\nphase 1 and multi-omics CD4+ T cells in combined')
+p
+
+# save this plot
+ggsave('~/plots/mo_scatter_mo_cd4t_combined_vs_eqtlgen_eqtl_sameaxis.pdf', width=5, height=5)
+
+# make a backup of the plot
+p_eqtlgen_sameaxis <- p
 
 ```
