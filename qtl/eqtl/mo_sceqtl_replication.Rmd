@@ -614,8 +614,9 @@ match_qtl_outputs_one_to_all <- function(replicating_table, replicating_in_qtl_f
       replicating_qtl_chromosome_top[['significant']] <- replicating_qtl_chromosome_top[[replicating_qtl_fdr_column]] < replicating_qtl_fdr_cutoff & replicating_qtl_chromosome_top[[replicating_qtl_pval_column]] < 0.05
       # calculate the Z
       replicating_qtl_chromosome_top[['zscore']] <- replicating_qtl_chromosome_top[[replicating_qtl_beta_column]] / replicating_qtl_chromosome_top[[replicating_qtl_se_column]]
+      
       # subset to the column we want
-      replicating_qtl_chromosome_top <- replicating_qtl_chromosome_top[, c('qtl', 'zscore', ..replicating_qtl_aa_column, 'significant', ..replicating_qtl_fdr_column, ..replicating_qtl_pval_column, ..replicating_qtl_beta_column, replicating_qtl_se_column)]
+      replicating_qtl_chromosome_top <- replicating_qtl_chromosome_top[, c('qtl', 'zscore', ..replicating_qtl_aa_column, 'significant', ..replicating_qtl_fdr_column, ..replicating_qtl_pval_column, ..replicating_qtl_beta_column, ..replicating_qtl_se_column)]
       # rename the columns to not conflict
       colnames(replicating_qtl_chromosome_top) <-c('qtl', paste(replicating_name, c('zscore', 'assessed_allele', 'significant', 'fdr', 'p', 'beta', 'se'), sep = '_'))
       
@@ -632,7 +633,7 @@ match_qtl_outputs_one_to_all <- function(replicating_table, replicating_in_qtl_f
       # calculate the Z
       replicating_in_qtl_chromosome[['zscore']] <- replicating_in_qtl_chromosome[[replicating_in_qtl_beta_column]] / replicating_in_qtl_chromosome[[replicating_in_qtl_se_column]]
       # subset to the column we want
-      replicating_in_qtl_chromosome <- replicating_in_qtl_chromosome[, c('qtl', 'zscore', ..replicating_in_qtl_aa_column, 'significant', ..replicating_in_qtl_fdr_column, ..replicating_in_qtl_pval_column, ..replicating_in_qtl_beta_column, replicating_in_qtl_se_column)]
+      replicating_in_qtl_chromosome <- replicating_in_qtl_chromosome[, c('qtl', 'zscore', ..replicating_in_qtl_aa_column, 'significant', ..replicating_in_qtl_fdr_column, ..replicating_in_qtl_pval_column, ..replicating_in_qtl_beta_column, ..replicating_in_qtl_se_column)]
       # rename the columns to not conflict
       colnames(replicating_in_qtl_chromosome) <- c('qtl', paste(replicating_in_name, c('zscore', 'assessed_allele', 'significant', 'fdr', 'p', 'beta', 'se'), sep = '_'))
   
@@ -1059,8 +1060,8 @@ knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # location of eQTL
 eqtl_output_combined_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/sc-eqtlgen/output/L1/combined/'
-# location of caQTL output
-eqtl_output_ut_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/sc-eqtlgen/output/L1/UT_20perm/'
+# # location of caQTL output
+# eqtl_output_ut_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/sc-eqtlgen/output/L1/UT_20perm/'
 
 ```
 
@@ -1389,11 +1390,14 @@ for (ct in names(onek1k_vs_combined)) {
   # extract the table
   onek1k_vs_combined_ct <- onek1k_vs_combined[[ct]]
   # subset to what is significant in combined
-  onek1k_vs_combined_ct <- onek1k_vs_combined_ct[onek1k_vs_combined_ct[['mo_significant']] == T, ]
+  # onek1k_vs_combined_ct <- onek1k_vs_combined_ct[onek1k_vs_combined_ct[['mo_significant']] == T, ]
+  onek1k_vs_combined_ct <- onek1k_vs_combined_ct[onek1k_vs_combined_ct[['k1_significant']] == T, ]
   # then do FDR correction on the onek1k
-  onek1k_vs_combined_ct[['k1_fdr']] <- p.adjust(onek1k_vs_combined_ct[['k1_p']], method = 'BH')
+  # onek1k_vs_combined_ct[['k1_fdr']] <- p.adjust(onek1k_vs_combined_ct[['k1_p']], method = 'BH')
+  onek1k_vs_combined_ct[['mo_fdr']] <- p.adjust(onek1k_vs_combined_ct[['mo_p']], method = 'BH')
   # and update the significance
-  onek1k_vs_combined_ct[['k1_significant']] <- onek1k_vs_combined_ct[['k1_fdr']] < 0.05
+  # onek1k_vs_combined_ct[['k1_significant']] <- onek1k_vs_combined_ct[['k1_fdr']] < 0.05
+  onek1k_vs_combined_ct[['mo_significant']] <- onek1k_vs_combined_ct[['mo_fdr']] < 0.05
   # put that into a list
   onek1k_vs_combined_replicating_list <- list()
   onek1k_vs_combined_replicating_list[[paste('mo', 'k1', sep = '_vs_')]] <- onek1k_vs_combined_ct
@@ -1619,21 +1623,29 @@ ggsave('~/plots/mo_scatter_mo_cd4t_combined_vs_sceqtlgen_eqtl.pdf', width=5, hei
 
 ```
 
-```{r get_sceqtlgen_overlap, include=FALSE}
+```{r get_bulkeqtlgen_overlap, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # same for eQTLgen, the one to compare against
-eqtlgen_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/eqtlgen_phase1/2019-12-11-cis-eQTLsFDR0.05-ProbeLevel-CohortInfoRemoved-BonferroniAdded.txt.gz'
+eqtlgen_fdr_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/eqtlgen_phase1/2019-12-11-cis-eQTLsFDR0.05-ProbeLevel-CohortInfoRemoved-BonferroniAdded.txt.gz'
 # read that one
-eqtlgen <- fread(eqtlgen_loc, header = T, sep = '\t')
-# add a dummy beta column, we already have the Z, so we make the beta the zscore, and the se 1, so we get the same Z score again
-eqtlgen[['dummybeta']] <- eqtlgen[['Zscore']]
-eqtlgen[['dummyse']] <- 1
-
+eqtlgen_fdr <- fread(eqtlgen_fdr_loc, header = T, sep = '\t')
+# we need to add the effect sizes
+eqtlgen_effects_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/eqtlgen_phase1/eqtlgen_phase1_cis.sumstats.harmonized.gz'
+# read that
+eqtlgen_effects <- fread(eqtlgen_effects_loc, header = T, sep = '\t')
+# and add that
+eqtlgen <- cbind(eqtlgen_fdr, eqtlgen_effects[
+  match(
+    paste(eqtlgen_fdr[['Gene']], eqtlgen_fdr[['SNP']]), 
+    paste(eqtlgen_effects[['Gene']], eqtlgen_effects[['SNP']])
+  ), 
+  c('A1', 'A2', 'EFFECT', 'se')
+])
 
 ```
 
-```{r get_sceqtlgen_overlap2, include=TRUE, fig.width=10, fig.height=10}
+```{r get_bulkeqtlgen_overlap2, include=TRUE, fig.width=10, fig.height=10}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # we need to read the bim file
@@ -1644,8 +1656,25 @@ b38_bim <- fread(b38_bim_loc, header = F, sep = '\t')
 b38_bim[['snp_b38']] <- paste(b38_bim[['V1']], b38_bim[['V4']], b38_bim[['V6']], b38_bim[['V5']], sep = ':')
 # add this b38 SNP to the eqtlgen output
 eqtlgen[['snp_b38']] <- b38_bim[match(eqtlgen[['SNP']], b38_bim[['V2']]), ][['snp_b38']]
+
 # remove the ones we cannot map back
 eqtlgen_filtered <- eqtlgen[!is.na(eqtlgen[['snp_b38']]), ]
+
+# now also add the chromosome and position based on b38
+eqtlgen_filtered <- cbind(
+  eqtlgen_filtered, 
+  b38_bim[match(eqtlgen_filtered[['snp_b38']], b38_bim[['snp_b38']]), c('V1', 'V4')]
+)
+
+```
+
+```{r get_bulkeqtlgen_overlap_save, include=TRUE, fig.width=10, fig.height=10}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# save the overlap with SNP etc.
+eqtlgen_filtered_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/eqtlgen_phase1/2019-12-11-cis-eQTLsFDR0.05-ProbeLevel-CohortInfoRemoved-BonferroniAdded-effectsizes.tsv.gz'
+write.table(eqtlgen_filtered, gzfile(eqtlgen_filtered_loc), row.names = F, col.names = T, sep = '\t')
+mdfiver::create_sha256_for_file(eqtlgen_filtered_loc)
 
 ```
 
@@ -1653,23 +1682,23 @@ eqtlgen_filtered <- eqtlgen[!is.na(eqtlgen[['snp_b38']]), ]
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # get replication table for that one
-eqtlgen_vs_ut <- match_qtl_outputs_one_to_all(eqtlgen_filtered, eqtl_output_ut_loc, replicating_chrom_column = 'SNPChr', replicating_name = 'eQTLgen', replicating_in_name = 'mo', replicating_qtl_pval_column = 'Pvalue', replicating_qtl_feature_column = 'GeneSymbol', replicating_qtl_variant_column = 'snp_b38', replicating_qtl_fdr_column = 'FDR', replicating_qtl_aa_column = 'AssessedAllele', replicating_qtl_fdr_cutoff = 0.05, replicating_qtl_beta_column = 'dummybeta', replicating_qtl_se_column = 'dummyse')
+# eqtlgen_vs_ut <- match_qtl_outputs_one_to_all(eqtlgen_filtered, eqtl_output_ut_loc, replicating_chrom_column = 'SNPChr', replicating_name = 'eQTLgen', replicating_in_name = 'mo', replicating_qtl_pval_column = 'Pvalue', replicating_qtl_feature_column = 'GeneSymbol', replicating_qtl_variant_column = 'snp_b38', replicating_qtl_fdr_column = 'FDR', replicating_qtl_aa_column = 'A1', replicating_qtl_fdr_cutoff = 0.05, replicating_qtl_beta_column = 'EFFECT', replicating_qtl_se_column = 'se')
 # and combined
-eqtlgen_vs_combined <- match_qtl_outputs_one_to_all(eqtlgen_filtered, eqtl_output_combined_loc, replicating_chrom_column = 'SNPChr', replicating_name = 'eQTLgen', replicating_in_name = 'mo', replicating_qtl_pval_column = 'Pvalue', replicating_qtl_feature_column = 'GeneSymbol', replicating_qtl_variant_column = 'snp_b38', replicating_qtl_fdr_column = 'FDR', replicating_qtl_aa_column = 'AssessedAllele', replicating_qtl_fdr_cutoff = 0.05, replicating_qtl_beta_column = 'dummybeta', replicating_qtl_se_column = 'dummyse')
+eqtlgen_vs_combined <- match_qtl_outputs_one_to_all(eqtlgen_filtered, eqtl_output_combined_loc, replicating_chrom_column = 'SNPChr', replicating_name = 'eQTLgen', replicating_in_name = 'mo', replicating_qtl_pval_column = 'Pvalue', replicating_qtl_feature_column = 'GeneSymbol', replicating_qtl_variant_column = 'snp_b38', replicating_qtl_fdr_column = 'FDR', replicating_qtl_aa_column = 'A1', replicating_qtl_fdr_cutoff = 0.05, replicating_qtl_beta_column = 'EFFECT', replicating_qtl_se_column = 'se')
 
 # check each cell type
-for (ct in names(eqtlgen_vs_ut)) {
-  # get where the alleles were different
-  allele_ut_diff <- eqtlgen_vs_ut[[ct]][['eQTLgen_assessed_allele']] != eqtlgen_vs_ut[[ct]][['mo_assessed_allele']]
-  # get the z score
-  ut_z <- eqtlgen_vs_combined[[ct]][['mo_zscore']]
-  # multiply by -1 for where it is different
-  ut_z[allele_ut_diff] <- -1 * ut_z[allele_ut_diff]
-  # and put the new one in
-  eqtlgen_vs_ut[[ct]][['mo_zscore_signed']] <- ut_z
+for (ct in names(eqtlgen_vs_combined)) {
+  # # get where the alleles were different
+  # allele_ut_diff <- eqtlgen_vs_ut[[ct]][['eQTLgen_assessed_allele']] != eqtlgen_vs_ut[[ct]][['mo_assessed_allele']]
+  # # get the z score
+  # ut_z <- eqtlgen_vs_combined[[ct]][['mo_zscore']]
+  # # multiply by -1 for where it is different
+  # ut_z[allele_ut_diff] <- -1 * ut_z[allele_ut_diff]
+  # # and put the new one in
+  # eqtlgen_vs_ut[[ct]][['mo_zscore_signed']] <- ut_z
   
   # get where the alleles were different
-  allele_combined_diff <- eqtlgen_vs_combined[[ct]][['eQTLgen_assessed_allele']] != eqtlgen_vs_combined[[ct]][['mo_assessed_allele']]
+  allele_combined_diff <- eqtlgen_vs_combined[[ct]][['eqtlgen_assessed_allele']] != eqtlgen_vs_combined[[ct]][['mo_assessed_allele']]
   # get the z score
   combined_z <- eqtlgen_vs_combined[[ct]][['mo_zscore']]
   # multiply by -1 for where it is different
@@ -1683,13 +1712,13 @@ for (ct in names(eqtlgen_vs_ut)) {
 ```{r save_eqtlgen_overlap, include=FALSE, fig.width=10, fig.height=10}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
-# check each cell type, and add the celltype to the table
-for (cell_type in names(eqtlgen_vs_ut)) {
-  eqtlgen_vs_ut[[cell_type]][['cell_type']] <- cell_type
-  # and add the mo condition
-  eqtlgen_vs_ut[[cell_type]][['mo_condition']] <- 'UT'
-  print(paste(cell_type, ncol(eqtlgen_vs_ut[[cell_type]])))
-}
+# # check each cell type, and add the celltype to the table
+# for (cell_type in names(eqtlgen_vs_ut)) {
+#   eqtlgen_vs_ut[[cell_type]][['cell_type']] <- cell_type
+#   # and add the mo condition
+#   eqtlgen_vs_ut[[cell_type]][['mo_condition']] <- 'UT'
+#   print(paste(cell_type, ncol(eqtlgen_vs_ut[[cell_type]])))
+# }
 # do the same for the combined one
 for (cell_type in names(eqtlgen_vs_combined)) {
   eqtlgen_vs_combined[[cell_type]][['cell_type']] <- cell_type
@@ -1698,18 +1727,23 @@ for (cell_type in names(eqtlgen_vs_combined)) {
   print(paste(cell_type, ncol(eqtlgen_vs_combined[[cell_type]])))
 }
 # merge the tables per folder
-eqtlgen_vs_ut_tbl <- do.call('rbind', eqtlgen_vs_ut[c('B', 'CD4T', 'CD8T', 'DC', 'monocyte', 'NK')])
+# eqtlgen_vs_ut_tbl <- do.call('rbind', eqtlgen_vs_ut[c('B', 'CD4T', 'CD8T', 'DC', 'monocyte', 'NK')])
 eqtlgen_vs_combined_tbl <- do.call('rbind', eqtlgen_vs_combined)
 
-# save these tables
-eqtlgen_vs_ut_tbl_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/replication/onek1k/L1/UT/mo_ut_vs_eqtlgen_eqtls.tsv.gz'
-write.table(eqtlgen_vs_ut_tbl, gzfile(eqtlgen_vs_ut_tbl_loc), row.names = F, col.names = T, sep = '\t')
-# with a checksum
-mdfiver::create_md5_for_file(eqtlgen_vs_ut_tbl_loc)
+# # save these tables
+# eqtlgen_vs_ut_tbl_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/replication/onek1k/L1/UT/mo_ut_vs_eqtlgen_eqtls.tsv.gz'
+# write.table(eqtlgen_vs_ut_tbl, gzfile(eqtlgen_vs_ut_tbl_loc), row.names = F, col.names = T, sep = '\t')
+# # with a checksum
+# mdfiver::create_md5_for_file(eqtlgen_vs_ut_tbl_loc)
 
-eqtlgen_vs_combined_tbl_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/replication/onek1k/L1/UT/mo_combined_vs_eqtlgen_eqtls.tsv.gz'
+# save the table
+eqtlgen_vs_combined_tbl_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/replication/eqtlgen/L1/combined/mo_combined_vs_eqtlgen_eqtls.tsv.gz'
 write.table(eqtlgen_vs_combined_tbl, gzfile(eqtlgen_vs_combined_tbl_loc), row.names = F, col.names = T, sep = '\t')
 mdfiver::create_md5_for_file(eqtlgen_vs_combined_tbl_loc)
+# save as the list as well
+eqtlgen_vs_combined_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/replication/eqtlgen/L1/combined/mo_combined_vs_eqtlgen_eqtls.rds'
+saveRDS(eqtlgen_vs_combined, eqtlgen_vs_combined_loc)
+mdfiver::create_md5_for_file(eqtlgen_vs_combined_loc)
 
 ```
 
@@ -1717,9 +1751,107 @@ mdfiver::create_md5_for_file(eqtlgen_vs_combined_tbl_loc)
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # get location
-eqtlgen_vs_combined_tbl_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/replication/onek1k/L1/UT/mo_combined_vs_eqtlgen_eqtls.tsv.gz'
+eqtlgen_vs_combined_tbl_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/replication/eqtlgen/L1/combined/mo_combined_vs_eqtlgen_eqtls.tsv.gz'
 # reload the table
 eqtlgen_vs_combined_tbl <- fread(eqtlgen_vs_combined_tbl_loc, header = T, sep = '\t')
+# the list as well
+eqtlgen_vs_combined_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/replication/eqtlgen/L1/combined/mo_combined_vs_eqtlgen_eqtls.rds'
+eqtlgen_vs_combined <- readRDS(eqtlgen_vs_combined_loc)
+
+```
+
+```{r eqtlgen_overlap_replication_stats, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# we'll store stats per cell type first
+stats_per_ct_eqtlgen_l <- list()
+# check each cell type
+for (ct in names(eqtlgen_vs_combined)) {
+  # extract the table
+  eqtlgen_vs_combined_ct <- eqtlgen_vs_combined[[ct]]
+  # subset to what is significant in eQTLgen
+  eqtlgen_vs_combined_ct <- eqtlgen_vs_combined_ct[eqtlgen_vs_combined_ct[['eQTLgen_significant']] == T, ]
+  # we can only do this if there are significant effects
+  if (nrow(eqtlgen_vs_combined_ct) > 0) {
+    # then do FDR correction on mo
+    eqtlgen_vs_combined_ct[['mo_fdr']] <- p.adjust(eqtlgen_vs_combined_ct[['mo_p']], method = 'BH')
+    # and update the significance
+    eqtlgen_vs_combined_ct[['mo_significant']] <- eqtlgen_vs_combined_ct[['mo_fdr']] < 0.05
+    # put that into a list
+    eqtlgen_vs_combined_replicating_list <- list()
+    eqtlgen_vs_combined_replicating_list[[paste('eQTLgen','mo', sep = '_vs_')]] <- eqtlgen_vs_combined_ct
+    # check replication in caQTLs across cell types
+    eqtlgen_combined_celltype_stats <- get_stats_qtl_matches(eqtlgen_vs_combined_replicating_list)
+    # now replace the name
+    eqtlgen_combined_celltype_stats[['replicating_in']] <- ct
+    # put in the list
+    stats_per_ct_eqtlgen_l[[ct]] <- eqtlgen_combined_celltype_stats
+  } else {
+    print(paste('skipping due to no overlap:', ct))
+  }
+}
+# merge all now
+stats_per_ct_eqtlgen <- do.call('rbind', stats_per_ct_eqtlgen_l)
+# rename replicating, not because it is what we are replicating, but because it is what we are replicating in
+stats_per_ct_eqtlgen[['replicating']] <- 'eQTLGen'
+
+```
+
+```{r eqtl_eqtlgen_replication_plot, include=TRUE, fig.width=3, fig.height=8}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# check replication in caQTLs across cell types
+eqtlgen_combined_celltype_stat_p <- plot_replication_stats(stats_per_ct_eqtlgen, mid_value = 0.5, comparing_value_to_text=list('n_sig_both' = 'N sig: ', 'n_sig_tested' = 'N test: ', 'rb_emp_all' = 'Rb: '), colour_column = 'rb_emp_all', category_plot_order = c('eQTLGen', 'B', 'CD4+ T', 'CD8+ T', 'NK', 'DC', 'Monocyte'), text_size = 4, legendless = T) +
+  xlab('Dataset') +
+  ylab('Cell type replicating in') +
+  ggtitle('Replication of eQTLs') +
+  labs(fill="Rb") +
+  theme(
+    # X label font size
+    axis.title.x = element_text(size = 20), 
+    # Y label font size
+    axis.title.y = element_text(size = 20), 
+    # X tick font size
+    axis.text.x = element_text(size = 16), 
+    # Y tick font size
+    axis.text.y = element_text(size = 16), 
+    # title size
+    title = element_text(size = 24)
+  ) + 
+  scale_y_discrete(position = "right")
+
+# save the figure
+ggsave('~/plots/mo_eqtlgen_eqtl_celltype_replication.pdf', plot = eqtlgen_combined_celltype_stat_p, width = 3, height = 8)
+
+# display the figure
+eqtlgen_combined_celltype_stat_p
+
+# check replication in caQTLs across cell types
+eqtlgen_combined_celltype_stat_simple_p <- plot_replication_stats(stats_per_ct_eqtlgen, mid_value = 0.5, comparing_value_to_text=list('rb_emp_all' = ''), colour_column = 'rb_emp_all', category_plot_order = c('eQTLGen', 'B', 'CD4+ T', 'CD8+ T', 'NK', 'DC', 'Monocyte'), text_size = 4, legendless = T) +
+  xlab('Dataset') +
+  ylab('Cell type replicating in') +
+  ggtitle('Replication of eQTLs') +
+  labs(fill="Rb") +
+  theme(
+    # X label font size
+    axis.title.x = element_text(size = 20), 
+    # Y label font size
+    axis.title.y = element_text(size = 20), 
+    # X tick font size
+    axis.text.x = element_text(size = 16), 
+    # Y tick font size
+    axis.text.y = element_text(size = 16), 
+    # title size
+    title = element_text(size = 24)
+  ) + 
+  scale_y_discrete(position = "right")
+
+# save the figure
+ggsave('~/plots/mo_eqtlgen_eqtl_celltype_replication_simple.pdf', plot = eqtlgen_combined_celltype_stat_simple_p, width = 3, height = 8)
+
+# display the figure
+eqtlgen_combined_celltype_stat_simple_p
+
 
 ```
 
