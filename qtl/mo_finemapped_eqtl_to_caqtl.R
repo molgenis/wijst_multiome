@@ -766,3 +766,14 @@ plot_concordanace(overlap_complete_unique_r2g_cd4t, main = 'Effect sizes of caQT
 plot_concordanace(overlap_complete_unique_distbiggerzero_r2g[!duplicated(overlap_complete_unique_distbiggerzero_r2g[['trait2']]), ], main = 'Effect sizes of caQTLs versus eQTLs\n(no region/gene overlap, top caQTL effect per gene)')
 plot_concordanace(overlap_complete_unique_r2g_mono[!duplicated(overlap_complete_unique_r2g_mono[['trait2']]), ], main = 'Effect sizes of caQTLs versus eQTLs for monocytes\n(top caQTL effect per gene)')
 plot_concordanace(overlap_complete_unique_r2g_cd4t[!duplicated(overlap_complete_unique_r2g_cd4t[['trait2']]), ], main = 'Effect sizes of caQTLs versus eQTLs for CD4+ T(top caQTL effect per gene)')
+
+# add the Z score instead
+overlap_complete_unique_r2g_mono[['ca_z']] <- overlap_complete_unique_r2g_mono[['ca_effect']] / overlap_complete_unique_r2g_mono[['ca_effect_se']]
+overlap_complete_unique_r2g_mono[['e_z']] <- overlap_complete_unique_r2g_mono[['e_effect']] / overlap_complete_unique_r2g_mono[['e_effect_se']]
+# plot the one we'll use in the end
+plot_concordanace(overlap_complete_unique_r2g_mono[!duplicated(overlap_complete_unique_r2g_mono[['trait2']]), ], main = 'Effect sizes of caQTLs versus eQTLs for monocytes\n(top caQTL effect per gene)', ca_effect_column = 'ca_z', e_effect_column = 'e_z')
+# save this plot
+pdf(file = '~/plots/mo_scatter_mo_caqtl_vs_eqtl_top_caqtl_per_gene_mono_z.pdf', width=5, height=5)
+plot_concordanace(overlap_complete_unique_r2g_mono[!duplicated(overlap_complete_unique_r2g_mono[['trait2']]), ], main = 'Effect sizes of caQTLs versus eQTLs for monocytes\n(top caQTL effect per gene)', ca_effect_column = 'ca_z', e_effect_column = 'e_z')
+dev.off()
+
