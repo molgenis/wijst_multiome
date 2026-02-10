@@ -181,7 +181,7 @@ get_group_proportions <- function(named_list_of_dfs, column_to_get_proportions_f
 ####################
 
 # location of the eQTL output
-qtl_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/output/L1/combined/'
+qtl_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/output/L1/combined/'
 # get all the QTL output
 qtl_output <- get_qtls_per_celltype_limix(qtl_output_loc)
 # add the top effect information
@@ -192,7 +192,7 @@ qtl_output_all <- do.call('rbind', qtl_output)
 qtl_output_all[['snp_chromosome']] <- paste0('chr', qtl_output_all[['snp_chromosome']])
 
 # get the cpeaks overlaps for each variant
-qtl_variants_all_cpeaks_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/annotations/mo_qtl_variants_tested_cpeaks_overlap.tsv.gz'
+qtl_variants_all_cpeaks_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/eqtl/annotations/mo_qtl_variants_tested_cpeaks_overlap.tsv.gz'
 qtl_variants_all_cpeaks <- fread(qtl_variants_all_cpeaks_loc, header = T, sep = '\t')
 # add overlapping feature to QTL
 qtl_output_all[['region']] <- qtl_variants_all_cpeaks[match(qtl_output_all[['snp_id']], qtl_variants_all_cpeaks[['snp_id']]), ][['overlapping_feature']]
@@ -201,9 +201,9 @@ qtl_output_all_sig <- qtl_output_all[qtl_output_all[['feature_q_value']] < 0.05 
                                        qtl_output_all[['p_value']] < qtl_output_all[['pval_nominal_threshold_global']], ]
 
 # location of the i-eqtl output
-iqtl_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_caqtl/sc-eqtlgen/output/ut_and_24hca_significant/L1/'
+iqtl_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/interaction_caqtl/sc-eqtlgen/output/ut_and_24hca_significant/L1/'
 # get all the QTL output
-iqtl_output <- get_qtls_per_celltype_limix(iqtl_output_loc, output_file = 'inflammation_final/iqtl_results_all_eigenmt_qval.tsv.gz', gene_column='feature', significance_column='feature_q_value', significance_cutoff=0.05, nominal_cutoff_column=NULL, nominal_significance_column=NULL)
+iqtl_output <- get_qtls_per_celltype_limix(iqtl_output_loc, output_file = '/iqtl_results_all_eigenmt_qval.tsv.gz', gene_column='feature', significance_column='feature_q_value', significance_cutoff=0.05, nominal_cutoff_column=NULL, nominal_significance_column=NULL)
 # merge all the results
 iqtl_output_all <- do.call('rbind', iqtl_output)
 # filter on signifiacnce
@@ -224,7 +224,7 @@ qtl_output_all_sig_wi[!is.na(qtl_output_all_sig_wi[['i_beta']]) & sign(qtl_outpu
 qtl_output_all_sig_wi[!is.na(qtl_output_all_sig_wi[['i_beta']]) & sign(qtl_output_all_sig_wi[['i_beta']]) == -1, ][['interaction_direction']] <- 'negative'
 
 # read the cpeaks annotation
-cpeaks_anno_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/cPeaks/cPeaks_wscreenv4.tsv.gz'
+cpeaks_anno_loc <- '/groups/umcg-franke-scrna/tmp02/external_datasets/cPeaks/cPeaks_wscreenv4.tsv.gz'
 cpeaks_anno <- fread(cpeaks_anno_loc, header = T, sep = '\t')
 # add the Signac style name
 cpeaks_anno[['signac_hg38']] <- paste(cpeaks_anno[['chr_hg38']], cpeaks_anno[['start_hg38']], cpeaks_anno[['end_hg38']], sep = '-')
@@ -236,8 +236,8 @@ qtl_output_all_sig_wi[['screen']] <- cpeaks_anno[match(qtl_output_all_sig_wi[['f
 # make list with tables depending on the effect strength
 qtl_output_all_sig_wi_direction <- list(
   'none' = unique(qtl_output_all_sig_wi[!is.na(qtl_output_all_sig_wi[['interaction_direction']]) & qtl_output_all_sig_wi[['interaction_direction']] == 'none', c('feature_id', 'screen', 'cell_type')]), 
-     'positive' = unique(qtl_output_all_sig_wi[!is.na(qtl_output_all_sig_wi[['interaction_direction']]) & qtl_output_all_sig_wi[['interaction_direction']] == 'positive', c('feature_id', 'screen', 'cell_type')]), 
-     'negative' = unique(qtl_output_all_sig_wi[!is.na(qtl_output_all_sig_wi[['interaction_direction']]) & qtl_output_all_sig_wi[['interaction_direction']] == 'negative', c('feature_id', 'screen', 'cell_type')]))
+  'positive' = unique(qtl_output_all_sig_wi[!is.na(qtl_output_all_sig_wi[['interaction_direction']]) & qtl_output_all_sig_wi[['interaction_direction']] == 'positive', c('feature_id', 'screen', 'cell_type')]), 
+  'negative' = unique(qtl_output_all_sig_wi[!is.na(qtl_output_all_sig_wi[['interaction_direction']]) & qtl_output_all_sig_wi[['interaction_direction']] == 'negative', c('feature_id', 'screen', 'cell_type')]))
 # get the percentage of each screen group
 fracs_screen_is_ca <- get_group_proportions(qtl_output_all_sig_wi_direction, specific_trait_expression = 'CA', specific_trait_name = 'CA')
 # make into a plot
@@ -417,3 +417,66 @@ p_snp_gene_interaction_all_nodir <- plot_grid(
   p_snp_gene_interaction_distances_distnozero_top_nodir
 )
 p_snp_gene_interaction_all_nodir
+
+
+# let's see how many effects we have per cell type and overall by checking each cell type
+caqtl_npeaks_l <- list()
+# and we'll keep the full lists of peaks
+caqtl_peaks <- list(
+  'capeak' = list(), 
+  'icapeak_stronger' = list(), 
+  'icapeak_weaker' = list(), 
+  'capeak_noica' = list()
+)
+# now check each cell type
+for (ct in unique(qtl_output_all_sig_wi[['cell_type']])) {
+  # subset to that ct
+  qtl_output_all_sig_wi_ct <- qtl_output_all_sig_wi[!is.na(qtl_output_all_sig_wi[['cell_type']]) & qtl_output_all_sig_wi[['cell_type']] == ct, ]
+  # get the unique capeaks
+  capeaks_ct <- unique(qtl_output_all_sig_wi_ct[['feature_id']])
+  # and the stronger effects
+  icapeaks_stronger <- unique(qtl_output_all_sig_wi_ct[!is.na(qtl_output_all_sig_wi_ct[['interaction_direction']]) & qtl_output_all_sig_wi_ct[['interaction_direction']] == 'positive', ][['feature_id']])
+  # and the weaker effects
+  icapeaks_weaker <- unique(qtl_output_all_sig_wi_ct[!is.na(qtl_output_all_sig_wi_ct[['interaction_direction']]) & qtl_output_all_sig_wi_ct[['interaction_direction']] == 'negative', ][['feature_id']])
+  # check which are never an ica
+  capeaks_noica <- setdiff(capeaks_ct, c(icapeaks_stronger, icapeaks_weaker))
+  # put all these in the lists
+  caqtl_peaks[['capeak']][[ct]] <- capeaks_ct
+  caqtl_peaks[['icapeak_stronger']][[ct]] <- icapeaks_stronger
+  caqtl_peaks[['icapeak_weaker']][[ct]] <- icapeaks_weaker
+  caqtl_peaks[['capeak_noica']][[ct]] <- capeaks_noica
+  # make these numbers
+  capeak_nrs_ct <- data.frame(
+    'cell_type' = c(ct), 
+    'n_capeak' = c(length(capeaks_ct)), 
+    'n_icapeak_stronger' = c(length(icapeaks_stronger)), 
+    'n_icapeak_weaker' = c(length(icapeaks_weaker)), 
+    'n_capeak_none' = c(length(capeaks_noica))
+  )
+  # and put in the list
+  caqtl_npeaks_l[[ct]] <- capeak_nrs_ct
+}
+# check for the all category as well
+caqtl_peaks[['capeak']][['all']] <- unique(do.call('c', caqtl_peaks[['capeak']]))
+caqtl_peaks[['icapeak_stronger']][['all']] <- unique(do.call('c', caqtl_peaks[['icapeak_stronger']]))
+caqtl_peaks[['icapeak_weaker']][['all']] <- unique(do.call('c', caqtl_peaks[['icapeak_weaker']]))
+caqtl_peaks[['capeak_noica']][['all']] <- setdiff(caqtl_peaks[['capeak']][['all']], c(caqtl_peaks[['icapeak_stronger']][['all']], caqtl_peaks[['icapeak_weaker']][['all']]))
+# make these numbers
+capeak_nrs_ct <- data.frame(
+  'cell_type' = c('all'), 
+  'n_capeak' = c(length(caqtl_peaks[['capeak']][['all']])), 
+  'n_icapeak_stronger' = c(length(caqtl_peaks[['icapeak_stronger']][['all']])), 
+  'n_icapeak_weaker' = c(length(caqtl_peaks[['icapeak_weaker']][['all']])), 
+  'n_capeak_none' = c(length(caqtl_peaks[['capeak_noica']][['all']]))
+)
+# and put in the list
+caqtl_npeaks_l[['all']] <- capeak_nrs_ct
+# and merge all
+caqtl_npeaks <- do.call('rbind', caqtl_npeaks_l)
+
+# check if there is a difference
+kruskal.test(distance ~ interaction_direction, data = qtl_output_all_sig_wi[qtl_output_all_sig_wi[['is_top_variant']] & !is.na(qtl_output_all_sig_wi[['distance']]), ])
+# p-value < 2.2e-16
+# do post-hoc test for positive vs negative
+wilcox.test(distance ~ interaction_direction, data = qtl_output_all_sig_wi[qtl_output_all_sig_wi[['is_top_variant']] & !is.na(qtl_output_all_sig_wi[['distance']]) & qtl_output_all_sig_wi[['interaction_direction']] != 'none', ])
+# p-value = 0.07615
