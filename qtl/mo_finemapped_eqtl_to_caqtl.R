@@ -740,6 +740,43 @@ overlap_complete <- cbind(overlap_complete, cpeaks_anno[match(overlap_complete[[
 overlap_distances <- get_closest_flanks(overlap_complete, 'atac_start_hg38', 'atac_end_hg38', 'gene_start', 'gene_end')
 # add that to the original table
 overlap_complete[['distance']] <- overlap_distances[['min_dist']]
+# get the distances between the variant and the region
+variant_region_distances <- get_closest_flanks(overlap_complete, 'atac_start_hg38', 'atac_end_hg38', 'atac_snp_position', 'atac_snp_position')
+# add to the original table again
+overlap_complete[['variant_to_atac_distance']] <- variant_region_distances[['min_dist']]
+
+# location of the CREs identified by SCENIC
+scenic_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eRegulon_both.tsv.gz'
+# read the scenic output
+scenic_output <- fread(scenic_output_loc, header = T, sep = '\t')
+# order by the extended
+scenic_output <- scenic_output[order(scenic_output[['is_extended']]), ]
+# and keep only what is non-extended if it was both extended and non-extended
+scenic_output <- scenic_output[!duplicated(paste(scenic_output[['Region']], scenic_output[['Gene']], scenic_output[['TF']])), ]
+# replace the ':' with '-' for the gene
+scenic_output[['Region']] <- gsub(':', '-', scenic_output[['Region']])
+# add the r2g
+scenic_output[['r2g']] <- paste(scenic_output[['Region']], scenic_output[['Gene']], sep = '+')
+# also for eQTL-caQTL
+overlap_complete[['r2g']] <- paste(overlap_complete[['trait1']], overlap_complete[['trait2']], sep = '+')
+# merge what is interesting
+overlap_complete <- merge(overlap_complete, unique(scenic_output[, c('r2g', 'TF', 'eRegulon_name', 'rho_R2G')]), by = 'r2g', all.x = T)
+# check if the directions are concordant
+overlap_complete[['qtl_scenic_concordant']] <- sign(overlap_complete[['e_effect']] * overlap_complete[['ca_effect']]) == sign(overlap_complete[['rho_R2G']])
+
+# write the result
+overlap_complete_wmetadata_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/colocalization/eqtl_caqtl/ut_and_24hca_significant/mo_eqtl_cqtl_coloc_and_overlapping_wmetadata.tsv.gz'
+write.table(overlap_complete, gzfile(overlap_complete_wmetadata_loc), row.names = F, col.names = T, sep = '\t', quote = F)
+# with a checksum
+mdfiver::create_sha256_for_file(overlap_complete_wmetadata_loc)
+
+# keep what Jelmer wanted
+overlap_complete_j <- overlap_complete[overlap_complete[['distance']] > 0 & overlap_complete[['variant_to_atac_distance']] == 0, ]
+overlap_complete_wmetadata_j_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/colocalization/eqtl_caqtl/ut_and_24hca_significant/mo_eqtl_cqtl_coloc_and_overlapping_wmetadata_jelmer.tsv.gz'
+write.table(overlap_complete_j, gzfile(overlap_complete_wmetadata_j_loc), row.names = F, col.names = T, sep = '\t', quote = F)
+mdfiver::create_sha256_for_file(overlap_complete_wmetadata_j_loc)
+
+
 # make a version where we remove entries where the gene and region physically overlap
 overlap_complete_distbiggerzero <- overlap_complete[overlap_complete[['distance']] > 0, ]
 
