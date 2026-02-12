@@ -2,7 +2,7 @@
 ############################################################################################################################
 # Authors: Roy Oelen
 # Name: mo_finemapped_eqtl_to_caqtl.R
-# Function: 
+# Function: check overlap of caQTLs and eQTLs and colocalizing signals
 ############################################################################################################################
 
 ####################
@@ -791,6 +791,28 @@ overlap_complete_wmetadata_j_loc <- '/groups/umcg-franke-scrna/tmp04/projects/mu
 write.table(overlap_complete_j, gzfile(overlap_complete_wmetadata_j_loc), row.names = F, col.names = T, sep = '\t', quote = F)
 mdfiver::create_sha256_for_file(overlap_complete_wmetadata_j_loc)
 
+# read the data again
+overlap_complete <- fread(overlap_complete_wmetadata_loc, header = T, sep = '\t')
+
+# add the Z score
+overlap_complete[['ca_z']] <- overlap_complete[['ca_effect']] / overlap_complete[['ca_effect_se']]
+overlap_complete[['e_z']] <- overlap_complete[['e_effect']] / overlap_complete[['e_effect_se']]
+# sort again
+overlap_complete <- overlap_complete[order(abs(overlap_complete[['e_z']]), abs(overlap_complete[['ca_z']]), decreasing = T), ]
+# do each cell type
+for (cell_type in unique(overlap_complete[['cell_type']])) {
+  # filter to cell type and overlap, because that is easier variant-wise
+  overlap_complete_ct <- overlap_complete[
+    overlap_complete[['cell_type']] == cell_type &
+    overlap_complete[['method']] == 'overlap', 
+  ]
+  # keep the first entry
+  overlap_complete_ct_unique_r2g <- overlap_complete_ct[!duplicated(paste(overlap_complete_ct[['trait1']], overlap_complete_ct[['trait2']])), ]
+  # save this plot
+  pdf(file = paste0('~/plots/mo_scatter_mo_caqtl_vs_eqtl_top_caqtl_per_gene_', cell_type, '_z.pdf'), width=5, height=5)
+  plot_concordanace(overlap_complete_ct_unique_r2g[!duplicated(overlap_complete_ct_unique_r2g[['trait2']]), ], main = paste0('Effect sizes of caQTLs versus eQTLs for ', cell_type, '\n(top caQTL effect per gene)'), ca_effect_column = 'ca_z', e_effect_column = 'e_z')
+  dev.off()
+}
 
 # make a version where we remove entries where the gene and region physically overlap
 overlap_complete_distbiggerzero <- overlap_complete[overlap_complete[['distance']] > 0, ]
@@ -819,9 +841,6 @@ plot_concordanace(overlap_complete_unique_distbiggerzero_r2g[!duplicated(overlap
 plot_concordanace(overlap_complete_unique_r2g_mono[!duplicated(overlap_complete_unique_r2g_mono[['trait2']]), ], main = 'Effect sizes of caQTLs versus eQTLs for monocytes\n(top caQTL effect per gene)')
 plot_concordanace(overlap_complete_unique_r2g_cd4t[!duplicated(overlap_complete_unique_r2g_cd4t[['trait2']]), ], main = 'Effect sizes of caQTLs versus eQTLs for CD4+ T(top caQTL effect per gene)')
 
-# add the Z score instead
-overlap_complete_unique_r2g_mono[['ca_z']] <- overlap_complete_unique_r2g_mono[['ca_effect']] / overlap_complete_unique_r2g_mono[['ca_effect_se']]
-overlap_complete_unique_r2g_mono[['e_z']] <- overlap_complete_unique_r2g_mono[['e_effect']] / overlap_complete_unique_r2g_mono[['e_effect_se']]
 # plot the one we'll use in the end
 plot_concordanace(overlap_complete_unique_r2g_mono[!duplicated(overlap_complete_unique_r2g_mono[['trait2']]), ], main = 'Effect sizes of caQTLs versus eQTLs for monocytes\n(top caQTL effect per gene)', ca_effect_column = 'ca_z', e_effect_column = 'e_z')
 # save this plot
