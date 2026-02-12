@@ -770,6 +770,21 @@ write.table(overlap_complete, gzfile(overlap_complete_wmetadata_loc), row.names 
 # with a checksum
 mdfiver::create_sha256_for_file(overlap_complete_wmetadata_loc)
 
+# also keep one for the supplementary information
+supp_colnames <- setdiff(colnames(overlap_complete), c('atac_housekeeping', 'atac_screen_all', 'TF', 'eRegulon_name', 'rho_R2G', 'qtl_scenic_concordant'))
+overlap_complete_supp <- overlap_complete[, ..supp_colnames, drop = F]
+# rename some columns
+colnames(overlap_complete_supp) <- gsub('atac_chr_hg38', 'atac_chr', colnames(overlap_complete_supp))
+colnames(overlap_complete_supp) <- gsub('atac_start_hg38', 'atac_start', colnames(overlap_complete_supp))
+colnames(overlap_complete_supp) <- gsub('atac_end_hg38', 'atac_end', colnames(overlap_complete_supp))
+colnames(overlap_complete_supp) <- gsub('^distance$', 'atac_gene_distance', colnames(overlap_complete_supp))
+# write the result
+overlap_complete_supp_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/colocalization/eqtl_caqtl/ut_and_24hca_significant/mo_eqtl_cqtl_coloc_and_overlapping_supp.tsv.gz'
+write.table(overlap_complete_supp, gzfile(overlap_complete_supp_loc), row.names = F, col.names = T, sep = '\t', quote = F)
+# with a checksum
+mdfiver::create_sha256_for_file(overlap_complete_supp_loc)
+
+
 # keep what Jelmer wanted
 overlap_complete_j <- overlap_complete[overlap_complete[['distance']] > 0 & overlap_complete[['variant_to_atac_distance']] == 0, ]
 overlap_complete_wmetadata_j_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/colocalization/eqtl_caqtl/ut_and_24hca_significant/mo_eqtl_cqtl_coloc_and_overlapping_wmetadata_jelmer.tsv.gz'
