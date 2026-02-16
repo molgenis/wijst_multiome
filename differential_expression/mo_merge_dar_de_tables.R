@@ -107,6 +107,32 @@ get_output_per_comparison <- function(output_loc, cell_types=c('B', 'CD4T', 'CD8
   return(results_per_celltype)
 }
 
+write_output_to_tsv <- function(de_output_loc, tsv_output_loc, cell_types=c('B', 'CD4T', 'CD8T', 'DC', 'monocyte', 'NK'), use_label_dict=T, remove_columns=c(), file_append='_condition_final.tsv.gz', filter_list=NULL) {
+  # get the output
+  results_per_celltype <- get_output_per_comparison(de_output_loc, cell_types = cell_types, file_append = file_append)
+  # check each of these
+  for (ct in names(results_per_celltype)) {
+    # extract
+    results_ct <- results_per_celltype[[ct]]
+    # add the cell type as an explicit column
+    results_ct <- cbind(data.frame('cell_type' = rep(ct, times = nrow(results_ct))), results_ct)
+    # put back into list
+    results_per_celltype[[ct]] <-  results_ct
+  }
+  # now merge all
+  results_all_celltype <- do.call('rbind', results_per_celltype)
+  # set output loc as the tsv
+  output_loc <- tsv_output_loc
+  # gz file ends with .gz
+  if (grepl('.gz$', tsv_output_loc)) {
+    # gzip if ends with .gz
+    output_loc <- gzfile(tsv_output_loc)
+  }
+  write.table(results_all_celltype, output_loc, sep = '\t', row.names = F, col.names = T, quote = F)
+  # make a checksum
+  mdfiver::create_sha256_for_file(tsv_output_loc)
+}
+
 
 write_output_to_excel <- function(de_output_loc, excel_output_loc, cell_types=c('B', 'CD4T', 'CD8T', 'DC', 'monocyte', 'NK'), use_label_dict=T, remove_columns=c(), file_append='_condition_final.tsv.gz', filter_list=NULL) {
   # get the output
@@ -177,6 +203,16 @@ write_output_to_excel(
   file_append='_condition_final.tsv.gz', 
   filter_list = list('p.bonferroni' = 0.05)
 )
+# also a tsv
+de_tsv_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/differential_expression/limma_dream/output/stimulation/mo_de_stim.tsv.gz'
+write_output_to_tsv(
+  de_output_loc, 
+  de_tsv_loc, 
+  cell_types=c('B', 'CD4T', 'CD8T', 'DC', 'monocyte', 'NK'), 
+  use_label_dict=T, 
+  remove_columns=c(), 
+  file_append='_condition_final.tsv.gz'
+)
 
 # DAR loc
 dar_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/differential_accessibility/limma_dream/output/stimulation/pct01/'
@@ -191,4 +227,27 @@ write_output_to_excel(
   remove_columns=c('permuted', 'seed', 'perm.FDR'), 
   file_append='_condition_final.wpermfdr.tsv.gz', 
   filter_list = list('p.bonferroni' = 0.05)
+)
+# tsv as well
+dar_tsv_sig_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/differential_accessibility/limma_dream/output/stimulation/pct01//mo_dar_stim_significant.tsv.gz'
+# run the summary
+write_output_to_tsv(
+  dar_output_loc, 
+  dar_tsv_sig_loc, 
+  cell_types=c('B', 'CD4T', 'CD8T', 'DC', 'monocyte', 'NK'), 
+  use_label_dict=T, 
+  remove_columns=c('permuted', 'seed', 'perm.FDR'), 
+  file_append='_condition_final.wpermfdr.tsv.gz', 
+  filter_list = list('p.bonferroni' = 0.05)
+)
+# full sumstats as well
+dar_tsv_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/differential_accessibility/limma_dream/output/stimulation/pct01//mo_dar_stim.tsv.gz'
+# run the summary
+write_output_to_tsv(
+  dar_output_loc, 
+  dar_tsv_loc, 
+  cell_types=c('B', 'CD4T', 'CD8T', 'DC', 'monocyte', 'NK'), 
+  use_label_dict=T, 
+  remove_columns=c('permuted', 'seed', 'perm.FDR'), 
+  file_append='_condition_final.wpermfdr.tsv.gz'
 )
