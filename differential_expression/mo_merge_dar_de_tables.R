@@ -100,7 +100,7 @@ get_output_per_comparison <- function(output_loc, cell_types=c('B', 'CD4T', 'CD8
     # paste together the output location
     output_loc_full <- paste(output_loc, cell_type, file_append, sep = '')
     # read the table
-    output <- read.table(output_loc_full, header = T, sep = '\t', row.names = 1)
+    output <- read.table(output_loc_full, header = T, sep = '\t')
     # add to the comparison list
     results_per_celltype[[cell_type]] <- output
   }
