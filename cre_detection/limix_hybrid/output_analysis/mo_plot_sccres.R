@@ -321,6 +321,7 @@ get_color_coding_dict <- function() {
   color_coding_dict[['Transit amplifying cells']] <- '#FF7F00'
   color_coding_dict[['Transit\namplifying cells']] <- '#FF7F00'
   color_coding_dict[['disconcordant']] <- 'gray'
+  color_coding_dict[['all']] <- 'gray'
   # up and down regulation will be added to, we need a whitening percentage
   pct_whitening <- 40
   # then we will check each cell type
@@ -333,6 +334,9 @@ get_color_coding_dict <- function() {
     color_coding_dict[[paste(cell_type, 'combined')]] <- color_coding_dict[[cell_type]]
     color_coding_dict[[paste(cell_type, 'UT')]] <- colorRampPalette(c(color_coding_dict[[cell_type]], "white"))(100)[pct_whitening]
     color_coding_dict[[paste(cell_type, '24hCA')]] <- colorRampPalette(c(color_coding_dict[[cell_type]], "black"))(100)[pct_whitening]
+    color_coding_dict[[paste(cell_type, 'shared')]] <- color_coding_dict[[cell_type]]
+    color_coding_dict[[paste(cell_type, 'ps')]] <- colorRampPalette(c(color_coding_dict[[cell_type]], "white"))(100)[pct_whitening]
+    color_coding_dict[[paste(cell_type, 'sc')]] <- colorRampPalette(c(color_coding_dict[[cell_type]], "black"))(100)[pct_whitening]
   }
   # general
   color_coding_dict[['AI']] <- 'darkblue'
@@ -660,6 +664,8 @@ get_group_proportions <- function(named_list_of_dfs, column_to_get_proportions_f
 
 
 add_nominal_p_value_cutoff <- function(cre_sumstats, cell_type_column='cell_type', feature_column='feature_id', emperical_p_column='empirical_feature_p_value', emperical_p_cutoff=0.05, nominal_p_column='p_value', nominal_p_cutoff=0.05) {
+  # convert
+  cre_sumstats <- data.frame(cre_sumstats)
   # check each cell type
   cres_cutoff_l <- list()
   # check each cell type
@@ -671,7 +677,17 @@ add_nominal_p_value_cutoff <- function(cre_sumstats, cell_type_column='cell_type
     # keep only top effects
     cre_sumstats_ct_top <- cre_sumstats_ct[!duplicated(cre_sumstats_ct[[feature_column]]), ]
     # then filter on the significant ones
-    cre_sumstats_ct_top_significant <- cre_sumstats_ct_top[cre_sumstats_ct_top[[emperical_p_column]] < emperical_p_cutoff, ]
+    if (is.numeric(emperical_p_cutoff)) {
+      # if numeric
+      cre_sumstats_ct_top_significant <- cre_sumstats_ct_top[cre_sumstats_ct_top[[emperical_p_column]] < emperical_p_cutoff, ]
+    }
+    else if(is.logical(emperical_p_cutoff)) {
+      # if logical
+      cre_sumstats_ct_top_significant <- cre_sumstats_ct_top[cre_sumstats_ct_top[[emperical_p_column]] == emperical_p_cutoff, ]
+    }
+    else {
+      stop('emperical cutoff must be logical or numeric')
+    }
     # get the max p that is still significant
     cre_sumstats_ct_top_significant_top_p <- max(cre_sumstats_ct_top_significant[[nominal_p_column]])
     # add that information
@@ -683,6 +699,8 @@ add_nominal_p_value_cutoff <- function(cre_sumstats, cell_type_column='cell_type
   }
   # merge all
   cres_cutoff <- do.call('rbind', cres_cutoff_l)
+  # convert
+  cres_cutoff <- data.table(cres_cutoff)
   return(cres_cutoff)
 }
 
@@ -871,7 +889,17 @@ match_qtl_tables <- function(qtl_replicating,
     # keep only the first entry
     qtl_replicating_ct_top <- qtl_replicating_ct[!duplicated(qtl_replicating_ct[[feature_column]]), ]
     # and keep only significant
-    qtl_replicating_ct_top <- qtl_replicating_ct_top[qtl_replicating_ct_top[[emperical_p_column]] < significance_cutoff_emperical, ]
+    if (is.numeric(significance_cutoff_emperical)) {
+      # if numeric
+      qtl_replicating_ct_top <- qtl_replicating_ct_top[qtl_replicating_ct_top[[emperical_p_column]] < significance_cutoff_emperical, ]
+    }
+    else if(is.logical(significance_cutoff_emperical)) {
+      # if logical
+      qtl_replicating_ct_top <- qtl_replicating_ct_top[qtl_replicating_ct_top[[emperical_p_column]] == significance_cutoff_emperical, ]
+    }
+    else {
+      stop('emperical cutoff must be logical or numeric')
+    }
     # add QTL in both
     qtl_replicating_ct_top[['qtl']] <- paste(qtl_replicating_ct_top[[feature_column]], qtl_replicating_ct_top[[variant_column]], sep = '_')
     qtl_replicating_in_ct[['qtl']] <- paste(qtl_replicating_in_ct[[feature_column]], qtl_replicating_in_ct[[variant_column]], sep = '_')
@@ -1229,6 +1257,89 @@ plot_replication_stats <- function(replication_stats, replicating_column='replic
 }
 
 
+get_overlapping_peakgene_links <- function(cre_tbl1, cre_tbl2, region_column1='snp_id', region_column2='snp_id', gene_column1='feature_id', gene_column2='feature_id', cell_type_column1='cell_type', cell_type_column2='cell_type', significance_cutoffs1=list('global_significance' = T, 'significant_nominal_cutoff' = T), significance_cutoffs2=list('global_significance' = T, 'significant_nominal_cutoff' = T), set_name1='sc', set_name2='ps') {
+  # convert
+  cre_tbl1 <- data.frame(cre_tbl1)
+  cre_tbl2 <- data.frame(cre_tbl2)
+  # save result in list first
+  result_per_ct <- list()
+  # also store for all cts
+  r2g_all <- list('d1' = list(), 'd2' = list())
+  # get the cell types
+  cell_types_both <- unique(intersect(cre_tbl1[[cell_type_column1]], cre_tbl2[[cell_type_column2]]))
+  # then check each of them
+  for (ct in cell_types_both) {
+    print(ct)
+    # subset both on these cell types
+    cre_tbl1_ct <- cre_tbl1[!is.na(cre_tbl1[[cell_type_column1]]) & cre_tbl1[[cell_type_column1]] == ct, ]
+    cre_tbl2_ct <- cre_tbl2[!is.na(cre_tbl2[[cell_type_column2]]) & cre_tbl2[[cell_type_column2]] == ct, ]
+    # now filter both on the significance cutoffs
+    for (significance_column in names(significance_cutoffs1)) {
+      # extract the cutoff
+      significance_cutoff <- significance_cutoffs1[[significance_column]]
+      # now based on the type, use to filter
+      if (is.numeric(significance_cutoff)) {
+        cre_tbl1_ct <- cre_tbl1_ct[cre_tbl1_ct[[significance_column]] < significance_cutoff, ]
+      }
+      else if (is.logical(significance_cutoff)) {
+        cre_tbl1_ct <- cre_tbl1_ct[cre_tbl1_ct[[significance_column]] == significance_cutoff, ]
+      }
+    }
+    # repeat for the other table
+    for (significance_column in names(significance_cutoffs2)) {
+      # extract the cutoff
+      significance_cutoff <- significance_cutoffs2[[significance_column]]
+      # now based on the type, use to filter
+      if (is.numeric(significance_cutoff)) {
+        cre_tbl2_ct <- cre_tbl2_ct[cre_tbl2_ct[[significance_column]] < significance_cutoff, ]
+      }
+      else if (is.logical(significance_cutoff)) {
+        cre_tbl2_ct <- cre_tbl2_ct[cre_tbl2_ct[[significance_column]] == significance_cutoff, ]
+      }
+    }
+    # extract the region-gene pairs for each of these
+    r2g1 <- paste(cre_tbl1_ct[[region_column1]], cre_tbl1_ct[[gene_column1]])
+    r2g2 <- paste(cre_tbl2_ct[[region_column2]], cre_tbl2_ct[[gene_column2]])
+    # now get which are shared and exclusive
+    r2g1_only <- setdiff(r2g1, r2g2)
+    r2g2_only <- setdiff(r2g2, r2g1)
+    r2g_shared <- intersect(r2g1, r2g2)
+    # get the sizes
+    r2g1_only_n <- length(r2g1_only)
+    r2g2_only_n <- length(r2g2_only)
+    r2g_shared_n <- length(r2g_shared)
+    # put in list
+    result_per_ct[[ct]] <- data.frame(
+      'cell_type' = c(ct, ct, ct), 
+      'shared' = c(set_name1, set_name2, 'shared'), 
+      'n' = c(r2g1_only_n, r2g2_only_n, r2g_shared_n)
+    )
+    # put also in the total table
+    r2g_all[['d1']][[ct]] <- r2g1
+    r2g_all[['d2']][[ct]] <- r2g2
+  }
+  # merge all the d1 r2g
+  r2g_all_d1 <- unique(do.call('c', r2g_all[['d1']]))
+  r2g_all_d2 <- unique(do.call('c', r2g_all[['d2']]))
+  # also get the sharedness here
+  r2g1_only <- setdiff(r2g_all_d1, r2g_all_d2)
+  r2g2_only <- setdiff(r2g_all_d2, r2g_all_d1)
+  r2g_shared <- intersect(r2g_all_d1, r2g_all_d2)
+  # get the sizes
+  r2g1_only_n <- length(r2g1_only)
+  r2g2_only_n <- length(r2g2_only)
+  r2g_shared_n <- length(r2g_shared)
+  # put in list
+  result_per_ct[['all']] <- data.frame(
+    'cell_type' = c('all', 'all', 'all'), 
+    'shared' = c(set_name1, set_name2, 'shared'), 
+    'n' = c(r2g1_only_n, r2g2_only_n, r2g_shared_n)
+  )
+  # merge all of them
+  results_all <- do.call('rbind', result_per_ct)
+  return(results_all)
+}
+
 
 ####################
 # Settings         #
@@ -1243,24 +1354,24 @@ set.seed(7777)
 ####################
 
 # read the cpeaks annotation
-cpeaks_anno_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/cPeaks/cPeaks_wscreenv4.tsv.gz'
+cpeaks_anno_loc <- '/groups/umcg-franke-scrna/tmp02/external_datasets/cPeaks/cPeaks_wscreenv4.tsv.gz'
 cpeaks_anno <- fread(cpeaks_anno_loc, header = T, sep = '\t')
 # add the Signac style name
 cpeaks_anno[['signac_hg38']] <- paste(cpeaks_anno[['chr_hg38']], cpeaks_anno[['start_hg38']], cpeaks_anno[['end_hg38']], sep = '-')
 # as well as the SCENIC+ style name
 cpeaks_anno[['scenic_hg38']] <- paste0(cpeaks_anno[['chr_hg38']], ':', cpeaks_anno[['start_hg38']], '-', cpeaks_anno[['end_hg38']])
 # # read the location of the UCSC annotations
-gene_anno_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/genome_annotation.tsv'
+gene_anno_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/genome_annotation.tsv'
 gene_anno <- fread(gene_anno_loc, header = T, sep = '\t')
 # rename columns to be the same as in limix
 colnames(gene_anno) <-c('chrom', 'start', 'end', 'strand', 'gs','Transcription_Start_Site','Transcript_type')
 # get extra annotations for the pseudobulk output
-strand_information_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eQTA/LimixExpAnnotationFile.incStrand.txt'
+strand_information_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/eQTA/LimixExpAnnotationFile.incStrand.txt'
 strand_information <- fread(strand_information_loc, header = T, sep = '\t')
 
 
 # location of the hybrid method
-hybrid_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/'
+hybrid_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/'
 # read hybrid method
 hybrid_output_list <- read_pseudobulk_cre_output_per_celltype(hybrid_output_loc, add_mtc = F, filter_alpha = F, add_global_nominal_threshold = F, add_local_nominal_threshold = F, filename_output = 'qtl_results_annotated_all.txt', alpha_min = .8, alpha_max = 1.2, filter_significance = F)
 # get the unique mappings
@@ -1307,9 +1418,9 @@ hybrid_output[['distance']] <- hybrid_distances[['min_dist']]
 hybrid_output[['category']] <- 'hybrid'
 hybrid_output[['strand']] <- strand_information[match(hybrid_output[['feature_id']], strand_information[['feature_id']]), ][['strand']]
 
-# add cutoff info
-hybrid_output <- add_nominal_p_value_cutoff(hybrid_output)
-pseudobulk_output <- add_nominal_p_value_cutoff(pseudobulk_output)
+# add significance cutoff
+hybrid_output <- add_nominal_p_value_cutoff(hybrid_output, emperical_p_column='global_significance', emperical_p_cutoff=T)
+pseudobulk_output <- add_nominal_p_value_cutoff(pseudobulk_output, emperical_p_column='global_significance', emperical_p_cutoff=T)
 
 # get this as numbers
 hybrid_output_n_cre_gene <- data.frame(table(unique(hybrid_output[hybrid_output[['significant_nominal_cutoff']], c('snp_id', 'feature_id', 'cell_type')])[['cell_type']]))
@@ -1335,18 +1446,20 @@ p_n_pscre_cre_gene <- egene_numbers_to_plot(hybrid_output_n_cre_gene, number_col
 p_n_pscre_cre <- egene_numbers_to_plot(hybrid_output_n_cre, number_column = 'n_cre', split_long_labels_to_lines = F, celltype_column = 'cell_type', use_label_dict = F, use_color_dict = T, legendless = T)
 p_n_pscre_gene <- egene_numbers_to_plot(hybrid_output_n_gene, number_column = 'n_gene', split_long_labels_to_lines = F, celltype_column = 'cell_type', use_label_dict = F, use_color_dict = T, legendless = T)
 
+
+
 # filter the outputs
-hybrid_output_sig <- hybrid_output[hybrid_output[['significant_nominal_cutoff']], ]
-pseudobulk_output_sig <- pseudobulk_output[pseudobulk_output[['significant_nominal_cutoff']], ]
+hybrid_output_sig <- hybrid_output[hybrid_output[['significant_nominal_cutoff']] & hybrid_output[['global_significance']], ]
+pseudobulk_output_sig <- pseudobulk_output[pseudobulk_output[['significant_nominal_cutoff']] & pseudobulk_output[['global_significance']], ]
 # set the locations to share these
-sccre_output_sig_loc <- '/groups/umcg-franke-scrna/tmp04/users/umcg-roelen/singularity/rstudio-server/simulated_home/tables/mo_sccre_significant.tsv.gz'
-pscre_output_sig_loc <- '/groups/umcg-franke-scrna/tmp04/users/umcg-roelen/singularity/rstudio-server/simulated_home/tables/mo_pscre_significant.tsv.gz'
+sccre_output_sig_loc <- '/groups/umcg-franke-scrna/tmp02/users/umcg-roelen/singularity/rstudio-server/simulated_home/tables/mo_sccre_significant.tsv.gz'
+pscre_output_sig_loc <- '/groups/umcg-franke-scrna/tmp02/users/umcg-roelen/singularity/rstudio-server/simulated_home/tables/mo_pscre_significant.tsv.gz'
 # and write these
 write.table(hybrid_output_sig, gzfile(sccre_output_sig_loc), row.names = F, col.names = T, sep = '\t')
 write.table(pseudobulk_output_sig, gzfile(pscre_output_sig_loc), row.names = F, col.names = T, sep = '\t')
 
 # merge the sccre to pscre
-ps_vs_sc_cre_rep <- match_qtl_tables(hybrid_output, pseudobulk_output, allele_column = NULL)
+ps_vs_sc_cre_rep <- match_qtl_tables(hybrid_output, pseudobulk_output, allele_column = NULL, emperical_p_column = 'global_significance', significance_cutoff_emperical = T)
 
 # we'll store stats per cell type first
 stats_per_ct_l <- list()
@@ -1355,9 +1468,10 @@ for (ct in names(ps_vs_sc_cre_rep)) {
   # extract the table
   sc_vs_ps_ct <- ps_vs_sc_cre_rep[[ct]]
   # qvalue correct
-  sc_vs_ps_ct[['sccre_empirical_feature_q_value']] <- qvalue(sc_vs_ps_ct[['sccre_empirical_feature_p_value']], lambda = 0)$qvalues
-  # subset to what is significant in eQTLgen
-  sc_vs_ps_ct <- sc_vs_ps_ct[sc_vs_ps_ct[['sccre_empirical_feature_q_value']] < 0.05, ]
+  # sc_vs_ps_ct[['sccre_empirical_feature_q_value']] <- qvalue(sc_vs_ps_ct[['sccre_empirical_feature_p_value']], lambda = 0)$qvalues
+  # # subset to what is significant in eQTLgen
+  # sc_vs_ps_ct <- sc_vs_ps_ct[sc_vs_ps_ct[['sccre_empirical_feature_q_value']] < 0.05, ]
+  sc_vs_ps_ct <- sc_vs_ps_ct[sc_vs_ps_ct[['sccre_global_significance']], ]
   # we only have significant effect now
   sc_vs_ps_ct[['sccre_significant']] <- T
   # we can only do this if there are significant effects
@@ -1375,10 +1489,11 @@ for (ct in names(ps_vs_sc_cre_rep)) {
     sc_vs_ps_ct_stats <- get_stats_qtl_matches(sc_vs_ps_ct_list, 
                                                significance_column_replicating_nominal='p_value', 
                                                significance_column_replicating_in_nominal='p_value', 
-                                               significance_column_replicating_emperical='empirical_feature_p_value', 
+                                               # significance_column_replicating_emperical='empirical_feature_p_value', 
+                                               significance_column_replicating_emperical='p_value', # dummy column, because all are significant
                                                se_column_replicating='beta_se', 
-                                               se_column_replicating_in='beta_se', 
-                                               )
+                                               se_column_replicating_in='beta_se'
+    )
     # now replace the name
     sc_vs_ps_ct_stats[['replicating_in']] <- ct_singulary
     # put in the list
@@ -1415,5 +1530,46 @@ sccre_to_pscre_celltype_stat_p <- plot_replication_stats(stats_per_ct, mid_value
 ggsave('~/plots/mo_sccre_vs_pscre_celltype_replication_simple.pdf', plot = sccre_to_pscre_celltype_stat_p, width = 3, height = 8)
 # display the figure
 sccre_to_pscre_celltype_stat_p
+# do concordance as well
+sccre_to_pscre_celltype_stat_p_cond <- plot_replication_stats(stats_per_ct, mid_value = 0.5, comparing_value_to_text=list('con_emp_emp' = ''), colour_column = 'con_emp_emp', category_plot_order = c('pseudobulk', 'B', 'CD4+ T', 'CD8+ T', 'NK', 'DC', 'Monocyte', 'monocyte'), text_size = 4, legendless = T) +
+  xlab('Dataset') +
+  ylab('Cell type replicating in') +
+  ggtitle('Replication of CREs') +
+  labs(fill="Concordance") +
+  theme(
+    # X label font size
+    axis.title.x = element_text(size = 20), 
+    # Y label font size
+    axis.title.y = element_text(size = 20), 
+    # X tick font size
+    axis.text.x = element_text(size = 16), 
+    # Y tick font size
+    axis.text.y = element_text(size = 16), 
+    # title size
+    title = element_text(size = 24)
+  ) + 
+  scale_y_discrete(position = "right")
+# save the figure
+ggsave('~/plots/mo_sccre_vs_pscre_celltype_replication_concordance.pdf', plot = sccre_to_pscre_celltype_stat_p_cond, width = 3, height = 8)
+# display the figure
+sccre_to_pscre_celltype_stat_p_cond
 
-
+# get overlapping numbers
+cre_overlapping <- get_overlapping_peakgene_links(hybrid_output, pseudobulk_output)
+# replace cell type names
+cre_overlapping[['cell_type_nice']] <- rename_labels(cre_overlapping[['cell_type']])
+# add cell type with sharedness
+cre_overlapping[['ct_sharedness']] <- paste(cre_overlapping[['cell_type_nice']], cre_overlapping[['shared']])
+# and plot them
+p_overlapping_r2g_ps_sc <- ggplot(data = cre_overlapping, mapping = aes(x = cell_type_nice, y = n, fill = ct_sharedness)) +
+  geom_bar(stat = 'identity', position = 'stack') + 
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+  theme(legend.position = 'none') +
+  xlab('Cell type') +
+  ylab('N region-gene links') + 
+  ggtitle('Number of region-gene links') +
+  scale_fill_manual(values = get_color_coding_dict())
+# show overlap
+p_overlapping_r2g_ps_sc
+# save the figure
+ggsave('~/plots/mo_sccre_vs_pscre_celltype_overlap.pdf', plot = p_overlapping_r2g_ps_sc, width = 4, height = 4)
