@@ -405,6 +405,8 @@ add_utr_info <- function(exon_intron_annotation, cds_annotation, feature_id_colu
 }
 
 add_pct_cds_info <- function(intron_exon_utr_annotation, feature_id_column='gene_id', start_column='start', end_column='end', strand_column='strand', utr_column='utr', cds_bins=8) {
+  # make into df
+  intron_exon_utr_annotation <- data.frame(intron_exon_utr_annotation)
   # make a list where we have this info added
   exon_intro_with_utr_wpct_l <- list()
   # check each feature
@@ -642,7 +644,11 @@ mdfiver::create_sha256_for_file(exons_annotatio_utr_pct_loc)
 # reload
 exon_intron_utr_annotation_pct <- fread(exons_annotatio_utr_pct_loc, header = T, sep = '\t')
 # also with smaller bins
-exon_intron_utr_annotation_pct_5 <- add_pct_cds_info(exon_intron_utr_annotation, cds_bins = 5)
+exon_intron_utr_annotation_pct_5 <- add_pct_cds_info(exon_intron_annotation, cds_bins = 5)
+# save this info
+exons_annotatio_utr_pct5_loc <- '/groups/umcg-franke-scrna/tmp02/external_datasets/ncbi_gencode/GCF_000001405.40/gencode_with_annotations_bins5.tsv.gz'
+write.table(exon_intron_utr_annotation_pct_5, gzfile(exons_annotatio_utr_pct5_loc), row.names = F, col.names = T, sep = '\t', quote = F)
+mdfiver::create_sha256_for_file(exons_annotatio_utr_pct5_loc)
 
 # add pct info
 exon_intron_utr_annotation_pcttrons <- add_pct_trons_info(exon_intron_utr_annotation)
@@ -868,20 +874,23 @@ qtl_output_all_sig_wi_gb <- add_gene_body_location(qtl_output_all_sig_wi, exon_i
 # add to the ieqtl data
 qtl_output_all_sig_wi_gb[['screen_overlap_func']] <- variant_to_screen_anno[match(qtl_output_all_sig_wi_gb[['snp_id']], variant_to_screen_anno[['snp_id']]), ][['function']]
 
+# add UTR info as well
+qtl_output_all_sig_wi_gb[['utr']] <- exon_intron_utr_annotation[match(paste(qtl_output_all_sig_wi_gb[['feature']], qtl_output_all_sig_wi_gb[['number']]), paste(exon_intron_utr_annotation[['feature']], exon_intron_utr_annotation[['number']])), ][['utr']]
+qtl_output_all_sig_wi_gb[['full_anno']] <- exon_intron_utr_annotation_pct[match(paste(qtl_output_all_sig_wi_gb[['feature']], qtl_output_all_sig_wi_gb[['number']]), paste(exon_intron_utr_annotation_pct[['feature']], exon_intron_utr_annotation_pct[['number']])), ][['full_anno']]
+qtl_output_all_sig_wi_gb[['full_anno5']] <- exon_intron_utr_annotation_pct_5[match(paste(qtl_output_all_sig_wi_gb[['feature']], qtl_output_all_sig_wi_gb[['number']]), paste(exon_intron_utr_annotation_pct_5[['feature']], exon_intron_utr_annotation_pct_5[['number']])), ][['full_anno']]
+qtl_output_all_sig_wi_gb[['tron_bin']] <- exon_intron_utr_annotation_pcttrons[match(paste(qtl_output_all_sig_wi_gb[['feature']], qtl_output_all_sig_wi_gb[['number']]), paste(exon_intron_utr_annotation_pcttrons[['feature']], exon_intron_utr_annotation_pcttrons[['number']])), ][['full_anno']]
+qtl_output_all_sig_wi_gb[['tron_bin_5bin']] <- exon_intron_utr_annotation_pcttrons_5[match(paste(qtl_output_all_sig_wi_gb[['feature']], qtl_output_all_sig_wi_gb[['number']]), paste(exon_intron_utr_annotation_pcttrons_5[['feature']], exon_intron_utr_annotation_pcttrons_5[['number']])), ][['full_anno']]
+# add a new column
+qtl_output_all_sig_wi_gb[['full_anno5_full']] <- qtl_output_all_sig_wi_gb[['full_anno5']]
+# where it is NA, use the variant classification
+qtl_output_all_sig_wi_gb[is.na(qtl_output_all_sig_wi_gb[['full_anno5']]), ][['full_anno5_full']] <- qtl_output_all_sig_wi_gb[is.na(qtl_output_all_sig_wi_gb[['full_anno5']]), ][['variant_classification']]
+
 # save QTL output info
 ieqtl_annotated_loc <- '~/tables/mo_ieqtl_annotated.rds'
 saveRDS(qtl_output_all_sig_wi_gb, ieqtl_annotated_loc)
 mdfiver::create_sha256_for_file(ieqtl_annotated_loc)
 # read back
 qtl_output_all_sig_wi_gb <- readRDS(ieqtl_annotated_loc)
-
-# add UTR info as well
-qtl_output_all_sig_wi_gb[['utr']] <- exon_intron_utr_annotation[match(paste(qtl_output_all_sig_wi_gb[['feature']], qtl_output_all_sig_wi_gb[['number']]), paste(exon_intron_utr_annotation[['feature']], exon_intron_utr_annotation[['number']])), ][['utr']]
-qtl_output_all_sig_wi_gb[['full_anno']] <- exon_intron_utr_annotation_pct[match(paste(qtl_output_all_sig_wi_gb[['feature']], qtl_output_all_sig_wi_gb[['number']]), paste(exon_intron_utr_annotation_pct[['feature']], exon_intron_utr_annotation_pct[['number']])), ][['full_anno']]
-qtl_output_all_sig_wi_gb[['tron_bin']] <- exon_intron_utr_annotation_pcttrons[match(paste(qtl_output_all_sig_wi_gb[['feature']], qtl_output_all_sig_wi_gb[['number']]), paste(exon_intron_utr_annotation_pcttrons[['feature']], exon_intron_utr_annotation_pcttrons[['number']])), ][['full_anno']]
-
-# just calculate the distance to the gene body
-
 
 # plot the distances per group
 p_snp_gene_interaction_distances <- ggplot(data = qtl_output_all_sig_wi, mapping = aes(x = distance, fill = interaction_direction)) +
@@ -1088,11 +1097,16 @@ p_nrs <- ggplot(
 # save the plot
 ggsave('~/plots/mo_variant_position_eqtls.pdf', width = 14, height = 7, plot = p_nrs)
 
-# make this into a table
-intron_exon_nrs <- data.table(table(qtl_output_all_sig_wi_gb[!is.na(qtl_output_all_sig_wi_gb$full_anno), ]$full_anno))
+# make this into a table (remove where there is gene body info, but not where)
+intron_exon_nrs <- data.table(table(qtl_output_all_sig_wi_gb[!is.na(qtl_output_all_sig_wi_gb[['full_anno5_full']]) & qtl_output_all_sig_wi_gb[['full_anno5_full']] != 'in_gene_body', ][['full_anno5_full']]))
+# intron_exon_nrs <- data.table(table(qtl_output_all_sig_wi_gb[!is.na(qtl_output_all_sig_wi_gb[['full_anno5_full']]) & qtl_output_all_sig_wi_gb[['full_anno5_full']] != 'in_gene_body' & qtl_output_all_sig_wi_gb[['interaction_direction']] != 'none', ][['full_anno5_full']]))
 colnames(intron_exon_nrs) <- c('loc', 'n')
+# rename some values to be nicer
+intron_exon_nrs[['loc']] <- gsub('before_tss', 'Before TSS', intron_exon_nrs[['loc']])
+# intron_exon_nrs[['loc']] <- gsub('behind_gene_body', 'Behind gene body', intron_exon_nrs[['loc']])
+intron_exon_nrs[['loc']] <- gsub('behind_gene_body', 'Behind GB', intron_exon_nrs[['loc']])
 # the loc into an factor
-intron_exon_nrs[['loc']] <- factor(intron_exon_nrs[['loc']], levels = c('5 prime UTR', 0:8, '3 prime UTR'))
+intron_exon_nrs[['loc']] <- factor(intron_exon_nrs[['loc']], levels = c('Before TSS', 'before_tss', '5 prime UTR', 0:5, '3 prime UTR', 'behind_gene_body', 'Behind gene body', 'Behind GB'))
 # make that into a plot
 p_locs <- ggplot(data = intron_exon_nrs, mapping = aes(x = loc, y = n)) +
   geom_bar(stat = 'identity') +
@@ -1111,16 +1125,16 @@ p_locs <- ggplot(data = intron_exon_nrs, mapping = aes(x = loc, y = n)) +
     plot.title = element_text(size = 20)
   )
 # finally also check exon/intron
-prime5_nrs <- data.frame(table(qtl_output_all_sig_wi_gb[!is.na(qtl_output_all_sig_wi_gb[['full_anno']]) & qtl_output_all_sig_wi_gb[['full_anno']] == '5 prime UTR', 'feature']))
+prime5_nrs <- data.frame(table(qtl_output_all_sig_wi_gb[!is.na(qtl_output_all_sig_wi_gb[['full_anno5_full']]) & qtl_output_all_sig_wi_gb[['full_anno5_full']] == '5 prime UTR', 'feature']))
 colnames(prime5_nrs) <- c('feature', 'nr')
 prime5_nrs[['frac']] <- prime5_nrs[['nr']] / sum(prime5_nrs[['nr']])
 # add a zero because there is apparently no introns
 prime5_nrs <- rbind(prime5_nrs, data.frame('feature' = c('intron'), 'nr' = c(0), 'frac' = c(0)))
-prime3_nrs <- data.frame(table(qtl_output_all_sig_wi_gb[!is.na(qtl_output_all_sig_wi_gb[['full_anno']]) & qtl_output_all_sig_wi_gb[['full_anno']] == '3 prime UTR', 'feature']))
+prime3_nrs <- data.frame(table(qtl_output_all_sig_wi_gb[!is.na(qtl_output_all_sig_wi_gb[['full_anno5_full']]) & qtl_output_all_sig_wi_gb[['full_anno5_full']] == '3 prime UTR', 'feature']))
 colnames(prime3_nrs) <- c('feature', 'nr')
 prime3_nrs[['frac']] <- prime3_nrs[['nr']] / sum(prime3_nrs[['nr']])
 prime3_nrs <- rbind(prime3_nrs, data.frame('feature' = c('intron'), 'nr' = c(0), 'frac' = c(0)))
-no_utr_nrs <- data.frame(table(qtl_output_all_sig_wi_gb[!is.na(qtl_output_all_sig_wi_gb[['full_anno']]) & qtl_output_all_sig_wi_gb[['full_anno']] != '5 prime UTR' & qtl_output_all_sig_wi_gb[['full_anno']] != '3 prime UTR', 'feature']))
+no_utr_nrs <- data.frame(table(qtl_output_all_sig_wi_gb[!is.na(qtl_output_all_sig_wi_gb[['full_anno5_full']]) & qtl_output_all_sig_wi_gb[['full_anno5_full']] != '5 prime UTR' & qtl_output_all_sig_wi_gb[['full_anno']] != '3 prime UTR', 'feature']))
 colnames(no_utr_nrs) <- c('feature', 'nr')
 no_utr_nrs[['frac']] <- no_utr_nrs[['nr']] / sum(no_utr_nrs[['nr']])
 # into plots
@@ -1128,7 +1142,7 @@ prime5_p <- ggplot(data = prime5_nrs, mapping = aes(x = feature, y = frac, fill 
   geom_bar(stat = 'identity') +
   xlab('Variant location') + 
   ylab('Fraction of variants') +
-  ggtitle('Location of variants') + 
+  ggtitle('5\'prime UTR') + 
   theme(legend.position = 'none') + 
   #theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
   theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) +
@@ -1145,7 +1159,7 @@ prime3_p <- ggplot(data = prime3_nrs, mapping = aes(x = feature, y = frac, fill 
   geom_bar(stat = 'identity') +
   xlab('Variant location') + 
   ylab('Fraction of variants') +
-  ggtitle('Location of variants') + 
+  ggtitle('3\'prime UTR') + 
   theme(legend.position = 'none') + 
   #theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
   theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) +
@@ -1162,7 +1176,7 @@ noutr_p <- ggplot(data = no_utr_nrs, mapping = aes(x = feature, y = frac, fill =
   geom_bar(stat = 'identity') +
   xlab('Variant location') + 
   ylab('Fraction of variants') +
-  ggtitle('Location of variants') + 
+  ggtitle('CDS') + 
   theme(legend.position = 'none') + 
   #theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
   theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) +
@@ -1189,7 +1203,10 @@ p_locs_combined <- plot_grid(
   ncol = 1, 
   rel_heights = c(2,1)
 )
-ggsave('~/plots/mo_ievariants_locs.pdf', p_locs_combined, width = 9, height = 6)
+# show the plot
+p_locs_combined
+# save the plot
+ggsave('~/plots/mo_ievariants_locs_5bins.pdf', p_locs_combined, width = 9, height = 6)
 
 
 # do the same, but now with the intron/exons numbered
