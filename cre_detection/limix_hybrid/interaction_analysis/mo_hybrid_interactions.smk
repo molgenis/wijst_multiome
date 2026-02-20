@@ -165,10 +165,6 @@ rule run_interaction:
 # write merged results
 ############################################
 
-############################################
-# write merged results
-############################################
-
 rule merge_results:
     input:
         # discover all result files produced by per-chunk rules

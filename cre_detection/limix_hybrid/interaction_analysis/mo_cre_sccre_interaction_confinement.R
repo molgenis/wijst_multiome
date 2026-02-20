@@ -522,8 +522,6 @@ get_top_effect_per_cs <- function(cs_output_per_ct, feature_column='feature_id',
 
 # luck seed
 set.seed(7777)
-# whether we are in debug mode
-debug <- T
 
 
 ####################
