@@ -1,0 +1,30 @@
+
+
+# location of the genotype files
+genotype_prefix_template: "/abs/path/to/genotypes/EUR_imputed_hg38_varFiltered_chr{chrom}"
+# base location of chunks
+chunk_base: "chunks"
+# location to store chunk outputs
+results_base: "results"
+# absolute confinement file loc
+confinement: "/abs/path/to/confinement.tsv.gz"
+# absolute smf file loc
+smf: "/abs/path/to/smf.tsv.gz"
+# absolute covariates file loc
+covariates: "/abs/path/to/covariates.tsv.gz"
+# barcode column in covariate file
+barcode_column: "barcode_lane"
+# fixed effects to consider
+fixed_effects: "region,genotype"
+# random effects to consider
+random_effects: "sample_final,lane"
+# terms that interact
+interaction_terms: "genotype,region"
+# do gaussnorm on expression data
+expression_gausnorm: true
+# do gausnorm on accessibility data
+accessibility_gausnorm: true
+# path to expression file
+expression_filename: "expression.tsv.gz"
+# path to accessibility file
+accessibility_filename: "accessibility.tsv.gz"
