@@ -30,3 +30,8 @@ accessibility_gausnorm: true
 expression_filename: "expression.tsv.gz"
 # path to accessibility file
 accessibility_filename: "/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eregulon_gene_auc_CD4T_nonsparse_transposed.tsv.gz"
+
+# R command
+r_command: "~/start_Rscript.sh"
+# script location
+script_loc: "/groups/umcg-franke-scrna/tmp02/users/umcg-roelen/singularity/rstudio-server/simulated_home/mo_hybrid_cre_interaction.R"

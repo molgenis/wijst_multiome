@@ -274,7 +274,7 @@ write_empty_result <- function(output_loc) {
 # luck seed
 set.seed(7777)
 # whether we are in debug mode
-debug <- T
+debug <- F
 
 
 ####################
@@ -482,7 +482,7 @@ expression_data <- expression_data[expression_data[['gene']] %in% confinement[['
 accessibility_data <- accessibility_data[accessibility_data[['region']] %in% confinement[['region']], ]
 
 # format output loc
-tsv_output_loc_full <- paste0(output_loc, 'result.tsv.gz')
+tsv_output_loc_full <- paste(output_loc, 'result.tsv.gz', sep = '/')
 # set output loc as the tsv
 output_loc_full <- tsv_output_loc_full
 # gz file ends with .gz
