@@ -1,17 +1,19 @@
-
+#####################################################
+# configuration yaml for mo_hybrid_interactions.smk #
+#####################################################
 
 # location of the genotype files
-genotype_prefix_template: "/abs/path/to/genotypes/EUR_imputed_hg38_varFiltered_chr{chrom}"
+genotype_prefix_template: "/groups/umcg-franke-scrna/tmp02/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/genotype_input/EUR_imputed_hg38_varFiltered_chr{chrom}"
 # base location of chunks
-chunk_base: "chunks"
+chunk_base: "/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/CD4T/"
 # location to store chunk outputs
-results_base: "results"
+results_base: "/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/CD4T/"
 # absolute confinement file loc
-confinement: "/abs/path/to/confinement.tsv.gz"
+confinement: "/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/mo_var_tf_gene_confinement.tsv.gz"
 # absolute smf file loc
-smf: "/abs/path/to/smf.tsv.gz"
+smf: "/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/CD4T/smf.tsv.gz"
 # absolute covariates file loc
-covariates: "/abs/path/to/covariates.tsv.gz"
+covariates: "/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/metadata/mo_celllevel_metadata.tsv.gz"
 # barcode column in covariate file
 barcode_column: "barcode_lane"
 # fixed effects to consider
@@ -27,4 +29,4 @@ accessibility_gausnorm: true
 # path to expression file
 expression_filename: "expression.tsv.gz"
 # path to accessibility file
-accessibility_filename: "accessibility.tsv.gz"
+accessibility_filename: "/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eregulon_gene_auc_CD4T_nonsparse_transposed.tsv.gz"
