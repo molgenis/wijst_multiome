@@ -2,7 +2,9 @@
 # Snakemake pipeline for hybrid interaction analysis #
 ######################################################
 
+# for paths
 import os
+# for pattern matching
 import re
 
 
@@ -10,6 +12,7 @@ import re
 # load default config
 ############################################
 
+# default config file
 configfile: "config.yaml"
 
 
@@ -17,126 +20,111 @@ configfile: "config.yaml"
 # configuration and path setup
 ############################################
 
+# grab variables from the configuration
 CHUNK_BASE   = config["chunk_base"]
 RESULTS_BASE = config["results_base"]
 GENO_TMPL    = config["genotype_prefix_template"]
-
+# also where R and the script are
 RSCRIPT_LOC  = config["script_loc"]
 R_COMMAND    = config["r_command"]
 
 
 ############################################
-# to store chunk format
+# helpers
 ############################################
 
-class WCObject:
-    def __init__(self, chrom, start, end):
-        self.chrom = chrom
-        self.start = start
-        self.end = end
-    
-    def __getitem__(self, key):
-        return getattr(self, key)
-
-
-############################################
-# define helpers
-############################################
-
-# define chunk_id (you were calling it, but it wasn't defined)
-def chunk_id(wc):
-    return f"chr{wc.chrom}-{wc.start}-{wc.end}"
-
-# define chunk_dir (also used but missing)
-def chunk_dir(wc):
-    return f"{CHUNK_BASE}/{chunk_id(wc)}"
-
-# autodetect absolute vs relative paths
 def resolve_rel_or_abs(base_dir, maybe_rel_path):
     """Return absolute path unchanged; join relative path to base_dir."""
     if os.path.isabs(maybe_rel_path):
         return maybe_rel_path
     return os.path.join(base_dir, maybe_rel_path)
 
-def chunk_outdir(wc):
-    return f"{RESULTS_BASE}/{chunk_id(wc)}"
+def chunk_dir_from_chunk(chunk: str) -> str:
+    return os.path.join(CHUNK_BASE, chunk)
 
-def chunk_expression(wc):
-    return resolve_rel_or_abs(chunk_dir(wc), config["expression_filename"])
+def chunk_outdir_from_chunk(chunk: str) -> str:
+    return os.path.join(RESULTS_BASE, chunk)
 
-def chunk_accessibility(wc):
-    return resolve_rel_or_abs(chunk_dir(wc), config["accessibility_filename"])
+def chrom_from_chunk(chunk: str) -> str:
+    # chunk like "chr9-99361653-100377592" -> "9"
+    return chunk.split("-")[0].replace("chr", "")
 
 
 ############################################
-# define chunking scheme
+# define chunking scheme (discover only real folders)
 ############################################
 
-# grab directories that match chr{chrom}-{start}-{end}
-pat = re.compile(r"^chr([^-/]+)-(\d+)-(\d+)$")
+# match directories like: chr{chrom}-{start}-{end}
+_pat = re.compile(r"^chr([^-/]+)-(\d+)-(\d+)$")
 
-# create list of cnunk diretoreis
-CHUNK_DIRS = []
-# check each entry
+# set the list of chunks we'll have
+CHUNKS = []
+# iterate the items in the directory
 with os.scandir(CHUNK_BASE) as it:
+    # check each entry
     for entry in it:
-        # check if even a directory
-        if entry.is_dir():
-            # then check if matches the pattern
-            m = pat.match(entry.name)
-            if m:
-                # then add to the list
-                CHUNK_DIRS.append(entry.name)
+        # check if it is a directory and fits the pattern of a chunk
+        if entry.is_dir() and _pat.match(entry.name):
+            CHUNKS.append(entry.name)
 
-# sort so that it is easier to check
-CHUNK_DIRS.sort()
+# sort the chunks so it is easier to reproduce
+CHUNKS.sort()
 
-# extract all the values
-CHROMS = [d.split("-")[0].replace("chr", "") for d in CHUNK_DIRS]
-STARTS = [d.split("-")[1] for d in CHUNK_DIRS]
-ENDS   = [d.split("-")[2] for d in CHUNK_DIRS]
+# warn if no chunks could be found
+if not CHUNKS:
+    print(f"[WARN] No chunk directories found under: {CHUNK_BASE}")
 
-# make object
-WC = WCObject(chrom=CHROMS, start=STARTS, end=ENDS)
 
+############################################
+# default target
+############################################
+
+# expand through all of the chunks
 rule all:
     input:
-        # each chunk
-        expand(f"{RESULTS_BASE}/chr{{chrom}}-{{start}}-{{end}}/result.tsv.gz",
-               chrom=WC.chrom, start=WC.start, end=WC.end, zip = True),
-        # merged chunk results
-        f"{RESULTS_BASE}/all_results.tsv.gz"
+        # each chunk result
+        expand(f"{RESULTS_BASE}/{{chunk}}/result.tsv.gz", chunk=CHUNKS),
+        # merge results
+        f"{RESULTS_BASE}/merged/all_results.tsv.gz"
 
 
 ############################################
 # run each chunk
 ############################################
 
+# the rule to run an interaction analysis
 rule run_interaction:
     input:
-        expression = chunk_expression,
-        accessibility = chunk_accessibility,
-        confinement = config["confinement"],
-        smf = config["smf"],
+        # grab all the expression and accessibility files
+        expression = lambda wc: resolve_rel_or_abs(chunk_dir_from_chunk(wc.chunk), config["expression_filename"]),
+        accessibility = lambda wc: resolve_rel_or_abs(chunk_dir_from_chunk(wc.chunk), config["accessibility_filename"]),
+        # fetch confinement
+        confinement = config["confinement"], 
+        # fetch sample mapping
+        smf = config["smf"], 
+        # and the covariates
         covariates = config["covariates"],
-        # OPTIONAL stricter tracking of PLINK files:
-        genotype_bed = lambda wc: GENO_TMPL.format(chrom=wc.chrom) + ".bed",
-        genotype_bim = lambda wc: GENO_TMPL.format(chrom=wc.chrom) + ".bim",
-        genotype_fam = lambda wc: GENO_TMPL.format(chrom=wc.chrom) + ".fam"
+        # check if the plink files are there
+        genotype_bed = lambda wc: GENO_TMPL.format(chrom=chrom_from_chunk(wc.chunk)) + ".bed",
+        genotype_bim = lambda wc: GENO_TMPL.format(chrom=chrom_from_chunk(wc.chunk)) + ".bim",
+        genotype_fam = lambda wc: GENO_TMPL.format(chrom=chrom_from_chunk(wc.chunk)) + ".fam"
     output:
-        tsv = f"{RESULTS_BASE}/chr{{chrom}}-{{start}}-{{end}}/result.tsv.gz"
+        tsv = f"{RESULTS_BASE}/{{chunk}}/result.tsv.gz"
     params:
-        outdir = chunk_outdir,
-        fixed_effects = config["fixed_effects"],
-        random_effects = config["random_effects"],
+        in_dir   = lambda wc: chunk_dir_from_chunk(wc.chunk),
+        outdir   = lambda wc: chunk_outdir_from_chunk(wc.chunk),
+        fixed_effects     = config["fixed_effects"],
+        random_effects    = config["random_effects"],
         interaction_terms = config["interaction_terms"],
-        barcode_column = config["barcode_column"],
-        genotype_prefix = lambda wc: GENO_TMPL.format(chrom=wc.chrom),
-        EXPR_FLAG = "--expression_gausnorm" if bool(config["expression_gausnorm"]) else "",
-        ACC_FLAG  = "--accessibility_gausnorm" if bool(config["accessibility_gausnorm"]) else "",
+        barcode_column    = config["barcode_column"],
+        # genotype prefix (precomputed in Python)
+        genotype_prefix   = lambda wc: GENO_TMPL.format(chrom=chrom_from_chunk(wc.chunk)),
+        # get the flags for expression or accessibility
+        EXPR_FLAG = "--expression_gausnorm"    if bool(config.get("expression_gausnorm", False)) else "",
+        ACC_FLAG  = "--accessibility_gausnorm" if bool(config.get("accessibility_gausnorm", False)) else "",
+        # R invocation
         rscript = RSCRIPT_LOC,
-        rcmd = R_COMMAND,
-        in_dir = lambda wc: chunk_dir(wc)
+        rcmd    = R_COMMAND
     threads: 2
     shell:
         r"""
@@ -156,10 +144,9 @@ rule run_interaction:
             {params.EXPR_FLAG} \
             {params.ACC_FLAG}
 
-        # Verify output exists
+        # check if output exists (your R writes an empty gz when nothing to test)
         test -s "{output.tsv}"
         """
-
 
 ############################################
 # write merged results
@@ -167,51 +154,50 @@ rule run_interaction:
 
 rule merge_results:
     input:
-        # discover all result files produced by per-chunk rules
-        expand(
-            f"{RESULTS_BASE}/chr{{chrom}}-{{start}}-{{end}}/result.tsv.gz",
-            chrom=WC.chrom,
-            start=WC.start,
-            end=WC.end, 
-			zip = True
-        )
+        expand(f"{RESULTS_BASE}/{{chunk}}/result.tsv.gz", chunk=CHUNKS)
     output:
-        merged = f"{RESULTS_BASE}/all_results.tsv.gz"
+        merged = f"{RESULTS_BASE}/merged/all_results.tsv.gz"
     run:
         import os, gzip, shutil, tempfile
 
+        # get all the files
         infiles = list(input)
-
-        # remove fiFles that are missing or zero-size
+        # but make sure we only consider once that have any contents
         nonempty = [f for f in infiles if os.path.exists(f) and os.path.getsize(f) > 0]
 
-        # check if output dir exists
+        # make sure parent directory exists
         os.makedirs(os.path.dirname(output.merged), exist_ok=True)
 
-        # uncompress before the merge
+        # create temporary file for merging everything
         tmp_path = tempfile.NamedTemporaryFile(delete=False).name
-        # keep track of whether we wrote header
+        # keep track if we wrote the header already
         wrote_header = False
-        # open file to write
+        # open the temporary file
         with open(tmp_path, "wt") as tmp:
+            # check each non-empty file
             for f in nonempty:
+                # open the file
                 with gzip.open(f, "rt") as fin:
+                    # go through the contents
                     for i, line in enumerate(fin):
+                        # check if we have the header (first line)
                         if i == 0:
-                            # Only write the first header
+                            # only write the header once
                             if not wrote_header:
                                 tmp.write(line)
                                 wrote_header = True
-                            # Skip header of later files
+                            # skip header from now on
+                        # what is not a header we'll write in any case
                         else:
                             tmp.write(line)
 
-        # create empty file if nothing was done
+        # if we didn't write the header at all, we didn't happen to have any non-empty chunks
         if not wrote_header:
+            # write an empty file
             with gzip.open(output.merged, "wt") as fout:
                 pass
         else:
-            # compress merged file
+            # compress merged file if we made one
             with open(tmp_path, "rb") as fin, gzip.open(output.merged, "wb") as fout:
                 shutil.copyfileobj(fin, fout)
 
