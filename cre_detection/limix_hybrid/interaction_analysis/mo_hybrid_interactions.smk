@@ -103,7 +103,7 @@ rule all:
     input:
         # each chunk
         expand(f"{RESULTS_BASE}/chr{{chrom}}-{{start}}-{{end}}/result.tsv.gz",
-               chrom=WC.chrom, start=WC.start, end=WC.end),
+               chrom=WC.chrom, start=WC.start, end=WC.end, zip = True),
         # merged chunk results
         f"{RESULTS_BASE}/all_results.tsv.gz"
 
@@ -172,7 +172,8 @@ rule merge_results:
             f"{RESULTS_BASE}/chr{{chrom}}-{{start}}-{{end}}/result.tsv.gz",
             chrom=WC.chrom,
             start=WC.start,
-            end=WC.end
+            end=WC.end, 
+			zip = True
         )
     output:
         merged = f"{RESULTS_BASE}/all_results.tsv.gz"
