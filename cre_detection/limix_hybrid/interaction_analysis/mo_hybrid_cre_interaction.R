@@ -2,7 +2,7 @@
 ############################################################################################################################
 # Authors: Roy Oelen
 # Name: mo_hybrid_cre_interaction.R
-# Function: 
+# Function: perform interaction-eQTL analysis at single-cell level with TF or ATAC as interaction terms
 # Example: 
 # 
 ############################################################################################################################
@@ -22,6 +22,7 @@ library(bestNormalize)
 # for the model
 library(lme4)
 library(lmerTest)
+
 
 ####################
 # Functions        #
@@ -193,7 +194,6 @@ do_interaction_analysis <- function(expression_data,
     region_values <- as.vector(unlist(accessibility_data[accessibility_data[['region']] == region, 2:ncol(accessibility_data)]))
     # check each gene
     for (gene in unique(genes_region)) {
-      print(paste(region, gene))
       # extract the gene
       gene_values <- as.vector(unlist(expression_data_region[expression_data_region[['gene']] == gene, 2:ncol(expression_data_region)]))
       # merge the metadata with the gene and the region
@@ -209,6 +209,8 @@ do_interaction_analysis <- function(expression_data,
         genotype_numeric <- as.vector(as(genotype, 'numeric'))
         # add the genotype
         covariates_data[['genotype']] <- genotype_numeric
+        # keep only complete cases
+        covariates_data_complete <- covariates_data[complete.cases(covariates_data), ]
         # initialize variables
         base_model <- NULL
         interaction_model <- NULL
@@ -217,18 +219,18 @@ do_interaction_analysis <- function(expression_data,
         # depending on the family, the calls and anovas are different
         if (family == 'poisson') {
           # model without interaction
-          base_model <- lme4::glmer(formula = base_formula, data = covariates_data, family = poisson)
+          base_model <- lme4::glmer(formula = base_formula, data = covariates_data_complete, family = poisson)
           # model with interaction
-          interaction_model <- lme4::glmer(formula = interaction_formula, data = covariates_data, family = poisson)
+          interaction_model <- lme4::glmer(formula = interaction_formula, data = covariates_data_complete, family = poisson)
           # check if they are different
           ftest_res <- anova(base_model, interaction_model, refit = FALSE, test = 'Chisq')
           anova_test_used <- 'LRT'
         }
         else if (family == 'gaussian') {
           # base model
-          base_model <- lmerTest::lmer(formula = base_formula, data = covariates_data)
+          base_model <- lmerTest::lmer(formula = base_formula, data = covariates_data_complete)
           # interaction model
-          interaction_model <- lmerTest::lmer(formula = interaction_formula, data = covariates_data)
+          interaction_model <- lmerTest::lmer(formula = interaction_formula, data = covariates_data_complete)
           # check if they are different
           ftest_res <- anova(base_model, interaction_model, refit = FALSE, test = 'F')
           anova_test_used <- 'F'
@@ -244,6 +246,10 @@ do_interaction_analysis <- function(expression_data,
         interaction_model_df[['anova']] <- anova_test_used
         # and finally the value (which is the last column, but the name will differ based on the type of test used)
         interaction_model_df[['anova_p']] <- ftest_res['interaction_model', ncol(ftest_res)]
+        # keep the number of cells we have
+        interaction_model_df[['ncell']] <- nrow(covariates_data_complete)
+        # and participants
+        interaction_model_df[['nparticipant']] <- length(unique(smf[smf[['cell']] %in% covariates_data_complete[['cell']], ][['participant']]))
         # store result
         res_per_comparison[[paste(region, gene, variant)]] <- interaction_model_df
       }
@@ -350,13 +356,13 @@ barcode_column <- NULL
 
 if (debug) {
   # set all of the variables hardcoded for a testing debug run
-  confinement_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/CD4T/mo_gt_tf_gene_confinement_test.tsv.gz'
-  in_dir <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/CD4T/chr9-99361653-100377592/'
+  confinement_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/mo_var_tf_gene_confinement.tsv.gz'
+  in_dir <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/CD4T/chr12-8899578-9674043/'
   smf_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/CD4T/smf.tsv.gz'
-  output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/CD4T/chr9-99361653-100377592/'
+  output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/CD4T/chr12-8899578-9674043/'
   expression_file <- 'expression.tsv.gz'
   accessibility_file <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eregulon_gene_auc_CD4T_nonsparse_transposed.tsv.gz'
-  genotype_loc <- '/groups/umcg-franke-scrna/tmp02/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/genotype_input/EUR_imputed_hg38_varFiltered_chr9'
+  genotype_loc <- '/groups/umcg-franke-scrna/tmp02/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/genotype_input/EUR_imputed_hg38_varFiltered_chr12'
   covariates_file <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/metadata/mo_celllevel_metadata.tsv.gz'
   fixed_effects_string <- 'region,genotype'
   random_effects_string <- 'sample_final,lane'
@@ -443,43 +449,63 @@ confinement <- fread(confinement_loc, header = T, sep = '\t', )
 # set harmonized column names to make it easier for ourselves
 colnames(confinement) <- c('variant', 'region', 'gene')
 
-# read the expression file
-# expression_data <- read.table(full_exp_path, header = T, sep = '\t', check.names = F, row.names = 1)
-expression_data <- fread(full_exp_path, header = T, sep = '\t', check.names = F, skip = 1)
-# read the header
-expression_data_header_line <- readLines(full_exp_path, n = 1)
-# split by sep
-expression_data_header <- strsplit(expression_data_header_line, '\t')[[1]]
-# add this header
-if (length(expression_data_header) == ncol(expression_data)) {
-  colnames(expression_data) <- expression_data_header
+# initialize variables
+expression_data <- NULL
+accessibility_data <- NULL
+# check if there is expression data
+if (length(count.fields(full_exp_path)) > 1) {
+  # read the expression file
+  # expression_data <- read.table(full_exp_path, header = T, sep = '\t', check.names = F, row.names = 1)
+  expression_data <- fread(full_exp_path, header = T, sep = '\t', check.names = F, skip = 1)
+  # read the header
+  expression_data_header_line <- readLines(full_exp_path, n = 1)
+  # split by sep
+  expression_data_header <- strsplit(expression_data_header_line, '\t')[[1]]
+  # add this header
+  if (length(expression_data_header) == ncol(expression_data)) {
+    colnames(expression_data) <- expression_data_header
+  } else {
+    # otherwise we need an extra column
+    colnames(expression_data) <- c('gene', expression_data_header)
+  }
+  # also set the first column name so we can refer to it later
+  colnames(expression_data)[[1]] <- 'gene'
 } else {
-  # otherwise we need an extra column
-  colnames(expression_data) <- c('gene', expression_data_header)
+  warning('no data fields for expression data, will do no further work')
+  # to avoid further nesting, we'll make a dummy entry that makes it so that we dont continue further
+  expression_data <- data.table('gene' = c())
 }
-# read the TF/accessibility data
-# accessibility_data <- read.table(full_acc_path, header = T, sep = '\t', check.names = F, row.names = 1)
-accessibility_data <- fread(full_acc_path, header = T, sep = '\t', check.names = F, skip = 1)
-# read the header
-accessibility_data_header_line <- readLines(full_acc_path, n = 1)
-# split by sep
-accessibility_data_header <- strsplit(accessibility_data_header_line, '\t')[[1]]
-# add this header
-if (length(accessibility_data_header) == ncol(accessibility_data)) {
-  colnames(accessibility_data) <- accessibility_data_header
+# check if there is TF/accessibility data
+if (length(count.fields(full_exp_path)) > 1) {
+  # read the TF/accessibility data
+  # accessibility_data <- read.table(full_acc_path, header = T, sep = '\t', check.names = F, row.names = 1)
+  accessibility_data <- fread(full_acc_path, header = T, sep = '\t', check.names = F, skip = 1)
+  # read the header
+  accessibility_data_header_line <- readLines(full_acc_path, n = 1)
+  # split by sep
+  accessibility_data_header <- strsplit(accessibility_data_header_line, '\t')[[1]]
+  # add this header
+  if (length(accessibility_data_header) == ncol(accessibility_data)) {
+    colnames(accessibility_data) <- accessibility_data_header
+  } else {
+    # otherwise we need an extra column
+    colnames(accessibility_data) <- c('region', accessibility_data_header)
+  }
+  # set same colnames always
+  colnames(accessibility_data)[[1]] <- 'region'
 } else {
-  # otherwise we need an extra column
-  colnames(accessibility_data) <- c('region', accessibility_data_header)
+  warning('no data fields for expression data, will do no further work')
+  # to avoid further nesting, we'll make a dummy entry that makes it so that we dont continue further
+  accessibility_data <- data.table('region' = c())
 }
+  
 
-# also set the first column name so we can refer to it later
-colnames(expression_data)[[1]] <- 'gene'
-colnames(accessibility_data)[[1]] <- 'region'
+
 # expression_data <- cbind(data.frame('gene' = rownames(expression_data)), expression_data)
 # accessibility_data <- cbind(data.frame('region' = rownames(accessibility_data)), accessibility_data)
 # subset both sets
-expression_data <- expression_data[expression_data[['gene']] %in% confinement[['gene']], ]
-accessibility_data <- accessibility_data[accessibility_data[['region']] %in% confinement[['region']], ]
+expression_data <- expression_data[!is.na(expression_data[['gene']]) & expression_data[['gene']] %in% confinement[['gene']], ]
+accessibility_data <- accessibility_data[!is.na(accessibility_data[['region']]) & accessibility_data[['region']] %in% confinement[['region']], ]
 
 # format output loc
 tsv_output_loc_full <- paste(output_loc, 'result.tsv.gz', sep = '/')
@@ -549,6 +575,11 @@ if (nrow(expression_data) > 0) {
         random_effects <- c()
         if (!is.null(random_effects_string) & !is.na(random_effects_string) & random_effects_string != '') {
           random_effects <- strsplit(random_effects_string, ',')[[1]]
+        }
+        # split random effects
+        interactions <- c()
+        if (!is.null(interaction_terms_string) & !is.na(interaction_terms_string) & interaction_terms_string != '') {
+          interactions <- strsplit(interaction_terms_string, ',')[[1]]
         }
         # if a covariate matrix was supplied, we'll load it
         if (!is.null(full_covariates_path)) {
