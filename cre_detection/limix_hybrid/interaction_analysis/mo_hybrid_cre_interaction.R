@@ -4,6 +4,20 @@
 # Name: mo_hybrid_cre_interaction.R
 # Function: perform interaction-eQTL analysis at single-cell level with TF or ATAC as interaction terms
 # Example: 
+# ~/start_Rscript.sh \
+#   /groups/umcg-franke-scrna/tmp02/users/umcg-roelen/singularity/rstudio-server/simulated_home/mo_hybrid_cre_interaction.R \
+#   --in /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/CD4T/chr7-159197098-159254288 \
+#   --out /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/CD4T/chr7-159197098-159254288 \
+#   --confinement /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/mo_var_tf_gene_confinement.tsv.gz \
+#   --smf_loc /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/CD4T/smf.tsv.gz \
+#   --covariates_file /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/metadata/mo_celllevel_metadata.tsv.gz \
+#   --fixed_effects region,genotype \
+#   --random_effects sample_final,lane \
+#   --interaction_terms genotype,region \
+#   --barcode_column barcode_lane \
+#   --genotype_loc /groups/umcg-franke-scrna/tmp02/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/genotype_input/EUR_imputed_hg38_varFiltered_chr7 \
+#   --expression_gausnorm \
+#   --accessibility_gausnorm
 # 
 ############################################################################################################################
 
@@ -494,7 +508,7 @@ if (length(count.fields(full_exp_path)) > 1) {
   # set same colnames always
   colnames(accessibility_data)[[1]] <- 'region'
 } else {
-  warning('no data fields for expression data, will do no further work')
+  warning('no data fields for accessibility data, will do no further work')
   # to avoid further nesting, we'll make a dummy entry that makes it so that we dont continue further
   accessibility_data <- data.table('region' = c())
 }
