@@ -1465,6 +1465,14 @@ pseudobulk_output[['strand']] <- strand_information[match(pseudobulk_output[['fe
 # add z score
 pseudobulk_output[['zscore']] <- pseudobulk_output[['beta']] / pseudobulk_output[['beta_se']]
 
+# track the region-gene pairs we tested, and in which chunks these were situated for easy debugging later
+hybrid_ct_region_gene_chunks <- unique(hybrid_output[, c('cell_type', 'snp_id', 'feature_id', 'folder')])
+# rename the columns
+colnames(hybrid_ct_region_gene_chunks) <- c('cell_type', 'region', 'gene', 'chunk')
+# place this file somewhere
+hybrid_ct_region_gene_chunks_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/region_gene/mo_r2g_to_chunk.tsv.gz'
+write.table(hybrid_ct_region_gene_chunks, gzfile(hybrid_ct_region_gene_chunks_loc), row.names = F, col.names = T, sep = '\t')
+mdfiver::create_sha256_for_file(hybrid_ct_region_gene_chunks_loc)
 
 # and to the hybrid method
 hybrid_output <- cbind(hybrid_output, cpeaks_anno[match(hybrid_output[['snp_id']], cpeaks_anno[['signac_hg38']]), c('chr_hg38', 'start_hg38', 'end_hg38')])
