@@ -49,6 +49,22 @@ def chrom_from_chunk(chunk: str) -> str:
     # chunk like "chr9-99361653-100377592" -> "9"
     return chunk.split("-")[0].replace("chr", "")
 
+def is_set(val) -> bool:
+    """True if val is provided (not None/empty after stripping)."""
+    if val is None:
+        return False
+    s = str(val).strip()
+    return s != "" and s.lower() != "none"
+
+def optional_chunk_file(maybe_path, chunk):
+    """
+    Return a resolved (absolute) file path if provided in config (supports abs/rel);
+    otherwise None so we can omit it from inputs and CLI.
+    """
+    if not is_set(maybe_path):
+        return None
+    return resolve_rel_or_abs(chunk_dir_from_chunk(chunk), maybe_path)
+
 
 ############################################
 # define chunking scheme (discover only real folders)
@@ -122,6 +138,15 @@ rule run_interaction:
         # get the flags for expression or accessibility
         EXPR_FLAG = "--expression_gausnorm"    if bool(config.get("expression_gausnorm", False)) else "",
         ACC_FLAG  = "--accessibility_gausnorm" if bool(config.get("accessibility_gausnorm", False)) else "",
+        # optional CLI args for expression/accessibility (only if provided)
+        expr_arg = lambda wc: (
+            f'--expression_file "{optional_chunk_file(config.get("expression_filename"), wc.chunk)}"'
+            if optional_chunk_file(config.get("expression_filename"), wc.chunk) else ""
+        ),
+        acc_arg = lambda wc: (
+            f'--accessibility_file "{optional_chunk_file(config.get("accessibility_filename"), wc.chunk)}"'
+            if optional_chunk_file(config.get("accessibility_filename"), wc.chunk) else ""
+        ),
         # R invocation
         rscript = RSCRIPT_LOC,
         rcmd    = R_COMMAND
