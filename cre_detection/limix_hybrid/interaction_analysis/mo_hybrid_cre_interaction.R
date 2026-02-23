@@ -379,12 +379,12 @@ barcode_column <- NULL
 if (debug) {
   # set all of the variables hardcoded for a testing debug run
   confinement_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/mo_var_tf_gene_confinement.tsv.gz'
-  in_dir <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/CD4T/chr12-8899578-9674043/'
+  in_dir <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/CD4T/chr1-150515244-151166478/'
   smf_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/CD4T/smf.tsv.gz'
-  output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/CD4T/chr12-8899578-9674043/'
+  output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/CD4T/chr1-150515244-151166478/'
   expression_file <- 'expression.tsv.gz'
   accessibility_file <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eregulon_gene_auc_CD4T_nonsparse_transposed.tsv.gz'
-  genotype_loc <- '/groups/umcg-franke-scrna/tmp02/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/genotype_input/EUR_imputed_hg38_varFiltered_chr12'
+  genotype_loc <- '/groups/umcg-franke-scrna/tmp02/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/genotype_input/EUR_imputed_hg38_varFiltered_chr1'
   covariates_file <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/metadata/mo_celllevel_metadata.tsv.gz'
   fixed_effects_string <- 'region,genotype'
   random_effects_string <- 'sample_final,lane'
@@ -669,17 +669,17 @@ if (nrow(expression_data) > 0) {
           # extract the last part of the folder
           chunk_name <- basename(in_dir)
           # if there were any results, we'll write one
-		  if (!is.null(interaction_result) & nrow(interaction_result) > 0) {
-			# add the chunk as a column
-			interaction_result[['chunk']] <- rep(chunk_name, times = nrow(interaction_result))
-			# write result
-			write.table(interaction_result, output_loc_full, sep = '\t', row.names = F, col.names = T, quote = F)
-			# make a checksum
-			mdfiver::create_sha256_for_file(tsv_output_loc_full)
-		  } else {
-			# just make the result null again
-			interaction_result <- NULL
-		  }
+          if ((!is.null(interaction_result)) && (!is.null(nrow(interaction_result))) && (nrow(interaction_result) > 0)) {
+            # add the chunk as a column
+            interaction_result[['chunk']] <- rep(chunk_name, times = nrow(interaction_result))
+            # write result
+            write.table(interaction_result, output_loc_full, sep = '\t', row.names = F, col.names = T, quote = F)
+            # make a checksum
+            mdfiver::create_sha256_for_file(tsv_output_loc_full)
+          } else {
+            # just make the result null again
+            interaction_result <- NULL
+          }
         } else {
           message('No cells left after intersecting with covariates matrix. No more work to be done')
         }
