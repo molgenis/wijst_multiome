@@ -6,16 +6,17 @@
 # Example: 
 # ~/start_Rscript.sh \
 #   /groups/umcg-franke-scrna/tmp02/users/umcg-roelen/singularity/rstudio-server/simulated_home/mo_hybrid_cre_interaction.R \
-#   --in /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/CD4T/chr7-159197098-159254288 \
-#   --out /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/CD4T/chr7-159197098-159254288 \
+#   --in /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/CD4T/chr12-8899578-9674043 \
+#   --out /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/CD4T/chr12-8899578-9674043 \
 #   --confinement /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/mo_var_tf_gene_confinement.tsv.gz \
 #   --smf_loc /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/CD4T/smf.tsv.gz \
 #   --covariates_file /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/metadata/mo_celllevel_metadata.tsv.gz \
+#   --accessibility_file /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eregulon_gene_auc_CD4T_nonsparse_transposed.tsv.gz \
 #   --fixed_effects region,genotype \
 #   --random_effects sample_final,lane \
 #   --interaction_terms genotype,region \
 #   --barcode_column barcode_lane \
-#   --genotype_loc /groups/umcg-franke-scrna/tmp02/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/genotype_input/EUR_imputed_hg38_varFiltered_chr7 \
+#   --genotype_loc /groups/umcg-franke-scrna/tmp02/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/genotype_input/EUR_imputed_hg38_varFiltered_chr12 \
 #   --expression_gausnorm \
 #   --accessibility_gausnorm
 # 
@@ -490,7 +491,7 @@ if (length(count.fields(full_exp_path)) > 1) {
   expression_data <- data.table('gene' = c())
 }
 # check if there is TF/accessibility data
-if (length(count.fields(full_exp_path)) > 1) {
+if (length(count.fields(full_acc_path)) > 1) {
   # read the TF/accessibility data
   # accessibility_data <- read.table(full_acc_path, header = T, sep = '\t', check.names = F, row.names = 1)
   accessibility_data <- fread(full_acc_path, header = T, sep = '\t', check.names = F, skip = 1)

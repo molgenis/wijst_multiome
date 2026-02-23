@@ -167,7 +167,10 @@ rule run_interaction:
             --barcode_column "{params.barcode_column}" \
             --genotype_loc "{params.genotype_prefix}" \
             {params.EXPR_FLAG} \
-            {params.ACC_FLAG}
+            {params.ACC_FLAG} \
+            {params.expr_arg} \
+            {params.acc_arg}
+
 
         # check if output exists (your R writes an empty gz when nothing to test)
         test -s "{output.tsv}"
