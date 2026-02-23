@@ -174,12 +174,12 @@ do_interaction_analysis <- function(expression_data,
   # create formula
   base_formula <- get_formula(var_of_interest = 'expression', fixed_effects = fixed_effects, random_effects = random_effects)
   base_formula_string <- (Reduce(paste, deparse(base_formula)))
-  message(paste('Using base formula:', base_formula_string, '\n'))
+  message(paste('Using base formula:', base_formula_string, ''))
   # paste together
   interactions_formula_part <- paste(interactions, collapse = '*')
   # create interaction formula
   interaction_formula_string <- paste(base_formula_string, interactions_formula_part, sep = ' + ')
-  message(paste('Using interaction formula:', interaction_formula_string, '\n'))
+  message(paste('Using interaction formula:', interaction_formula_string, ''))
   interaction_formula <- as.formula(interaction_formula_string)
   # conver to dataframes
   expression_data <- data.frame(expression_data)
@@ -226,47 +226,52 @@ do_interaction_analysis <- function(expression_data,
         covariates_data[['genotype']] <- genotype_numeric
         # keep only complete cases
         covariates_data_complete <- covariates_data[complete.cases(covariates_data), ]
-        # initialize variables
-        base_model <- NULL
-        interaction_model <- NULL
-        ftest_res <- NULL
-        anova_test_used <- NULL
-        # depending on the family, the calls and anovas are different
-        if (family == 'poisson') {
-          # model without interaction
-          base_model <- lme4::glmer(formula = base_formula, data = covariates_data_complete, family = poisson)
-          # model with interaction
-          interaction_model <- lme4::glmer(formula = interaction_formula, data = covariates_data_complete, family = poisson)
-          # check if they are different
-          ftest_res <- anova(base_model, interaction_model, refit = FALSE, test = 'Chisq')
-          anova_test_used <- 'LRT'
+        # check if there is any data left
+        if (nrow(covariates_data_complete) > 0) {
+          # initialize variables
+          base_model <- NULL
+          interaction_model <- NULL
+          ftest_res <- NULL
+          anova_test_used <- NULL
+          # depending on the family, the calls and anovas are different
+          if (family == 'poisson') {
+            # model without interaction
+            base_model <- lme4::glmer(formula = base_formula, data = covariates_data_complete, family = poisson)
+            # model with interaction
+            interaction_model <- lme4::glmer(formula = interaction_formula, data = covariates_data_complete, family = poisson)
+            # check if they are different
+            ftest_res <- anova(base_model, interaction_model, refit = FALSE, test = 'Chisq')
+            anova_test_used <- 'LRT'
+          }
+          else if (family == 'gaussian') {
+            # base model
+            base_model <- lmerTest::lmer(formula = base_formula, data = covariates_data_complete)
+            # interaction model
+            interaction_model <- lmerTest::lmer(formula = interaction_formula, data = covariates_data_complete)
+            # check if they are different
+            ftest_res <- anova(base_model, interaction_model, refit = FALSE, test = 'F')
+            anova_test_used <- 'F'
+          }
+          else {
+            stop(paste0('unknown family ', family, ', only valid families are gaussian and poisson'))
+          }
+          # convert the model to a df
+          interaction_model_df <- model_to_row(interaction_model)
+          # add the family used
+          interaction_model_df[['family']] <- family
+          # add the interaction test used
+          interaction_model_df[['anova']] <- anova_test_used
+          # and finally the value (which is the last column, but the name will differ based on the type of test used)
+          interaction_model_df[['anova_p']] <- ftest_res['interaction_model', ncol(ftest_res)]
+          # keep the number of cells we have
+          interaction_model_df[['ncell']] <- nrow(covariates_data_complete)
+          # and participants
+          interaction_model_df[['nparticipant']] <- length(unique(smf[smf[['cell']] %in% covariates_data_complete[['cell']], ][['participant']]))
+          # store result
+          res_per_comparison[[paste(region, gene, variant)]] <- interaction_model_df
+        } else {
+          warning(paste('No data left for region', region, 'gene', gene, 'variant', variant, 'after complete cases. Skipping this combination.'))
         }
-        else if (family == 'gaussian') {
-          # base model
-          base_model <- lmerTest::lmer(formula = base_formula, data = covariates_data_complete)
-          # interaction model
-          interaction_model <- lmerTest::lmer(formula = interaction_formula, data = covariates_data_complete)
-          # check if they are different
-          ftest_res <- anova(base_model, interaction_model, refit = FALSE, test = 'F')
-          anova_test_used <- 'F'
-        }
-        else {
-          stop(paste0('unknown family ', family, ', only valid families are gaussian and poisson'))
-        }
-        # convert the model to a df
-        interaction_model_df <- model_to_row(interaction_model)
-        # add the family used
-        interaction_model_df[['family']] <- family
-        # add the interaction test used
-        interaction_model_df[['anova']] <- anova_test_used
-        # and finally the value (which is the last column, but the name will differ based on the type of test used)
-        interaction_model_df[['anova_p']] <- ftest_res['interaction_model', ncol(ftest_res)]
-        # keep the number of cells we have
-        interaction_model_df[['ncell']] <- nrow(covariates_data_complete)
-        # and participants
-        interaction_model_df[['nparticipant']] <- length(unique(smf[smf[['cell']] %in% covariates_data_complete[['cell']], ][['participant']]))
-        # store result
-        res_per_comparison[[paste(region, gene, variant)]] <- interaction_model_df
       }
     }
   }
@@ -317,7 +322,7 @@ option_list <- list(
   make_option(c("-a", "--accessibility_file"), type="character", default='accessibility.tsv.gz', 
               help="accessibility filename for chunk", metavar="character"), 
   make_option(c("-v", "--covariates_file"), type="character", default=NULL, 
-             help="accessibility filename for chunk", metavar="character"), 
+              help="accessibility filename for chunk", metavar="character"), 
   make_option(c("-f", "--fixed_effects"), type="character", default=NULL,
               help="comman separated list of fixed effects to correct for [default= %default]", metavar="character"),
   make_option(c("-r", "--random_effects"), type="character", default=NULL,
@@ -384,6 +389,18 @@ if (debug) {
   interaction_terms_string <- 'genotype,region'
   barcode_column <- 'barcode_lane'
   
+  confinement_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/mo_var_tf_gene_confinement.tsv.gz'
+  in_dir <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/pseudobulked/L1/monocyte/'
+  smf_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/pseudobulked/L1//smf.tsv.gz'
+  output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/pseudobulked/monocyte/'
+  expression_file <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/input/L1/combined/monocyte.qtlInput.txt.gz'
+  accessibility_file <- 'eregulons.tsv.gz'
+  genotype_loc <- '/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/genotype_input/EUR_imputed_hg38_varFiltered_chr12'
+  covariates_file <- 'covariates.tsv.gz'
+  fixed_effects_string <- 'region,genotype'
+  random_effects_string <- 'sample_final,lane'
+  interaction_terms_string <- 'genotype,region'
+  barcode_column <- 'ps_column'
   
 } else {
   # obligatory parameters without a default
@@ -494,7 +511,6 @@ if (length(count.fields(full_exp_path)) > 1) {
 if (length(count.fields(full_acc_path)) > 1) {
   # read the TF/accessibility data
   # accessibility_data <- read.table(full_acc_path, header = T, sep = '\t', check.names = F, row.names = 1)
-  accessibility_data <- fread(full_acc_path, header = T, sep = '\t', check.names = F, skip = 1)
   # read the header
   accessibility_data_header_line <- readLines(full_acc_path, n = 1)
   # split by sep
@@ -513,7 +529,7 @@ if (length(count.fields(full_acc_path)) > 1) {
   # to avoid further nesting, we'll make a dummy entry that makes it so that we dont continue further
   accessibility_data <- data.table('region' = c())
 }
-  
+
 
 
 # expression_data <- cbind(data.frame('gene' = rownames(expression_data)), expression_data)
@@ -634,7 +650,7 @@ if (nrow(expression_data) > 0) {
           covariates_data <- covariates_data[match(intersecting_cells, covariates_data[['cell']]), ]
           smf <- smf[match(intersecting_cells, smf[['cell']])]
           # perform the analysis
-          message('Starting analysis..\n')
+          message('Starting analysis..')
           # into a variable
           interaction_result <- do_interaction_analysis(
             expression_data = expression_data, 
@@ -647,6 +663,10 @@ if (nrow(expression_data) > 0) {
             random_effects = random_effects, 
             interactions = interactions
           )
+          # extract the last part of the folder
+          chunk_name <- basename(in_dir)
+          # add the chunk as a column
+          interaction_result[['chunk']] <- rep(chunk_name, times = nrow(interaction_result))
           # write result
           write.table(interaction_result, output_loc_full, sep = '\t', row.names = F, col.names = T, quote = F)
           # make a checksum
