@@ -267,6 +267,8 @@ do_interaction_analysis <- function(expression_data,
           interaction_model_df[['ncell']] <- nrow(covariates_data_complete)
           # and participants
           interaction_model_df[['nparticipant']] <- length(unique(smf[smf[['cell']] %in% covariates_data_complete[['cell']], ][['participant']]))
+          # and what we actually tested
+          interaction_model_df <- cbind(data.frame('variant' = c(variant), 'region' = c(region), 'gene' = c(gene)), interaction_model_df)
           # store result
           res_per_comparison[[paste(region, gene, variant)]] <- interaction_model_df
         } else {
@@ -511,6 +513,7 @@ if (length(count.fields(full_exp_path)) > 1) {
 if (length(count.fields(full_acc_path)) > 1) {
   # read the TF/accessibility data
   # accessibility_data <- read.table(full_acc_path, header = T, sep = '\t', check.names = F, row.names = 1)
+  accessibility_data <- fread(full_acc_path, header = T, sep = '\t', check.names = F, skip = 1)
   # read the header
   accessibility_data_header_line <- readLines(full_acc_path, n = 1)
   # split by sep
