@@ -668,12 +668,18 @@ if (nrow(expression_data) > 0) {
           )
           # extract the last part of the folder
           chunk_name <- basename(in_dir)
-          # add the chunk as a column
-          interaction_result[['chunk']] <- rep(chunk_name, times = nrow(interaction_result))
-          # write result
-          write.table(interaction_result, output_loc_full, sep = '\t', row.names = F, col.names = T, quote = F)
-          # make a checksum
-          mdfiver::create_sha256_for_file(tsv_output_loc_full)
+          # if there were any results, we'll write one
+		  if (!is.null(interaction_result) & nrow(interaction_result) > 0) {
+			# add the chunk as a column
+			interaction_result[['chunk']] <- rep(chunk_name, times = nrow(interaction_result))
+			# write result
+			write.table(interaction_result, output_loc_full, sep = '\t', row.names = F, col.names = T, quote = F)
+			# make a checksum
+			mdfiver::create_sha256_for_file(tsv_output_loc_full)
+		  } else {
+			# just make the result null again
+			interaction_result <- NULL
+		  }
         } else {
           message('No cells left after intersecting with covariates matrix. No more work to be done')
         }
