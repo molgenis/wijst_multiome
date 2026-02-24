@@ -270,7 +270,7 @@ do_interaction_analysis <- function(expression_data,
           # and what we actually tested
           interaction_model_df <- cbind(data.frame('variant' = c(variant), 'region' = c(region), 'gene' = c(gene)), interaction_model_df)
           # store result
-          res_per_comparison[[paste(region, gene, variant)]] <- interaction_model_df
+          res_per_comparison[[paste(region, gene, variant)]] <- data.table(interaction_model_df)
         } else {
           warning(paste('No data left for region', region, 'gene', gene, 'variant', variant, 'after complete cases. Skipping this combination.'))
         }
@@ -278,7 +278,7 @@ do_interaction_analysis <- function(expression_data,
     }
   }
   # merge all results
-  res_all <- do.call('rbind', res_per_comparison)
+  res_all <- rbindlist(res_per_comparison, fill = T)
   return(res_all)
 }
 
