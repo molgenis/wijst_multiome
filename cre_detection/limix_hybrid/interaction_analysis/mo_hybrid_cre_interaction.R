@@ -226,6 +226,8 @@ do_interaction_analysis <- function(expression_data,
         covariates_data[['genotype']] <- genotype_numeric
         # keep only complete cases
         covariates_data_complete <- covariates_data[complete.cases(covariates_data), ]
+        # and only finite values
+        covariates_data_complete <- covariates_data_complete[is.finite(covariates_data_complete[['expression']]) & is.finite(covariates_data_complete[['region']]) & is.finite(covariates_data_complete[['genotype']]), ]
         # check if there is any data left
         if (nrow(covariates_data_complete) > 0) {
           # initialize variables
@@ -239,8 +241,16 @@ do_interaction_analysis <- function(expression_data,
             base_model <- lme4::glmer(formula = base_formula, data = covariates_data_complete, family = poisson)
             # model with interaction
             interaction_model <- lme4::glmer(formula = interaction_formula, data = covariates_data_complete, family = poisson)
-            # check if they are different
-            ftest_res <- anova(base_model, interaction_model, refit = FALSE, test = 'Chisq')
+            # try to do the Chi-squared test
+            tryCatch({
+              # check if they are different
+              ftest_res <- anova(base_model, interaction_model, refit = FALSE, test = 'Chisq')
+            # catch error if model did not converge or some other issue
+            }, error = function(e) {
+              warning(paste('Error in chi-square', region, 'gene', gene, 'variant', variant, ':', e$message, '. This can happen if the model fails to converge'))
+              ftest_res <- data.frame('y' = c(NA, NA))
+              rownames(ftest_res) <- c('base_model', 'interaction_model')
+            })
             anova_test_used <- 'LRT'
           }
           else if (family == 'gaussian') {
@@ -248,8 +258,16 @@ do_interaction_analysis <- function(expression_data,
             base_model <- lmerTest::lmer(formula = base_formula, data = covariates_data_complete)
             # interaction model
             interaction_model <- lmerTest::lmer(formula = interaction_formula, data = covariates_data_complete)
-            # check if they are different
-            ftest_res <- anova(base_model, interaction_model, refit = FALSE, test = 'F')
+            # try to do F test
+            tryCatch({
+              # check if they are different
+              ftest_res <- anova(base_model, interaction_model, refit = FALSE, test = 'F')
+            # catch error if model did not converge or some other issue
+            }, error = function(e) {
+              warning(paste('Error in F-test', region, 'gene', gene, 'variant', variant, ':', e$message, '. This can happen if the model fails to converge'))
+              ftest_res <- data.frame('y' = c(NA, NA))
+              rownames(ftest_res) <- c('base_model', 'interaction_model')
+            })
             anova_test_used <- 'F'
           }
           else {
