@@ -538,8 +538,8 @@ if (length(count.fields(full_acc_path)) > 1) {
 # expression_data <- cbind(data.frame('gene' = rownames(expression_data)), expression_data)
 # accessibility_data <- cbind(data.frame('region' = rownames(accessibility_data)), accessibility_data)
 # subset both sets
-expression_data <- expression_data[!is.na(expression_data[['gene']]) & expression_data[['gene']] %in% confinement[['gene']], ]
-accessibility_data <- accessibility_data[!is.na(accessibility_data[['region']]) & accessibility_data[['region']] %in% confinement[['region']], ]
+expression_data_confined <- expression_data[!is.na(expression_data[['gene']]) & expression_data[['gene']] %in% confinement[['gene']], ]
+accessibility_data_confined <- accessibility_data[!is.na(accessibility_data[['region']]) & accessibility_data[['region']] %in% confinement[['region']], ]
 
 # format output loc
 tsv_output_loc_full <- paste(output_loc, 'result.tsv.gz', sep = '/')
@@ -573,9 +573,9 @@ if (nrow(expression_data) > 0) {
     # filter the confinement on the variants we have in the genotype data as well
     confinement <- confinement[confinement[['variant']] %in% overlapping_variants, ]
     # and the genes we have
-    confinement <- confinement[confinement[['gene']] %in% expression_data[['gene']], ]
+    confinement <- confinement[confinement[['gene']] %in% expression_data_confined[['gene']], ]
     # and regions or TFs we have
-    confinement <- confinement[confinement[['region']] %in% accessibility_data[['region']], ]
+    confinement <- confinement[confinement[['region']] %in% accessibility_data_confined[['region']], ]
     # check if we have any data left
     if (nrow(confinement) > 0) {
       # read smf
