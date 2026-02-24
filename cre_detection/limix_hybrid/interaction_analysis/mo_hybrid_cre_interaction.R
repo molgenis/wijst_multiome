@@ -235,46 +235,69 @@ do_interaction_analysis <- function(expression_data,
           interaction_model <- NULL
           ftest_res <- NULL
           anova_test_used <- NULL
-          # depending on the family, the calls and anovas are different
-          if (family == 'poisson') {
-            # model without interaction
-            base_model <- lme4::glmer(formula = base_formula, data = covariates_data_complete, family = poisson)
-            # model with interaction
-            interaction_model <- lme4::glmer(formula = interaction_formula, data = covariates_data_complete, family = poisson)
-            # try to do the Chi-squared test
-            tryCatch({
-              # check if they are different
-              ftest_res <- anova(base_model, interaction_model, refit = FALSE, test = 'Chisq')
-            # catch error if model did not converge or some other issue
-            }, error = function(e) {
-              warning(paste('Error in chi-square', region, 'gene', gene, 'variant', variant, ':', e$message, '. This can happen if the model fails to converge'))
-              ftest_res <- data.frame('y' = c(NA, NA))
-              rownames(ftest_res) <- c('base_model', 'interaction_model')
-            })
-            anova_test_used <- 'LRT'
+          # try to do 
+          tryCatch({
+            # depending on the family, the calls and anovas are different
+            if (family == 'poisson') {
+              # model without interaction
+              base_model <- lme4::glmer(formula = base_formula, data = covariates_data_complete, family = poisson)
+              # model with interaction
+              interaction_model <- lme4::glmer(formula = interaction_formula, data = covariates_data_complete, family = poisson)
+              # try to do the Chi-squared test
+              tryCatch({
+                # check if they are different
+                ftest_res <- anova(base_model, interaction_model, refit = FALSE, test = 'Chisq')
+              # catch error if model did not converge or some other issue
+              }, error = function(e) {
+                warning(paste('Error in chi-square', region, 'gene', gene, 'variant', variant, ':', e$message, '. This can happen if the model fails to converge'))
+                ftest_res <- data.frame('y' = c(NA, NA))
+                rownames(ftest_res) <- c('base_model', 'interaction_model')
+              })
+              anova_test_used <- 'LRT'
+            }
+            else if (family == 'gaussian') {
+              # base model
+              base_model <- lmerTest::lmer(formula = base_formula, data = covariates_data_complete)
+              # interaction model
+              interaction_model <- lmerTest::lmer(formula = interaction_formula, data = covariates_data_complete)
+              # try to do F test
+              tryCatch({
+                # check if they are different
+                ftest_res <- anova(base_model, interaction_model, refit = FALSE, test = 'F')
+              # catch error if model did not converge or some other issue
+              }, error = function(e) {
+                warning(paste('Error in F-test', region, 'gene', gene, 'variant', variant, ':', e$message, '. This can happen if the model fails to converge'))
+                ftest_res <- data.frame('y' = c(NA, NA))
+                rownames(ftest_res) <- c('base_model', 'interaction_model')
+              })
+              anova_test_used <- 'F'
+            }
+            else {
+              stop(paste0('unknown family ', family, ', only valid families are gaussian and poisson'))
+            }
+            
+          }, error = function(e) {
+            warning(paste('Error in model fitting', region, gene, variant, ':', e$message, '. This can happen if the model fails to converge'))
+          })
+          # initialize the dataframe to add model to
+          interaction_model_df_base <- data.frame('variant' = c(variant), 'region' = c(region), 'gene' = c(gene))
+          # initialize the model df
+          interaction_model_df <- NULL
+          # if we have a model, we can convert to a df
+          if(!is.null(interaction_model)) {
+            # convert the model to a df
+            interaction_model_df <- model_to_row(interaction_model)
+            # and what we actually tested
+            interaction_model_df <- cbind(interaction_model_df_base, interaction_model_df)
+          } else if(!is.null(base_model)) {
+            # if we at least have a base model, we can still convert that to a df
+            interaction_model_df <- model_to_row(base_model)
+            # and what we actually tested
+            interaction_model_df <- cbind(interaction_model_df_base, interaction_model_df)
+          } else {
+            # if the model failed to fit, we still want to have a row for this combination
+            interaction_model_df <- interaction_model_df_base
           }
-          else if (family == 'gaussian') {
-            # base model
-            base_model <- lmerTest::lmer(formula = base_formula, data = covariates_data_complete)
-            # interaction model
-            interaction_model <- lmerTest::lmer(formula = interaction_formula, data = covariates_data_complete)
-            # try to do F test
-            tryCatch({
-              # check if they are different
-              ftest_res <- anova(base_model, interaction_model, refit = FALSE, test = 'F')
-            # catch error if model did not converge or some other issue
-            }, error = function(e) {
-              warning(paste('Error in F-test', region, 'gene', gene, 'variant', variant, ':', e$message, '. This can happen if the model fails to converge'))
-              ftest_res <- data.frame('y' = c(NA, NA))
-              rownames(ftest_res) <- c('base_model', 'interaction_model')
-            })
-            anova_test_used <- 'F'
-          }
-          else {
-            stop(paste0('unknown family ', family, ', only valid families are gaussian and poisson'))
-          }
-          # convert the model to a df
-          interaction_model_df <- model_to_row(interaction_model)
           # add the family used
           interaction_model_df[['family']] <- family
           # add the interaction test used
@@ -285,8 +308,6 @@ do_interaction_analysis <- function(expression_data,
           interaction_model_df[['ncell']] <- nrow(covariates_data_complete)
           # and participants
           interaction_model_df[['nparticipant']] <- length(unique(smf[smf[['cell']] %in% covariates_data_complete[['cell']], ][['participant']]))
-          # and what we actually tested
-          interaction_model_df <- cbind(data.frame('variant' = c(variant), 'region' = c(region), 'gene' = c(gene)), interaction_model_df)
           # store result
           res_per_comparison[[paste(region, gene, variant)]] <- data.table(interaction_model_df)
         } else {
