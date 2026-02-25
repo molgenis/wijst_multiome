@@ -159,16 +159,16 @@ get_interaction_inputs <- function(expression_data,
                                     random_effects=c('sample_final'), 
                                     interactions=c('genotype','region')
                                    ) {
-  # create formula
-  base_formula <- get_formula(var_of_interest = 'expression', fixed_effects = fixed_effects, random_effects = random_effects)
-  base_formula_string <- (Reduce(paste, deparse(base_formula)))
-  message(paste('Using base formula:', base_formula_string, ''))
-  # paste together
-  interactions_formula_part <- paste(interactions, collapse = '*')
-  # create interaction formula
-  interaction_formula_string <- paste(base_formula_string, interactions_formula_part, sep = ' + ')
-  message(paste('Using interaction formula:', interaction_formula_string, ''))
-  interaction_formula <- as.formula(interaction_formula_string)
+  # # create formula
+  # base_formula <- get_formula(var_of_interest = 'expression', fixed_effects = fixed_effects, random_effects = random_effects)
+  # base_formula_string <- (Reduce(paste, deparse(base_formula)))
+  # message(paste('Using base formula:', base_formula_string, ''))
+  # # paste together
+  # interactions_formula_part <- paste(interactions, collapse = '*')
+  # # create interaction formula
+  # interaction_formula_string <- paste(base_formula_string, interactions_formula_part, sep = ' + ')
+  # message(paste('Using interaction formula:', interaction_formula_string, ''))
+  # interaction_formula <- as.formula(interaction_formula_string)
   # conver to dataframes
   expression_data <- data.frame(expression_data)
   accessibility_data <- data.frame(accessibility_data)
@@ -223,6 +223,82 @@ get_interaction_inputs <- function(expression_data,
 }
 
 
+calculate_per_sample_correlation <- function(full_variates_table, formula_string='expression~region', correlation=T, sample_column='sample_id', beta_variate_column='region', family='gaussian') {
+  # make into datatable
+  full_variates_table <- data.table(full_variates_table)
+  # we'll store in a list first
+  cor_per_sample <- list()
+  # list the samples
+  samples_present <- unique(full_variates_table[[sample_column]])
+  # filter where we don't know the sample
+  samples_present <- samples_present[!is.na(samples_present)]
+  # check each sample
+  for (sample_present in samples_present) {
+    # subset the table
+    variates_table_sample <- full_variates_table[
+      !is.na(full_variates_table[[sample_column]]) & full_variates_table[[sample_column]] == sample_present, 
+    ]
+    # get number of cells
+    ncell <- nrow(variates_table_sample)
+    # now calculate a correlation
+    estimate <- NULL
+    p <- NULL
+    # try to do this, we might error if we have too few observations
+    tryCatch({
+      if (correlation) {
+        # reformat the formula
+        formula_string <- gsub(' ', '', formula_string)
+        # then split by predictor
+        formula_string_split <- strsplit(formula_string, '~')[[1]]
+        # check if of correct length
+        if (length(formula_string_split) > 2) {
+          stop('split contains more than a two values. A correlation can only be made up of two variables')
+        }
+        else if (length(formula_string_split) < 2) {
+          stop('split contains less than two values. A correlation can only be made up of two variables')
+        } else {
+          # do the correlation test
+          cor_test <- cor.test(y = variates_table_sample[[formula_string_split[[1]]]], 
+                               x = variates_table_sample[[formula_string_split[[2]]]])
+          # extract p
+          p <- cor_test$p.value
+          estimate <- as.vector(cor_test$estimate[1])
+        }
+      } else {
+        # initialize regression model
+        regression_model <- NULL
+        # depending on the family, the calls are different
+        if (family == 'poisson') {
+          # use poisson model
+          regression_model <- lme4::glmer(formula = as.formula(formula_string), data = variates_table_sample, family = poisson)
+        }
+        else if (family == 'gaussian') {
+          # use gaussian model
+          regression_model <- lmerTest::lmer(formula = as.formula(formula_string), data = variates_table_sample)
+        } else {
+          # error if weird formula is given
+          stop(paste0('unknown family ', family, ', only valid families are gaussian and poisson when using a regression model'))
+        }
+        # convert model
+        regression_model_row <- model_to_row(regression_model)
+        # extract the values
+        p <- regression_model_row[paste(beta_variate_column, 'p', sep = '_')][1]
+        estimate <- regression_model_row[paste(beta_variate_column, 'beta', sep = '_')][1]
+      }
+    }, error = function(e) {
+      warning(paste('Error in correlation or regression model for sample', sample_present, e$message))
+      estimate <- NA
+      p <- NA
+    })
+    # make into df
+    cor_per_sample[[sample_present]] <- data.table('sample' = c(sample_present), 'estimate' = c(estimate), 'p' = c(p), 'ncell' = c(ncell))
+  }
+  # merge all
+  cor_all <- rbindlist(cor_per_sample, fill = T)
+  return(cor_all)
+}
+
+
 ####################
 # Settings         #
 ####################
@@ -236,19 +312,19 @@ set.seed(7777)
 ####################
 
 # the chunk the data is in
-chunk <- 'chr11-605362-1251771'
+chunk <- 'chr6-6385763-6874450'
 # where the files are placed
 in_dir_base <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/'
 # which genotype to use
-genotype_loc <- '/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/genotype_input/EUR_imputed_hg38_varFiltered_chr11'
+genotype_loc <- '/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/genotype_input/EUR_imputed_hg38_varFiltered_chr6'
 # the variant to look at
-variants <- c('11:831809:T:G')
+variants <- c('6:6588959:G:GGA', '6:6569080:G:C', '6:6588959:G:GGA', '6:6569080:G:C', '6:6588959:G:GGA', '6:6569080:G:C')
 # the TF or region
-regions <- c('ETS2_extended_+/+_(510g)')
+regions <- c('BCL11A_direct_+/+_(146g)', 'BCL11A_direct_+/+_(146g)', 'EBF1_direct_+/+_(142g)', 'EBF1_direct_+/+_(142g)', 'PAX5_direct_+/+_(115g)', 'PAX5_direct_+/+_(115g)')
 # the gene
-genes <- c('CD151')
+genes <- c('LY86', 'LY86', 'LY86', 'LY86', 'LY86', 'LY86')
 # finally the cell type
-cell_type <- 'CD4T'
+cell_type <- 'monocyte'
 # whether to gausnorm first
 accessibility_gausnorm <- T
 expression_gausnorm <- T
@@ -259,7 +335,7 @@ family <- 'gaussian'
 in_dir <- paste(in_dir_base, cell_type, chunk, sep = '/')
 smf_loc <- paste(in_dir_base, cell_type, 'smf.tsv.gz', sep = '/')
 expression_file <- 'expression.tsv.gz'
-accessibility_file <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eregulon_gene_auc_CD4T_nonsparse_transposed.tsv.gz'
+accessibility_file <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eregulon_gene_auc_monocyte_nonsparse_transposed.tsv.gz'
 covariates_file <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/metadata/mo_celllevel_metadata.tsv.gz'
 fixed_effects_string <- 'region,genotype'
 random_effects_string <- 'sample_final,lane'
@@ -486,6 +562,10 @@ interactions_formula_part <- paste(interactions, collapse = '*')
 # create interaction formula
 interaction_formula_string <- paste(base_formula_string, interactions_formula_part, sep = ' + ')
 interaction_formula <- as.formula(interaction_formula_string)
+# also make a simplified formula
+simplified_formula <- get_formula(var_of_interest = 'expression', fixed_effects = c(fixed_effects, random_effects), random_effects = NULL)
+# whether to simplify
+simplify <- T
 
 # now plot each of these
 for (confinement_i in 1:nrow(confinement)) {
@@ -499,12 +579,20 @@ for (confinement_i in 1:nrow(confinement)) {
   interaction_model <- NULL
   # depending on the family, the calls and anovas are different
   if (family == 'poisson') {
-    # model with interaction
-    interaction_model <- lme4::glmer(formula = interaction_formula, data = plot_df, family = poisson)
+    if (simplify) {
+      interaction_model <- lme4::glmer(formula = simplified_formula, data = plot_df, family = poisson)
+    } else {
+      # model with interaction
+      interaction_model <- lme4::glmer(formula = interaction_formula, data = plot_df, family = poisson)
+    }
   }
   else if (family == 'gaussian') {
-    # interaction model
-    interaction_model <- lmerTest::lmer(formula = interaction_formula, data = plot_df)
+    if (simplify) {
+      interaction_model <- lm(formula = simplified_formula, data = plot_df)
+    } else {
+      # interaction model
+      interaction_model <- lmerTest::lmer(formula = interaction_formula, data = plot_df)
+    }
   }
   # predict using the model
   plot_df[['expression_predicted']] <- as.vector(unlist(predict(interaction_model, plot_df)))
@@ -514,8 +602,9 @@ for (confinement_i in 1:nrow(confinement)) {
   p <- ggplot(data = plot_df, mapping = aes(x = region, y = expression, colour = gt)) +
     geom_point() + 
     # geom_line(mapping = aes(x = region, y = expression_predicted, colour = gt))  +
-    geom_smooth(method = 'lm', formula = as.formula('y ~ x')) +
-    scale_colour_manual(values = roycols::get_color_list(unique(plot_df[['gt']]))) +
+    geom_smooth(method = 'lm', formula = y~x) + 
+    # geom_smooth(method = 'lm', formula = simplified_formula) + 
+    scale_colour_manual(values = roycols::get_color_list(unique(plot_df[['gt']]))) + 
     xlab(paste(region, 'accessibility')) + 
     ylab(paste(gene, 'expression')) + 
     labs(colour = 'Genotype') + 
