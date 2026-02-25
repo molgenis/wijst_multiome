@@ -612,7 +612,7 @@ ieqtl_vs_de_counts <- data.frame(table(ieqtl_vs_de[, c('cell_type', 'de_directio
 # add add extra column to catch both directions
 ieqtl_vs_de_counts[['directions']] <- paste(ieqtl_vs_de_counts[['de_direction']], ieqtl_vs_de_counts[['i_direction']], sep = '>')
 # plot these
-ggplot(data = ieqtl_vs_de_counts, mapping = aes(x = cell_type, y = Freq, fill = directions)) +
+p_ieqtl_vs_de_counts <- ggplot(data = ieqtl_vs_de_counts, mapping = aes(x = cell_type, y = Freq, fill = directions)) +
   geom_bar(stat = 'identity', position = 'stack') +
   scale_fill_manual(values = roycols::get_color_list(unique(ieqtl_vs_de_counts[['directions']]))) +
   xlab('Cell type') + 
@@ -626,8 +626,13 @@ ggplot(data = ieqtl_vs_de_counts, mapping = aes(x = cell_type, y = Freq, fill = 
         axis.text.x = element_text(size=12),
         strip.text.x = element_text(size=12)) + 
   theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+# show plot
+p_ieqtl_vs_de_counts
+# save plot
+ggsave('~/plots/mo_multiome_de_vs_ieqtl_overlap_numbers.pdf', width = 8, height = 6, plot = p_ieqtl_vs_de_counts)
+
 # also excluding the DE effects that don't lead to i-eQTLs
-ggplot(data = ieqtl_vs_de_counts[ieqtl_vs_de_counts[['i_direction']] != 'none', ], mapping = aes(x = cell_type, y = Freq, fill = directions)) +
+p_ieqtl_vs_de_counts_ieonly <- ggplot(data = ieqtl_vs_de_counts[ieqtl_vs_de_counts[['i_direction']] != 'none', ], mapping = aes(x = cell_type, y = Freq, fill = directions)) +
   geom_bar(stat = 'identity', position = 'stack') +
   scale_fill_manual(values = roycols::get_color_list(unique(ieqtl_vs_de_counts[['directions']]))) +
   xlab('Cell type') + 
@@ -641,3 +646,7 @@ ggplot(data = ieqtl_vs_de_counts[ieqtl_vs_de_counts[['i_direction']] != 'none', 
         axis.text.x = element_text(size=12),
         strip.text.x = element_text(size=12)) + 
   theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+# show the plot
+p_ieqtl_vs_de_counts_ieonly
+# save plot
+ggsave('~/plots/mo_multiome_de_vs_ieqtl_overlap_numbers_ieqtlonly.pdf', width = 8, height = 6, plot = p_ieqtl_vs_de_counts_ieonly)
