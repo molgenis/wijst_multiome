@@ -317,6 +317,159 @@ get_color_coding_dict <- function(){
 }
 
 
+get_de_genes <- function(mast_output_loc, pval_column='metap_bonferroni', sig_pval=0.05, max=NULL, max_by_pval=T, only_positive=F, only_negative=F, lfc_column='metafc', lfc_cutoff=NULL, to_ens=F, symbols.to.ensg.mapping='genes.tsv', cell_types=c('B', 'CD4T', 'CD8T', 'DC', 'monocyte', 'NK'), stims=c('UT', 'Baseline', 't24h', 't8w'), de_method='mast_seurat', condition_name='timepoint'){
+  # set up per cell type
+  de_per_ct <- list()
+  # check each cell type
+  for(cell_type in cell_types){
+    # set up per stim combination
+    de_per_condition <- list()
+    # check each stim
+    for(stim in stims){
+      for(stim2 in stims){
+        try({
+          if(stim != stim2){
+            print(paste(cell_type, stim, stim2, sep = ' '))
+            # paste the filepath together
+            filepath <- NULL
+            if ("limma" == de_method) {
+              #filepath <- paste(mast_output_loc, cell_type, '_', condition_name,  stim, '_', stim2, '.tsv.gz', sep = '')
+              filepath <- paste(mast_output_loc, cell_type, '_', condition_name, '.tsv.gz', sep = '')
+            }
+            else {
+              filepath <- paste(mast_output_loc, cell_type, stim,stim2, '.tsv.gz', sep = '')
+            }
+            if (file.exists(filepath)) {
+              # read the mast output
+              mast <- read.table(filepath, header=T)
+              # filter to only include the significant results
+              mast <- mast[mast[[pval_column]] <= 0.05, ]
+              # filter for only the positive lfc if required
+              if(only_positive){
+                mast <- mast[mast[[lfc_column]] < 0, ]
+              }
+              # filter for only the positive lfc if required
+              if(only_negative){
+                mast <- mast[mast[[lfc_column]] > 0, ]
+              }
+              # filter only ones with strong enough effect if required
+              if (!is.null(lfc_cutoff)) {
+                mast <- mast[abs(mast[[lfc_column]]) >= lfc_cutoff, ]
+              }
+              # confine in some way if reporting a max number of genes
+              if(!is.null(max)){
+                # by p if required
+                if(max_by_pval){
+                  mast <- mast[order(mast[[p_val_column]]), ]
+                }
+                # by lfc otherwise
+                else{
+                  mast <- mast[order(mast[[lfc_column]], decreasing = T), ]
+                }
+                # subset to the number we requested if max was set
+                mast <- mast[1:max,]
+              }
+              # grab the genes from the column names
+              genes <- rownames(mast)
+              if ("limma" == de_method) {
+                genes <- mast[['feature']]
+              }
+              # convert the symbols to ensemble IDs
+              if (to_ens) {
+                mapping <- read.table(symbols.to.ensg.mapping, header = F, stringsAsFactors = F)
+                mapping$V2 <- gsub("_", "-", make.unique(mapping$V2))
+                genes <- mapping[match(genes, mapping$V2),"V1"]
+              }
+              # otherwise change the Seurat replacement back
+              else{
+                #genes <- gsub("-", "_", genes)
+              }
+              de_per_condition[[paste(stim, stim2, sep = '')]] <- genes
+            }
+          }
+        })
+      }
+    }
+    de_per_ct[[cell_type]] <- de_per_condition
+  }
+  return(de_per_ct)
+}
+
+
+get_qtls_per_celltype_limix <- function(qtl_output_loc, output_file='qtl_results_all_qval_allchroms_fdr005_significant.txt.gz', gene_column='feature_id', significance_column='feature_q_value', significance_cutoff=0.05, nominal_cutoff_column='pval_nominal_threshold_global', nominal_significance_column='p_value', verbose=T) {
+  # get the folders in the directory, which should be the cell types
+  cell_types <- list.dirs(qtl_output_loc, full.names = F, recursive = F)
+  # we will store the results in a list for now
+  qtls_per_celltype <- list()
+  # check each cell type
+  for (cell_type in cell_types) {
+    # paste together the full path
+    full_cell_type_path <- paste(qtl_output_loc, '/', cell_type, '/', output_file, sep = '')
+    # log if requested
+    if (verbose) {
+      print(paste('reading', full_cell_type_path))
+    }
+    # read the file
+    cell_type_output <- read.table(full_cell_type_path, sep = '\t', header = T)
+    # filter the results on significance
+    if (!is.null(significance_column)) {
+      # print progress if requested
+      if (verbose) {
+        print(paste('variant+phenotype before filtering by significance column', nrow(cell_type_output)))
+      }
+      # filter
+      cell_type_output <- cell_type_output[
+        !is.na(cell_type_output[[significance_column]]) &
+          cell_type_output[[significance_column]] < significance_cutoff, 
+      ]
+      if (verbose) {
+        print(paste('variant+phenotype after filtering by significance column', nrow(cell_type_output)))
+      }
+    }
+    if (!is.null(nominal_cutoff_column) & !is.null(nominal_significance_column)) {
+      # print progress if requested
+      if (verbose) {
+        print(paste('variant+phenotype before filtering by nominal cutoff', nrow(cell_type_output)))
+      }
+      # filter
+      cell_type_output <- cell_type_output[
+        !is.na(cell_type_output[[nominal_cutoff_column]]) & 
+          !is.na(cell_type_output[[nominal_significance_column]]) &
+          cell_type_output[[nominal_significance_column]] <= cell_type_output[[nominal_cutoff_column]], 
+      ]
+      if (verbose) {
+        print(paste('variant+phenotype after filtering by nominal cutoff', nrow(cell_type_output)))
+      }
+    }
+    # add the celltype as a column
+    cell_type_output[['cell_type']] <- cell_type
+    # add to the list
+    qtls_per_celltype[[cell_type]] <- cell_type_output
+  }
+  # turn into a dataframe
+  return(qtls_per_celltype)
+}
+
+
+add_top_effect_annotation <- function(qtls_per_celltype, feature_column='feature_id', variant_column='snp_id', significance_column='p_value', decreasing=F) {
+  # go through each of the cell types
+  for (cell_type in names(qtls_per_celltype)) {
+    # extract that table
+    qtls_celltype <- qtls_per_celltype[[cell_type]]
+    # order by the significancce
+    qtls_celltype_ordered <- qtls_celltype[order(qtls_celltype[[significance_column]], decreasing = decreasing), ]
+    # keep only the top effect
+    qtls_celltype_top <- qtls_celltype_ordered[!duplicated(qtls_celltype_ordered[[feature_column]]), ]
+    # and annotate in the original table if the variant-feature combination was the top one
+    qtls_celltype[['is_top_variant']] <- paste(qtls_celltype[[variant_column]], qtls_celltype[[feature_column]]) %in% paste(qtls_celltype_top[[variant_column]], qtls_celltype_top[[feature_column]])
+    # put that back in the list
+    qtls_per_celltype[[cell_type]] <- qtls_celltype
+  }
+  return(qtls_per_celltype)
+}
+
+
+
 ####################
 # Main code        #
 ####################
@@ -405,3 +558,86 @@ p_dar_vs_icaqtl <- ggplot(
   theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
 p_dar_vs_icaqtl
 ggsave('~/plots/mo_multiome_dar_vs_icapeak_numbers.pdf', width = 8, height = 6, plot = p_de_vs_ieqtl)
+
+
+# next we'll look at up and down separately, first get the up DE genes
+de_mo_up <- get_de_genes(limma_output_mo_loc, de_method = 'limma', pval_column = 'p.bonferroni', lfc_column = 'logFC', lfc_cutoff = 0.1, only_positive = T, stims = c('24hCA', 'UT'), condition_name = 'condition_final')
+# then only down
+de_mo_down <- get_de_genes(limma_output_mo_loc, de_method = 'limma', pval_column = 'p.bonferroni', lfc_column = 'logFC', lfc_cutoff = 0.1, only_negative = T, stims = c('24hCA', 'UT'), condition_name = 'condition_final')
+
+# get all the QTL output
+ieqtl_output <- get_qtls_per_celltype_limix(ieqtl_output_loc, output_file = 'inflammation_final/iqtl_results_all_eigenmt_qval.tsv.gz', gene_column='feature', significance_column='feature_q_value', significance_cutoff=0.05, nominal_cutoff_column=NULL, nominal_significance_column=NULL)
+# add top effect annotation
+ieqtl_output <- add_top_effect_annotation(ieqtl_output, significance_column = 'feature_bf_eigen', feature_column = 'feature')
+# merge all the results
+ieqtl_output_all <- do.call('rbind', ieqtl_output)
+# filter on signifiacnce
+ieqtl_output_all_sig <- ieqtl_output_all[ieqtl_output_all[['feature_q_value']] < 0.05 &
+                                         ieqtl_output_all[['feature_bf_eigen']] < 0.05, ]
+# rename the columns
+colnames(ieqtl_output_all_sig) <- c('i_beta', 'i_beta_se', 'i_empirical_feature_p_value', 'i_p_value', 'snp_id', 'feature_id', 'i_n_tests_feature', 'i_feature_bf_eigen', 'i_total_bf_eigen', 'i_feature_q_value', 'i_cell_type', 'i_top_effect')
+# keep only top
+ieqtl_output_all_sig_top <- ieqtl_output_all_sig[ieqtl_output_all_sig[['i_top_effect']], ]
+# add the signs
+ieqtl_output_all_sig_top[['i_direction']] <- NA
+ieqtl_output_all_sig_top[sign(ieqtl_output_all_sig_top[['i_beta']]) == -1, ][['i_direction']] <- 'weaker'
+ieqtl_output_all_sig_top[sign(ieqtl_output_all_sig_top[['i_beta']]) == 1, ][['i_direction']] <- 'stronger'
+# make a df of all the DE genes
+de_genes_df_ct <- list()
+for (ct in c(names(de_mo_up), names(de_mo_down))) {
+  # extract up genes if present
+  if (ct %in% names(de_mo_up)) {
+    # create df
+    de_genes_up_ct <- data.frame('gene' = de_mo_up[[ct]][['UT24hCA']], 'cell_type' = rep(ct, times = length(de_mo_up[[ct]][['UT24hCA']])), 'de_direction' = rep('up', times = length(de_mo_up[[ct]][['UT24hCA']])))
+    # and put in list
+    de_genes_df_ct[[paste(ct, 'up')]] <- de_genes_up_ct
+  }
+  # extract down genes if present
+  if (ct %in% names(de_mo_down)) {
+    # create df
+    de_genes_down_ct <- data.frame('gene' = de_mo_down[[ct]][['UT24hCA']], 'cell_type' = rep(ct, times = length(de_mo_down[[ct]][['UT24hCA']])), 'de_direction' = rep('down', times = length(de_mo_down[[ct]][['UT24hCA']])))
+    # and put in list
+    de_genes_df_ct[[paste(ct, 'down')]] <- de_genes_down_ct
+  }
+}
+# merge all
+de_genes_df <- do.call('rbind', de_genes_df_ct)
+# merge this with the QTL input
+ieqtl_vs_de <- merge(de_genes_df, ieqtl_output_all_sig_top[, c('feature_id', 'i_cell_type', 'i_direction')], by.x = c('gene', 'cell_type'), by.y = c('feature_id', 'i_cell_type'), all = T)
+# fill NAs
+ieqtl_vs_de[is.na(ieqtl_vs_de[['de_direction']]), ][['de_direction']] <- 'none'
+ieqtl_vs_de[is.na(ieqtl_vs_de[['i_direction']]), ][['i_direction']] <- 'none'
+# count them
+ieqtl_vs_de_counts <- data.frame(table(ieqtl_vs_de[, c('cell_type', 'de_direction', 'i_direction')]))
+# add add extra column to catch both directions
+ieqtl_vs_de_counts[['directions']] <- paste(ieqtl_vs_de_counts[['de_direction']], ieqtl_vs_de_counts[['i_direction']], sep = '>')
+# plot these
+ggplot(data = ieqtl_vs_de_counts, mapping = aes(x = cell_type, y = Freq, fill = directions)) +
+  geom_bar(stat = 'identity', position = 'stack') +
+  scale_fill_manual(values = roycols::get_color_list(unique(ieqtl_vs_de_counts[['directions']]))) +
+  xlab('Cell type') + 
+  ylab('Number interaction-eGenes and DE genes') + 
+  labs(fill = 'DE > i-eQTL') + 
+  theme(legend.title = element_text(size=14), 
+        legend.text = element_text(size=12),
+        axis.title.x = element_text(size=14),
+        axis.title.y = element_text(size=14),
+        axis.text.y = element_text(size=12),
+        axis.text.x = element_text(size=12),
+        strip.text.x = element_text(size=12)) + 
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+# also excluding the DE effects that don't lead to i-eQTLs
+ggplot(data = ieqtl_vs_de_counts[ieqtl_vs_de_counts[['i_direction']] != 'none', ], mapping = aes(x = cell_type, y = Freq, fill = directions)) +
+  geom_bar(stat = 'identity', position = 'stack') +
+  scale_fill_manual(values = roycols::get_color_list(unique(ieqtl_vs_de_counts[['directions']]))) +
+  xlab('Cell type') + 
+  ylab('Number interaction-eGenes and DE genes') + 
+  labs(fill = 'DE > i-eQTL') + 
+  theme(legend.title = element_text(size=14), 
+        legend.text = element_text(size=12),
+        axis.title.x = element_text(size=14),
+        axis.title.y = element_text(size=14),
+        axis.text.y = element_text(size=12),
+        axis.text.x = element_text(size=12),
+        strip.text.x = element_text(size=12)) + 
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
