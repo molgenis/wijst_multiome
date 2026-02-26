@@ -343,6 +343,14 @@ debug <- T
 confinement_loc <- '~/tables/mo_dual_qtl_plot_tbl.tsv.gz'
 # read the confinement file
 confinement <- fread(confinement_loc, header = T, sep = '\t')
+# add some more I particularly am interested in
+confinement <- rbind(confinement, 
+                     data.frame(
+                       'variant' = c('6:6586961:A:G', '6:6586961:A:G'), 
+                       'gene' = c('LY86', 'LY86'), 
+                       'region' = c('chr6-6586717-6587570', 'chr6-6586717-6587570'), 
+                       'cell_type' = c('B', 'monocyte')
+                     ))
 
 # the variant data
 genotype_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/genotype/imputed_hg38_all_anc'
