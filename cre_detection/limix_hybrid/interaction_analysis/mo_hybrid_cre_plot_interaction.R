@@ -223,7 +223,7 @@ get_interaction_inputs <- function(expression_data,
 }
 
 
-calculate_per_sample_correlation <- function(full_variates_table, formula_string='expression~region', correlation=T, sample_column='sample_id', beta_variate_column='region', family='gaussian') {
+calculate_per_sample_correlation <- function(full_variates_table, formula_string='expression~region', correlation=T, method='spearman', sample_column='sample_id', beta_variate_column='region', family='gaussian') {
   # make into datatable
   full_variates_table <- data.table(full_variates_table)
   # we'll store in a list first
@@ -259,7 +259,8 @@ calculate_per_sample_correlation <- function(full_variates_table, formula_string
         } else {
           # do the correlation test
           cor_test <- cor.test(y = variates_table_sample[[formula_string_split[[1]]]], 
-                               x = variates_table_sample[[formula_string_split[[2]]]])
+                               x = variates_table_sample[[formula_string_split[[2]]]], 
+                               method = method)
           # extract p
           p <- cor_test$p.value
           estimate <- as.vector(cor_test$estimate[1])
@@ -282,13 +283,11 @@ calculate_per_sample_correlation <- function(full_variates_table, formula_string
         # convert model
         regression_model_row <- model_to_row(regression_model)
         # extract the values
-        p <- regression_model_row[paste(beta_variate_column, 'p', sep = '_')][1]
-        estimate <- regression_model_row[paste(beta_variate_column, 'beta', sep = '_')][1]
+        p <- as.vector(unlist(regression_model_row[paste(beta_variate_column, 'p', sep = '_')][1]))
+        estimate <- as.vector(unlist(regression_model_row[paste(beta_variate_column, 'beta', sep = '_')][1]))
       }
     }, error = function(e) {
-      warning(paste('Error in correlation or regression model for sample', sample_present, e$message))
-      estimate <- NA
-      p <- NA
+      warning(paste('Error in correlation or regression model for sample', region, 'gene', gene, 'variant', variant, ':', e$message, '. This can happen if the model fails to converge'))
     })
     # make into df
     cor_per_sample[[sample_present]] <- data.table('sample' = c(sample_present), 'estimate' = c(estimate), 'p' = c(p), 'ncell' = c(ncell))
@@ -318,13 +317,13 @@ in_dir_base <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_de
 # which genotype to use
 genotype_loc <- '/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/genotype_input/EUR_imputed_hg38_varFiltered_chr6'
 # the variant to look at
-variants <- c('6:6588959:G:GGA', '6:6569080:G:C', '6:6588959:G:GGA', '6:6569080:G:C', '6:6588959:G:GGA', '6:6569080:G:C')
+variants <- c('6:6588959:G:GGA', '6:6569080:G:C', '6:6586961:A:G', '6:6588959:G:GGA', '6:6569080:G:C' ,'6:6586961:A:G', '6:6588959:G:GGA', '6:6569080:G:C', '6:6586961:A:G')
 # the TF or region
-regions <- c('BCL11A_direct_+/+_(146g)', 'BCL11A_direct_+/+_(146g)', 'EBF1_direct_+/+_(142g)', 'EBF1_direct_+/+_(142g)', 'PAX5_direct_+/+_(115g)', 'PAX5_direct_+/+_(115g)')
+regions <- c('BCL11A_direct_+/+_(146g)', 'BCL11A_direct_+/+_(146g)', 'BCL11A_direct_+/+_(146g)', 'EBF1_direct_+/+_(142g)', 'EBF1_direct_+/+_(142g)', 'EBF1_direct_+/+_(142g)', 'PAX5_direct_+/+_(115g)', 'PAX5_direct_+/+_(115g)', 'PAX5_direct_+/+_(115g)')
 # the gene
-genes <- c('LY86', 'LY86', 'LY86', 'LY86', 'LY86', 'LY86')
+genes <- c('LY86', 'LY86', 'LY86', 'LY86', 'LY86', 'LY86', 'LY86', 'LY86', 'LY86')
 # finally the cell type
-cell_type <- 'monocyte'
+cell_type <- 'all'
 # whether to gausnorm first
 accessibility_gausnorm <- T
 expression_gausnorm <- T
@@ -335,7 +334,7 @@ family <- 'gaussian'
 in_dir <- paste(in_dir_base, cell_type, chunk, sep = '/')
 smf_loc <- paste(in_dir_base, cell_type, 'smf.tsv.gz', sep = '/')
 expression_file <- 'expression.tsv.gz'
-accessibility_file <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eregulon_gene_auc_monocyte_nonsparse_transposed.tsv.gz'
+accessibility_file <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eregulon_gene_auc_all_nonsparse_transposed.tsv.gz'
 covariates_file <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/metadata/mo_celllevel_metadata.tsv.gz'
 fixed_effects_string <- 'region,genotype'
 random_effects_string <- 'sample_final,lane'
@@ -617,4 +616,85 @@ for (confinement_i in 1:nrow(confinement)) {
           strip.text.x = element_text(size=12)) + 
     theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
   p
+}
+
+
+# store the plots
+cor_gt_plots <- list()
+cor_gt_dfs <- list()
+# get co-eQTL style plots
+for (confinement_i in 1:nrow(confinement)) {
+  # extract the variant, region and gene
+  variant <- confinement[confinement_i, 'variant']
+  region <- confinement[confinement_i, 'region']
+  gene <- confinement[confinement_i, 'gene']
+  # extract the plottable table
+  plot_df <- interaction_result[[paste(region, gene, variant)]]
+  # get the per-sample plot
+  per_sample_df <- calculate_per_sample_correlation(plot_df, sample_column = 'sample_final')
+  # add the genotypes to this table
+  per_sample_df[['genotype']] <- plot_df[match(per_sample_df[['sample']], plot_df[['sample_final']]), ][['genotype']]
+  # make character string
+  per_sample_df[['gt']] <- as.character(per_sample_df[['genotype']])
+  # fit model with the genotype and the correlation
+  lm_gt_to_cor <- lm(data = per_sample_df[per_sample_df$ncell >= 5, ], formula = 'estimate ~ genotype + ncell')
+  # extract the p value for the genotype
+  lm_gt_to_cor_coeffs <- summary(lm_gt_to_cor)$coefficients
+  # this is always the last column
+  lm_gt_to_cor_gt_p <- lm_gt_to_cor_coeffs['genotype', ncol(summary(lm_gt_to_cor_coeffs))]
+  # plot both of them
+  p_cor <- ggplot(data = per_sample_df, mapping = aes(x = gt, y = estimate, fill = gt)) + 
+    geom_boxplot(outlier.shape = NA) +
+    scale_fill_manual(values = roycols::get_color_list(unique(per_sample_df[['gt']]))) + 
+    xlab(paste('genotype')) + 
+    ylab(paste(gene, 'TF activity ~ expression')) + 
+    labs(fill = 'Genotype') + 
+    ggtitle(paste('cor', variant, region, gene, 'p < ', as.character(round(lm_gt_to_cor_gt_p, digits = 3)))) +
+    theme(legend.title = element_text(size=14), 
+          legend.text = element_text(size=12),
+          axis.title.x = element_text(size=14),
+          axis.title.y = element_text(size=14),
+          axis.text.y = element_text(size=12),
+          axis.text.x = element_text(size=12),
+          strip.text.x = element_text(size=12)) + 
+    theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+  # place in table
+  cor_gt_plots[[paste(variant, region, gene, 'cor', sep = '_')]] <- p_cor
+  cor_gt_dfs[[paste(variant, region, gene, 'cor', sep = '_')]] <- per_sample_df
+  # show the plot
+  p_cor
+  
+  # also as a beta
+  per_sample_df_lm <- calculate_per_sample_correlation(plot_df, sample_column = 'sample_final', correlation = F, formula_string = 'expression~region+(1|lane)')
+  # add genotype
+  per_sample_df_lm[['genotype']] <- plot_df[match(per_sample_df_lm[['sample']], plot_df[['sample_final']]), ][['genotype']]
+  # add character string genotype
+  per_sample_df_lm[['gt']] <- as.character(per_sample_df_lm[['genotype']])
+  # fit model with the genotype and the coefficient (beta)
+  lm_gt_to_est <- lm(data = per_sample_df_lm[per_sample_df_lm$ncell >= 5, ], formula = 'estimate ~ genotype + ncell')
+  # extract the p value for the genotype
+  lm_gt_to_est_coeffs <- summary(lm_gt_to_est)$coefficients
+  # this is always the last column
+  lm_gt_to_est_gt_p <- lm_gt_to_est_coeffs['genotype', ncol(summary(lm_gt_to_est_coeffs))]
+  # and the model plot as well
+  p_lm <- ggplot(data = per_sample_df_lm, mapping = aes(x = gt, y = estimate, fill = gt)) + 
+    geom_boxplot(outlier.shape = NA) +
+    scale_fill_manual(values = roycols::get_color_list(unique(per_sample_df_lm[['gt']]))) + 
+    xlab(paste('genotype')) + 
+    ylab(paste(gene, 'TF activity ~ expression')) + 
+    labs(fill = 'Genotype') + 
+    ggtitle(paste('glm', variant, region, gene, 'p < ', as.character(round(lm_gt_to_est_gt_p, digits = 3)))) + 
+    theme(legend.title = element_text(size=14), 
+          legend.text = element_text(size=12),
+          axis.title.x = element_text(size=14),
+          axis.title.y = element_text(size=14),
+          axis.text.y = element_text(size=12),
+          axis.text.x = element_text(size=12),
+          strip.text.x = element_text(size=12)) + 
+    theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+  # place in table
+  cor_gt_plots[[paste(variant, region, gene, 'lm', sep = '_')]] <- p_lm
+  cor_gt_dfs[[paste(variant, region, gene, 'lm', sep = '_')]] <- per_sample_df_lm
+  # show the plot
+  p_lm
 }
