@@ -326,7 +326,7 @@ genes <- c('LY86', 'LY86', 'LY86', 'LY86', 'LY86', 'LY86', 'LY86', 'LY86', 'LY86
 cell_type <- 'all'
 # whether to gausnorm first
 accessibility_gausnorm <- T
-expression_gausnorm <- T
+expression_gausnorm <- F
 # model family
 family <- 'gaussian'
 
@@ -338,7 +338,7 @@ accessibility_file <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing
 covariates_file <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/metadata/mo_celllevel_metadata.tsv.gz'
 fixed_effects_string <- 'region,genotype'
 random_effects_string <- 'sample_final,lane'
-interaction_terms_string <- 'genotype,region'
+interaction_terms_string <- 'genotype,region,celltype_imputed_lowerres'
 barcode_column <- 'barcode_lane'
 
 # make the full path to the expression data
@@ -618,7 +618,6 @@ for (confinement_i in 1:nrow(confinement)) {
   p
 }
 
-
 # store the plots
 cor_gt_plots <- list()
 cor_gt_dfs <- list()
@@ -644,7 +643,10 @@ for (confinement_i in 1:nrow(confinement)) {
   lm_gt_to_cor_gt_p <- lm_gt_to_cor_coeffs['genotype', ncol(summary(lm_gt_to_cor_coeffs))]
   # plot both of them
   p_cor <- ggplot(data = per_sample_df, mapping = aes(x = gt, y = estimate, fill = gt)) + 
-    geom_boxplot(outlier.shape = NA) +
+    geom_boxplot(outlier.shape = NA) + 
+    geom_point() +
+    # and add jitter
+    geom_jitter(size = 0.5, alpha = 0.5) + 
     scale_fill_manual(values = roycols::get_color_list(unique(per_sample_df[['gt']]))) + 
     xlab(paste('genotype')) + 
     ylab(paste(gene, 'TF activity ~ expression')) + 
@@ -678,7 +680,10 @@ for (confinement_i in 1:nrow(confinement)) {
   lm_gt_to_est_gt_p <- lm_gt_to_est_coeffs['genotype', ncol(summary(lm_gt_to_est_coeffs))]
   # and the model plot as well
   p_lm <- ggplot(data = per_sample_df_lm, mapping = aes(x = gt, y = estimate, fill = gt)) + 
-    geom_boxplot(outlier.shape = NA) +
+    geom_boxplot(outlier.shape = NA) + 
+    geom_point() +
+    # and add jitter
+    geom_jitter(size = 0.5, alpha = 0.5) +
     scale_fill_manual(values = roycols::get_color_list(unique(per_sample_df_lm[['gt']]))) + 
     xlab(paste('genotype')) + 
     ylab(paste(gene, 'TF activity ~ expression')) + 
@@ -698,3 +703,18 @@ for (confinement_i in 1:nrow(confinement)) {
   # show the plot
   p_lm
 }
+
+# let's save each plot
+tf_i_eqtl_plots_loc <- '~/plots/multiome/tf_i_eqtls/'
+# make that directory
+dir.create(tf_i_eqtl_plots_loc, recursive = T)
+# now do each combination
+for (comb in names(cor_gt_plots)) {
+  # extract the plot
+  p_to_plot <- cor_gt_plots[[comb]]
+  # make a safer name
+  p_name <- gsub('\\:|/', '.', comb)
+  # save the plot
+  ggsave(paste0(tf_i_eqtl_plots_loc, '/', p_name, '.pdf'), plot = p_to_plot, width = 6, height = 6)
+}
+
