@@ -861,7 +861,7 @@ for (confinement_i in 1:nrow(confinement)) {
   # plot both of them
   p_cor <- ggplot(data = per_sample_df, mapping = aes(x = gt, y = estimate, fill = gt)) + 
     geom_boxplot(outlier.shape = NA) + 
-    geom_point() +
+    # geom_point() +
     # and add jitter
     geom_jitter(size = 0.5, alpha = 0.5) + 
     scale_fill_manual(values = roycols::get_color_list(unique(per_sample_df[['gt']]))) + 
@@ -898,7 +898,7 @@ for (confinement_i in 1:nrow(confinement)) {
   # and the model plot as well
   p_lm <- ggplot(data = per_sample_df_lm, mapping = aes(x = gt, y = estimate, fill = gt)) + 
     geom_boxplot(outlier.shape = NA) + 
-    geom_point() +
+    # geom_point() +
     # and add jitter
     geom_jitter(size = 0.5, alpha = 0.5) +
     scale_fill_manual(values = roycols::get_color_list(unique(per_sample_df_lm[['gt']]))) + 
