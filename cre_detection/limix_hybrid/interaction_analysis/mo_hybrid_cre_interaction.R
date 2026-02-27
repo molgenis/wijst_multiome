@@ -5,18 +5,18 @@
 # Function: perform interaction-eQTL analysis at single-cell level with TF or ATAC as interaction terms
 # Example: 
 # ~/start_Rscript.sh \
-#   /groups/umcg-franke-scrna/tmp02/users/umcg-roelen/singularity/rstudio-server/simulated_home/mo_hybrid_cre_interaction.R \
-#   --in /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/CD4T/chr12-8899578-9674043 \
-#   --out /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/CD4T/chr12-8899578-9674043 \
-#   --confinement /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/mo_var_tf_gene_confinement.tsv.gz \
-#   --smf_loc /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/CD4T/smf.tsv.gz \
-#   --covariates_file /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/metadata/mo_celllevel_metadata.tsv.gz \
-#   --accessibility_file /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eregulon_gene_auc_CD4T_nonsparse_transposed.tsv.gz \
+#   /groups/umcg-franke-scrna/tmp04/users/umcg-roelen/singularity/rstudio-server/simulated_home/mo_hybrid_cre_interaction.R \
+#   --in /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/monocyte/chr12-8899578-9674043 \
+#   --out /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/sc/monocyte/lane_donor_countrna/chr12-8899578-9674043 \
+#   --confinement /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/mo_var_tf_gene_confinement.tsv.gz \
+#   --smf_loc /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/monocyte/smf.tsv.gz \
+#   --covariates_file /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/metadata/mo_celllevel_metadata.tsv.gz \
+#   --accessibility_file /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eregulon_gene_auc_monocyte_nonsparse_transposed.tsv.gz \
 #   --fixed_effects region,genotype \
 #   --random_effects sample_final,lane \
 #   --interaction_terms genotype,region \
 #   --barcode_column barcode_lane \
-#   --genotype_loc /groups/umcg-franke-scrna/tmp02/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/genotype_input/EUR_imputed_hg38_varFiltered_chr12 \
+#   --genotype_loc /groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/genotype_input/EUR_imputed_hg38_varFiltered_chr12 \
 #   --expression_gausnorm \
 #   --accessibility_gausnorm
 # 
@@ -91,7 +91,7 @@ get_formula <- function(var_of_interest, fixed_effects=NULL, random_effects=NULL
 #' print(transformed_dt)
 #' }
 #'
-gausnorm_independent_variable_matrix <- function(independent_variable_matrix, feature_id_column='feature') {
+gausnorm_independent_variable_matrix <- function(independent_variable_matrix, feature_id_column='feature', boxcox=F, min_value=1e-6) {
   # take the features
   features <- independent_variable_matrix[[feature_id_column]]
   # remove the feature ID
@@ -99,16 +99,27 @@ gausnorm_independent_variable_matrix <- function(independent_variable_matrix, fe
   # take the donor names, as they are the columns
   colnames_original <- colnames(independent_variable_matrix)
   # transpose the matrix, as we'll do this on a per-column basis
-  transformed_data <- as.data.table(
-    lapply(independent_variable_matrix, function(x) {
-      if (is.numeric(x)) {
+  independent_variable_matrix_t <- t(as.matrix(independent_variable_matrix))
+  # transform the data
+  transformed_data <- apply(independent_variable_matrix_t, 2, function(x) {
+    if (is.numeric(x)) {
+      if (!is.null(min_value)) {
+        x[x < min_value] <- min_value
+      }
+      if (boxcox) {
+        boxcox(x)$x.t
+      } else {
         yeojohnson(x)$x.t
       }
-      else {
-        x
-      }
-    })
-  )
+    }
+    else {
+      x
+    }
+  })
+  # make into table
+  transformed_data <- do.call('cbind', transformed_data)
+  # transform back and make datatable
+  transformed_data <- as.data.table(t(transformed_data))
   # add back the donor names
   colnames(transformed_data) <- colnames_original
   # make the features as a data.table as well
@@ -118,6 +129,27 @@ gausnorm_independent_variable_matrix <- function(independent_variable_matrix, fe
   # and merge the feature column back onto the data
   transformed_data <- cbind(features_column, transformed_data)
   return(transformed_data)
+}
+
+
+gausnorm_independent_variable <- function(x, boxcox=F, min_value=1e-6) {
+  # initialize value 
+  y <- NULL
+  # only if numeric we can convert
+  if (is.numeric(x)) {
+    if (!is.null(min_value)) {
+      x[x < min_value] <- min_value
+    }
+    if (boxcox) {
+      y <- boxcox(x)$x.t
+    } else {
+      y - yeojohnson(x)$x.t
+    }
+  }
+  else {
+    y <- x
+  }
+  return(y)
 }
 
 
@@ -170,7 +202,11 @@ do_interaction_analysis <- function(expression_data,
                                     fixed_effects=c('lane','region','genotype'), 
                                     random_effects=c('sample_final'), 
                                     interactions=c('genotype','region'), 
-                                    family = 'gaussian') {
+                                    family = 'gaussian', 
+                                    accessibility_gausnorm=T, 
+                                    expression_gausnorm=T, 
+                                    accessibility_boxcox=F, 
+                                    expression_boxcox=F) {
   # create formula
   base_formula <- get_formula(var_of_interest = 'expression', fixed_effects = fixed_effects, random_effects = random_effects)
   base_formula_string <- (Reduce(paste, deparse(base_formula)))
@@ -214,6 +250,13 @@ do_interaction_analysis <- function(expression_data,
       # merge the metadata with the gene and the region
       covariates_data[['region']] <- region_values
       covariates_data[['expression']] <- gene_values
+      # gausnorm them if requested
+      if (accessibility_gausnorm) {
+        covariates_data[['region']] <- gausnorm_independent_variable(covariates_data[['region']], accessibility_boxcox)
+      }
+      if(expression_gausnorm) {
+        covariates_data[['expression']] <- gausnorm_independent_variable(covariates_data[['expression']], expression_boxcox)
+      }
       # get the variants for this region-gene combination
       variants_region_gene <- unique(confinement_region[confinement_region[['gene']] == gene, ][['variant']])
       # check each variant
@@ -404,6 +447,10 @@ genotype_loc <- NULL
 expression_gausnorm <- T
 # whether to gausnorm the accessibility/TF data
 accessibility_gausnorm <- T
+# whether to gausnorm the expression data
+expression_boxcox <- T
+# whether to gausnorm the accessibility/TF data
+accessibility_boxcox <- T
 # fixed effects string
 fixed_effects_string <- NULL
 # random effects string
@@ -674,12 +721,22 @@ if (nrow(expression_data) > 0) {
         if (length(intersecting_cells) > 0) {
           # do gaussnorm if so requested
           if (expression_gausnorm) {
-            message('Yeo-Johnson gausnorm on expression data...')
-            expression_data <- gausnorm_independent_variable_matrix(independent_variable_matrix = expression_data, feature_id_column = 'gene')
+            if (expression_boxcox) {
+              message('Yeo-Johnson gausnorm on expression data...')
+              # expression_data <- gausnorm_independent_variable_matrix(independent_variable_matrix = expression_data, feature_id_column = 'gene', boxcox = T)
+            } else {
+              message('Yeo-Johnson gausnorm on expression data...')
+              # expression_data <- gausnorm_independent_variable_matrix(independent_variable_matrix = expression_data, feature_id_column = 'gene')
+            }
           }
           if (accessibility_gausnorm) {
-            message('Yeo-Johnson gausnorm on accessibility/TF data...')
-            accessibility_data <- gausnorm_independent_variable_matrix(independent_variable_matrix = accessibility_data, feature_id_column = 'region')
+            if (accessibility_boxcox) {
+              message('Yeo-Johnson gausnorm on accessibility/TF data...')
+              # accessibility_data <- gausnorm_independent_variable_matrix(independent_variable_matrix = accessibility_data, feature_id_column = 'region', boxcox = T)
+            } else {
+              message('Yeo-Johnson gausnorm on accessibility/TF data...')
+              # accessibility_data <- gausnorm_independent_variable_matrix(independent_variable_matrix = accessibility_data, feature_id_column = 'region')
+            }
           }
           # order cells
           intersecting_cells <- intersecting_cells[order(intersecting_cells)]
@@ -703,7 +760,11 @@ if (nrow(expression_data) > 0) {
             covariates_data = covariates_data, 
             fixed_effects = fixed_effects, 
             random_effects = random_effects, 
-            interactions = interactions
+            interactions = interactions, 
+            accessibility_gausnorm = accessibility_gausnorm, 
+            expression_gausnorm = expression_gausnorm, 
+            accessibility_boxcox = accessibility_boxcox, 
+            expression_boxcox = expression_boxcox
           )
           # extract the last part of the folder
           chunk_name <- basename(in_dir)
@@ -740,3 +801,4 @@ if (is.null(interaction_result)) {
   # so we'll store an empty file
   write_empty_result(tsv_output_loc_full)
 }
+

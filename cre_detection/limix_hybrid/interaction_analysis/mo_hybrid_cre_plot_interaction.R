@@ -31,6 +31,166 @@ library(roycols)
 # Functions        #
 ####################
 
+#' get a label dict that replaces the posix safe names into printable versions
+#' 
+#' @returns a label dict that replaces the posix safe names into printable versions
+#' label_dict_names <- get_label_dict()
+get_label_dict <- function() {
+  label_dict <- list()
+  label_dict[['CD4_T_cells']] <- 'CD4+ T cells'
+  label_dict[['CD8_T_cells']] <- 'CD8+ T cells'
+  label_dict[['CD4T']] <- 'CD4+ T'
+  label_dict[['CD8T']] <- 'CD8+ T'
+  label_dict[['CD4_T']] <- 'CD4+ T'
+  label_dict[['CD8_T']] <- 'CD8+ T'
+  label_dict[['Dendritic_cells']] <- 'Dendritic cells'
+  label_dict[['Endothelial_cells']] <- 'Endothelial cells'
+  label_dict[['Fibroblasts']] <- 'Fibroblasts'
+  label_dict[['Glia_cells']] <- 'Glia cells'
+  label_dict[['Mast_cells']] <- 'MAST cells'
+  label_dict[['Mature_absorptive_enterocytes']] <- 'Mature absorptive enterocytes'
+  label_dict[['Mature_secretory_enterocytes']] <- 'Mature secretory enterocytes'
+  label_dict[['Memory_B']] <- 'Memory B cells'
+  label_dict[['Monocytes']] <- 'Monocytes'
+  label_dict[['monocyte']] <- 'Monocyte'
+  label_dict[['Mono']] <- 'Monocyte'
+  label_dict[['Plasma_cells']] <- 'Plasma cells'
+  label_dict[['Stem_cells']] <- 'Stem cells'
+  label_dict[['Stromal_cells']] <- 'Stromal cells'
+  label_dict[['T_others']] <- 'other T cells'
+  label_dict[['Transit_amplifying_cells']] <- 'Transit amplifying cells'
+  label_dict[['AI']] <- 'Actively Inflamed'
+  label_dict[['NI']] <- 'Non-Inflamed'
+  return(label_dict)
+}
+
+
+rename_labels <- function(vector_to_rename) {
+  # get the labels that are present
+  label_renaming <- get_label_dict()
+  # now check which labels we are missing
+  missing_renames <- setdiff(unique(vector_to_rename), names(label_renaming))
+  # add those renames as not being renames
+  for (missing_rename in missing_renames) {
+    label_renaming[[missing_rename]] <- missing_rename
+  }
+  # now replace each value with the rename
+  renamed_vector <- as.vector(unlist(label_renaming[vector_to_rename]))
+  # and return that
+  return(renamed_vector)
+}
+
+
+remap_with_label_dict <- function(vector_of_names) {
+  # get the label dict
+  relabels <- get_label_dict()
+  # get the labels available for renaming
+  labels_available <- names(relabels)
+  # get the ones we cant remap
+  unmappable <- setdiff(unique(vector_of_names), labels_available)
+  # report on those
+  if (length(unmappable) > 0) {
+    print(paste('cannot remap the following names, they will be returned unchanged:', paste(unmappable, collapse = ',')))
+    # and put those in our remapping list as their originals
+    relabels[unmappable] <- unmappable
+  }
+  # now actually do the remapping
+  remapped <- as.vector(unlist(relabels[vector_of_names]))
+  return(remapped)
+}
+
+
+get_color_coding_dict <- function() {
+  # medhigh
+  color_coding_dict <- list()
+  color_coding_dict[["B"]] <- "#71BC4B"
+  #color_coding_dict[['CD4_T_cells']] <- '#7FC97F'
+  color_coding_dict[['CD4_T_cells']] <- '#153057'
+  color_coding_dict[['CD4T']] <- '#153057'
+  #color_coding_dict[['CD8_T_cells']] <- '#BEAED4'
+  color_coding_dict[['CD8_T_cells']] <- '#009DDB'
+  color_coding_dict[['CD8T']] <- '#009DDB'
+  #color_coding_dict[['Dendritic_cells']] <- '#FDC086'
+  color_coding_dict[['Dendritic_cells']] <- '#965EC8'
+  color_coding_dict[['DC']] <- '#965EC8'
+  color_coding_dict[['Endothelial_cells']] <- '#FFFFB3'
+  color_coding_dict[['Fibroblasts']] <- '#386CB0'
+  color_coding_dict[['Glia_cells']] <- '#F0027F'
+  color_coding_dict[['Mast_cells']] <- '#BF5B17'
+  color_coding_dict[['Mature_absorptive_enterocytes']] <- '#A6CEE3'
+  color_coding_dict[['Mature_secretory_enterocytes']] <- '#1B9E77'
+  color_coding_dict[['Memory_B']] <- '#D95F02'
+  color_coding_dict[['Microfold_cell']] <- '#BEAED4'
+  #color_coding_dict[['Monocytes']] <- '#7570B3'
+  color_coding_dict[['Monocyte']] <- '#EDBA1B'
+  color_coding_dict[['Naive_B_cells']] <- '#FDC086'
+  color_coding_dict[['NK']] <- '#E64B50'
+  #color_coding_dict[['Plasma_cells']] <- '#E7298A'
+  color_coding_dict[['Plasma_cells']] <- '#DB8E00'
+  color_coding_dict[['Stem_cells']] <- '#66A61E'
+  color_coding_dict[['Stromal_cells']] <- '#8DD3C7'
+  #color_coding_dict[['T_others']] <- '#A6761D'
+  color_coding_dict[['T_others']] <- '#FF63B6'
+  color_coding_dict[['Transit_amplifying_cells']] <- '#FF7F00'
+  color_coding_dict[['disconcordant']] <- 'gray'
+  #color_coding_dict[['CD4+ T cells']] <- '#7FC97F'
+  color_coding_dict[['CD4+ T cells']] <- '#153057'
+  color_coding_dict[['CD4+ T']] <- '#153057'
+  #color_coding_dict[['CD8+ T cells']] <- '#BEAED4'
+  color_coding_dict[['CD8+ T cells']] <- '#009DDB'
+  color_coding_dict[['CD8+ T']] <- '#009DDB'
+  #color_coding_dict[['Dendritic cells']] <- '#FDC086'
+  color_coding_dict[['Dendritic cells']] <- '#965EC8'
+  color_coding_dict[['Endothelial cells']] <- '#FFFFB3'
+  color_coding_dict[['Endothelial\ncells']] <- '#FFFFB3'
+  color_coding_dict[['Fibroblasts']] <- '#386CB0'
+  color_coding_dict[['Glia cells']] <- '#F0027F'
+  color_coding_dict[['MAST cells']] <- '#BF5B17'
+  color_coding_dict[['Mature absorptive enterocytes']] <- '#A6CEE3'
+  color_coding_dict[['Mature\nabsorptive\nenterocytes']] <- '#A6CEE3'
+  color_coding_dict[['Mature secretory enterocytes']] <- '#1B9E77'
+  color_coding_dict[['Mature secretory\nenterocytes']] <- '#1B9E77'
+  color_coding_dict[['Memory B cells']] <- '#D95F02'
+  #color_coding_dict[['Monocytes']] <- '#7570B3'
+  color_coding_dict[['Microfold cells']] <- '#BEAED4'
+  color_coding_dict[['Monocytes']] <- '#EDBA1B'
+  color_coding_dict[['Naive B cells']] <- '#FDC086'
+  #color_coding_dict[['Plasma cells']] <- '#E7298A'
+  color_coding_dict[['Plasma cells']] <- '#DB8E00'
+  color_coding_dict[['plasmablast']] <- '#DB8E00'
+  color_coding_dict[['Stem cells']] <- '#66A61E'
+  color_coding_dict[['Stromal cells']] <- '#8DD3C7'
+  #color_coding_dict[['other T cells']] <- '#A6761D'
+  color_coding_dict[['other T cells']] <- '#FF63B6'
+  color_coding_dict[['T_other']] <- '#FF63B6'
+  color_coding_dict[['T_other']] <- '#FF63B6'
+  color_coding_dict[['Transit amplifying cells']] <- '#FF7F00'
+  color_coding_dict[['Transit\namplifying cells']] <- '#FF7F00'
+  color_coding_dict[['disconcordant']] <- 'gray'
+  color_coding_dict[['unannotated']] <- 'gray'
+  # up and down regulation will be added to, we need a whitening percentage
+  pct_whitening <- 40
+  # then we will check each cell type
+  for (cell_type in names(color_coding_dict)) {
+    # the up color is the same as the regular one
+    color_coding_dict[[paste(cell_type, 'up')]] <- color_coding_dict[[cell_type]]
+    # but the down one will have a more faded colour
+    color_coding_dict[[paste(cell_type, 'down')]] <- colorRampPalette(c(color_coding_dict[[cell_type]], "white"))(100)[pct_whitening]
+    # we'll do something similiar when we have multiple conditions
+    color_coding_dict[[paste(cell_type, 'combined')]] <- color_coding_dict[[cell_type]]
+    color_coding_dict[[paste(cell_type, 'UT')]] <- colorRampPalette(c(color_coding_dict[[cell_type]], "white"))(100)[pct_whitening]
+    color_coding_dict[[paste(cell_type, '24hCA')]] <- colorRampPalette(c(color_coding_dict[[cell_type]], "black"))(100)[pct_whitening]
+  }
+  # general
+  color_coding_dict[['AI']] <- 'darkblue'
+  color_coding_dict[['NI']] <- 'darkred'
+  color_coding_dict[['Actively Inflamed']] <- 'darkblue'
+  color_coding_dict[['Non-Inflamed']] <- 'darkred'
+  return(color_coding_dict)
+}
+
+
+
 #' Create a formula for mixed-effects models
 #'
 #' This function generates a formula for mixed-effects models based on the specified variable of interest, fixed effects, and random effects.
@@ -79,7 +239,7 @@ get_formula <- function(var_of_interest, fixed_effects=NULL, random_effects=NULL
 #' print(transformed_dt)
 #' }
 #'
-gausnorm_independent_variable_matrix <- function(independent_variable_matrix, feature_id_column='feature') {
+gausnorm_independent_variable_matrix <- function(independent_variable_matrix, feature_id_column='feature', boxcox=F, min_value=1e-6) {
   # take the features
   features <- independent_variable_matrix[[feature_id_column]]
   # remove the feature ID
@@ -87,16 +247,27 @@ gausnorm_independent_variable_matrix <- function(independent_variable_matrix, fe
   # take the donor names, as they are the columns
   colnames_original <- colnames(independent_variable_matrix)
   # transpose the matrix, as we'll do this on a per-column basis
-  transformed_data <- as.data.table(
-    lapply(independent_variable_matrix, function(x) {
+  independent_variable_matrix_t <- t(as.matrix(independent_variable_matrix))
+  # transform the data
+  transformed_data <- apply(independent_variable_matrix_t, 2, function(x) {
       if (is.numeric(x)) {
-        yeojohnson(x)$x.t
+        if (!is.null(min_value)) {
+          x[x < min_value] <- min_value
+        }
+        if (boxcox) {
+          boxcox(x)$x.t
+        } else {
+          yeojohnson(x)$x.t
+        }
       }
       else {
         x
       }
     })
-  )
+  # make into table
+  transformed_data <- do.call('cbind', transformed_data)
+  # transform back and make datatable
+  transformed_data <- as.data.table(t(transformed_data))
   # add back the donor names
   colnames(transformed_data) <- colnames_original
   # make the features as a data.table as well
@@ -108,6 +279,25 @@ gausnorm_independent_variable_matrix <- function(independent_variable_matrix, fe
   return(transformed_data)
 }
 
+gausnorm_independent_variable <- function(x, boxcox=F, min_value=1e-6) {
+  # initialize value 
+  y <- NULL
+  # only if numeric we can convert
+  if (is.numeric(x)) {
+    if (!is.null(min_value)) {
+      x[x < min_value] <- min_value
+    }
+    if (boxcox) {
+      y <- boxcox(x)$x.t
+    } else {
+      y - yeojohnson(x)$x.t
+    }
+  }
+  else {
+    y <- x
+  }
+  return(y)
+}
 
 model_to_row <- function(model) {
   # make summary of model
@@ -157,7 +347,11 @@ get_interaction_inputs <- function(expression_data,
                                     covariates_data=NULL, 
                                     fixed_effects=c('lane','region','genotype'), 
                                     random_effects=c('sample_final'), 
-                                    interactions=c('genotype','region')
+                                    interactions=c('genotype','region'), 
+                                                   accessibility_gausnorm=T, 
+                                                   expression_gausnorm=T, 
+                                                   accessibility_boxcox=F, 
+                                                   expression_boxcox=F
                                    ) {
   # # create formula
   # base_formula <- get_formula(var_of_interest = 'expression', fixed_effects = fixed_effects, random_effects = random_effects)
@@ -202,6 +396,13 @@ get_interaction_inputs <- function(expression_data,
       # merge the metadata with the gene and the region
       covariates_data[['region']] <- region_values
       covariates_data[['expression']] <- gene_values
+      # gausnorm them if requested
+      if (accessibility_gausnorm) {
+        covariates_data[['region']] <- gausnorm_independent_variable(covariates_data[['region']], accessibility_boxcox)
+      }
+      if(expression_gausnorm) {
+        covariates_data[['expression']] <- gausnorm_independent_variable(covariates_data[['expression']], expression_boxcox)
+      }
       # get the variants for this region-gene combination
       variants_region_gene <- unique(confinement_region[confinement_region[['gene']] == gene, ][['variant']])
       # check each variant
@@ -326,7 +527,9 @@ genes <- c('LY86', 'LY86', 'LY86', 'LY86', 'LY86', 'LY86', 'LY86', 'LY86', 'LY86
 cell_type <- 'all'
 # whether to gausnorm first
 accessibility_gausnorm <- T
-expression_gausnorm <- F
+expression_gausnorm <- T
+accessibility_boxcox <- T
+expression_boxcox <- T
 # model family
 family <- 'gaussian'
 
@@ -335,7 +538,7 @@ in_dir <- paste(in_dir_base, cell_type, chunk, sep = '/')
 smf_loc <- paste(in_dir_base, cell_type, 'smf.tsv.gz', sep = '/')
 expression_file <- 'expression.tsv.gz'
 accessibility_file <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eregulon_gene_auc_all_nonsparse_transposed.tsv.gz'
-covariates_file <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/metadata/mo_celllevel_metadata.tsv.gz'
+covariates_file <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/mo_celllevel_metadata_nounannotated.tsv.gz'
 fixed_effects_string <- 'region,genotype'
 random_effects_string <- 'sample_final,lane'
 interaction_terms_string <- 'genotype,region,celltype_imputed_lowerres'
@@ -506,12 +709,22 @@ if (nrow(expression_data) > 0) {
         if (length(intersecting_cells) > 0) {
           # do gaussnorm if so requested
           if (expression_gausnorm) {
-            message('Yeo-Johnson gausnorm on expression data...')
-            expression_data <- gausnorm_independent_variable_matrix(independent_variable_matrix = expression_data, feature_id_column = 'gene')
+            if (expression_boxcox) {
+              message('Yeo-Johnson gausnorm on expression data...')
+              # expression_data <- gausnorm_independent_variable_matrix(independent_variable_matrix = expression_data, feature_id_column = 'gene', boxcox = T)
+            } else {
+              message('Yeo-Johnson gausnorm on expression data...')
+              # expression_data <- gausnorm_independent_variable_matrix(independent_variable_matrix = expression_data, feature_id_column = 'gene')
+            }
           }
           if (accessibility_gausnorm) {
-            message('Yeo-Johnson gausnorm on accessibility/TF data...')
-            accessibility_data <- gausnorm_independent_variable_matrix(independent_variable_matrix = accessibility_data, feature_id_column = 'region')
+            if (accessibility_boxcox) {
+              message('Yeo-Johnson gausnorm on accessibility/TF data...')
+              # accessibility_data <- gausnorm_independent_variable_matrix(independent_variable_matrix = accessibility_data, feature_id_column = 'region', boxcox = T)
+            } else {
+              message('Yeo-Johnson gausnorm on accessibility/TF data...')
+              # accessibility_data <- gausnorm_independent_variable_matrix(independent_variable_matrix = accessibility_data, feature_id_column = 'region')
+            }
           }
           # order cells
           intersecting_cells <- intersecting_cells[order(intersecting_cells)]
@@ -535,7 +748,11 @@ if (nrow(expression_data) > 0) {
             covariates_data = covariates_data, 
             fixed_effects = fixed_effects, 
             random_effects = random_effects, 
-            interactions = interactions
+            interactions = interactions, 
+            accessibility_gausnorm = accessibility_gausnorm, 
+            expression_gausnorm = expression_gausnorm, 
+            accessibility_boxcox = accessibility_boxcox, 
+            expression_boxcox = expression_boxcox
           )
         } else {
           message('No cells left after intersecting with covariates matrix. No more work to be done')
