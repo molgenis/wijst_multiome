@@ -12,9 +12,9 @@
 #   --smf_loc /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/monocyte/smf.tsv.gz \
 #   --covariates_file /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/metadata/mo_celllevel_metadata.tsv.gz \
 #   --accessibility_file /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eregulon_gene_auc_monocyte_nonsparse_transposed.tsv.gz \
-#   --fixed_effects region,genotype \
+#   --fixed_effects genotype \
 #   --random_effects sample_final,lane \
-#   --interaction_terms genotype,region \
+#   --interaction_terms expression,region \
 #   --aggregate_columns sample_final,lane \
 #   --barcode_column barcode_lane \
 #   --genotype_loc /groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/genotype_input/EUR_imputed_hg38_varFiltered_chr6 \
@@ -635,7 +635,7 @@ if (debug) {
   interaction_terms_string <- 'region,expression'
   barcode_column <- 'barcode_lane'
   aggregate_columns_string <- 'sample_final,lane'
-  ncell_cutoff <- 5
+  ncell_cutoff <- 10
   
 } else {
   # obligatory parameters without a default
@@ -951,9 +951,9 @@ cor_gt_results <- list()
 # get co-eQTL style plots
 for (confinement_i in 1:nrow(confinement)) {
   # extract the variant, region and gene
-  variant <- confinement[confinement_i, 'variant']
-  region <- confinement[confinement_i, 'region']
-  gene <- confinement[confinement_i, 'gene']
+  variant <- as.vector(unlist(confinement[confinement_i, 'variant']))
+  region <- as.vector(unlist(confinement[confinement_i, 'region']))
+  gene <- as.vector(unlist(confinement[confinement_i, 'gene']))
   # paste together the naming
   confinement_name <- paste(region, gene, variant)
   # check if this combination is in the results
@@ -1066,6 +1066,7 @@ if (length(cor_gt_results) > 0) {
   chunk_name <- basename(in_dir)
   # save this
   cor_gt_results_table[['chunk']] <- rep(chunk_name, times = nrow(cor_gt_results_table))
+  print(cor_gt_results_table)
   # write result
   write.table(cor_gt_results_table, output_loc_full, sep = '\t', row.names = F, col.names = T, quote = F)
   # make a checksum
@@ -1074,4 +1075,3 @@ if (length(cor_gt_results) > 0) {
   # write an empty result
   write_empty_result(tsv_output_loc_full)
 }
-
