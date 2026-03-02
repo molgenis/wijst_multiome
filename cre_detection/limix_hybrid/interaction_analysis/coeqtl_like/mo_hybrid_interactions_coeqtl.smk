@@ -67,6 +67,15 @@ def optional_chunk_file(maybe_path, chunk):
         return None
     return resolve_rel_or_abs(chunk_dir_from_chunk(chunk), maybe_path)
 
+def optional_chunk_param(maybe_param):
+    """
+    Return a resolved parameter if provided in config (supports abs/rel);
+    otherwise None so we can omit it from inputs and CLI.
+    """
+    if not is_set(maybe_param):
+        return None
+    return maybe_param
+
 
 ############################################
 # define chunking scheme (discover only real folders)
@@ -151,9 +160,9 @@ rule run_interaction:
             if optional_chunk_file(config.get("accessibility_filename"), wc.chunk) else ""
         ),
         raneff_arg = lambda wc: (
-            f'--random_effects "{optional_chunk_file(config.get("random_effects"), wc.chunk)}"'
-            if optional_chunk_file(config.get("random_effects"), wc.chunk) else ""
-        ),
+            f'--random_effects "{optional_chunk_param(config.get("random_effects", None))}"'
+            if optional_chunk_param(config.get("random_effects")) else ""
+        ), 
         # R invocation
         rscript = RSCRIPT_LOC,
         rcmd    = R_COMMAND
