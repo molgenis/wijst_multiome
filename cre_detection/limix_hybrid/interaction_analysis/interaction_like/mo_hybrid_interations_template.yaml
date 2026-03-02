@@ -1,5 +1,7 @@
-#####################################################
-# configuration yaml for mo_hybrid_interactions.smk #
+######################################################
+# Authors: Roy Oelen
+# Name: mo_hybrid_interactions_template.yaml
+# Function: configuration yaml for mo_hybrid_interactions.smk
 #####################################################
 
 # location of the genotype files

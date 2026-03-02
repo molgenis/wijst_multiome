@@ -135,6 +135,7 @@ rule run_interaction:
         random_effects    = config["random_effects"],
         interaction_terms = config["interaction_terms"],
         barcode_column    = config["barcode_column"],
+        aggregate_columns = config["aggregate_columns"], 
         # genotype prefix (precomputed in Python)
         genotype_prefix   = lambda wc: GENO_TMPL.format(chrom=chrom_from_chunk(wc.chunk)),
         # get the flags for expression or accessibility
@@ -148,6 +149,10 @@ rule run_interaction:
         acc_arg = lambda wc: (
             f'--accessibility_file "{optional_chunk_file(config.get("accessibility_filename"), wc.chunk)}"'
             if optional_chunk_file(config.get("accessibility_filename"), wc.chunk) else ""
+        ),
+        raneff_arg = lambda wc: (
+            f'--random_effects "{optional_chunk_file(config.get("random_effects"), wc.chunk)}"'
+            if optional_chunk_file(config.get("random_effects"), wc.chunk) else ""
         ),
         # R invocation
         rscript = RSCRIPT_LOC,
@@ -164,8 +169,9 @@ rule run_interaction:
             --smf_loc "{input.smf}" \
             --covariates_file "{input.covariates}" \
             --fixed_effects "{params.fixed_effects}" \
-            --random_effects "{params.random_effects}" \
+            {params.raneff_arg} \
             --interaction_terms "{params.interaction_terms}" \
+            --aggregate_columns "{params.aggregate_columns}" \
             --barcode_column "{params.barcode_column}" \
             --genotype_loc "{params.genotype_prefix}" \
             {params.EXPR_FLAG} \
