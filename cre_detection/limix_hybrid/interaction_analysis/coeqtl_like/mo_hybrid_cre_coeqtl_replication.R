@@ -388,6 +388,7 @@ get_interaction_inputs <- function(expression_data,
     covariates_data <- data.frame(covariates_data)
     # get which things we need from that dataframe
     covariate_columns <- setdiff(c(fixed_effects, random_effects, interactions, aggregate_columns), c('expression', 'region', 'genotype'))
+    
     # and subset the covariates data to that
     covariates_data <- covariates_data[, c('cell', covariate_columns)]
   }
@@ -608,7 +609,7 @@ accessibility_boxcox <- F
 # fixed effects string
 fixed_effects_string <- NULL
 # random effects string
-random_effects_string <- NULL
+random_effects_string <- ''
 # interaction terms string
 interaction_terms_string <- NULL
 # aggregate columns string
@@ -683,6 +684,11 @@ if (debug) {
     error("m/--aggregate_columns is an obligatory parameter")
   } else {
     aggregate_columns_string <- opt[['aggregate_columns']]
+  }
+  if (is.null(opt[['random_effects']])) {
+    random_effects_string <- ''
+  } else {
+    random_effects_string <- opt[['random_effects']]
   }
   # parameters that have a sane default
   random_effects_string <- opt[['random_effects']]
@@ -837,7 +843,7 @@ if (nrow(expression_data) > 0) {
         
         # split the fixed effects
         fixed_effects <- c()
-        if (!is.null(fixed_effects_string) & !is.na(fixed_effects_string) & fixed_effects_string != '') {
+        if (!is.null(fixed_effects_string) && !is.na(fixed_effects_string) && fixed_effects_string != '') {
           fixed_effects <- strsplit(fixed_effects_string, ',')[[1]]
         }
         # warn if we are not including the genotype
@@ -846,12 +852,12 @@ if (nrow(expression_data) > 0) {
         }
         # split random effects
         random_effects <- c()
-        if (!is.null(random_effects_string) & !is.na(random_effects_string) & random_effects_string != '') {
+        if (!is.null(random_effects_string) && !is.na(random_effects_string) && random_effects_string != '') {
           random_effects <- strsplit(random_effects_string, ',')[[1]]
         }
         # split random effects
         interactions <- c()
-        if (!is.null(interaction_terms_string) & !is.na(interaction_terms_string) & interaction_terms_string != '') {
+        if (!is.null(interaction_terms_string) && !is.na(interaction_terms_string) && interaction_terms_string != '') {
           interactions <- strsplit(interaction_terms_string, ',')[[1]]
         }
         # split random effects
@@ -963,9 +969,9 @@ if (!is.null(interaction_result)) {
       # extract the plottable table
       plot_df <- interaction_result[[confinement_name]]
       # add an aggregated column for the sample, by pasting the aggregate columns together
-      plot_df[['aggregated_sample']] <- apply(plot_df[, aggregate_columns], 1, function(x) paste(x, collapse = '_'))
+      plot_df[['aggregated_sample']] <- apply(plot_df[, aggregate_columns, drop = F], 1, function(x) paste(x, collapse = '_'))
       # add an aggregated column for the sample, by pasting the aggregate columns together
-      covariates_data[['aggregated_sample']] <- apply(covariates_data[, aggregate_columns], 1, function(x) paste(x, collapse = '_'))
+      covariates_data[['aggregated_sample']] <- apply(covariates_data[, aggregate_columns, drop = F], 1, function(x) paste(x, collapse = '_'))
       # get the per-sample plot
       per_sample_df <- calculate_per_sample_correlation(plot_df, sample_column = 'aggregated_sample', formula_string = paste(interactions, sep = '~', collapse = '~'))
       # take the unique sets of the covariates from the plot df, to add this to the per sample df
@@ -980,24 +986,31 @@ if (!is.null(interaction_result)) {
       per_sample_df[['gt']] <- as.character(per_sample_df[['genotype']])
       # create a formula
       base_formula <- get_formula(var_of_interest = 'estimate', fixed_effects = c(fixed_effects, 'ncell'), random_effects = random_effects)
-      # fit model with the genotype and the correlation
-      lm_gt_to_cor <- NULL
-      if (!is.null(random_effects) && length(random_effects) > 0) {
-        # use glm if we have random effects
-        lm_gt_to_cor <- lmerTest::lmer(formula = base_formula, data = per_sample_df[per_sample_df$ncell >= ncell_cutoff, ])
-      } else {
-        # or simple model if here are not
-        lm_gt_to_cor <- lm(data = per_sample_df[per_sample_df$ncell >= ncell_cutoff, ], formula = base_formula)
-      }
-      # extract p value for the genotype term
-      lm_gt_to_cor_summary <- summary(lm_gt_to_cor)
-      lm_gt_to_cor_p <- NULL
-      # the p values is always the last
-      lm_gt_to_cor_p <- lm_gt_to_cor_summary[['coefficients']]['genotype', ncol(lm_gt_to_cor_summary[['coefficients']])]
-      # convert the result to a table
-      lm_gt_to_cor_table <- model_to_row(lm_gt_to_cor)
-      # add the variant, region and gene to the table
-      lm_gt_to_cor_table <- cbind(data.table('variant' = c(variant), 'region' = c(region), 'gene' = c(gene)), lm_gt_to_cor_table)
+      # try to do modelling
+      tryCatch({
+        # fit model with the genotype and the correlation
+        lm_gt_to_cor <- NULL
+        if (!is.null(random_effects) && length(random_effects) > 0) {
+          # use glm if we have random effects
+          lm_gt_to_cor <- lmerTest::lmer(formula = base_formula, data = per_sample_df[per_sample_df$ncell >= ncell_cutoff, ])
+        } else {
+          # or simple model if here are not
+          lm_gt_to_cor <- lm(data = per_sample_df[per_sample_df$ncell >= ncell_cutoff, ], formula = base_formula)
+        }
+        # extract p value for the genotype term
+        lm_gt_to_cor_summary <- summary(lm_gt_to_cor)
+        lm_gt_to_cor_p <- NULL
+        # the p values is always the last
+        lm_gt_to_cor_p <- lm_gt_to_cor_summary[['coefficients']]['genotype', ncol(lm_gt_to_cor_summary[['coefficients']])]
+        # convert the result to a table
+        lm_gt_to_cor_table <- model_to_row(lm_gt_to_cor)
+        # add the variant, region and gene to the table
+        lm_gt_to_cor_table <- cbind(data.table('variant' = c(variant), 'region' = c(region), 'gene' = c(gene)), lm_gt_to_cor_table)
+      }, error = function(e) {
+        warning(paste('Error in model fitting', region, gene, variant, ':', e$message))
+        # make empty table
+        lm_gt_to_cor_table <- data.table('variant' = c(variant), 'region' = c(region), 'gene' = c(gene))
+      })
       # add the number of samples
       lm_gt_to_cor_table[['nsample']] <- nrow(per_sample_df[per_sample_df$ncell >= ncell_cutoff, ])
       # and the distribution of cells
@@ -1069,7 +1082,6 @@ if (length(cor_gt_results) > 0) {
   chunk_name <- basename(in_dir)
   # save this
   cor_gt_results_table[['chunk']] <- rep(chunk_name, times = nrow(cor_gt_results_table))
-  print(cor_gt_results_table)
   # write result
   write.table(cor_gt_results_table, output_loc_full, sep = '\t', row.names = F, col.names = T, quote = F)
   # make a checksum

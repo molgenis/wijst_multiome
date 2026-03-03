@@ -25,6 +25,7 @@ library(lmerTest)
 # to plot
 library(ggplot2)
 library(roycols)
+library(cowplot)
 
 
 ####################
@@ -499,6 +500,80 @@ calculate_per_sample_correlation <- function(full_variates_table, formula_string
 }
 
 
+calculate_per_sample_prediction <- function(full_variates_table, formula_string='expression~region', correlation=T, method='spearman', sample_column='sample_id', beta_variate_column='region', family='gaussian', base_lm=F) {
+  # make into datatable
+  full_variates_table <- data.table(full_variates_table)
+  # we'll store in a list first
+  cor_per_sample <- list()
+  # list the samples
+  samples_present <- unique(full_variates_table[[sample_column]])
+  # filter where we don't know the sample
+  samples_present <- samples_present[!is.na(samples_present)]
+  # check each sample
+  for (sample_present in samples_present) {
+    # subset the table
+    variates_table_sample <- full_variates_table[
+      !is.na(full_variates_table[[sample_column]]) & full_variates_table[[sample_column]] == sample_present, 
+    ]
+    # get number of cells
+    ncell <- nrow(variates_table_sample)
+    # now calculate a correlation
+    estimate <- NULL
+    p <- NULL
+    # try to do this, we might error if we have too few observations
+    tryCatch({
+      if (correlation) {
+        # reformat the formula
+        formula_string <- gsub(' ', '', formula_string)
+        # then split by predictor
+        formula_string_split <- strsplit(formula_string, '~')[[1]]
+        # check if of correct length
+        if (length(formula_string_split) > 2) {
+          stop('split contains more than a two values. A correlation can only be made up of two variables')
+        }
+        else if (length(formula_string_split) < 2) {
+          stop('split contains less than two values. A correlation can only be made up of two variables')
+        } else {
+          # do the correlation test
+          cor_test <- cor.test(y = variates_table_sample[[formula_string_split[[1]]]], 
+                               x = variates_table_sample[[formula_string_split[[2]]]], 
+                               method = method)
+          # extract p
+          p <- cor_test$p.value
+          estimate <- as.vector(cor_test$estimate[1])
+        }
+      } else {
+        # initialize regression model
+        regression_model <- NULL
+        # depending on the family, the calls are different
+        if (family == 'poisson') {
+          # use poisson model
+          regression_model <- lme4::glmer(formula = as.formula(formula_string), data = variates_table_sample, family = poisson)
+        }
+        else if (family == 'gaussian') {
+          # use gaussian model
+          if (base_lm) {
+            regression_model <- lm(formula = as.formula(formula_string), data = variates_table_sample)
+          } else {
+            regression_model <- lmerTest::lmer(formula = as.formula(formula_string), data = variates_table_sample)
+          }
+        } else {
+          # error if weird formula is given
+          stop(paste0('unknown family ', family, ', only valid families are gaussian and poisson when using a regression model'))
+        }
+        variates_table_sample[['predicted']] <- as.vector(unlist(predict(regression_model, variates_table_sample)))
+      }
+    }, error = function(e) {
+      warning(paste('Error in correlation or regression model for sample', region, 'gene', gene, 'variant', variant, ':', e$message, '. This can happen if the model fails to converge'))
+    })
+    # make into df
+    cor_per_sample[[sample_present]] <- variates_table_sample
+  }
+  # merge all
+  cor_all <- rbindlist(cor_per_sample, fill = T)
+  return(cor_all)
+}
+
 ####################
 # Settings         #
 ####################
@@ -526,10 +601,10 @@ genes <- c('LY86', 'LY86', 'LY86', 'LY86', 'LY86', 'LY86', 'LY86', 'LY86', 'LY86
 # finally the cell type
 cell_type <- 'all'
 # whether to gausnorm first
-accessibility_gausnorm <- T
-expression_gausnorm <- T
-accessibility_boxcox <- T
-expression_boxcox <- T
+accessibility_gausnorm <- F
+expression_gausnorm <- F
+accessibility_boxcox <- F
+expression_boxcox <- F
 # model family
 family <- 'gaussian'
 
@@ -672,7 +747,7 @@ if (nrow(expression_data) > 0) {
         
         # split the fixed effects
         fixed_effects <- c()
-        if (!is.null(fixed_effects_string) & !is.na(fixed_effects_string) & fixed_effects_string != '') {
+        if (!is.null(fixed_effects_string) && !is.na(fixed_effects_string) && fixed_effects_string != '') {
           fixed_effects <- strsplit(fixed_effects_string, ',')[[1]]
         }
         # warn if we are not including the genotype
@@ -681,12 +756,12 @@ if (nrow(expression_data) > 0) {
         }
         # split random effects
         random_effects <- c()
-        if (!is.null(random_effects_string) & !is.na(random_effects_string) & random_effects_string != '') {
+        if (!is.null(random_effects_string) && !is.na(random_effects_string) && random_effects_string != '') {
           random_effects <- strsplit(random_effects_string, ',')[[1]]
         }
         # split random effects
         interactions <- c()
-        if (!is.null(interaction_terms_string) & !is.na(interaction_terms_string) & interaction_terms_string != '') {
+        if (!is.null(interaction_terms_string) && !is.na(interaction_terms_string) && interaction_terms_string != '') {
           interactions <- strsplit(interaction_terms_string, ',')[[1]]
         }
         # if a covariate matrix was supplied, we'll load it
@@ -781,7 +856,10 @@ interaction_formula <- as.formula(interaction_formula_string)
 # also make a simplified formula
 simplified_formula <- get_formula(var_of_interest = 'expression', fixed_effects = c(fixed_effects, random_effects), random_effects = NULL)
 # whether to simplify
-simplify <- T
+simplify <- F
+
+# keep track of all the models
+interaction_models <- list()
 
 # now plot each of these
 for (confinement_i in 1:nrow(confinement)) {
@@ -810,6 +888,7 @@ for (confinement_i in 1:nrow(confinement)) {
       interaction_model <- lmerTest::lmer(formula = interaction_formula, data = plot_df)
     }
   }
+  interaction_models[[paste(variant, gene, region, sep = "_")]] <- interaction_model
   # predict using the model
   plot_df[['expression_predicted']] <- as.vector(unlist(predict(interaction_model, plot_df)))
   # make the variant a character string
@@ -837,88 +916,156 @@ for (confinement_i in 1:nrow(confinement)) {
 
 # store the plots
 cor_gt_plots <- list()
+# also the regression lines
+# reg_gt_plots <- list()
+# the inputs
 cor_gt_dfs <- list()
+# and the results
+cor_gt_results <- list()
 # get co-eQTL style plots
 for (confinement_i in 1:nrow(confinement)) {
   # extract the variant, region and gene
   variant <- confinement[confinement_i, 'variant']
   region <- confinement[confinement_i, 'region']
   gene <- confinement[confinement_i, 'gene']
-  # extract the plottable table
-  plot_df <- interaction_result[[paste(region, gene, variant)]]
-  # get the per-sample plot
-  per_sample_df <- calculate_per_sample_correlation(plot_df, sample_column = 'sample_final')
-  # add the genotypes to this table
-  per_sample_df[['genotype']] <- plot_df[match(per_sample_df[['sample']], plot_df[['sample_final']]), ][['genotype']]
-  # make character string
-  per_sample_df[['gt']] <- as.character(per_sample_df[['genotype']])
-  # fit model with the genotype and the correlation
-  lm_gt_to_cor <- lm(data = per_sample_df[per_sample_df$ncell >= 5, ], formula = 'estimate ~ genotype + ncell')
-  # extract the p value for the genotype
-  lm_gt_to_cor_coeffs <- summary(lm_gt_to_cor)$coefficients
-  # this is always the last column
-  lm_gt_to_cor_gt_p <- lm_gt_to_cor_coeffs['genotype', ncol(summary(lm_gt_to_cor_coeffs))]
-  # plot both of them
-  p_cor <- ggplot(data = per_sample_df, mapping = aes(x = gt, y = estimate, fill = gt)) + 
-    geom_boxplot(outlier.shape = NA) + 
-    # geom_point() +
-    # and add jitter
-    geom_jitter(size = 0.5, alpha = 0.5) + 
-    scale_fill_manual(values = roycols::get_color_list(unique(per_sample_df[['gt']]))) + 
-    xlab(paste('genotype')) + 
-    ylab(paste(gene, 'TF activity ~ expression')) + 
-    labs(fill = 'Genotype') + 
-    ggtitle(paste('cor', variant, region, gene, 'p < ', as.character(round(lm_gt_to_cor_gt_p, digits = 3)))) +
-    theme(legend.title = element_text(size=14), 
-          legend.text = element_text(size=12),
-          axis.title.x = element_text(size=14),
-          axis.title.y = element_text(size=14),
-          axis.text.y = element_text(size=12),
-          axis.text.x = element_text(size=12),
-          strip.text.x = element_text(size=12)) + 
-    theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
-  # place in table
-  cor_gt_plots[[paste(variant, region, gene, 'cor', sep = '_')]] <- p_cor
-  cor_gt_dfs[[paste(variant, region, gene, 'cor', sep = '_')]] <- per_sample_df
-  # show the plot
-  p_cor
-  
-  # also as a beta
-  per_sample_df_lm <- calculate_per_sample_correlation(plot_df, sample_column = 'sample_final', correlation = F, formula_string = 'expression~region+(1|lane)')
-  # add genotype
-  per_sample_df_lm[['genotype']] <- plot_df[match(per_sample_df_lm[['sample']], plot_df[['sample_final']]), ][['genotype']]
-  # add character string genotype
-  per_sample_df_lm[['gt']] <- as.character(per_sample_df_lm[['genotype']])
-  # fit model with the genotype and the coefficient (beta)
-  lm_gt_to_est <- lm(data = per_sample_df_lm[per_sample_df_lm$ncell >= 5, ], formula = 'estimate ~ genotype + ncell')
-  # extract the p value for the genotype
-  lm_gt_to_est_coeffs <- summary(lm_gt_to_est)$coefficients
-  # this is always the last column
-  lm_gt_to_est_gt_p <- lm_gt_to_est_coeffs['genotype', ncol(summary(lm_gt_to_est_coeffs))]
-  # and the model plot as well
-  p_lm <- ggplot(data = per_sample_df_lm, mapping = aes(x = gt, y = estimate, fill = gt)) + 
-    geom_boxplot(outlier.shape = NA) + 
-    # geom_point() +
-    # and add jitter
-    geom_jitter(size = 0.5, alpha = 0.5) +
-    scale_fill_manual(values = roycols::get_color_list(unique(per_sample_df_lm[['gt']]))) + 
-    xlab(paste('genotype')) + 
-    ylab(paste(gene, 'TF activity ~ expression')) + 
-    labs(fill = 'Genotype') + 
-    ggtitle(paste('glm', variant, region, gene, 'p < ', as.character(round(lm_gt_to_est_gt_p, digits = 3)))) + 
-    theme(legend.title = element_text(size=14), 
-          legend.text = element_text(size=12),
-          axis.title.x = element_text(size=14),
-          axis.title.y = element_text(size=14),
-          axis.text.y = element_text(size=12),
-          axis.text.x = element_text(size=12),
-          strip.text.x = element_text(size=12)) + 
-    theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
-  # place in table
-  cor_gt_plots[[paste(variant, region, gene, 'lm', sep = '_')]] <- p_lm
-  cor_gt_dfs[[paste(variant, region, gene, 'lm', sep = '_')]] <- per_sample_df_lm
-  # show the plot
-  p_lm
+  # paste together the naming
+  confinement_name <- paste(region, gene, variant)
+  # check if this combination is in the results
+  if (confinement_name %in% names(interaction_result)) {
+    # extract the plottable table
+    plot_df <- interaction_result[[confinement_name]]
+    # add an aggregated column for the sample, by pasting the aggregate columns together
+    plot_df[['aggregated_sample']] <- apply(plot_df[, aggregate_columns], 1, function(x) paste(x, collapse = '_'))
+    # add an aggregated column for the sample, by pasting the aggregate columns together
+    covariates_data[['aggregated_sample']] <- apply(covariates_data[, aggregate_columns], 1, function(x) paste(x, collapse = '_'))
+    # get the per-sample plot
+    per_sample_df <- calculate_per_sample_correlation(plot_df, sample_column = 'aggregated_sample', formula_string = paste(c('expression', 'region'), sep = '~', collapse = '~'))
+    # get the predictions per sample
+    per_sample_predictions <- calculate_per_sample_prediction(plot_df, sample_column = 'aggregated_sample', correlation = F, formula_string = 'expression~region', base_lm=T)
+    # take the unique sets of the covariates from the plot df, to add this to the per sample df
+    unique_covariate_columns <- unique(c(fixed_effects, random_effects, interactions, aggregate_columns))
+    # but remove region and expression
+    unique_covariate_columns <- setdiff(unique_covariate_columns, c('region', 'expression', 'celltype_imputed_lowerres'))
+    # subset the plot df to these columns and the sample column, and take unique rows
+    plot_df_unique_covariates <- unique(plot_df[, c('aggregated_sample', unique_covariate_columns)])
+    # then add this to the plot df
+    per_sample_df <- merge(per_sample_df, plot_df_unique_covariates, by.x = 'sample', by.y = 'aggregated_sample', all.x = T)
+    # make character string
+    per_sample_df[['gt']] <- as.character(per_sample_df[['genotype']])
+    # create a formula
+    base_formula <- get_formula(var_of_interest = 'estimate', fixed_effects = c(setdiff(fixed_effects, c('region', 'celltype_imputed_lowerres')), 'ncell'), random_effects = random_effects)
+    # fit model with the genotype and the correlation
+    lm_gt_to_cor <- NULL
+    if (!is.null(random_effects) && length(random_effects) > 0) {
+      # use glm if we have random effects
+      lm_gt_to_cor <- lmerTest::lmer(formula = base_formula, data = per_sample_df[per_sample_df[['ncell']] >= ncell_cutoff, ])
+    } else {
+      # or simple model if here are not
+      lm_gt_to_cor <- lm(data = per_sample_df[per_sample_df[['ncell']] >= ncell_cutoff, ], formula = base_formula)
+    }
+    # extract p value for the genotype term
+    lm_gt_to_cor_summary <- summary(lm_gt_to_cor)
+    lm_gt_to_cor_p <- NULL
+    # the p values is always the last
+    lm_gt_to_cor_p <- lm_gt_to_cor_summary[['coefficients']]['genotype', ncol(lm_gt_to_cor_summary[['coefficients']])]
+    # convert the result to a table
+    lm_gt_to_cor_table <- model_to_row(lm_gt_to_cor)
+    # add the variant, region and gene to the table
+    lm_gt_to_cor_table <- cbind(data.table('variant' = c(variant), 'region' = c(region), 'gene' = c(gene)), lm_gt_to_cor_table)
+    # add the number of samples
+    lm_gt_to_cor_table[['nsample']] <- nrow(per_sample_df[per_sample_df[['ncell']] >= ncell_cutoff, ])
+    # and the distribution of cells
+    lm_gt_to_cor_table[['ncell']] <- paste(as.character(min(per_sample_df[per_sample_df$ncell >= ncell_cutoff, ][['ncell']])),
+                                           as.character(quantile(per_sample_df[per_sample_df$ncell >= ncell_cutoff, ][['ncell']])[['25%']]),
+                                           as.character(quantile(per_sample_df[per_sample_df$ncell >= ncell_cutoff, ][['ncell']])[['50%']]),
+                                           as.character(quantile(per_sample_df[per_sample_df$ncell >= ncell_cutoff, ][['ncell']])[['75%']]),
+                                           as.character(max(per_sample_df[per_sample_df$ncell >= ncell_cutoff, ][['ncell']])),
+                                           sep = ';'
+    )
+    # check how many genotypes we have
+    unique_genotypes <- unique(per_sample_df[['gt']])
+    # filter genotypes
+    unique_genotypes <- unique_genotypes[!is.na(unique_genotypes)]
+    # and sort first
+    unique_genotypes <- unique_genotypes[order(unique_genotypes)]
+    # get colors for the genotypes
+    geno_colors <- roycols::get_color_list(unique_genotypes)
+    # plot both of them
+    p_cor <- ggplot(data = per_sample_df[per_sample_df[['ncell']] >= ncell_cutoff, ], mapping = aes(x = gt, y = estimate, fill = gt)) + 
+      geom_boxplot(outlier.shape = NA) + 
+      # geom_point() +
+      # and add jitter
+      geom_jitter(size = 0.5, alpha = 0.5, data = per_sample_df[per_sample_df[['ncell']] >= ncell_cutoff, ], mapping = aes(x = gt, y = estimate, colour = ncell)) +
+      # geom_jitter(size = 0.5, alpha = 0.5) + 
+      scale_fill_manual(values = geno_colors) + 
+      # and colour of ncell
+      scale_colour_gradient2(low='blue', mid = 'white', high='red', midpoint = max(per_sample_df[['ncell']]/2)) + 
+      xlab(paste('genotype')) + 
+      ylab(paste(gene, 'region ~ expression')) + 
+      labs(fill = 'Genotype', colour = 'Ncell') + 
+      ggtitle(paste('cor', variant, region, gene, 'p < ', as.character(round(lm_gt_to_cor_p, digits = 5)))) +
+      theme(legend.title = element_text(size=14), 
+            legend.text = element_text(size=12),
+            axis.title.x = element_text(size=14),
+            axis.title.y = element_text(size=14),
+            axis.text.y = element_text(size=12),
+            axis.text.x = element_text(size=12),
+            strip.text.x = element_text(size=12)) + 
+      theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+    # next, add the same information to our predicted expression values
+    per_sample_predictions <- merge(per_sample_predictions, covariates_data[, c('cell', setdiff(colnames(covariates_data), colnames(per_sample_predictions)))], by.x = 'cell', by.y = 'cell', all.x = T)
+    # make character string
+    per_sample_predictions[['gt']] <- as.character(per_sample_predictions[['genotype']])
+    # put each genotype in a list
+    geno_p_list <- list()
+    # get the x range
+    x_min <- min(per_sample_predictions[['region']])
+    x_max <- max(per_sample_predictions[['region']])
+    # get the y range
+    y_min <- min(per_sample_predictions[['predicted']])
+    y_max <- max(per_sample_predictions[['predicted']])
+    # check each genotype
+    for (unique_genotype in unique_genotypes) {
+      # extract taht genotype
+      per_sample_predictions_geno <- per_sample_predictions[per_sample_predictions[['gt']] == unique_genotype, ]
+      # we'll colour all these by the genotype, which is the same
+      color_list <- list()
+      for (s in unique(per_sample_predictions_geno[['aggregated_sample']])) {
+        color_list[[s]] <- geno_colors[[unique_genotype]]
+      }
+      # plot each sample
+      # p_gt_group <- ggplot(data = per_sample_predictions_geno, mapping = aes(x = region, y = predicted, colour = aggregated_sample)) + 
+      p_gt_group <- ggplot(data = per_sample_predictions_geno, mapping = aes(x = region, y = predicted, group = aggregated_sample)) + 
+        geom_line(colour = geno_colors[[unique_genotype]]) + 
+        xlim(c(x_min * 1.1, x_max * 1.1)) + 
+        ylim(c(y_min * 1.1, y_max * 1.1)) +
+        # and colour of ncell
+        # scale_colour_manual(values = color_list) + 
+        xlab(paste('region')) + 
+        ylab(paste(gene, 'expression')) + 
+        labs(fill = 'sample', colour = 'sample') + 
+        ggtitle(paste(unique_genotype)) +
+        theme(legend.title = element_text(size=14), 
+              legend.text = element_text(size=12),
+              axis.title.x = element_text(size=14),
+              axis.title.y = element_text(size=14),
+              axis.text.y = element_text(size=12),
+              axis.text.x = element_text(size=12),
+              strip.text.x = element_text(size=12)) + 
+        theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) +
+        theme(legend.position = 'none')
+      # put in the list
+      geno_p_list[[unique_genotype]] <- p_gt_group
+    }
+    # merge the ps
+    geno_p_all <- plot_grid(plotlist = geno_p_list, nrow = 1)
+    # place in table
+    # reg_gt_plots[[paste(variant, region, gene, 'cor', sep = '_')]] <- geno_p_all
+    # cor_gt_plots[[paste(variant, region, gene, 'cor', sep = '_')]] <- p_cor
+    cor_gt_plots[[paste(variant, region, gene, 'cor', sep = '_')]] <- plot_grid(geno_p_all, p_cor, nrow = 2, rel_heights = c(1, 2)) 
+    cor_gt_dfs[[paste(variant, region, gene, 'cor', sep = '_')]] <- per_sample_df
+    cor_gt_results[[paste(variant, region, gene, 'cor', sep = '_')]] <- lm_gt_to_cor_table
+  }
 }
 
 # let's save each plot

@@ -9,13 +9,13 @@ genotype_prefix_template: "/groups/umcg-franke-scrna/tmp02/projects/sc-eqtlgen-c
 # base location of chunks
 chunk_base: "/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/CD4T/"
 # location to store chunk outputs
-results_base: "/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/CD4T/"
+results_base: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/sc/CD4T/lane_donor_countrna/"
 # absolute confinement file loc
 confinement: "/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/mo_var_tf_gene_confinement.tsv.gz"
 # absolute smf file loc
 smf: "/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/CD4T/smf.tsv.gz"
 # absolute covariates file loc
-covariates: "/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/metadata/mo_celllevel_metadata.tsv.gz"
+covariates: "//groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/mo_celllevel_metadata_nounannotated.tsv.gz"
 # barcode column in covariate file
 barcode_column: "barcode_lane"
 # fixed effects to consider
