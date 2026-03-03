@@ -615,8 +615,8 @@ smf_loc <- paste(in_dir_base, cell_type, 'smf.tsv.gz', sep = '/')
 expression_file <- 'expression.tsv.gz'
 accessibility_file <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eregulon_gene_auc_all_nonsparse_transposed.tsv.gz'
 covariates_file <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/mo_celllevel_metadata_nounannotated.tsv.gz'
-fixed_effects_string <- 'region,genotype'
-random_effects_string <- ''
+fixed_effects_string <- 'region,genotype,celltype_imputed_lowerres,nCount_RNA'
+random_effects_string <- 'sample_final,lane'
 interaction_terms_string <- 'genotype,region'
 barcode_column <- 'barcode_lane'
 aggregate_columns <- c('sample_final')
@@ -953,8 +953,8 @@ for (confinement_i in 1:nrow(confinement)) {
     per_sample_predictions <- calculate_per_sample_prediction(plot_df, sample_column = 'aggregated_sample', correlation = F, formula_string = 'expression~region', base_lm=T)
     # take the unique sets of the covariates from the plot df, to add this to the per sample df
     unique_covariate_columns <- unique(c(fixed_effects, random_effects, interactions, aggregate_columns))
-    # but remove region and expression
-    unique_covariate_columns <- setdiff(unique_covariate_columns, c('region', 'expression', 'celltype_imputed_lowerres'))
+    # but remove region and expression and celltype and lane
+    unique_covariate_columns <- setdiff(unique_covariate_columns, c('region', 'expression', 'celltype_imputed_lowerres', 'lane', 'nCount_RNA'))
     # subset the plot df to these columns and the sample column, and take unique rows
     plot_df_unique_covariates <- unique(plot_df[, c('aggregated_sample', unique_covariate_columns)])
     # then add this to the plot df
@@ -962,7 +962,7 @@ for (confinement_i in 1:nrow(confinement)) {
     # make character string
     per_sample_df[['gt']] <- as.character(per_sample_df[['genotype']])
     # create a formula
-    base_formula <- get_formula(var_of_interest = 'estimate', fixed_effects = c(setdiff(fixed_effects, c('region', 'celltype_imputed_lowerres')), 'ncell'), random_effects = random_effects)
+    base_formula <- get_formula(var_of_interest = 'estimate', fixed_effects = c(setdiff(fixed_effects, c('region', 'celltype_imputed_lowerres', 'nCount_RNA')), 'ncell'), random_effects = setdiff(random_effects, c('sample_final', 'lane')))
     # try to do modelling
     tryCatch({
       # fit model with the genotype and the correlation
