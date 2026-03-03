@@ -21,15 +21,17 @@ barcode_column: "barcode_lane"
 # fixed effects to consider
 fixed_effects: "genotype"
 # random effects to consider
-random_effects: "sample_final,lane"
+random_effects: None
 # aggregation columns to consider
-aggregate_columns: "sample_final,lane"
+aggregate_columns: "sample_final"
 # terms that interact
 interaction_terms: "expression,region"
 # do gaussnorm on expression data
 expression_gausnorm: false
 # do gausnorm on accessibility data
 accessibility_gausnorm: false
+# do gausnorm on correlations
+correlations_gausnorm: false
 # path to expression file
 expression_filename: "expression.tsv.gz"
 # path to accessibility file

@@ -298,14 +298,14 @@ gausnorm_independent_variable <- function(x, boxcox=F, min_value=1e-6) {
   # initialize value 
   y <- NULL
   # only if numeric we can convert
-  if (is.numeric(x)) {
+  if (is.numeric(x) && boxcox) {
     if (!is.null(min_value)) {
       x[x < min_value] <- min_value
     }
     if (boxcox) {
       y <- boxcox(x)$x.t
     } else {
-      y - yeojohnson(x)$x.t
+      y <- yeojohnson(x)$x.t
     }
   }
   else {
@@ -568,6 +568,8 @@ option_list <- list(
               help="Apply the yeo-johnson transformation on accessibility before modelling [default: %default]"), 
   make_option(c("-y", "--expression_gausnorm"), action="store_true", default=FALSE,
               help="Apply the yeo-johnson transformation on expression before modelling [default: %default]"), 
+  make_option(c("-z", "--correlations_gausnorm"), action="store_true", default=FALSE,
+              help="Apply the yeo-johnson transformation on correlations before modelling [default: %default]"), 
   make_option(c("-t", "--interaction_terms"), type="character", default=NULL,
               help="interaction to model", metavar='character'), 
   make_option(c("-g", "--genotype_loc"), type="character", default=NULL,
@@ -620,6 +622,8 @@ covariates_file <- NULL
 barcode_column <- NULL
 # number of cells required to keep a correlation for a sample
 ncell_cutoff <- 10
+# gausnorm the correlations
+correlations_gausnorm <- T
 
 if (debug) {
   # set all of the variables hardcoded for a testing debug run
@@ -637,6 +641,7 @@ if (debug) {
   barcode_column <- 'barcode_lane'
   aggregate_columns_string <- 'sample_final,lane'
   ncell_cutoff <- 10
+  correlations_gausnorm <- T
   
 } else {
   # obligatory parameters without a default
@@ -698,6 +703,7 @@ if (debug) {
   covariates_file <- opt[['covariates_file']]
   accessibility_gausnorm <- opt[['accessibility_gausnorm']]
   expression_gausnorm <- opt[['expression_gausnorm']]
+  correlations_gausnorm <- opt[['correlations_gausnorm']]
   ncell_cutoff <- opt[['ncell_cutoff']]
 }
 
@@ -974,6 +980,12 @@ if (!is.null(interaction_result)) {
       covariates_data[['aggregated_sample']] <- apply(covariates_data[, aggregate_columns, drop = F], 1, function(x) paste(x, collapse = '_'))
       # get the per-sample plot
       per_sample_df <- calculate_per_sample_correlation(plot_df, sample_column = 'aggregated_sample', formula_string = paste(interactions, sep = '~', collapse = '~'))
+      # store original estimate
+      per_sample_df[['estimate_raw']] <- per_sample_df[['estimate']]
+      # gausnorm if requested
+      if (correlations_gausnorm) {
+        per_sample_df[['estimate']] <- gausnorm_independent_variable(per_sample_df[['estimate']])
+      }
       # take the unique sets of the covariates from the plot df, to add this to the per sample df
       unique_covariate_columns <- unique(c(fixed_effects, random_effects, interactions, aggregate_columns))
       # but remove region and expression
@@ -1022,11 +1034,11 @@ if (!is.null(interaction_result)) {
                                              sep = ';'
       )
       # plot both of them
-      p_cor <- ggplot(data = per_sample_df[per_sample_df$ncell >= ncell_cutoff, ], mapping = aes(x = gt, y = estimate, fill = gt)) + 
+      p_cor <- ggplot(data = per_sample_df[per_sample_df$ncell >= ncell_cutoff, ], mapping = aes(x = gt, y = estimate_raw, fill = gt)) + 
         geom_boxplot(outlier.shape = NA) + 
         # geom_point() +
         # and add jitter
-        geom_jitter(size = 0.5, alpha = 0.5, data = per_sample_df[per_sample_df$ncell >= ncell_cutoff, ], mapping = aes(x = gt, y = estimate, colour = ncell)) +
+        geom_jitter(size = 0.5, alpha = 0.5, data = per_sample_df[per_sample_df$ncell >= ncell_cutoff, ], mapping = aes(x = gt, y = estimate_raw, colour = ncell)) +
         # geom_jitter(size = 0.5, alpha = 0.5) + 
         scale_fill_manual(values = roycols::get_color_list(unique(per_sample_df[['gt']]))) + 
         # and colour of ncell

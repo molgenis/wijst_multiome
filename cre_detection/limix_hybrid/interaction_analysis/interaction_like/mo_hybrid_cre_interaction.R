@@ -137,13 +137,13 @@ gausnorm_independent_variable <- function(x, boxcox=F, min_value=1e-6) {
   y <- NULL
   # only if numeric we can convert
   if (is.numeric(x)) {
-    if (!is.null(min_value)) {
+    if (!is.null(min_value) && boxcox) {
       x[x < min_value] <- min_value
     }
     if (boxcox) {
       y <- boxcox(x)$x.t
     } else {
-      y - yeojohnson(x)$x.t
+      y <- yeojohnson(x)$x.t
     }
   }
   else {
@@ -478,12 +478,12 @@ if (debug) {
   barcode_column <- 'barcode_lane'
   
   confinement_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/mo_var_tf_gene_confinement.tsv.gz'
-  in_dir <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/pseudobulked/L1/monocyte/'
+  in_dir <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/pseudobulked/L1/CD8T/'
   smf_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/pseudobulked/L1//smf.tsv.gz'
-  output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/pseudobulked/monocyte/'
-  expression_file <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/input/L1/combined/monocyte.qtlInput.txt.gz'
+  output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/pseudobulked/CD8T/'
+  expression_file <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/input/L1/combined/CD8T.qtlInput.txt.gz'
   accessibility_file <- 'eregulons.tsv.gz'
-  genotype_loc <- '/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/genotype_input/EUR_imputed_hg38_varFiltered_chr12'
+  genotype_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/genotype/imputed_hg38_all_anc'
   covariates_file <- 'covariates.tsv.gz'
   fixed_effects_string <- 'region,genotype'
   random_effects_string <- 'sample_final,lane'
