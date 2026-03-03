@@ -928,9 +928,9 @@ cor_gt_results <- list()
 # get co-eQTL style plots
 for (confinement_i in 1:nrow(confinement)) {
   # extract the variant, region and gene
-  variant <- confinement[confinement_i, 'variant']
-  region <- confinement[confinement_i, 'region']
-  gene <- confinement[confinement_i, 'gene']
+  variant <- as.vector(unlist(confinement[confinement_i, 'variant']))
+  region <- as.vector(unlist(confinement[confinement_i, 'region']))
+  gene <- as.vector(unlist(confinement[confinement_i, 'gene']))
   # paste together the naming
   confinement_name <- paste(region, gene, variant)
   # check if this combination is in the results
@@ -963,15 +963,19 @@ for (confinement_i in 1:nrow(confinement)) {
     per_sample_df[['gt']] <- as.character(per_sample_df[['genotype']])
     # create a formula
     base_formula <- get_formula(var_of_interest = 'estimate', fixed_effects = c(setdiff(fixed_effects, c('region', 'celltype_imputed_lowerres', 'nCount_RNA')), 'ncell'), random_effects = setdiff(random_effects, c('sample_final', 'lane')))
+    # initialize variable
+    lm_gt_to_cor_table_base <- data.table('variant' = c(variant), 'region' = c(region), 'gene' = c(gene))
+    lm_gt_to_cor_table <- NULL
     # try to do modelling
     tryCatch({
       # fit model with the genotype and the correlation
       lm_gt_to_cor <- NULL
-      if (!is.null(random_effects) && length(random_effects) > 0) {
+      if (!is.null(setdiff(random_effects, c('sample_final', 'lane'))) && length(setdiff(random_effects, c('sample_final', 'lane'))) > 0) {
         # use glm if we have random effects
         lm_gt_to_cor <- lmerTest::lmer(formula = base_formula, data = per_sample_df[per_sample_df$ncell >= ncell_cutoff, ])
       } else {
         # or simple model if here are not
+        message('calling base lm due to no random effects specified')
         lm_gt_to_cor <- lm(data = per_sample_df[per_sample_df$ncell >= ncell_cutoff, ], formula = base_formula)
       }
       # extract p value for the genotype term
@@ -982,11 +986,11 @@ for (confinement_i in 1:nrow(confinement)) {
       # convert the result to a table
       lm_gt_to_cor_table <- model_to_row(lm_gt_to_cor)
       # add the variant, region and gene to the table
-      lm_gt_to_cor_table <- cbind(data.table('variant' = c(variant), 'region' = c(region), 'gene' = c(gene)), lm_gt_to_cor_table)
+      lm_gt_to_cor_table <- cbind(lm_gt_to_cor_table_base, lm_gt_to_cor_table)
     }, error = function(e) {
       warning(paste('Error in model fitting', region, gene, variant, ':', e$message))
       # make empty table
-      lm_gt_to_cor_table <- data.table('variant' = c(variant), 'region' = c(region), 'gene' = c(gene))
+      lm_gt_to_cor_table <- lm_gt_to_cor_table_base
     })
     # add the number of samples
     lm_gt_to_cor_table[['nsample']] <- nrow(per_sample_df[per_sample_df[['ncell']] >= ncell_cutoff, ])

@@ -998,6 +998,9 @@ if (!is.null(interaction_result)) {
       per_sample_df[['gt']] <- as.character(per_sample_df[['genotype']])
       # create a formula
       base_formula <- get_formula(var_of_interest = 'estimate', fixed_effects = c(fixed_effects, 'ncell'), random_effects = random_effects)
+      # initialize variable
+      lm_gt_to_cor_table_base <- data.table('variant' = c(variant), 'region' = c(region), 'gene' = c(gene))
+      lm_gt_to_cor_table <- NULL
       # try to do modelling
       tryCatch({
         # fit model with the genotype and the correlation
@@ -1017,11 +1020,11 @@ if (!is.null(interaction_result)) {
         # convert the result to a table
         lm_gt_to_cor_table <- model_to_row(lm_gt_to_cor)
         # add the variant, region and gene to the table
-        lm_gt_to_cor_table <- cbind(data.table('variant' = c(variant), 'region' = c(region), 'gene' = c(gene)), lm_gt_to_cor_table)
+        lm_gt_to_cor_table <- cbind(lm_gt_to_cor_table_base, lm_gt_to_cor_table)
       }, error = function(e) {
         warning(paste('Error in model fitting', region, gene, variant, ':', e$message))
         # make empty table
-        lm_gt_to_cor_table <- data.table('variant' = c(variant), 'region' = c(region), 'gene' = c(gene))
+        lm_gt_to_cor_table <- lm_gt_to_cor_table_base
       })
       # add the number of samples
       lm_gt_to_cor_table[['nsample']] <- nrow(per_sample_df[per_sample_df$ncell >= ncell_cutoff, ])
