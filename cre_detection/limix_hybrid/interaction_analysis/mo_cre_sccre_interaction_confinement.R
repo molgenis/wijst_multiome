@@ -479,7 +479,7 @@ get_top_effect_per_cs <- function(cs_output_per_ct, feature_column='feature_id',
   # check each cell type
   for (cell_type in names(cs_output_per_ct)) {
     # get output for this cell type
-    cs_output_ct <- eqtl_outputs[[cell_type]]
+    cs_output_ct <- cs_output_per_ct[[cell_type]]
     # order
     cs_output_ct <- cs_output_ct[order(cs_output_ct[[sort_column]], decreasing = decreasing_sort), ]
     # check if there are entries where the CS is not known
@@ -537,6 +537,13 @@ eqtl_outputs <- get_output_per_celltype_limix(eqtl_output_loc)
 # get the top effects per credible set
 eqtl_top_var_feature_per_cs <- get_top_effect_per_cs(eqtl_outputs)
 
+# location of the QTL outputs
+caqtl_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/finemapping/caqtl/sc-eqtlgen/combined_with_qtl/combined/L1/'
+# read the eQTL output
+caqtl_outputs <- get_output_per_celltype_limix(caqtl_output_loc)
+# get the top effects per credible set
+caqtl_top_var_feature_per_cs <- get_top_effect_per_cs(caqtl_outputs)
+
 # the location of SCENIC output
 scenic_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eRegulon_both.tsv.gz'
 # read the scenic output
@@ -547,6 +554,8 @@ scenic_output <- scenic_output[order(scenic_output[['is_extended']]), ]
 scenic_output <- scenic_output[!duplicated(paste(scenic_output[['Region']], scenic_output[['Gene']], scenic_output[['TF']])), ]
 # remove what SCENIC thinks is less likely
 scenic_output <- scenic_output[scenic_output[['Gene_signature_direction']] %in% c('+/+', '-/+'), ]
+# rename the regions
+scenic_output[['region_cpeaks']] <- gsub(':', '-', scenic_output[['Region']])
 
 # add the TF to the top QTLs
 eqtl_top_var_feature_per_cs_tf <- merge(eqtl_top_var_feature_per_cs, scenic_output[, c('Gene', 'Gene_signature_name')], by.x = 'feature', by.y = 'Gene')
@@ -554,7 +563,23 @@ eqtl_top_var_feature_per_cs_tf <- merge(eqtl_top_var_feature_per_cs, scenic_outp
 eqtl_top_var_feature_per_cs_tf_all <- unique(eqtl_top_var_feature_per_cs_tf[, c('variant', 'Gene_signature_name', 'feature')])
 # set column names
 colnames(eqtl_top_var_feature_per_cs_tf_all) <- c('variant', 'eregulon', 'feature')
+
+# add the TF to the top caQTLs
+caqtl_top_var_feature_per_cs_tf <- merge(caqtl_top_var_feature_per_cs, scenic_output[, c('region_cpeaks', 'Gene', 'Gene_signature_name')], by.x = 'feature', by.y = 'region_cpeaks')
+# we will ook at the gene-TF relations, so we need to go from region to gene here
+caqtl_top_var_feature_per_cs_tf_all <- unique(caqtl_top_var_feature_per_cs_tf[, c('variant', 'Gene_signature_name', 'Gene')])
+# set column names
+colnames(caqtl_top_var_feature_per_cs_tf_all) <- c('variant', 'eregulon', 'feature')
+
+# merge the gene-TF results from the eQTLs and caQTLs
+qtl_top_var_feature_per_cs_tf_all_both <- unique(rbind(
+  eqtl_top_var_feature_per_cs_tf_all, 
+  caqtl_top_var_feature_per_cs_tf_all
+))
+# sort to make comparisons easier
+qtl_top_var_feature_per_cs_tf_all_both <- qtl_top_var_feature_per_cs_tf_all_both[order(qtl_top_var_feature_per_cs_tf_all_both[['variant']], qtl_top_var_feature_per_cs_tf_all_both[['eregulon']], qtl_top_var_feature_per_cs_tf_all_both[['feature']]), ]
+
 # write this file
-tf_to_gene_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/mo_var_tf_gene_confinement.tsv.gz'
-write.table(eqtl_top_var_feature_per_cs_tf_all, gzfile(tf_to_gene_output_loc), row.names = F, col.names = T, sep = '\t')
+tf_to_gene_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/mo_var_tf_gene_confinement_inclcaqtls.tsv.gz'
+write.table(qtl_top_var_feature_per_cs_tf_all_both, gzfile(tf_to_gene_output_loc), row.names = F, col.names = T, sep = '\t')
 mdfiver::create_sha256_for_file(tf_to_gene_output_loc)

@@ -6,8 +6,8 @@
 # Example: 
 # ~/start_Rscript.sh \
 #   /groups/umcg-franke-scrna/tmp02/users/umcg-roelen/singularity/rstudio-server/simulated_home/mo_hybrid_cre_interaction_merge.R \
-#   --in /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/CD4T/ \
-#   --out /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/CD4T/merged/results_fdr.tsv.gz
+#   --in /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/sc/all/lane_donor_countrna/ \
+#   --out /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/sc/all/lane_donor_countrna/merged/results_fdr.tsv.gz
 # 
 ############################################################################################################################
 
@@ -106,15 +106,37 @@ chunk_fulldirs <- chunk_fulldirs[order(chunk_fulldirs)]
 chunk_fullpaths <- paste(chunk_fulldirs, chunk_filename, sep = '/')
 # make a list to keep each of the tables
 chunk_tables <- list()
+# keep track of all the column
+chunk_cols <- list()
 # check each chunk
 for (chunk_path in chunk_fullpaths) {
   # check if the file is empty
   if (length(count.fields(chunk_path)) > 1) {
     # read each chunk
     chunk_contents <- fread(chunk_path, header = T, sep = '\t')
-    # place in the list
-    chunk_tables[[chunk_path]] <- chunk_contents
+    # check if we have rows
+    if (nrow(chunk_contents) > 0) {
+      # place in the list
+      chunk_tables[[chunk_path]] <- chunk_contents
+      # add to the list of columns
+      chunk_cols[[chunk_path]] <- colnames(chunk_contents)
+    }
   }
+}
+# get the outer join of those columns
+all_columns <- unique(do.call('c', chunk_cols))
+# make sure all tables have all columns, and in the same order
+for (chunk_path in names(chunk_tables)) {
+  # get the columns of this table
+  chunk_cols_i <- chunk_cols[[chunk_path]]
+  # get the missing columns
+  missing_cols <- setdiff(all_columns, chunk_cols_i)
+  # add those missing columns as NA
+  for (missing_col in missing_cols) {
+    chunk_tables[[chunk_path]][[missing_col]] <- NA
+  }
+  # order the columns in the same way for all tables
+  chunk_tables[[chunk_path]] <- chunk_tables[[chunk_path]][, all_columns, with = F]
 }
 # merge all
 chunks_merged <- rbindlist(chunk_tables, fill = T)
@@ -137,6 +159,14 @@ if (is.null(chunks_merged)) {
     bhs <- p.adjust(chunks_merged[[p_column]][p_valid_i], method = 'BH')
     # then place those BHs
     chunks_merged[[bh_column]][p_valid_i] <- bhs
+    # add bf column as well
+    bf_column <- gsub('_p$', '_bf', p_column)
+    # adjust the valid p values
+    bfs <- p.adjust(chunks_merged[[p_column]][p_valid_i], method = 'bonferroni')
+    # add the bonferroni column
+    chunks_merged[[bf_column]] <- NA
+    # and place the bonferroni adjusted p values
+    chunks_merged[[bf_column]][p_valid_i] <- bfs
   }
   # set output loc as the tsv
   output_loc_full <- output_loc
@@ -145,6 +175,8 @@ if (is.null(chunks_merged)) {
     # gzip if ends with .gz
     output_loc_full <- gzfile(output_loc)
   }
+  # remove any columns that are fully NA
+  chunks_merged <- chunks_merged[, which(unlist(lapply(chunks_merged, function(x) !all(is.na(x))))), with = F]
   # write table
   write.table(chunks_merged, output_loc_full, row.names = F, col.names = T, sep = '\t', quote = F)
   # make checksum

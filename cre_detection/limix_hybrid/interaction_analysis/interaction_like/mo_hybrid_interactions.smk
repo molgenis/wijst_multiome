@@ -28,6 +28,7 @@ RESULTS_BASE = config["results_base"]
 GENO_TMPL    = config["genotype_prefix_template"]
 # also where R and the script are
 RSCRIPT_LOC  = config["script_loc"]
+MERGE_SCRIPT_LOC = config["merge_script_loc"]
 R_COMMAND    = config["r_command"]
 
 
@@ -178,57 +179,27 @@ rule run_interaction:
         test -s "{output.tsv}"
         """
 
+
 ############################################
-# write merged results
+# write merged results using R script
 ############################################
 
 rule merge_results:
     input:
+        # all chunk result files (ensures rule waits for them)
         expand(f"{RESULTS_BASE}/{{chunk}}/result.tsv.gz", chunk=CHUNKS)
     output:
-        merged = f"{RESULTS_BASE}/merged/all_results.tsv.gz"
-    run:
-        import os, gzip, shutil, tempfile
+        merged = f"{RESULTS_BASE}/merged/results_fdr.tsv.gz"
+    params:
+        # directory containing all chunk subdirectories
+        in_dir = RESULTS_BASE,
+        rscript = MERGE_SCRIPT_LOC,
+        rcmd = R_COMMAND
+    shell:
+        r"""
+        mkdir -p "$(dirname {output.merged})"
 
-        # get all the files
-        infiles = list(input)
-        # but make sure we only consider once that have any contents
-        nonempty = [f for f in infiles if os.path.exists(f) and os.path.getsize(f) > 0]
-
-        # make sure parent directory exists
-        os.makedirs(os.path.dirname(output.merged), exist_ok=True)
-
-        # create temporary file for merging everything
-        tmp_path = tempfile.NamedTemporaryFile(delete=False).name
-        # keep track if we wrote the header already
-        wrote_header = False
-        # open the temporary file
-        with open(tmp_path, "wt") as tmp:
-            # check each non-empty file
-            for f in nonempty:
-                # open the file
-                with gzip.open(f, "rt") as fin:
-                    # go through the contents
-                    for i, line in enumerate(fin):
-                        # check if we have the header (first line)
-                        if i == 0:
-                            # only write the header once
-                            if not wrote_header:
-                                tmp.write(line)
-                                wrote_header = True
-                            # skip header from now on
-                        # what is not a header we'll write in any case
-                        else:
-                            tmp.write(line)
-
-        # if we didn't write the header at all, we didn't happen to have any non-empty chunks
-        if not wrote_header:
-            # write an empty file
-            with gzip.open(output.merged, "wt") as fout:
-                pass
-        else:
-            # compress merged file if we made one
-            with open(tmp_path, "rb") as fin, gzip.open(output.merged, "wb") as fout:
-                shutil.copyfileobj(fin, fout)
-
-        os.unlink(tmp_path)
+        {params.rcmd} "{params.rscript}" \
+            --in "{params.in_dir}" \
+            --out "{output.merged}"
+        """
