@@ -7,13 +7,13 @@
 # location of the genotype files
 genotype_prefix_template: "/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/genotype_input/EUR_imputed_hg38_varFiltered_chr{chrom}"
 # base location of chunks
-chunk_base: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/CD4T/"
+chunk_base: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/all/"
 # location to store chunk outputs
-results_base: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/coeqtl/CD4T/lane_donor/"
+results_base: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/coeqtl/all/lane_donor_inclcaqtls/"
 # absolute confinement file loc
-confinement: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/mo_var_tf_gene_confinement.tsv.gz"
+confinement: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/mo_var_tf_gene_confinement_inclcaqtls.tsv.gz"
 # absolute smf file loc
-smf: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/CD4T/smf.tsv.gz"
+smf: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/all/smf.tsv.gz"
 # absolute covariates file loc
 covariates: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/mo_celllevel_metadata_nounannotated.tsv.gz"
 # barcode column in covariate file
@@ -31,13 +31,15 @@ expression_gausnorm: false
 # do gausnorm on accessibility data
 accessibility_gausnorm: false
 # do gausnorm on correlations
-correlations_gausnorm: false
+correlations_gausnorm: true
 # path to expression file
 expression_filename: "expression.tsv.gz"
 # path to accessibility file
-accessibility_filename: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eregulon_gene_auc_CD4T_nonsparse_transposed.tsv.gz"
+accessibility_filename: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eregulon_gene_auc_all_nonsparse_transposed.tsv.gz"
 
 # R command
 r_command: "~/start_Rscript.sh"
 # script location
 script_loc: "/groups/umcg-franke-scrna/tmp04/users/umcg-roelen/singularity/rstudio-server/simulated_home/mo_hybrid_cre_coeqtl_replication.R"
+# merging script as well
+merge_script_loc: "/groups/umcg-franke-scrna/tmp04/users/umcg-roelen/singularity/rstudio-server/simulated_home/mo_hybrid_cre_interaction_merge.R"
