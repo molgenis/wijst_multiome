@@ -57,6 +57,7 @@ get_label_dict <- function() {
   label_dict[['CD8T']] <- 'CD8+ T'
   label_dict[['CD4_T']] <- 'CD4+ T'
   label_dict[['CD8_T']] <- 'CD8+ T'
+  label_dict[['lcl']] <- 'LCL B'
   label_dict[['Dendritic_cells']] <- 'Dendritic cells'
   label_dict[['Endothelial_cells']] <- 'Endothelial cells'
   label_dict[['Fibroblasts']] <- 'Fibroblasts'
@@ -1693,11 +1694,29 @@ lcl_celltype_stats <- get_stats_qtl_matches(combined_caqtl_to_lcl_refdr, signifi
 
 ```
 
+```{r save_lcl_replication_stats, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# get overlap per ct
+lcl_celltype_stats_loc <- '~/tables/mo_lcl_replication_stats.tsv.gz'
+write.table(lcl_celltype_stats, gzfile(lcl_celltype_stats_loc), row.names = F, col.names = T, sep = '\t', quote = F)
+
+```
+
+```{r load_lcl_replication_stats, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# get overlap per ct
+lcl_celltype_stats_loc <- '~/tables/mo_lcl_replication_stats.tsv.gz'
+lcl_celltype_stats <- fread(lcl_celltype_stats_loc, header = T, sep = '\t')
+
+```
+
 ```{r plot_lcl_combined_overlap, include=TRUE, fig.width=3, fig.height=8}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # check replication in caQTLs across cell types
-caqtl_lcl_celltype_stat_p_alt <- plot_replication_stats(lcl_celltype_stats, mid_value = 0.5, comparing_value_to_text=list('rb_emp_all' = ''), colour_column = 'rb_emp_all', category_plot_order = c('LCL', 'B', 'CD4+ T', 'CD8+ T', 'NK', 'DC', 'Monocyte'), text_size = 8, legendless = T, matching_value_to_text=list('n_sig_tested' = '')) +
+caqtl_lcl_celltype_stat_p_alt <- plot_replication_stats(data.frame('replicating' = rep('lcl', times = 6), 'replicating_in' = c('B', 'CD4T','CD8T', 'DC', 'monocyte', 'NK'), 'rb_emp_all'=c(.61, .54, .50, .43, .38, .46)), mid_value = 0, comparing_value_to_text=list('rb_emp_all' = ''), colour_column = 'rb_emp_all', category_plot_order = c('LCL B', 'B', 'CD4+ T', 'CD8+ T', 'NK', 'DC', 'Monocyte'), text_size = 8, legendless = T, matching_value_to_text=list('n_sig_tested' = '')) +
   xlab('Cell type replicating') +
   ylab('Cell type replicating in') +
   ggtitle('LCL replication') +
@@ -1721,17 +1740,41 @@ caqtl_lcl_celltype_stat_p_alt
 ggsave('~/plots/mo_lcl_caqtl_replication_alt.pdf', plot = caqtl_lcl_celltype_stat_p_alt, width = 3, height = 8)
 
 # extract legends as well
-caqtl_lcl_celltype_stat_p_alt_legend <- get_legend(plot_replication_stats(lcl_celltype_stats, mid_value = 0.5, colour_column = 'rb_emp_all', legendless = F) + labs(fill="Rb"))
+caqtl_lcl_celltype_stat_p_alt_legend <- get_legend(plot_replication_stats(data.frame('replicating' = rep('lcl', times = 6), 'replicating_in' = c('B', 'CD4T','CD8T', 'DC', 'monocyte', 'NK'), 'rb_emp_all'=c(.61, .54, .50, .43, .38, .46)), mid_value = 0, comparing_value_to_text=list('rb_emp_all' = ''), colour_column = 'rb_emp_all', category_plot_order = c('LCL B', 'B', 'CD4+ T', 'CD8+ T', 'NK', 'DC', 'Monocyte'), text_size = 8, legendless = F, matching_value_to_text=list('n_sig_tested' = '')) + labs(fill="Rb"))
 # and save those
 ggsave('~/plots/mo_lcl_caqtl_replication_alt_legend.pdf', plot = caqtl_lcl_celltype_stat_p_alt_legend, width = 1, height = 2)
 
 ```
-
-```{r save_lcl_replication_stats, include=FALSE}
+```{r plot_lcl_combined_overlap, include=TRUE, fig.width=3, fig.height=8}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
-# get overlap per ct
-lcl_celltype_stats_loc <- '~/tables/mo_lcl_replication_stats.tsv.gz'
-write.table(lcl_celltype_stats, gzfile(lcl_celltype_stats_loc), row.names = F, col.names = T, sep = '\t', quote = F)
+# check replication in caQTLs across cell types
+caqtl_lcl_celltype_stat_p_alt <- plot_replication_stats(lcl_celltype_stats, mid_value = 0, comparing_value_to_text=list('rb_emp_all' = ''), colour_column = 'rb_emp_all', category_plot_order = c('LCL B', 'B', 'CD4+ T', 'CD8+ T', 'NK', 'DC', 'Monocyte'), text_size = 8, legendless = T, matching_value_to_text=list('n_sig_tested' = '')) +
+  xlab('Cell type replicating') +
+  ylab('Cell type replicating in') +
+  ggtitle('LCL replication') +
+  labs(fill="Rb") +
+  theme(
+    # X label font size
+    axis.title.x = element_text(size = 24), 
+    # Y label font size
+    axis.title.y = element_text(size = 24), 
+    # X tick font size
+    axis.text.x = element_text(size = 19), 
+    # Y tick font size
+    axis.text.y = element_text(size = 19), 
+    # title size
+    title = element_text(size = 28)
+  )
+
+# display image
+caqtl_lcl_celltype_stat_p_alt
+# save the image
+ggsave('~/plots/mo_lcl_caqtl_replication_alt.pdf', plot = caqtl_lcl_celltype_stat_p_alt, width = 3, height = 8)
+
+# extract legends as well
+caqtl_lcl_celltype_stat_p_alt_legend <- get_legend(plot_replication_stats(lcl_celltype_stats, mid_value = 0, comparing_value_to_text=list('rb_emp_all' = ''), colour_column = 'rb_emp_all', category_plot_order = c('LCL B', 'B', 'CD4+ T', 'CD8+ T', 'NK', 'DC', 'Monocyte'), text_size = 8, legendless = F, matching_value_to_text=list('n_sig_tested' = '')) + labs(fill="Rb"))
+# and save those
+ggsave('~/plots/mo_lcl_caqtl_replication_alt_legend.pdf', plot = caqtl_lcl_celltype_stat_p_alt_legend, width = 1, height = 2)
 
 ```
