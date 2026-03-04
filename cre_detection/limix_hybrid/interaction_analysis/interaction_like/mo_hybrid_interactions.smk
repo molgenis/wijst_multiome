@@ -104,7 +104,7 @@ rule all:
         # each chunk result
         expand(f"{RESULTS_BASE}/{{chunk}}/result.tsv.gz", chunk=CHUNKS),
         # merge results
-        f"{RESULTS_BASE}/merged/all_results.tsv.gz"
+        f"{RESULTS_BASE}/merged/results_fdr.tsv.gz"
 
 
 ############################################

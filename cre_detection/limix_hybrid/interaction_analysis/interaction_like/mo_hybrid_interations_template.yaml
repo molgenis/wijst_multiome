@@ -15,7 +15,7 @@ confinement: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_dete
 # absolute smf file loc
 smf: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/all/smf.tsv.gz"
 # absolute covariates file loc
-covariates: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/mo_celllevel_metadata_nounannotated.tsv.g"
+covariates: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/mo_celllevel_metadata_nounannotated.tsv.gz"
 # barcode column in covariate file
 barcode_column: "barcode_lane"
 # fixed effects to consider
@@ -36,6 +36,6 @@ accessibility_filename: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoi
 # R command
 r_command: "~/start_Rscript.sh"
 # script location
-script_loc: "/groups/umcg-franke-scrna/tmp02/users/umcg-roelen/singularity/rstudio-server/simulated_home/mo_hybrid_cre_interaction.R"
+script_loc: "/groups/umcg-franke-scrna/tmp04/users/umcg-roelen/singularity/rstudio-server/simulated_home/mo_hybrid_cre_interaction.R"
 # merging script as well
-merge_script_loc: "/groups/umcg-franke-scrna/tmp02/users/umcg-roelen/singularity/rstudio-server/simulated_home/mo_hybrid_cre_interaction_merge.R"
+merge_script_loc: "/groups/umcg-franke-scrna/tmp04/users/umcg-roelen/singularity/rstudio-server/simulated_home/mo_hybrid_cre_interaction_merge.R"
