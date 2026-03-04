@@ -649,6 +649,8 @@ exon_intron_utr_annotation_pct_5 <- add_pct_cds_info(exon_intron_annotation, cds
 exons_annotatio_utr_pct5_loc <- '/groups/umcg-franke-scrna/tmp02/external_datasets/ncbi_gencode/GCF_000001405.40/gencode_with_annotations_bins5.tsv.gz'
 write.table(exon_intron_utr_annotation_pct_5, gzfile(exons_annotatio_utr_pct5_loc), row.names = F, col.names = T, sep = '\t', quote = F)
 mdfiver::create_sha256_for_file(exons_annotatio_utr_pct5_loc)
+# reload
+exon_intron_utr_annotation_pct_5 <- fread(exons_annotatio_utr_pct5_loc, header = T, sep = '\t')
 
 # add pct info
 exon_intron_utr_annotation_pcttrons <- add_pct_trons_info(exon_intron_utr_annotation)
@@ -771,13 +773,13 @@ kruskal.test(tss_dist ~ interaction_direction, data = qtl_output_all_sig_wi[qtl_
 kruskal.test(tss_dist ~ interaction_direction, data = qtl_output_all_sig_wi[qtl_output_all_sig_wi[['is_top_variant']] & !is.na(qtl_output_all_sig_wi[['tss_dist']]) & !is.na(qtl_output_all_sig_wi[['gene_biotype']]) & qtl_output_all_sig_wi[['gene_biotype']] == 'protein_coding', ])
 
 # keep top over all cell types
-qtl_output_all_sig_wi_wi <- qtl_output_all_sig_wi[!is.na(qtl_output_all_sig_wi[['i_beta']]), ]
+qtl_output_all_sig_wi_wi_tc <- qtl_output_all_sig_wi[!is.na(qtl_output_all_sig_wi[['i_beta']]), ]
 qtl_output_all_sig_wi_wi_tc[['i_zscore']] <- qtl_output_all_sig_wi_wi_tc[['i_beta']] / qtl_output_all_sig_wi_wi_tc[['i_beta_se']]
 qtl_output_all_sig_wi_wi_tc[['zscore']] <- qtl_output_all_sig_wi_wi_tc[['beta']] / qtl_output_all_sig_wi_wi_tc[['beta_se']]
 #qtl_output_all_sig_wi_wi_tc <- qtl_output_all_sig_wi[order(qtl_output_all_sig_wi_wi_tc[['i_zscore']]), ]
-qtl_output_all_sig_wi_wi_tc <- qtl_output_all_sig_wi[order(qtl_output_all_sig_wi[['p_value']]), ]
-qtl_output_all_sig_wi_wi_tc <- qtl_output_all_sig_wi[order(qtl_output_all_sig_wi[['i_feature_bf_eigen']]), ]
-qtl_output_all_sig_wi_wi_tc <- qtl_output_all_sig_wi_wi_tc[!duplicated(qtl_output_all_sig_wi[['feature_id']]), ]
+qtl_output_all_sig_wi_wi_tc <- qtl_output_all_sig_wi_wi_tc[order(qtl_output_all_sig_wi_wi_tc[['p_value']]), ]
+qtl_output_all_sig_wi_wi_tc <- qtl_output_all_sig_wi_wi_tc[order(qtl_output_all_sig_wi_wi_tc[['i_feature_bf_eigen']]), ]
+qtl_output_all_sig_wi_wi_tc <- qtl_output_all_sig_wi_wi_tc[!duplicated(qtl_output_all_sig_wi_wi_tc[['feature_id']]), ]
 
 # check if there is a difference
 kruskal.test(distance_directional ~ interaction_direction, data = qtl_output_all_sig_wi[qtl_output_all_sig_wi[['is_top_variant']] & !is.na(qtl_output_all_sig_wi[['distance_directional']]), ])
@@ -801,17 +803,83 @@ kruskal.test(maf ~ gene_biotype, data = qtl_output_all_sig_wi[qtl_output_all_sig
 # p-value = 0.01058
 # next, try to model multiple variable at once by first checking if the distance at all plays a role
 qtl_output_all_sig_wi_factorized <- qtl_output_all_sig_wi
-summary(
+# add new columns for just checking each direction separately
+qtl_output_all_sig_wi_factorized[['interaction_any']] <- ifelse(qtl_output_all_sig_wi_factorized[['interaction_direction']] == 'none', 'no_interaction', 'yes_interaction')
+qtl_output_all_sig_wi_factorized[['interaction_positive']] <- ifelse(qtl_output_all_sig_wi_factorized[['interaction_direction']] == 'positive', 'yes_pos_interaction', 'no_pos_interaction')
+qtl_output_all_sig_wi_factorized[['interaction_negative']] <- ifelse(qtl_output_all_sig_wi_factorized[['interaction_direction']] == 'negative', 'yes_neg_interaction', 'no_neg_interaction')
+# full model
+qtl_top_interaction_dir_model_full <- summary(
   lm(
     formula = as.formula('distance_directional ~ 
                           interaction_direction + 
                           gb_size +
                           maf +
-                          beta + 
-                          gene_biotype'), 
+                          beta'), 
+                          # beta + 
+                          # gene_biotype'), 
     data = qtl_output_all_sig_wi_factorized[qtl_output_all_sig_wi_factorized[['is_top_variant']] & !is.na(qtl_output_all_sig_wi_factorized[['distance_directional']]), ]
   )
 )
+# model yes/no interaction
+qtl_top_interaction_dir_model_yesno <- summary(
+  lm(
+    formula = as.formula('distance_directional ~ 
+                          interaction_any + 
+                          gb_size +
+                          maf +
+                          beta'), 
+    # beta + 
+    # gene_biotype'), 
+    data = qtl_output_all_sig_wi_factorized[qtl_output_all_sig_wi_factorized[['is_top_variant']] & !is.na(qtl_output_all_sig_wi_factorized[['distance_directional']]), ]
+  )
+)
+# model yes/no positive
+qtl_top_interaction_dir_model_pos_yesno <- summary(
+  lm(
+    formula = as.formula('distance_directional ~ 
+                          interaction_positive + 
+                          gb_size +
+                          maf +
+                          beta'), 
+    # beta + 
+    # gene_biotype'), 
+    data = qtl_output_all_sig_wi_factorized[qtl_output_all_sig_wi_factorized[['is_top_variant']] & !is.na(qtl_output_all_sig_wi_factorized[['distance_directional']]), ]
+  )
+)
+# model yes/no negative
+qtl_top_interaction_dir_model_neg_yesno <- summary(
+  lm(
+    formula = as.formula('distance_directional ~ 
+                          interaction_negative + 
+                          gb_size +
+                          maf +
+                          beta'), 
+    # beta + 
+    # gene_biotype'), 
+    data = qtl_output_all_sig_wi_factorized[qtl_output_all_sig_wi_factorized[['is_top_variant']] & !is.na(qtl_output_all_sig_wi_factorized[['distance_directional']]), ]
+  )
+)
+# make into tables
+qtl_top_interaction_dir_model_full_tbl <- cbind('term' = gsub(' +', '_', rownames(qtl_top_interaction_dir_model_full[['coefficients']])), data.frame(qtl_top_interaction_dir_model_full[['coefficients']], check.names = F))
+qtl_top_interaction_dir_model_yesno_tbl <- cbind('term' = gsub(' +', '_', rownames(qtl_top_interaction_dir_model_yesno[['coefficients']])), data.frame(qtl_top_interaction_dir_model_yesno[['coefficients']], check.names = F))
+qtl_top_interaction_dir_model_pos_yesno_tbl <- cbind('term' = gsub(' +', '_', rownames(qtl_top_interaction_dir_model_pos_yesno[['coefficients']])), data.frame(qtl_top_interaction_dir_model_pos_yesno[['coefficients']], check.names = F))
+qtl_top_interaction_dir_model_neg_yesno_tbl <- cbind('term' = gsub(' +', '_', rownames(qtl_top_interaction_dir_model_neg_yesno[['coefficients']])), data.frame(qtl_top_interaction_dir_model_neg_yesno[['coefficients']], check.names = F))
+# fix column names where applicable
+colnames(qtl_top_interaction_dir_model_full_tbl) <- gsub(' +', '_', colnames(qtl_top_interaction_dir_model_full_tbl))
+colnames(qtl_top_interaction_dir_model_yesno_tbl) <- gsub(' +', '_', colnames(qtl_top_interaction_dir_model_yesno_tbl))
+colnames(qtl_top_interaction_dir_model_pos_yesno_tbl) <- gsub(' +', '_', colnames(qtl_top_interaction_dir_model_pos_yesno_tbl))
+colnames(qtl_top_interaction_dir_model_neg_yesno_tbl) <- gsub(' +', '_', colnames(qtl_top_interaction_dir_model_neg_yesno_tbl))
+# write these tables
+qtl_top_interaction_dir_model_full_tbl_loc <- '~/multiome/tables/mo_eqtl_interaction_dir_full.tsv.gz'
+qtl_top_interaction_dir_model_yesno_tbl_loc <- '~/multiome/tables/mo_eqtl_interaction_dir_yesno.tsv.gz'
+qtl_top_interaction_dir_model_pos_yesno_tbl_loc <- '~/multiome/tables/mo_eqtl_interaction_pos_yesno.tsv.gz'
+qtl_top_interaction_dir_model_neg_yesno_tbl_loc <- '~/multiome/tables/mo_eqtl_interaction_neg_yesno.tsv.gz'
+# write results with checksum
+write.table(qtl_top_interaction_dir_model_full_tbl, gzfile(qtl_top_interaction_dir_model_full_tbl_loc), row.names = F, col.names = T, sep = '\t', quote = F); mdfiver::create_sha256_for_file(qtl_top_interaction_dir_model_full_tbl_loc)
+write.table(qtl_top_interaction_dir_model_yesno_tbl, gzfile(qtl_top_interaction_dir_model_yesno_tbl_loc), row.names = F, col.names = T, sep = '\t', quote = F); mdfiver::create_sha256_for_file(qtl_top_interaction_dir_model_yesno_tbl_loc)
+write.table(qtl_top_interaction_dir_model_pos_yesno_tbl, gzfile(qtl_top_interaction_dir_model_pos_yesno_tbl_loc), row.names = F, col.names = T, sep = '\t', quote = F); mdfiver::create_sha256_for_file(qtl_top_interaction_dir_model_pos_yesno_tbl_loc)
+write.table(qtl_top_interaction_dir_model_neg_yesno_tbl, gzfile(qtl_top_interaction_dir_model_neg_yesno_tbl_loc), row.names = F, col.names = T, sep = '\t', quote = F); mdfiver::create_sha256_for_file(qtl_top_interaction_dir_model_neg_yesno_tbl_loc)
+
 # when modelling all of these, only yes vs no interaction is significant
 # interaction_directionnone           3.342e+04  8.928e+03   3.744 0.000187 ***
 # interaction_directionpositive       1.915e+04  1.197e+04   1.600 0.109849
