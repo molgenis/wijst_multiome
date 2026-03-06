@@ -1036,6 +1036,11 @@ if (!is.null(interaction_result)) {
                                              as.character(max(per_sample_df[per_sample_df$ncell >= ncell_cutoff, ][['ncell']])),
                                              sep = ';'
       )
+      # get rounded significance
+      significance <- 'NA'
+      if (is.numeric(lm_gt_to_cor_p)) {
+        significance <- as.character(round(lm_gt_to_cor_p, digits = 5))
+      }
       # plot both of them
       p_cor <- ggplot(data = per_sample_df[per_sample_df$ncell >= ncell_cutoff, ], mapping = aes(x = gt, y = estimate_raw, fill = gt)) + 
         geom_boxplot(outlier.shape = NA) + 
@@ -1049,7 +1054,7 @@ if (!is.null(interaction_result)) {
         xlab(paste('genotype')) + 
         ylab(paste(gene, 'region ~ expression')) + 
         labs(fill = 'Genotype', colour = 'Ncell') + 
-        ggtitle(paste('cor', variant, region, gene, 'p < ', as.character(round(lm_gt_to_cor_p, digits = 5)))) +
+        ggtitle(paste('cor', variant, region, gene, 'p < ', significance)) +
         theme(legend.title = element_text(size=14), 
               legend.text = element_text(size=12),
               axis.title.x = element_text(size=14),
@@ -1076,7 +1081,7 @@ for (comb in names(cor_gt_results)) {
   # extract the result table
   result_table <- cor_gt_results[[comb]]
   # check if the result table has more than 0 rows
-  if (nrow(result_table) > 0) {
+  if ((!is.null(result_table)) && (!is.null(dim(result_table))) && (length(dim(result_table)) == 2) && (nrow(result_table) > 0)) {
     # check if the genotype association was significant
     if (result_table[['genotype_p']][1] < 0.05) {
       # if so, save the plot
@@ -1090,7 +1095,7 @@ for (comb in names(cor_gt_results)) {
 }
 
 # check if there were any results
-if (length(cor_gt_results) > 0) {
+if (!is.null(cor_gt_results) && length(cor_gt_results) > 0) {
   # save the results table as well
   cor_gt_results_table <- rbindlist(cor_gt_results, fill = T)
   # extract the last part of the folder
