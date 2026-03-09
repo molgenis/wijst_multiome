@@ -80,6 +80,43 @@ get_tf_ieqtl_outputs <- function(output_loc, cell_types=NULL, output_file='merge
   return(res_all)
 }
 
+check_tf_sign_overlap <- function(scenic_output, tf_column='TF', ereg_column='eRegulon_name', gene_column='Gene') {
+  # we'll create a mapping for each of the genes, which eregulons it has
+  gene_to_eregs <- list()
+  # check each gene
+  for (gene in unique(scenic_output[[gene_column]])) {
+    # get the eregulons for this gene
+    eregs <- unique(scenic_output[scenic_output[[gene_column]] == gene, ][[ereg_column]])
+    # remove the direct/extended annotations
+    eregs <- gsub('_direct|_extended', '', eregs)
+    # put it in the list
+    gene_to_eregs[[gene]] <- eregs
+  }
+  # now add to the table whether the TF has a dual role for that gene
+  scenic_output[['tf_is_dual']] <- apply(
+    scenic_output,
+    MARGIN = 1,
+    FUN = function(row) {
+      # get the gene
+      gene <- row[[gene_column]]
+      # get the eregulons for this gene
+      eregs <- gene_to_eregs[[gene]]
+      # check if the TF is in both a + and - eregulon for this gene
+      tf <- row[[tf_column]]
+      # make the plus one
+      ereg_plus <- paste0(tf, '_+/+')
+      # and the minus one
+      ereg_minus <- paste0(tf, '_-/+')
+      # check plus
+      has_plus <- ereg_plus %in% gene_to_eregs[[gene]]
+      # check minus
+      has_minus <- ereg_minus %in% gene_to_eregs[[gene]]
+      # check if both are true
+      return(has_plus & has_minus)
+    }
+  )
+  return(scenic_output)
+}
 
 plot_concondance <- function(dataset_to_compare, d1_effect_column='d1_zscore', d2_effect_column='d2_zscore', concordance_number_font_size=8, concordance_number_label_size=8) {
   # get the minimal significant z for k1
@@ -167,6 +204,9 @@ scenic_output <- scenic_output[scenic_output[['Gene_signature_direction']] %in% 
 scenic_output <- scenic_output[!duplicated(paste(scenic_output[['Region']], scenic_output[['Gene']], scenic_output[['Gene_signature_direction']])), ]
 # make the regions cpeak style
 scenic_output[['region_cpeaks']] <- gsub(':', '-', scenic_output[['Region']])
+
+# add dual role information
+scenic_output <- check_tf_sign_overlap(scenic_output, tf_column = 'TF', ereg_column = 'eRegulon_name', gene_column = 'Gene')
 
 # results of the pseudobulk method
 ps_tf_ieqtl_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/pseudobulked/'
