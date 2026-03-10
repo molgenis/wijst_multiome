@@ -141,6 +141,8 @@ rule run_interaction:
         # get the flags for expression or accessibility
         EXPR_FLAG = "--expression_gausnorm"    if bool(config.get("expression_gausnorm", False)) else "",
         ACC_FLAG  = "--accessibility_gausnorm" if bool(config.get("accessibility_gausnorm", False)) else "",
+        EXPR_FLAG_BC = "--expression_boxcox"    if bool(config.get("expression_boxcox", False)) else "",
+        ACC_FLAG_BC  = "--accessibility_boxcox" if bool(config.get("accessibility_boxcox", False)) else "",
         # optional CLI args for expression/accessibility (only if provided)
         expr_arg = lambda wc: (
             f'--expression_file "{optional_chunk_file(config.get("expression_filename"), wc.chunk)}"'
@@ -171,6 +173,8 @@ rule run_interaction:
             --genotype_loc "{params.genotype_prefix}" \
             {params.EXPR_FLAG} \
             {params.ACC_FLAG} \
+            {params.EXPR_FLAG_BC} \
+            {params.ACC_FLAG_BC} \
             {params.expr_arg} \
             {params.acc_arg}
 

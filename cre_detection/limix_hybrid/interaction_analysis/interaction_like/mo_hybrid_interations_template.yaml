@@ -28,6 +28,10 @@ interaction_terms: "genotype,region"
 expression_gausnorm: true
 # do gausnorm on accessibility data
 accessibility_gausnorm: true
+# do boxcox instead of yeo-johnson on expression data (only works if also gausnorm is true)
+expression_boxcox: false
+# do boxcox instead of yeo-johnson on accessibility data (only works if also gausnorm is true)
+accessibility_boxcox: false
 # path to expression file
 expression_filename: "expression.tsv.gz"
 # path to accessibility file
