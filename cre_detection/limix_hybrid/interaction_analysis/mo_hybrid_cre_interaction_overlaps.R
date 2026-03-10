@@ -235,19 +235,21 @@ sc_tf_ieqtls_sig <- sc_tf_ieqtls[
 co_tf_ieqtls <- co_tf_ieqtls[
     co_tf_ieqtls[['genotype_bh']] < 0.05, 
 ]
-# merge what is significant in both
-sc_and_co_tf_ieqtls_sig <- merge(sc_tf_ieqtls_sig, co_tf_ieqtls, by.x = c('cell_type', 'variant', 'region', 'gene'), by.y = c('cell_type', 'variant', 'region', 'gene'))
-# check concordance
-sc_and_co_tf_ieqtls_sig_cond <- sum(sign(sc_and_co_tf_ieqtls_sig[['region:genotype_beta']]) == sign(sc_and_co_tf_ieqtls_sig[['genotype_beta.y']])) / nrow(sc_tf_ieqtls_sig)
 
 # merge the sc tf-i-eQTLs with the scenic output
 scenic_sc_tf_ieqtls <- merge(scenic_output, sc_tf_ieqtls, by.x = c('Gene_signature_name', 'Gene'), by.y = c('region', 'gene'), allow.cartesian = T)
+# do a flip if the transcripion factor is negatively associated
+# scenic_sc_tf_ieqtls[['rho_TF2G_corrected']] <- scenic_sc_tf_ieqtls[['rho_TF2G']]
+# scenic_sc_tf_ieqtls[scenic_sc_tf_ieqtls[['Gene_signature_direction']] == '-/+', ][['rho_TF2G_corrected']] <- scenic_sc_tf_ieqtls[scenic_sc_tf_ieqtls[['Gene_signature_direction']] == '-/+', ][['rho_TF2G']] * -1
+scenic_sc_tf_ieqtls[['region_beta_corrected']] <- scenic_sc_tf_ieqtls[['region_beta']]
+scenic_sc_tf_ieqtls[scenic_sc_tf_ieqtls[['Gene_signature_direction']] == '-/+', ][['region_beta_corrected']] <- scenic_sc_tf_ieqtls[scenic_sc_tf_ieqtls[['Gene_signature_direction']] == '-/+', ][['region_beta_corrected']] * -1
 # check the ieQTL direction and the signs
 scenic_sc_tf_ieqtls[['ieqtl_sign']] <- sign(scenic_sc_tf_ieqtls[['region:genotype_beta']])
 # and the TF-gene direction
 scenic_sc_tf_ieqtls[['tf2g_sign']] <- sign(scenic_sc_tf_ieqtls[['rho_TF2G']])
 # add the Z-score for the accessiblity i-eQTLs as well
 scenic_sc_tf_ieqtls[['region_z']] <- scenic_sc_tf_ieqtls[['region_beta']] / scenic_sc_tf_ieqtls[['region_se']]
+scenic_sc_tf_ieqtls[['region_z_corrected']] <- scenic_sc_tf_ieqtls[['region_beta_corrected']] / scenic_sc_tf_ieqtls[['region_se']]
 # get what is significant
 scenic_sc_tf_ieqtls_sig <- scenic_sc_tf_ieqtls[
   scenic_sc_tf_ieqtls[['region:genotype_bh']] < 0.05 & 
@@ -279,7 +281,7 @@ p_scenic_sc_tf_ieqtls_occ <- ggplot(scenic_sc_tf_ieqtls_occ, aes(x = ieqtl_sign_
   scale_fill_manual(values=list('TF increases gene' = 'darkred', 'TF represses gene' = 'darkblue'), name = 'SCENIC+ TF direction')
 
 # also try to check the concordance of the TF-gene relations
-p_scenic_vs_tf_ieqtls <- plot_concondance(scenic_sc_tf_ieqtls, 'rho_TF2G', 'region_beta') + 
+p_scenic_vs_tf_ieqtls <- plot_concondance(scenic_sc_tf_ieqtls, 'rho_TF2G', 'region_beta_corrected') + 
   # with correct labels
   xlab(paste('SCENIC+ TF2G\n(Rho)')) + 
   ylab(paste('Expression ~ TF\n(beta)')) + 
@@ -300,7 +302,7 @@ scenic_sc_tf_ieqtls_top_tf2g <- scenic_sc_tf_ieqtls[order(abs(scenic_sc_tf_ieqtl
 # by keeping the top effect
 scenic_sc_tf_ieqtls_top_tf2g <- scenic_sc_tf_ieqtls_top_tf2g[!duplicated(paste(scenic_sc_tf_ieqtls_top_tf2g[['Gene_signature_name']], scenic_sc_tf_ieqtls_top_tf2g[['Gene']])), ]
 # also try to check the concordance of the TF-gene relations
-p_scenic_vs_tf_ieqtls_top <- plot_concondance(scenic_sc_tf_ieqtls_top_tf2g, 'rho_TF2G', 'region_beta') + 
+p_scenic_vs_tf_ieqtls_top <- plot_concondance(scenic_sc_tf_ieqtls_top_tf2g, 'rho_TF2G', 'region_beta_corrected') + 
   # with correct labels
   xlab(paste('SCENIC+ TF2G\n(Rho)')) + 
   ylab(paste('Expression ~ TF\n(beta)')) + 
@@ -317,7 +319,7 @@ p_scenic_vs_tf_ieqtls_top <- plot_concondance(scenic_sc_tf_ieqtls_top_tf2g, 'rho
         strip.text.x = element_text(size=14)) + 
   theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
 # and with Z
-p_scenic_vs_tf_ieqtls_top_z <- plot_concondance(scenic_sc_tf_ieqtls_top_tf2g, 'rho_TF2G', 'region_z') + 
+p_scenic_vs_tf_ieqtls_top_z <- plot_concondance(scenic_sc_tf_ieqtls_top_tf2g, 'rho_TF2G', 'region_z_corrected') + 
   # with correct labels
   xlab(paste('SCENIC+ TF2G\n(Rho)')) + 
   ylab(paste('Expression ~ TF\n(Z-score)')) + 
@@ -338,9 +340,9 @@ scenic_sc_tf_ieqtls_top_tf2g_sig <- scenic_sc_tf_ieqtls_top_tf2g[
   scenic_sc_tf_ieqtls_top_tf2g[['region:genotype_bh']] < 0.05 & 
     scenic_sc_tf_ieqtls_top_tf2g[['anova_bh']] < 0.05 & 
     scenic_sc_tf_ieqtls_top_tf2g[['region_bh']] < 0.05 & 
-    scenic_sc_tf_ieqtls_top_tf2g[['genotype_bh']] < 0.05, 
+    scenic_sc_tf_ieqtls_top_tf2g[['genotype_bh']] < 0.05,
 ]
-p_scenic_vs_tf_ieqtls_top_z_sig <- plot_concondance(scenic_sc_tf_ieqtls_top_tf2g_sig, 'rho_TF2G', 'region_z') + 
+p_scenic_vs_tf_ieqtls_top_z_sig <- plot_concondance(scenic_sc_tf_ieqtls_top_tf2g_sig, 'rho_TF2G', 'region_z_corrected') + 
   # with correct labels
   xlab(paste('SCENIC+ TF2G\n(Rho)')) + 
   ylab(paste('Expression ~ TF\n(Z-score)')) + 
@@ -361,9 +363,9 @@ scenic_sc_tf_ieqtls_top_tf2g_nonsig <- scenic_sc_tf_ieqtls_top_tf2g[!(
   scenic_sc_tf_ieqtls_top_tf2g[['region:genotype_bh']] < 0.05 & 
     scenic_sc_tf_ieqtls_top_tf2g[['anova_bh']] < 0.05 & 
     scenic_sc_tf_ieqtls_top_tf2g[['region_bh']] < 0.05 & 
-    scenic_sc_tf_ieqtls_top_tf2g[['genotype_bh']] < 0.05), 
+    scenic_sc_tf_ieqtls_top_tf2g[['genotype_bh']] < 0.05),
 ]
-p_scenic_vs_tf_ieqtls_top_z_nonsig <- plot_concondance(scenic_sc_tf_ieqtls_top_tf2g_nonsig, 'rho_TF2G', 'region_z') + 
+p_scenic_vs_tf_ieqtls_top_z_nonsig <- plot_concondance(scenic_sc_tf_ieqtls_top_tf2g_nonsig, 'rho_TF2G', 'region_z_corrected') + 
   # with correct labels
   xlab(paste('SCENIC+ TF2G\n(Rho)')) + 
   ylab(paste('Expression ~ TF\n(Z-score)')) + 
@@ -391,7 +393,7 @@ p_scenic_vs_tf_ieqtls_top_z_grid <- plot_grid(
 scenic_sc_tf_ieqtls_top_tf2g_onlytfsig <- scenic_sc_tf_ieqtls_top_tf2g[
   scenic_sc_tf_ieqtls_top_tf2g[['region_bh']] < 0.05,  
 ]
-p_scenic_vs_tf_ieqtls_top_z_onlytfsig <- plot_concondance(scenic_sc_tf_ieqtls_top_tf2g_onlytfsig, 'rho_TF2G', 'region_z') + 
+p_scenic_vs_tf_ieqtls_top_z_onlytfsig <- plot_concondance(scenic_sc_tf_ieqtls_top_tf2g_onlytfsig, 'rho_TF2G', 'region_z_corrected') + 
   # with correct labels
   xlab(paste('SCENIC+ TF2G\n(Rho)')) + 
   ylab(paste('Expression ~ TF\n(Z-score)')) + 
@@ -550,7 +552,7 @@ p_scenic_vs_region_ieqtls_top_z_sig <- plot_concondance(scenic_sc_region_ieqtls_
 p_scenic_vs_region_ieqtls_top_z_grid <- plot_grid(
   p_scenic_vs_region_ieqtls_top_z, 
   p_scenic_vs_region_ieqtls_top_z_sig, 
-  # p_scenic_vs_region_ieqtls_top_z_nonsig, 
+  p_scenic_vs_region_ieqtls_top_z_nonsig,
   nrow = 2, 
   ncol = 2
 )
