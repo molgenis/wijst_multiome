@@ -327,6 +327,16 @@ scenic_output_region_info <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/
 write.table(scenic_output, gzfile(scenic_output_region_info), row.names = F, col.names = T, sep = '\t')
 # and make a checksum
 mdfiver::create_md5_for_file(scenic_output_region_info)
+# perform a filtering step, remove what SCENIC thinks is less likely
+scenic_output <- scenic_output[scenic_output[['Gene_signature_direction']] %in% c('+/+', '-/+'), ]
+# and keep only what is non-extended if it was both extended and non-extended
+scenic_output <- scenic_output[!duplicated(paste(scenic_output[['Region']], scenic_output[['Gene']], scenic_output[['Gene_signature_direction']])), ]
+# store this somewhere again
+scenic_output_region_info_filtered <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eRegulon_both_filtered.tsv.gz'
+write.table(scenic_output, gzfile(scenic_output_region_info_filtered), row.names = F, col.names = T, sep = '\t')
+mdfiver::create_md5_for_file(scenic_output_region_info_filtered)
+mdfiver::create_sha256_for_file(scenic_output_region_info_filtered)
+
 
 # check now many effects are under genetic regulation
 n_cre_genreg <- nrow(scenic_output[!is.na(scenic_output[['caqtl_celltype']]) | !is.na(scenic_output[['eqtl_varregion_celltype']]), ])
