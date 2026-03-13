@@ -14,7 +14,7 @@ library(IRanges)
 library(ggplot2)
 library(cowplot)
 library(stringr)
-
+library(logistf)
 
 ####################
 # Functions        #
@@ -584,91 +584,119 @@ get_color_list <- function(vector_of_names, use_sampling=F, color_indices=NULL) 
   return(colors_to_use_list)
 }
 
+####################
+# Setings          #
+####################
+
+# redo some calculations we already did
+recalc <- F
 
 ####################
 # Main code        #
 ####################
 
-# location of the gene annotations with exons
-exons_annotation_loc <- '/groups/umcg-franke-scrna/tmp02/external_datasets/ncbi_gencode/GCF_000001405.40/genomic.gtf.gz'
-# read the annotation file
-exons_annotation <- read.table(exons_annotation_loc, header = F, sep = '\t')
-# set column names
-colnames(exons_annotation) <- c('seqname','source','feature','start','end','score','strand','frame','attributes')
-# add the gene ID
-exons_annotation[['gene_id']] <- str_extract(exons_annotation$attributes, "(?<=gene_id )[^;]+")
-# add biotype
-exons_annotation[['gene_biotype']] <- str_extract(exons_annotation$attributes, "(?<=gene_biotype )[^;]+")
 # save this info
-exons_annotation_exons_loc <- '/groups/umcg-franke-scrna/tmp02/external_datasets/ncbi_gencode/GCF_000001405.40/gencode_exons.tsv.gz'
-write.table(exons_annotation, gzfile(exons_annotation_exons_loc), row.names = F, col.names = T, sep = '\t', quote = T)
-# with a checksum
-mdfiver::create_sha256_for_file(exons_annotation_exons_loc)
-# reload
-exons_annotation <- fread(exons_annotation_exons_loc, header = T, sep = '\t')
+exons_annotation_exons_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/ncbi_gencode/GCF_000001405.40/gencode_exons.tsv.gz'
+if (recalc) {
+  # location of the gene annotations with exons
+  exons_annotation_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/ncbi_gencode/GCF_000001405.40/genomic.gtf.gz'
+  # read the annotation file
+  exons_annotation <- read.table(exons_annotation_loc, header = F, sep = '\t')
+  # set column names
+  colnames(exons_annotation) <- c('seqname','source','feature','start','end','score','strand','frame','attributes')
+  # add the gene ID
+  exons_annotation[['gene_id']] <- str_extract(exons_annotation$attributes, "(?<=gene_id )[^;]+")
+  # add biotype
+  exons_annotation[['gene_biotype']] <- str_extract(exons_annotation$attributes, "(?<=gene_biotype )[^;]+")
+  write.table(exons_annotation, gzfile(exons_annotation_exons_loc), row.names = F, col.names = T, sep = '\t', quote = T)
+  # with a checksum
+  mdfiver::create_sha256_for_file(exons_annotation_exons_loc)
+} else {
+  # reload
+  exons_annotation <- fread(exons_annotation_exons_loc, header = T, sep = '\t')
+}
 
-# subset to the transcripts
-exons_annotation_transcripts <- exons_annotation[exons_annotation[['feature']] == 'transcript', ]
-# add a TSS
-exons_annotation_transcripts[['TSS']] <- exons_annotation_transcripts[['start']]
-# but make this the end if we are on the negative strand
-exons_annotation_transcripts[exons_annotation_transcripts[['strand']] == '-', ][['TSS']] <- exons_annotation_transcripts[exons_annotation_transcripts[['strand']] == '-', ][['end']]
 # save this info
-exons_annotatio_transcripts_loc <- '/groups/umcg-franke-scrna/tmp02/external_datasets/ncbi_gencode/GCF_000001405.40/gencode_with_transcripts.tsv.gz'
-write.table(exons_annotation_transcripts, gzfile(exons_annotatio_transcripts_loc), row.names = F, col.names = T, sep = '\t', quote = T)
-# with a checksum
-mdfiver::create_sha256_for_file(exons_annotatio_transcripts_loc)
-# reload
-exons_annotation_transcripts <- fread(exons_annotatio_transcripts_loc, header = T, sep = '\t')
+exons_annotatio_transcripts_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/ncbi_gencode/GCF_000001405.40/gencode_with_transcripts.tsv.gz'
+if (recalc) {
+  # subset to the transcripts
+  exons_annotation_transcripts <- exons_annotation[exons_annotation[['feature']] == 'transcript', ]
+  # add a TSS
+  exons_annotation_transcripts[['TSS']] <- exons_annotation_transcripts[['start']]
+  # but make this the end if we are on the negative strand
+  exons_annotation_transcripts[exons_annotation_transcripts[['strand']] == '-', ][['TSS']] <- exons_annotation_transcripts[exons_annotation_transcripts[['strand']] == '-', ][['end']]
+  write.table(exons_annotation_transcripts, gzfile(exons_annotatio_transcripts_loc), row.names = F, col.names = T, sep = '\t', quote = T)
+  # with a checksum
+  mdfiver::create_sha256_for_file(exons_annotatio_transcripts_loc)
+  
+} else {
+  # reload
+  exons_annotation_transcripts <- fread(exons_annotatio_transcripts_loc, header = T, sep = '\t')
+}
 
-# get exon/intron info
-exon_intron_annotation <- add_introns_to_exons_info(exons_annotation)
-# add the intron/exon number with the actual annotation
-exon_intron_annotation[['annotation']] <- paste(exon_intron_annotation[['feature']], exon_intron_annotation[['number']])
 # save this info
-exons_annotation_anns_loc <- '/groups/umcg-franke-scrna/tmp02/external_datasets/ncbi_gencode/GCF_000001405.40/gencode_with_annotations.tsv.gz'
-write.table(exon_intron_utr_annotation, gzfile(exons_annotation_anns_loc), row.names = F, col.names = T, sep = '\t', quote = T)
-# with a checksum
-mdfiver::create_sha256_for_file(exons_annotation_anns_loc)
-# reload
-exon_intron_annotation <- fread(exons_annotation_anns_loc)
+exons_annotation_anns_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/ncbi_gencode/GCF_000001405.40/gencode_with_annotations.tsv.gz'
+if (recalc) {
+  # get exon/intron info
+  exon_intron_annotation <- add_introns_to_exons_info(exons_annotation)
+  # add the intron/exon number with the actual annotation
+  exon_intron_annotation[['annotation']] <- paste(exon_intron_annotation[['feature']], exon_intron_annotation[['number']])
+  write.table(exon_intron_utr_annotation, gzfile(exons_annotation_anns_loc), row.names = F, col.names = T, sep = '\t', quote = T)
+  # with a checksum
+  mdfiver::create_sha256_for_file(exons_annotation_anns_loc)
+} else {
+  # reload
+  exon_intron_utr_annotation <- fread(exons_annotation_anns_loc)
+}
 
-# get the CDS info as well
-exons_annotation_cds <- exons_annotation[exons_annotation[['feature']] == 'CDS', ]
-# add pct info
-exon_intron_utr_annotation_pct <- add_pct_cds_info(exon_intron_utr_annotation)
 # save this info
-exons_annotatio_utr_pct_loc <- '/groups/umcg-franke-scrna/tmp02/external_datasets/ncbi_gencode/GCF_000001405.40/gencode_with_annotations_bins.tsv.gz'
-write.table(exon_intron_utr_annotation_pct, gzfile(exons_annotatio_utr_pct_loc), row.names = F, col.names = T, sep = '\t', quote = F)
-mdfiver::create_sha256_for_file(exons_annotatio_utr_pct_loc)
-# reload
-exon_intron_utr_annotation_pct <- fread(exons_annotatio_utr_pct_loc, header = T, sep = '\t')
-# also with smaller bins
-exon_intron_utr_annotation_pct_5 <- add_pct_cds_info(exon_intron_annotation, cds_bins = 5)
-# save this info
-exons_annotatio_utr_pct5_loc <- '/groups/umcg-franke-scrna/tmp02/external_datasets/ncbi_gencode/GCF_000001405.40/gencode_with_annotations_bins5.tsv.gz'
-write.table(exon_intron_utr_annotation_pct_5, gzfile(exons_annotatio_utr_pct5_loc), row.names = F, col.names = T, sep = '\t', quote = F)
-mdfiver::create_sha256_for_file(exons_annotatio_utr_pct5_loc)
-# reload
-exon_intron_utr_annotation_pct_5 <- fread(exons_annotatio_utr_pct5_loc, header = T, sep = '\t')
+exons_annotatio_utr_pct_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/ncbi_gencode/GCF_000001405.40/gencode_with_annotations_bins.tsv.gz'
+if (recalc) {
+  # get the CDS info as well
+  exons_annotation_cds <- exons_annotation[exons_annotation[['feature']] == 'CDS', ]
+  # add pct info
+  exon_intron_utr_annotation_pct <- add_pct_cds_info(exon_intron_utr_annotation)
+  write.table(exon_intron_utr_annotation_pct, gzfile(exons_annotatio_utr_pct_loc), row.names = F, col.names = T, sep = '\t', quote = F)
+  mdfiver::create_sha256_for_file(exons_annotatio_utr_pct_loc)
+} else {
+  # reload
+  exon_intron_utr_annotation_pct <- fread(exons_annotatio_utr_pct_loc, header = T, sep = '\t')
+}
 
-# add pct info
-exon_intron_utr_annotation_pcttrons <- add_pct_trons_info(exon_intron_utr_annotation)
 # save this info
-exons_annotatio_utr_pcttrons_loc <- '/groups/umcg-franke-scrna/tmp02/external_datasets/ncbi_gencode/GCF_000001405.40/gencode_with_annotations_bins_pcttrons.tsv.gz'
-write.table(exon_intron_utr_annotation_pcttrons, gzfile(exons_annotatio_utr_pcttrons_loc), row.names = F, col.names = T, sep = '\t', quote = F)
-mdfiver::create_sha256_for_file(exons_annotatio_utr_pcttrons_loc)
-# reload this info
-exon_intron_utr_annotation_pcttrons <- fread(exons_annotatio_utr_pcttrons_loc, header = T, sep = '\t')
-# also with smaller bins
-exon_intron_utr_annotation_pcttrons_5 <- add_pct_trons_info(exon_intron_utr_annotation, cds_bins = 5)
+exons_annotatio_utr_pct5_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/ncbi_gencode/GCF_000001405.40/gencode_with_annotations_bins5.tsv.gz'
+if (recalc) {
+  # also with smaller bins
+  exon_intron_utr_annotation_pct_5 <- add_pct_cds_info(exon_intron_annotation, cds_bins = 5)
+  write.table(exon_intron_utr_annotation_pct_5, gzfile(exons_annotatio_utr_pct5_loc), row.names = F, col.names = T, sep = '\t', quote = F)
+  mdfiver::create_sha256_for_file(exons_annotatio_utr_pct5_loc)
+} else {
+  # reload
+  exon_intron_utr_annotation_pct_5 <- fread(exons_annotatio_utr_pct5_loc, header = T, sep = '\t')
+}
+
+# save this info
+exons_annotatio_utr_pcttrons_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/ncbi_gencode/GCF_000001405.40/gencode_with_annotations_bins_pcttrons.tsv.gz'
+if (recalc) {
+  # add pct info
+  exon_intron_utr_annotation_pcttrons <- add_pct_trons_info(exon_intron_utr_annotation)
+  write.table(exon_intron_utr_annotation_pcttrons, gzfile(exons_annotatio_utr_pcttrons_loc), row.names = F, col.names = T, sep = '\t', quote = F)
+  mdfiver::create_sha256_for_file(exons_annotatio_utr_pcttrons_loc)
+} else {
+  # reload this info
+  exon_intron_utr_annotation_pcttrons <- fread(exons_annotatio_utr_pcttrons_loc, header = T, sep = '\t')
+  # also with smaller bins
+  exon_intron_utr_annotation_pcttrons_5 <- add_pct_trons_info(exon_intron_utr_annotation, cds_bins = 5)
+}
+
+
 
 # get the location of the file annotating the QTL variants and their SCREEN annotation
-variant_to_screen_region_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/eqtl/annotations/mo_qtl_variants_tested_screen_overlap.tsv.gz'
+variant_to_screen_region_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/annotations/mo_qtl_variants_tested_screen_overlap.tsv.gz'
 # read
 variant_to_screen_region <- fread(variant_to_screen_region_loc, header = T, sep = '\t')
 # get the annotation for each region
-screen_region_anno_loc <- '/groups/umcg-franke-scrna/tmp02/external_datasets/encode_cres/v4/GRCh38-cCREs.bed'
+screen_region_anno_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/encode_cres/v4/GRCh38-cCREs.bed'
 # read that annotation
 screen_region_anno <- fread(screen_region_anno_loc, sep = '\t', header = F)
 # set column names
@@ -682,7 +710,7 @@ variant_to_screen_anno <- cbind(
 )
 
 # location of the eQTL output
-qtl_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/eqtl/sc-eqtlgen/output/L1/combined/'
+qtl_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/sc-eqtlgen/output/L1/combined/'
 # get all the QTL output
 qtl_output <- get_qtls_per_celltype_limix(qtl_output_loc)
 # add the top effect information
@@ -693,7 +721,7 @@ qtl_output_all <- do.call('rbind', qtl_output)
 qtl_output_all[['snp_chromosome']] <- paste0('chr', qtl_output_all[['snp_chromosome']])
 
 # get the cpeaks overlaps for each variant
-qtl_variants_all_cpeaks_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/eqtl/annotations/mo_qtl_variants_tested_cpeaks_overlap.tsv.gz'
+qtl_variants_all_cpeaks_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/annotations/mo_qtl_variants_tested_cpeaks_overlap.tsv.gz'
 qtl_variants_all_cpeaks <- fread(qtl_variants_all_cpeaks_loc, header = T, sep = '\t')
 # add overlapping feature to QTL
 qtl_output_all[['region']] <- qtl_variants_all_cpeaks[match(qtl_output_all[['snp_id']], qtl_variants_all_cpeaks[['snp_id']]), ][['overlapping_feature']]
@@ -702,7 +730,7 @@ qtl_output_all_sig <- qtl_output_all[qtl_output_all[['feature_q_value']] < 0.05 
                                        qtl_output_all[['p_value']] < qtl_output_all[['pval_nominal_threshold_global']], ]
 
 # location of the i-eqtl output
-iqtl_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/output/ut_and_24hca_significant/L1/'
+iqtl_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/output/ut_and_24hca_significant/L1/'
 # get all the QTL output
 iqtl_output <- get_qtls_per_celltype_limix(iqtl_output_loc, output_file = 'inflammation_final/iqtl_results_all_eigenmt_qval.tsv.gz', gene_column='feature', significance_column='feature_q_value', significance_cutoff=0.05, nominal_cutoff_column=NULL, nominal_significance_column=NULL)
 # merge all the results
@@ -815,8 +843,8 @@ qtl_top_interaction_dir_model_full <- summary(
                           gb_size +
                           maf +
                           beta'), 
-                          # beta + 
-                          # gene_biotype'), 
+    # beta + 
+    # gene_biotype'), 
     data = qtl_output_all_sig_wi_factorized[qtl_output_all_sig_wi_factorized[['is_top_variant']] & !is.na(qtl_output_all_sig_wi_factorized[['distance_directional']]), ]
   )
 )
@@ -857,6 +885,45 @@ qtl_top_interaction_dir_model_neg_yesno <- summary(
     # beta + 
     # gene_biotype'), 
     data = qtl_output_all_sig_wi_factorized[qtl_output_all_sig_wi_factorized[['is_top_variant']] & !is.na(qtl_output_all_sig_wi_factorized[['distance_directional']]), ]
+  )
+)
+# model yes/no interaction explicitly with logistic
+qtl_output_all_sig_wi_factorized[['interaction_any']] <- factor(qtl_output_all_sig_wi_factorized[['interaction_any']])
+qtl_top_interaction_dir_model_yesno_logis <- summary(
+  logistf(
+    formula = as.formula('interaction_any  ~ 
+                          distance_directional + 
+                          gb_size +
+                          maf +
+                          beta'), 
+    data = qtl_output_all_sig_wi_factorized[qtl_output_all_sig_wi_factorized[['is_top_variant']] & !is.na(qtl_output_all_sig_wi_factorized[['distance_directional']]), ], 
+    family = binomial
+  )
+)
+# model positive yes/no interaction explicitly with logistic
+qtl_output_all_sig_wi_factorized[['interaction_positive']] <- factor(qtl_output_all_sig_wi_factorized[['interaction_positive']])
+qtl_top_interaction_dir_model_pos_yesno_logis <- summary(
+  logistf(
+    formula = as.formula('interaction_positive  ~ 
+                          distance_directional + 
+                          gb_size +
+                          maf +
+                          beta'), 
+    data = qtl_output_all_sig_wi_factorized[qtl_output_all_sig_wi_factorized[['is_top_variant']] & !is.na(qtl_output_all_sig_wi_factorized[['distance_directional']]), ], 
+    family = binomial
+  )
+)
+# model negative yes/no interaction explicitly with logistic
+qtl_output_all_sig_wi_factorized[['interaction_negative']] <- factor(qtl_output_all_sig_wi_factorized[['interaction_negative']])
+qtl_top_interaction_dir_model_neg_yesno_logis <- summary(
+  logistf(
+    formula = as.formula('interaction_negative  ~ 
+                          distance_directional + 
+                          gb_size +
+                          maf +
+                          beta'), 
+    data = qtl_output_all_sig_wi_factorized[qtl_output_all_sig_wi_factorized[['is_top_variant']] & !is.na(qtl_output_all_sig_wi_factorized[['distance_directional']]), ], 
+    family = binomial
   )
 )
 # make into tables
@@ -1390,7 +1457,7 @@ p_distance_wiedirection <- ggplot(data = qtl_output_all_sig_wi_wi_tc, mapping = 
   ylab('distance to gene') +
   ggtitle('Gene distance per interaction direction') + 
   theme(axis.text.x=element_blank(), 
-                 axis.ticks = element_blank()) + 
+        axis.ticks = element_blank()) + 
   theme(legend.position = 'none') + 
   theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) + 
