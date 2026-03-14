@@ -66,7 +66,7 @@ option_list <- list(
               help="column in second variant list file containing variant ID", metavar="character"),
   make_option(c("-d", "--depth"), type="numeric", default=1000, 
               help="number of consecutive variants to check for LD", metavar="numeric"), 
-  make_option(c("-l", "--ld_cutoff"), type="numeric", default=0.1, 
+  make_option(c("-l", "--ld_cutoff"), type="numeric", default=0.0, 
               help="make values smaller than the cutoff into 0, so the matrix is more sparse", metavar="numeric")
 )
 
@@ -78,15 +78,15 @@ opt <- parse_args(opt_parser)
 # initialize the options in debug mode
 if (debug) {
   opt <- list(
-    genotypes = '/groups/umcg-franke-scrna/tmp04/external_datasets/sc-eqtlgen-imputation-ref-hg38/ref_panel_QC/30x-GRCh38-norsid',
-    # output_file = '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/annotations/mo_qtl_variants_tested_ld/mo_qtl_variants_ld_chr',
-    output_file = '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/GWAS_enrichment/GWAS_vars/immune-gwas-catalog-download-associations-alt-full-moldpairs',
+    genotypes = '/groups/umcg-franke-scrna/tmp04/external_datasets/sc-eqtlgen-imputation-ref-hg38/ref_panel_QC/30x-GRCh38-EUR-norsid',
+    output_file = '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/annotations/mo_qtl_variants_tested_ld/eurpop/',
+    # output_file = '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/GWAS_enrichment/GWAS_vars/immune-gwas-catalog-download-associations-alt-full-moldpairs',
     variant_list_file = '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/annotations/mo_qtl_variants_tested_cpeaks_overlap.tsv.gz',
     variant_list_column = 'snp_id',
-    second_variant_list_file = '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/GWAS_enrichment/GWAS_vars/immune-gwas-catalog-download-associations-alt-full-chromposrefalt.tsv.gz', 
-    second_variant_list_column = 'chromposaltref',
+    # second_variant_list_file = '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/GWAS_enrichment/GWAS_vars/immune-gwas-catalog-download-associations-alt-full-chromposrefalt.tsv.gz', 
+    # second_variant_list_column = 'chromposaltref',
     depth = 1000, 
-    ld_cutoff = .1
+    ld_cutoff = 0
   )
 }
 # set non-optional parameters
@@ -189,11 +189,14 @@ for (chromosome in chromosomes_gt) {
   ld_mat_chr <- NULL
   # depending on whether we have a second list, use a different approach
   if (is.null(second_variants)) {
+    message(paste('calculating LD between', ncol(genotypes_chr$genotypes), 'variants in list 1'))
     # calculate all the LD, because we only have the variants in the first list anyway
     ld_mat_chr <- snpStats::ld(genotypes_chr$genotypes, depth = depth, stats = "R.squared", symmetric = T)
     # make more sparse
     if (ld_cutoff > 0) {
-      ld_mat_chr[abs(ld_mat_chr) < ld_cutoff] <- 0
+      message(paste('making values smaller than', ld_cutoff, 'into 0'))
+      ld_mat_chr@x[ld_mat_chr@x < ld_cutoff] <- 0
+      ld_mat_chr <- drop0(ld_mat_chr)
     }
     # write variants as well
     ld_mat_chr_rows <- rownames(ld_mat_chr)
@@ -226,12 +229,9 @@ for (chromosome in chromosomes_gt) {
       map = genotypes_chr$map[rownames(genotypes_chr$map) %in% second_variants, ],
       fam = genotypes_chr$fam
     )
+    message(paste('calculating LD between', ncol(genotypes_chr_l1$genotypes), 'variants in list 1 and', ncol(genotypes_chr_l2$genotypes), 'variants in list 2'))
     # calculate the LD between the two lists
     ld_mat_chr <- snpStats::ld(genotypes_chr_l1$genotypes, genotypes_chr_l2$genotypes, stats = "R.squared")
-    # make more sparse
-    if (ld_cutoff > 0) {
-      ld_mat_chr[abs(ld_mat_chr) < ld_cutoff] <- 0
-    }
     # write variants as well
     ld_mat_chr_rows <- rownames(ld_mat_chr)
     ld_mat_chr_cols <- colnames(ld_mat_chr)
@@ -245,6 +245,13 @@ for (chromosome in chromosomes_gt) {
     mdfiver::create_sha256_for_file(output_file_chrom_full_cols_loc)
     # now make the matrix sparse
     ld_mat_chr <- Matrix(ld_mat_chr, sparse = TRUE)
+    # make more sparse
+    if (ld_cutoff > 0) {
+      message(paste('making values smaller than', ld_cutoff, 'into 0'))
+      ld_mat_chr[ld_mat_chr < ld_cutoff] <- 0
+      ld_mat_chr@x[ld_mat_chr@x < ld_cutoff] <- 0
+      ld_mat_chr <- drop0(ld_mat_chr)
+    }
     # set the output file loc
     output_file_chrom_full <- paste(output_file, chromosome, '.mtx', sep = '')
     Matrix::writeMM(ld_mat_chr, output_file_chrom_full)

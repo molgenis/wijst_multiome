@@ -14,6 +14,8 @@ library(Seurat)
 library(Matrix)
 library(data.table)
 library(AUCell)
+library(ggplot2)
+library(stringr)
 
 
 ####################
@@ -63,14 +65,28 @@ seurat_object <- readRDS(seurat_object_loc)
 
 # make a list of all the genes per ereg
 ereg_to_genes <- list()
-for (ereg in unique(scenic_output[['Gene_signature_name']])) {
-  # get the genes
-  unique(genes_ereg <- scenic_output[
-    scenic_output[['Gene_signature_name']] == ereg, 
-  ][['Gene']])
-  # put in the list
-  ereg_to_genes[[ereg]] <- genes_ereg
+# for (ereg in unique(scenic_output[['Gene_signature_name']])) {
+#   # get the genes
+#   genes_ereg <- unique(scenic_output[
+#     scenic_output[['Gene_signature_name']] == ereg, 
+#   ][['Gene']])
+#   # put in the list
+#   ereg_to_genes[[ereg]] <- genes_ereg
+# }
+# location of the eregulon from scenics
+scenic_eregs_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eRegulon_signatures.tsv.gz'
+# read that
+scenic_eregs <- fread(scenic_eregs_loc, header = T, sep = '\t')
+# check each of the gene based ones
+for (ereg in unique(scenic_eregs[scenic_eregs[['modality']] == 'Gene_based', ][['signature_name']])) {
+    # get the genes
+    genes_ereg <- unique(scenic_eregs[
+      scenic_eregs[['signature_name']] == ereg,
+    ][['gene_or_region']])
+    # put in the list
+    ereg_to_genes[[ereg]] <- unique(genes_ereg)
 }
+
 # extract expression matrix
 expr_mat <- seurat_object@assays$RNA@layers$counts
 # set the barcodes as column names
@@ -80,6 +96,7 @@ gene_names <- data.frame(seurat_object@assays$RNA@features)
 gene_names_counts <- rownames(gene_names[gene_names[['counts']], , drop = F])
 # set those as row names
 rownames(expr_mat) <- gene_names_counts
+
 # Calculate enrichment scores
 cells_AUC <- AUCell_run(expr_mat, ereg_to_genes)
 # set the path to save this one
@@ -94,7 +111,7 @@ expr_mat_included <- expr_mat[, colnames(expr_mat) %in% barcodes]
 # Calculate enrichment scores
 cells_AUC_included <- AUCell_run(expr_mat_included, ereg_to_genes)
 # set the path to save this one
-cells_AUC_included_loc <- '~/multiome/rds/mo_auc_mtx_included.rds'
+cells_AUC_included_loc <- '~/multiome/rds/mo_auc_mtx_included_fromscenic.rds'
 # save the file
 saveRDS(cells_AUC_included, cells_AUC_included_loc)
 # make a checksum
@@ -102,7 +119,7 @@ mdfiver::create_sha256_for_file(cells_AUC_included_loc)
 
 # reload data
 cells_AUC_loc <- '~/multiome/rds/mo_auc_mtx_full.rds'
-cells_AUC_included_loc <- '~/multiome/rds/mo_auc_mtx_included.rds'
+cells_AUC_included_loc <- '~/multiome/rds/mo_auc_mtx_included_fromscenic.rds'
 cells_AUC <- readRDS(cells_AUC_loc)
 cells_AUC_included <- readRDS(cells_AUC_included_loc)
 
@@ -116,6 +133,9 @@ barcodes_before_vs_included <- intersect(barcodes, colnames(cells_AUC_included))
 # then subset
 cells_AUC_included_vs_before <- getAUC(cells_AUC_included[, barcodes_before_vs_included])
 cells_before_vs_AUC_included <- auc_mtx[, barcodes_before_vs_included]
+
+# keep the eregs also in SCENIC+
+ereg_to_genes <- ereg_to_genes[names(ereg_to_genes) %in% scenic_eregs_to_keep[['Gene_signature_name']]]
 
 # create a list to store each df
 auc_cors <- list()
@@ -132,13 +152,39 @@ for (gene_set in names(ereg_to_genes)) {
     x = as.vector(unlist(cells_AUC_included_vs_before[gene_set, ])), 
     y = as.vector(unlist(cells_before_vs_AUC_included[gene_set, ]))
   )
+  # and how many genes where in here
+  auc_n_genes <- length(ereg_to_genes[[gene_set]])
   # make into a df
-  cor_df_gs <- data.frame('regulon' = c(gene_set), 'cor_full' = c(auc_vs_before_cor), 'cor_included' = c(auc_included_vs_before_cor))
+  cor_df_gs <- data.frame('regulon' = c(gene_set), 'cor_full' = c(auc_vs_before_cor), 'cor_included' = c(auc_included_vs_before_cor), 'n_genes' = c(auc_n_genes))
   # put in the list
   auc_cors[[gene_set]] <- cor_df_gs
 }
 # merge all
 auc_cors_all <- do.call('rbind', auc_cors)
+# add the gene list number
+auc_cors_all[['n_gene_original']] <- apply(auc_cors_all, 1, function(x) {
+  # extract value
+  str_res <- str_extract(x[['regulon']], '_\\(\\d+g\\)$')[[1]]
+  # remove the characters that are not numeric
+  str_res <- gsub('\\(|\\)|g|_', '', str_res)
+  # # then make numeric
+  num_res <- as.numeric(str_res)
+  return(num_res)
+})
+# add pct
+auc_cors_all[['n_genes_pct']] <- auc_cors_all[['n_genes']] / auc_cors_all[['n_gene_original']]
+# show the correlation versus the percentage
+ggplot(data = auc_cors_all, mapping = aes(x = n_genes_pct, y = cor_included)) +
+  geom_point() +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+  xlab('% of genes of original gene set') + 
+  ylab('Correlation of SCENIC+ vs AUCell values')
+# show the correlation versus the percentage again for 
+ggplot(data = auc_cors_all, mapping = aes(x = n_genes_pct, y = cor_full)) +
+  geom_point() +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+  xlab('% of genes of original gene set') + 
+  ylab('Correlation of SCENIC+ vs AUCell values')
 
 # read the TF-interaction-QTL output
 tf_i_eqtl_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/sc/all/lane_donor_countrna_inclcaqtls/merged/results_fdr.tsv.gz'
@@ -168,12 +214,38 @@ for (ereg in names(ereg_to_genes)) {
     ereg_to_genes_notop[[ereg]] <- genes_ereg_notop
   }
 }
-
+# get the rankings
+expr_mat_included_ranks <- AUCell_buildRankings(expr_mat_included, plotStats=TRUE)
 # Calculate enrichment scores
 cells_AUC_notop <- AUCell_run(expr_mat, ereg_to_genes_notop)
+# set the path to save this one
+cells_AUC_notop_loc <- '~/multiome/rds/mo_auc_mtx_notop_fromscenic.rds'
+# save the file
+saveRDS(cells_AUC_notop, cells_AUC_notop_loc)
+# make a checksum
+mdfiver::create_sha256_for_file(cells_AUC_notop_loc)
+
 
 # first do AUC we had done before vs the new full one
 barcodes_full_vs_notop <- intersect(colnames(cells_AUC), colnames(cells_AUC_notop))
 # then subset
 cells_AUC_notop_vs_full <- getAUC(cells_AUC_notop[, barcodes_full_vs_notop])
 cells_AUC_full_vs_notop <- getAUC(cells_AUC[, barcodes_full_vs_notop])
+# get correlation for each gene set
+auc_cors_notop <- list()
+for (gene_set in names(ereg_to_genes_notop)) {
+  print(gene_set)
+  # do the full matrix vs what we had before
+  auc_notop_vs_before_cor <- cor(
+    x = as.vector(unlist(cells_AUC_notop_vs_full[gene_set, ])), 
+    y = as.vector(unlist(cells_AUC_full_vs_notop[gene_set, ]))
+  )
+  # and how many genes where in here
+  auc_n_genes <- length(ereg_to_genes[[gene_set]])
+  # make into a df
+  cor_df_gs <- data.frame('regulon' = c(gene_set), 'cor_included_notop' = c(auc_notop_vs_before_cor), 'n_genes' = c(auc_n_genes))
+  # put in the list
+  auc_cors_notop[[gene_set]] <- cor_df_gs
+}
+# merge all
+auc_cors_notop_all <- do.call('rbind', auc_cors_notop)
