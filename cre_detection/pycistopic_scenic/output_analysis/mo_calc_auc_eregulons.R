@@ -185,6 +185,12 @@ ggplot(data = auc_cors_all, mapping = aes(x = n_genes_pct, y = cor_full)) +
   theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
   xlab('% of genes of original gene set') + 
   ylab('Correlation of SCENIC+ vs AUCell values')
+ggplot(data = auc_cors_all, mapping = aes(x = regulon, y = cor_full)) +
+  geom_point() +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+  xlab('eregulon name') + 
+  ylab('Correlation of SCENIC+ vs AUCell values') + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
 # read the TF-interaction-QTL output
 tf_i_eqtl_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/sc/all/lane_donor_countrna_inclcaqtls/merged/results_fdr.tsv.gz'
@@ -217,7 +223,7 @@ for (ereg in names(ereg_to_genes)) {
 # get the rankings
 expr_mat_included_ranks <- AUCell_buildRankings(expr_mat_included, plotStats=TRUE)
 # Calculate enrichment scores
-cells_AUC_notop <- AUCell_run(expr_mat, ereg_to_genes_notop)
+cells_AUC_notop <- AUCell_run(expr_mat_included, ereg_to_genes_notop)
 # set the path to save this one
 cells_AUC_notop_loc <- '~/multiome/rds/mo_auc_mtx_notop_fromscenic.rds'
 # save the file
@@ -231,21 +237,37 @@ barcodes_full_vs_notop <- intersect(colnames(cells_AUC), colnames(cells_AUC_noto
 # then subset
 cells_AUC_notop_vs_full <- getAUC(cells_AUC_notop[, barcodes_full_vs_notop])
 cells_AUC_full_vs_notop <- getAUC(cells_AUC[, barcodes_full_vs_notop])
+
+# first do AUC we had done before vs the new full one
+barcodes_included_vs_notop <- intersect(colnames(cells_AUC_included), colnames(cells_AUC_notop))
+# then subset
+cells_AUC_notop_vs_included <- getAUC(cells_AUC_notop[, barcodes_included_vs_notop])
+cells_AUC_included_vs_notop <- getAUC(cells_AUC_included[, barcodes_included_vs_notop])
 # get correlation for each gene set
 auc_cors_notop <- list()
 for (gene_set in names(ereg_to_genes_notop)) {
   print(gene_set)
   # do the full matrix vs what we had before
-  auc_notop_vs_before_cor <- cor(
+  auc_notop_vs_full_cor <- cor(
     x = as.vector(unlist(cells_AUC_notop_vs_full[gene_set, ])), 
     y = as.vector(unlist(cells_AUC_full_vs_notop[gene_set, ]))
+  )
+  auc_notop_vs_included_cor <- cor(
+    x = as.vector(unlist(cells_AUC_notop_vs_included[gene_set, ])), 
+    y = as.vector(unlist(cells_AUC_included_vs_notop[gene_set, ]))
   )
   # and how many genes where in here
   auc_n_genes <- length(ereg_to_genes[[gene_set]])
   # make into a df
-  cor_df_gs <- data.frame('regulon' = c(gene_set), 'cor_included_notop' = c(auc_notop_vs_before_cor), 'n_genes' = c(auc_n_genes))
+  cor_df_gs <- data.frame('regulon' = c(gene_set), 'cor_full_notop' = c(auc_notop_vs_before_cor), 'cor_included_notop' = c(auc_notop_vs_included_cor), 'n_genes' = c(auc_n_genes))
   # put in the list
   auc_cors_notop[[gene_set]] <- cor_df_gs
 }
 # merge all
 auc_cors_notop_all <- do.call('rbind', auc_cors_notop)
+ggplot(data = auc_cors_notop_all, mapping = aes(x = regulon, y = cor_included_notop )) +
+  geom_point() +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+  xlab('eregulon name') + 
+  ylab('Correlation of AUCell values before and after top TF-i-eQTL gene') + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
