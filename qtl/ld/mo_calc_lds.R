@@ -10,13 +10,15 @@
 #   --variant_list_file /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/annotations/mo_qtl_variants_tested_cpeaks_overlap.tsv.gz \
 #   --second_variant_list_file /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/GWAS_enrichment/GWAS_vars/immune-gwas-catalog-download-associations-alt-full-chromposrefalt.tsv.gz \ 
 #   --variant_list_column snp_id \
-#   --second_variant_list_column chromposaltref
+#   --second_variant_list_column chromposaltref \
+#   --ld_cutoff 0.1
 # Example 2: 
 # Rscript mo_calc_lds.R \
 #   --genotypes /groups/umcg-franke-scrna/tmp04/external_datasets/sc-eqtlgen-imputation-ref-hg38/ref_panel_QC/30x-GRCh38-EUR-norsid \
 #   --output_file /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/annotations/mo_qtl_variants_tested_ld/1000G_HC/eurpop/moresparse/mo_qtl_variants_tested_cpeaks_overlap_chr \
 #   --variant_list_file /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/annotations/mo_qtl_variants_tested_cpeaks_overlap.tsv.gz \
-#   --variant_list_column snp_id 
+#   --variant_list_column snp_id \
+#   --ld_cutoff 0.1
 #
 ############################################################################################################################
 
