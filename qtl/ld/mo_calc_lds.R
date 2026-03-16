@@ -2,17 +2,24 @@
 ############################################################################################################################
 # Authors: Roy Oelen
 # Name: mo_calc_lds.R
-# Function: 
+# Function: calulate pair-wise LD between SNPs in single variant list or LD between variants in list 1 and list 2. NOTE! NA ARE CODED AS HIGH NUMBER! 1+308
 # Example: 
 # Rscript mo_calc_lds.R \
 #   --genotypes /groups/umcg-franke-scrna/tmp04/external_datasets/sc-eqtlgen-imputation-ref-hg38/ref_panel_QC/30x-GRCh38-norsid \
-#   --output_file /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/GWAS_enrichment/GWAS_vars/immune-gwas-catalog-download-associations-alt-full-moldpairs \
+#   --output_file /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/GWAS_enrichment/GWAS_vars/moldpairs/1000G_HC/allpop/immune-gwas-catalog-download-associations-alt-full-moldpairs \
 #   --variant_list_file /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/annotations/mo_qtl_variants_tested_cpeaks_overlap.tsv.gz \
 #   --second_variant_list_file /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/GWAS_enrichment/GWAS_vars/immune-gwas-catalog-download-associations-alt-full-chromposrefalt.tsv.gz \ 
 #   --variant_list_column snp_id \
 #   --second_variant_list_column chromposaltref
+# Example 2: 
+# Rscript mo_calc_lds.R \
+#   --genotypes /groups/umcg-franke-scrna/tmp04/external_datasets/sc-eqtlgen-imputation-ref-hg38/ref_panel_QC/30x-GRCh38-EUR-norsid \
+#   --output_file /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/annotations/mo_qtl_variants_tested_ld/1000G_HC/eurpop/moresparse/mo_qtl_variants_tested_cpeaks_overlap_chr \
+#   --variant_list_file /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/annotations/mo_qtl_variants_tested_cpeaks_overlap.tsv.gz \
+#   --variant_list_column snp_id 
 #
 ############################################################################################################################
+
 
 ####################
 # libraries        #
