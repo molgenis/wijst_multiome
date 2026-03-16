@@ -22,6 +22,165 @@ library(stringr)
 # Functions        #
 ####################
 
+#' get a label dict that replaces the posix safe names into printable versions
+#' 
+#' @returns a label dict that replaces the posix safe names into printable versions
+#' label_dict_names <- get_label_dict()
+get_label_dict <- function() {
+  label_dict <- list()
+  label_dict[['CD4_T_cells']] <- 'CD4+ T cells'
+  label_dict[['CD8_T_cells']] <- 'CD8+ T cells'
+  label_dict[['CD4T']] <- 'CD4+ T'
+  label_dict[['CD8T']] <- 'CD8+ T'
+  label_dict[['CD4_T']] <- 'CD4+ T'
+  label_dict[['CD8_T']] <- 'CD8+ T'
+  label_dict[['Dendritic_cells']] <- 'Dendritic cells'
+  label_dict[['Endothelial_cells']] <- 'Endothelial cells'
+  label_dict[['Fibroblasts']] <- 'Fibroblasts'
+  label_dict[['Glia_cells']] <- 'Glia cells'
+  label_dict[['Mast_cells']] <- 'MAST cells'
+  label_dict[['Mature_absorptive_enterocytes']] <- 'Mature absorptive enterocytes'
+  label_dict[['Mature_secretory_enterocytes']] <- 'Mature secretory enterocytes'
+  label_dict[['Memory_B']] <- 'Memory B cells'
+  label_dict[['Monocytes']] <- 'Monocytes'
+  label_dict[['monocyte']] <- 'Monocyte'
+  label_dict[['Mono']] <- 'Monocyte'
+  label_dict[['Plasma_cells']] <- 'Plasma cells'
+  label_dict[['Stem_cells']] <- 'Stem cells'
+  label_dict[['Stromal_cells']] <- 'Stromal cells'
+  label_dict[['T_others']] <- 'other T cells'
+  label_dict[['Transit_amplifying_cells']] <- 'Transit amplifying cells'
+  label_dict[['AI']] <- 'Actively Inflamed'
+  label_dict[['NI']] <- 'Non-Inflamed'
+  return(label_dict)
+}
+
+
+rename_labels <- function(vector_to_rename) {
+  # get the labels that are present
+  label_renaming <- get_label_dict()
+  # now check which labels we are missing
+  missing_renames <- setdiff(unique(vector_to_rename), names(label_renaming))
+  # add those renames as not being renames
+  for (missing_rename in missing_renames) {
+    label_renaming[[missing_rename]] <- missing_rename
+  }
+  # now replace each value with the rename
+  renamed_vector <- as.vector(unlist(label_renaming[vector_to_rename]))
+  # and return that
+  return(renamed_vector)
+}
+
+
+remap_with_label_dict <- function(vector_of_names) {
+  # get the label dict
+  relabels <- get_label_dict()
+  # get the labels available for renaming
+  labels_available <- names(relabels)
+  # get the ones we cant remap
+  unmappable <- setdiff(unique(vector_of_names), labels_available)
+  # report on those
+  if (length(unmappable) > 0) {
+    print(paste('cannot remap the following names, they will be returned unchanged:', paste(unmappable, collapse = ',')))
+    # and put those in our remapping list as their originals
+    relabels[unmappable] <- unmappable
+  }
+  # now actually do the remapping
+  remapped <- as.vector(unlist(relabels[vector_of_names]))
+  return(remapped)
+}
+
+
+get_color_coding_dict <- function() {
+  # medhigh
+  color_coding_dict <- list()
+  color_coding_dict[["B"]] <- "#71BC4B"
+  #color_coding_dict[['CD4_T_cells']] <- '#7FC97F'
+  color_coding_dict[['CD4_T_cells']] <- '#153057'
+  color_coding_dict[['CD4T']] <- '#153057'
+  #color_coding_dict[['CD8_T_cells']] <- '#BEAED4'
+  color_coding_dict[['CD8_T_cells']] <- '#009DDB'
+  color_coding_dict[['CD8T']] <- '#009DDB'
+  #color_coding_dict[['Dendritic_cells']] <- '#FDC086'
+  color_coding_dict[['Dendritic_cells']] <- '#965EC8'
+  color_coding_dict[['DC']] <- '#965EC8'
+  color_coding_dict[['Endothelial_cells']] <- '#FFFFB3'
+  color_coding_dict[['Fibroblasts']] <- '#386CB0'
+  color_coding_dict[['Glia_cells']] <- '#F0027F'
+  color_coding_dict[['Mast_cells']] <- '#BF5B17'
+  color_coding_dict[['Mature_absorptive_enterocytes']] <- '#A6CEE3'
+  color_coding_dict[['Mature_secretory_enterocytes']] <- '#1B9E77'
+  color_coding_dict[['Memory_B']] <- '#D95F02'
+  color_coding_dict[['Microfold_cell']] <- '#BEAED4'
+  #color_coding_dict[['Monocytes']] <- '#7570B3'
+  color_coding_dict[['Monocyte']] <- '#EDBA1B'
+  color_coding_dict[['Naive_B_cells']] <- '#FDC086'
+  color_coding_dict[['NK']] <- '#E64B50'
+  #color_coding_dict[['Plasma_cells']] <- '#E7298A'
+  color_coding_dict[['Plasma_cells']] <- '#DB8E00'
+  color_coding_dict[['Stem_cells']] <- '#66A61E'
+  color_coding_dict[['Stromal_cells']] <- '#8DD3C7'
+  #color_coding_dict[['T_others']] <- '#A6761D'
+  color_coding_dict[['T_others']] <- '#FF63B6'
+  color_coding_dict[['T_other']] <- '#FF63B6'
+  color_coding_dict[['Transit_amplifying_cells']] <- '#FF7F00'
+  color_coding_dict[['disconcordant']] <- 'gray'
+  #color_coding_dict[['CD4+ T cells']] <- '#7FC97F'
+  color_coding_dict[['CD4+ T cells']] <- '#153057'
+  color_coding_dict[['CD4+ T']] <- '#153057'
+  #color_coding_dict[['CD8+ T cells']] <- '#BEAED4'
+  color_coding_dict[['CD8+ T cells']] <- '#009DDB'
+  color_coding_dict[['CD8+ T']] <- '#009DDB'
+  #color_coding_dict[['Dendritic cells']] <- '#FDC086'
+  color_coding_dict[['Dendritic cells']] <- '#965EC8'
+  color_coding_dict[['Endothelial cells']] <- '#FFFFB3'
+  color_coding_dict[['Endothelial\ncells']] <- '#FFFFB3'
+  color_coding_dict[['Fibroblasts']] <- '#386CB0'
+  color_coding_dict[['Glia cells']] <- '#F0027F'
+  color_coding_dict[['MAST cells']] <- '#BF5B17'
+  color_coding_dict[['Mature absorptive enterocytes']] <- '#A6CEE3'
+  color_coding_dict[['Mature\nabsorptive\nenterocytes']] <- '#A6CEE3'
+  color_coding_dict[['Mature secretory enterocytes']] <- '#1B9E77'
+  color_coding_dict[['Mature secretory\nenterocytes']] <- '#1B9E77'
+  color_coding_dict[['Memory B cells']] <- '#D95F02'
+  #color_coding_dict[['Monocytes']] <- '#7570B3'
+  color_coding_dict[['Microfold cells']] <- '#BEAED4'
+  color_coding_dict[['Monocytes']] <- '#EDBA1B'
+  color_coding_dict[['Naive B cells']] <- '#FDC086'
+  #color_coding_dict[['Plasma cells']] <- '#E7298A'
+  color_coding_dict[['Plasma cells']] <- '#DB8E00'
+  color_coding_dict[['Plasmablast']] <- '#DB8E00'
+  color_coding_dict[['plasmablast']] <- '#DB8E00'
+  color_coding_dict[['Stem cells']] <- '#66A61E'
+  color_coding_dict[['Stromal cells']] <- '#8DD3C7'
+  #color_coding_dict[['other T cells']] <- '#A6761D'
+  color_coding_dict[['other T cells']] <- '#FF63B6'
+  color_coding_dict[['Transit amplifying cells']] <- '#FF7F00'
+  color_coding_dict[['Transit\namplifying cells']] <- '#FF7F00'
+  color_coding_dict[['disconcordant']] <- 'gray'
+  # up and down regulation will be added to, we need a whitening percentage
+  pct_whitening <- 40
+  # then we will check each cell type
+  for (cell_type in names(color_coding_dict)) {
+    # the up color is the same as the regular one
+    color_coding_dict[[paste(cell_type, 'up')]] <- color_coding_dict[[cell_type]]
+    # but the down one will have a more faded colour
+    color_coding_dict[[paste(cell_type, 'down')]] <- colorRampPalette(c(color_coding_dict[[cell_type]], "white"))(100)[pct_whitening]
+    # we'll do something similiar when we have multiple conditions
+    color_coding_dict[[paste(cell_type, 'combined')]] <- color_coding_dict[[cell_type]]
+    color_coding_dict[[paste(cell_type, 'UT')]] <- colorRampPalette(c(color_coding_dict[[cell_type]], "white"))(100)[pct_whitening]
+    color_coding_dict[[paste(cell_type, '24hCA')]] <- colorRampPalette(c(color_coding_dict[[cell_type]], "black"))(100)[pct_whitening]
+  }
+  # general
+  color_coding_dict[['AI']] <- 'darkblue'
+  color_coding_dict[['NI']] <- 'darkred'
+  color_coding_dict[['Actively Inflamed']] <- 'darkblue'
+  color_coding_dict[['Non-Inflamed']] <- 'darkred'
+  return(color_coding_dict)
+}
+
+
+
 
 ####################
 # Main code        #
@@ -271,3 +430,98 @@ ggplot(data = auc_cors_notop_all, mapping = aes(x = regulon, y = cor_included_no
   xlab('eregulon name') + 
   ylab('Correlation of AUCell values before and after top TF-i-eQTL gene') + 
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# we'll do some things related to metadata
+metadata_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/mo_celllevel_metadata_nounannotated.tsv.gz'
+metadata <- fread(metadata_loc, header = T, sep = '\t')
+# add nicer cell type name
+metadata[['cell_type_nice']] <- rename_labels(as.character(metadata[['celltype_imputed_lowerres']]))
+# add a new column of ct to stim
+metadata[['cell_type_stim']] <- paste(as.character(metadata[['cell_type_nice']]), as.character(metadata[['condition_final']]))
+# subset to some columns, so we can use those to create an ordering
+ct_to_stim <- unique(metadata[, c('condition_final', 'cell_type_nice', 'cell_type_stim')])
+# order by condition in the way that we like
+ct_to_stim[['condition_final']] <- factor(ct_to_stim[['condition_final']], levels = c('UT', '24hCA'))
+# now order the cell types and conditions, having made sure that UT is before 24hCA
+ct_to_stim <- ct_to_stim[order(ct_to_stim[['cell_type_nice']], ct_to_stim[['condition_final']]), ]
+# and make the cell type stim order like this in the full metadata
+metadata[['cell_type_stim']] <- factor(metadata[['cell_type_stim']], levels = ct_to_stim[['cell_type_stim']])
+# subset the metadata to the AUC data we have
+metadata_auc_barcodes <- intersect(barcodes, metadata[['barcode_lane']])
+metadata_to_auc <- metadata[match(metadata_auc_barcodes, metadata[['barcode_lane']]), ]
+# and the AUC data as well
+auc_to_metadata <- auc_mtx[, metadata_auc_barcodes]
+# get a list of eregulons to plot
+eregs_to_plot <- c('EBF1_direct_+/+_(142g)', 'PAX5_direct_+/+_(115g)')
+# store the plots
+ereg_plots <- list()
+# do each ereg
+for (ereg in eregs_to_plot) {
+  # add this ereg the metadata
+  metadata_to_auc[['tf_activity']] <- as.vector(unlist(auc_to_metadata[ereg, ]))
+  # and plot
+  p_ereg <- ggplot(data = metadata_to_auc, mapping = aes(x = cell_type_stim, y = tf_activity, fill = cell_type_stim)) + 
+    geom_boxplot(outlier.shape = NA) + 
+    # and add jitter
+    geom_jitter(size = 0.5, alpha = 0.1) +
+    # and labels
+    xlab('Cell type and condition') + 
+    ylab(paste(ereg, 'activity')) + 
+    theme(legend.position = 'none') +
+    theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) + 
+    scale_fill_manual(values = get_color_coding_dict())
+  # put in list
+  ereg_plots[[ereg]] <- p_ereg
+}
+
+# remove the top gene from the eregulon lists
+ereg_to_genes_iegenes <- list()
+for (ereg in names(ereg_to_genes)) {
+  # check if there is an interaction
+  if (ereg %in% sc_tf_ieqtl_sig[['region']]) {
+    # get the genes
+    genes_ereg <- ereg_to_genes[[ereg]]
+    # get the genes
+    tf_i_egenes <- unlist(as.vector(sc_tf_ieqtl_sig_top_tf_per_gene[sc_tf_ieqtl_sig_top_tf_per_gene[['region']] == ereg, ][['gene']]))
+    # check each gene
+    for (tf_i_egene in tf_i_egenes) {
+      # and thate one
+      genes_ereg_no_tf_i_egene <- setdiff(genes_ereg, tf_i_egene)
+      # put in the list
+      ereg_to_genes_iegenes[[paste(ereg, tf_i_egene, sep = '_')]] <- genes_ereg_no_tf_i_egene
+    }
+  }
+}
+# recalculate enrichment scores
+cells_AUC_notop <- AUCell_run(expr_mat_included, ereg_to_genes_iegenes)
+# extract the auc matrix
+cells_AUC_notop_mtx <- getAUC(cells_AUC_notop)
+# as matrix
+cells_AUC_notop_mtx <- as.matrix(cells_AUC_notop_mtx)
+# extract dimension names
+cells_AUC_notop_eregs <- rownames(cells_AUC_notop_mtx)
+cells_AUC_notop_barcodes <- colnames(cells_AUC_notop_mtx)
+# make into data.table
+cells_AUC_notop_dt <- data.table(cells_AUC_notop_mtx)
+# but add the eregulon as the first column
+cells_AUC_notop_dt <- cbind(data.table('eregulon' = cells_AUC_notop_eregs), cells_AUC_notop_dt)
+# set export location
+cells_AUC_notop_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/mo_tf_interaction_eregulon_gene_removed_auc_all_nonsparse_transposed.tsv.gz'
+# write the output
+write.table(cells_AUC_notop_dt, gzfile(cells_AUC_notop_loc), row.names = F, col.names = T, sep = '\t', quote = F)
+# with a checksum
+mdfiver::create_sha256_for_file(cells_AUC_notop_loc)
+
+# make a new confinement file
+sc_tf_ieqtl_sig_confinement <- sc_tf_ieqtl_sig[, c('variant', 'region', 'gene')]
+# and replace the region with the eregulon name and the gene, as we generated for the new AUC matrix
+sc_tf_ieqtl_sig_confinement[['region']] <- paste(sc_tf_ieqtl_sig[['region']], sc_tf_ieqtl_sig[['gene']], sep = '_')
+# update the column names to actually reflect what we do
+colnames(sc_tf_ieqtl_sig_confinement) <- c('variant', 'eregulon', 'gene')
+# set output loc
+sc_tf_ieqtl_sig_confinement_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/mo_var_tf_gene_confinement_inclcaqtls_significant.tsv.gz'
+# write output
+write.table(sc_tf_ieqtl_sig_confinement, gzfile(sc_tf_ieqtl_sig_confinement_loc), row.names = F, col.names = T, sep = '\t', quote = F)
+# with a checksum
+mdfiver::create_sha256_for_file(sc_tf_ieqtl_sig_confinement_loc)
