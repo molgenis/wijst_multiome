@@ -528,6 +528,68 @@ plot_concordanace <- function(qtl_effect_table, ca_effect_column='ca_effect', e_
   # 5,5
 }
 
+add_significant_celltypes_as_strings <- function(overlap_table, variant1_col='hit1', variant2_col='hit2', trait1_col='trait1', trait2_col='trait2', cell_type_column='cell_type') {
+  # we'll store the cell types in a list
+  overlap_cts_per_overlap <- list()
+  # make into dataframe
+  overlap_table_df <- data.frame(overlap_table)
+  # add column that is combination of these
+  overlap_table_df[['full_overlap']] <- paste(overlap_table_df[[variant1_col]], overlap_table_df[[variant2_col]], overlap_table_df[[trait1_col]], overlap_table_df[[trait2_col]])
+  # get the unique overlaps
+  overlaps_unique <- unique(overlap_table_df[['full_overlap']])
+  # get how many
+  overlaps_unique_n <- length(overlaps_unique)
+  # create progress bar for this
+  progressbar <- txtProgressBar(min = 0, max = overlaps_unique_n, style = 3)
+  # check each of these entries
+  for (overlap_i in 1 : overlaps_unique_n) {
+    # update progress bar
+    setTxtProgressBar(progressbar, overlap_i)
+    # extract overlap
+    overlap <- overlaps_unique[overlap_i]
+    # subset to this overlap
+    overlap_this <- overlap_table_df[!is.na(overlap_table_df[['full_overlap']]) & overlap_table_df[['full_overlap']] == overlap, ]
+    # extract the cell types
+    overlap_cts_this <- unique(overlap_this[[cell_type_column]])
+    # order them
+    overlap_cts_this <- overlap_cts_this[order(overlap_cts_this)]
+    # make into string
+    overlap_cts_string <- paste(as.character(overlap_cts_this), collapse = ',')
+    # put into list
+    overlap_cts_per_overlap[[overlap]] <- data.frame('overlap' = c(overlap), 'other_ct' = c(overlap_cts_string))
+  }
+  close(progressbar)
+  # merge tables
+  overlap_cts_all_overlaps <- do.call('rbind', overlap_cts_per_overlap)
+  # now add this to the original table
+  overlap_table[['other_ct']] <- overlap_cts_all_overlaps[match(overlap_table_df[['full_overlap']], overlap_cts_all_overlaps[['overlap']]), ][['other_ct']]
+  return(overlap_table)
+}
+
+
+
+add_significant_celltypes_as_strings_vectorised <- function(overlap_table, variant1_col='hit1', variant2_col='hit2', trait1_col='trait1', trait2_col='trait2', cell_type_column='cell_type') {
+  # convert to dataframe format
+  overlap_table_df <- data.frame(overlap_table)
+  # add overlap 
+  overlap_table_df[['full_overlap']] <- paste(overlap_table_df[[variant1_col]], overlap_table_df[[variant2_col]],
+                                         overlap_table_df[[trait1_col]], overlap_table_df[[trait2_col]])
+  
+  # split into groups
+  split_cts <- split(overlap_table_df[[cell_type_column]], overlap_table_df[['full_overlap']])
+  
+  # summarise to string per group
+  ct_strings <- sapply(split_cts, function(x) {
+    ct_string <- paste(sort(unique(x)), collapse = ",")
+    return(ct_string)
+  })
+  
+  # map back
+  overlap_table_df[['other_ct']] <- ct_strings[overlap_table_df[['full_overlap']]]
+  # back to data table format
+  return(data.table(overlap_table_df))
+}
+
 
 ####################
 # Main Code        #
@@ -764,6 +826,45 @@ overlap_complete <- merge(overlap_complete, unique(scenic_output[, c('r2g', 'TF'
 # check if the directions are concordant
 overlap_complete[['qtl_scenic_concordant']] <- sign(overlap_complete[['e_effect']] * overlap_complete[['ca_effect']]) == sign(overlap_complete[['rho_R2G']])
 
+
+# rename some columns
+colnames(overlap_complete) <- gsub('atac_chr_hg38', 'atac_chr', colnames(overlap_complete))
+colnames(overlap_complete) <- gsub('atac_start_hg38', 'atac_start', colnames(overlap_complete))
+colnames(overlap_complete) <- gsub('atac_end_hg38', 'atac_end', colnames(overlap_complete))
+colnames(overlap_complete) <- gsub('^distance$', 'atac_gene_distance', colnames(overlap_complete))
+
+# gwas data location
+gwas_catalogue_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/GWAS_enrichment/GWAS_vars/immune-gwas-catalog-download-associations-alt-full-chromposrefalt.tsv.gz'
+gwas_catalogue <- fread(gwas_catalogue_loc, header = T, sep = '\t')
+# keep only what is GWS
+gwas_catalogue[['P-VALUE']] <- gsub(',', '.', gwas_catalogue[['P-VALUE']])
+gwas_catalogue[['P-VALUE']] <- gsub('E', 'e', gwas_catalogue[['P-VALUE']])
+gwas_catalogue[['P-VALUE']] <- as.numeric(gwas_catalogue[['P-VALUE']])
+gwas_catalogue <- gwas_catalogue[gwas_catalogue[['P-VALUE']] < 5e10-8, ]
+# get the ld data
+ld_data_gwas_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/GWAS_enrichment/GWAS_vars/moldpairs/1000G_HC/eurpop/immune-gwas-catalog-download-associations-alt-full-moldpairs_ld_pairs.tsv.gz'
+ld_data_gwas <- fread(ld_data_gwas_loc, header = T, sep = '\t')
+# keep only where one of the ld variants is the GWAS variant
+ld_data_gwas <- ld_data_gwas[ld_data_gwas[['ld_variant']] %in% gwas_catalogue[['chromposaltref']], ]
+# and where the index variant is one of our QTL variants
+ld_data_gwas <- ld_data_gwas[ld_data_gwas[['index_variant']] %in% c(overlap_complete[['hit1']], overlap_complete[['hit2']]), ]
+# add info on whether the variant was in the gwas
+overlap_complete[['hit1_in_imm_gwas']] <- overlap_complete[['hit1']] %in% gwas_catalogue[['chromposaltref']]
+overlap_complete[['hit2_in_imm_gwas']] <- overlap_complete[['hit2']] %in% gwas_catalogue[['chromposaltref']]
+# or had an LD variant
+overlap_complete[['hit1_ld_imm_gwas']] <- overlap_complete[['hit1']] %in% ld_data_gwas[['ld_variant']]
+overlap_complete[['hit2_ld_imm_gwas']] <- overlap_complete[['hit2']] %in% ld_data_gwas[['ld_variant']]
+# and if either
+overlap_complete[['hit1_imm_gwas']] <- overlap_complete[['hit1_in_imm_gwas']] | overlap_complete[['hit1_ld_imm_gwas']]
+overlap_complete[['hit2_imm_gwas']] <- overlap_complete[['hit2_in_imm_gwas']] | overlap_complete[['hit2_ld_imm_gwas']]
+
+# add which cell types are present
+overlap_complete <- add_significant_celltypes_as_strings_vectorised(overlap_complete)
+
+# add the Z score
+overlap_complete[['ca_z']] <- overlap_complete[['ca_effect']] / overlap_complete[['ca_effect_se']]
+overlap_complete[['e_z']] <- overlap_complete[['e_effect']] / overlap_complete[['e_effect_se']]
+
 # write the result
 overlap_complete_wmetadata_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/colocalization/eqtl_caqtl/ut_and_24hca_significant/mo_eqtl_cqtl_coloc_and_overlapping_wmetadata.tsv.gz'
 write.table(overlap_complete, gzfile(overlap_complete_wmetadata_loc), row.names = F, col.names = T, sep = '\t', quote = F)
@@ -771,22 +872,20 @@ write.table(overlap_complete, gzfile(overlap_complete_wmetadata_loc), row.names 
 mdfiver::create_sha256_for_file(overlap_complete_wmetadata_loc)
 
 # also keep one for the supplementary information
-supp_colnames <- setdiff(colnames(overlap_complete), c('atac_housekeeping', 'atac_screen_all', 'TF', 'eRegulon_name', 'rho_R2G', 'qtl_scenic_concordant'))
+supp_colnames <- setdiff(colnames(overlap_complete), c('atac_housekeeping', 'atac_screen_all', 'TF', 'eRegulon_name', 'rho_R2G', 'qtl_scenic_concordant', 'full_overlap'))
 overlap_complete_supp <- overlap_complete[, ..supp_colnames, drop = F]
-# rename some columns
-colnames(overlap_complete_supp) <- gsub('atac_chr_hg38', 'atac_chr', colnames(overlap_complete_supp))
-colnames(overlap_complete_supp) <- gsub('atac_start_hg38', 'atac_start', colnames(overlap_complete_supp))
-colnames(overlap_complete_supp) <- gsub('atac_end_hg38', 'atac_end', colnames(overlap_complete_supp))
-colnames(overlap_complete_supp) <- gsub('^distance$', 'atac_gene_distance', colnames(overlap_complete_supp))
 # write the result
 overlap_complete_supp_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/colocalization/eqtl_caqtl/ut_and_24hca_significant/mo_eqtl_cqtl_coloc_and_overlapping_supp.tsv.gz'
 write.table(overlap_complete_supp, gzfile(overlap_complete_supp_loc), row.names = F, col.names = T, sep = '\t', quote = F)
 # with a checksum
 mdfiver::create_sha256_for_file(overlap_complete_supp_loc)
-
+# reload the file
+overlap_complete_supp <- fread(overlap_complete_supp_loc, header = T, sep = '\t')
 
 # keep what Jelmer wanted
-overlap_complete_j <- overlap_complete[overlap_complete[['distance']] > 0 & overlap_complete[['variant_to_atac_distance']] == 0, ]
+overlap_complete_j <- overlap_complete[overlap_complete[['atac_gene_distance']] > 0 & overlap_complete[['variant_to_atac_distance']] == 0, ]
+# remove column we don't need
+overlap_complete_j[['full_overlap']] <- NULL
 overlap_complete_wmetadata_j_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/colocalization/eqtl_caqtl/ut_and_24hca_significant/mo_eqtl_cqtl_coloc_and_overlapping_wmetadata_jelmer.tsv.gz'
 write.table(overlap_complete_j, gzfile(overlap_complete_wmetadata_j_loc), row.names = F, col.names = T, sep = '\t', quote = F)
 mdfiver::create_sha256_for_file(overlap_complete_wmetadata_j_loc)
@@ -794,9 +893,6 @@ mdfiver::create_sha256_for_file(overlap_complete_wmetadata_j_loc)
 # read the data again
 overlap_complete <- fread(overlap_complete_wmetadata_loc, header = T, sep = '\t')
 
-# add the Z score
-overlap_complete[['ca_z']] <- overlap_complete[['ca_effect']] / overlap_complete[['ca_effect_se']]
-overlap_complete[['e_z']] <- overlap_complete[['e_effect']] / overlap_complete[['e_effect_se']]
 # sort again
 overlap_complete <- overlap_complete[order(abs(overlap_complete[['e_z']]), abs(overlap_complete[['ca_z']]), decreasing = T), ]
 # do each cell type
