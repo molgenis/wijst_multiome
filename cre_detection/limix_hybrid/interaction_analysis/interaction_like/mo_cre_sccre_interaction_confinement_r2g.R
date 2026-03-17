@@ -516,6 +516,96 @@ get_top_effect_per_cs <- function(cs_output_per_ct, feature_column='feature_id',
   return(var_feature_all)
 }
 
+
+add_associated_region <- function(eqtl_outputs, scenic_output, eqtl_gene_column='feature_id', scenic_gene_column='Gene', scenic_region_column='Region') {
+  # keep a list per cell type
+  cs_output_per_ct_region <- list()
+  # check each cell type
+  for (cell_type in names(eqtl_outputs)) {
+    # extract for cell type
+    cs_output_ct <- eqtl_outputs[[cell_type]]
+    # subset scenic
+    scenic_relevant <- scenic_output[, c(..scenic_gene_column, ..scenic_region_column)]
+    # with standardised columns
+    colnames(scenic_relevant) <- c('feature', 'region')
+    # add associated region to gene
+    cs_output_ct <- merge(
+      cs_output_ct, 
+      scenic_relevant, 
+      by.x = eqtl_gene_column, 
+      by.y = 'feature'
+    )
+    # put back in the list
+    cs_output_per_ct_region[[cell_type]] <- cs_output_ct
+  }
+  return(cs_output_per_ct_region)
+}
+
+
+add_associated_caqtls <- function(eqtl_outputs, caqtl_outputs, eqtl_region_column='region', caqtl_region_column='feature_id', caqtl_variant_column='snp_id') {
+  # keep a list per cell type
+  cs_output_per_ct_caqtl_variant <- list()
+  # check each cell type
+  for (cell_type in names(cs_output_per_ct)) {
+    # extract for cell type
+    cs_output_ct_eqtl <- cs_output_per_ct[[cell_type]]
+    # keep only ones that have a region associated
+    cs_output_ct_eqtl <- cs_output_ct_eqtl[!is.na(cs_output_ct_eqtl[[eqtl_region_column]]), ]
+    # subset the caqtl data for the relevant things
+    cs_output_ct_caqtl <- caqtl_outputs[[cell_type]][, c(..caqtl_region_column, ..caqtl_variant_column)]
+    # set columns
+    colnames(cs_output_ct_caqtl) <- c('region', 'caqtl_variant')
+    # now merge
+    cs_output_ct_eqtl <- merge(cs_output_ct_eqtl, 
+                               cs_output_ct_caqtl, 
+                               by.x = eqtl_region_column, 
+                               by.y = 'region', 
+                               all.x = T)
+    # add back to list
+    cs_output_per_ct_caqtl_variant[[cell_type]] <- cs_output_ct_eqtl
+  }
+  return(cs_output_per_ct_caqtl_variant)
+}
+
+
+get_closest_flanks <- function(position_table, left_flank_column1, right_flank_column1, left_flank_column2, right_flank_column2) {
+  # get the distance between left flanks
+  dist_left_flank1_to_left_flank2 <- position_table[[left_flank_column1]] - position_table[[left_flank_column2]]
+  # distance between the right flanks
+  dist_right_flank1_to_right_flank2 <- position_table[[right_flank_column1]] - position_table[[right_flank_column2]]
+  # distance between left flank 1 and right flank 2
+  dist_left_flank1_to_right_flank2 <- position_table[[left_flank_column1]] - position_table[[right_flank_column2]]
+  # distance between right flank 1 and left flank 2
+  dist_right_flank1_to_left_flank2 <- position_table[[right_flank_column1]] - position_table[[left_flank_column2]]
+  # put in a table for convenience sake
+  distances_tbl <- data.table(
+    'lf1_to_lf2' = dist_left_flank1_to_left_flank2, 
+    'rf1_to_rf2' = dist_right_flank1_to_right_flank2, 
+    'lf1_to_rf2' = dist_left_flank1_to_right_flank2, 
+    'rf1_to_lf2' = dist_right_flank1_to_left_flank2
+  )
+  # add the minimum absolute distance
+  distances_tbl[['min_dist']] <- apply(distances_tbl, 1, function(x) {
+    return(min(abs(x)))
+  })
+  # but set this to zero if any of the flanks end in the bodies
+  #              -----
+  #                 ++++
+  distances_tbl[(distances_tbl[['lf1_to_lf2']] < 0 & distances_tbl[['lf1_to_rf2']] > 0) |
+                  #                   ----
+                #                 ++++
+                (distances_tbl[['rf1_to_lf2']] > 0 & distances_tbl[['lf1_to_rf2']] < 0) |
+                  #                   ----
+                #                 +++++++++
+                (distances_tbl[['lf1_to_lf2']] > 0 & distances_tbl[['rf1_to_rf2']] < 0) |
+                  #                 ---------
+                #                   ++++
+                (distances_tbl[['lf1_to_lf2']] < 0 & distances_tbl[['rf1_to_rf2']] > 0)
+                , 'min_dist'] <- 0
+  return(distances_tbl)
+}
+
+
 ####################
 # Settings         #
 ####################
@@ -531,29 +621,33 @@ debug <- F
 ####################
 
 # location of the QTL outputs
-eqtl_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/finemapping/eqtl/sc-eqtlgen/combined_with_qtl/combined/L1/'
+eqtl_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/finemapping/eqtl/sc-eqtlgen/combined_with_qtl/combined/L1/'
 # read the eQTL output
 eqtl_outputs <- get_output_per_celltype_limix(eqtl_output_loc)
 # get the top effects per credible set
 eqtl_top_var_feature_per_cs <- get_top_effect_per_cs(eqtl_outputs)
 
 # location of the QTL outputs
-caqtl_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/finemapping/caqtl/sc-eqtlgen/combined_with_qtl/combined/L1/'
+caqtl_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/finemapping/caqtl/sc-eqtlgen/combined_with_qtl/combined/L1/'
 # read the eQTL output
 caqtl_outputs <- get_output_per_celltype_limix(caqtl_output_loc)
 # get the top effects per credible set
 caqtl_top_var_feature_per_cs <- get_top_effect_per_cs(caqtl_outputs)
 
 # the location of SCENIC output
-scenic_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eRegulon_both.tsv.gz'
+scenic_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eRegulon_both.tsv.gz'
 # read the scenic output
 scenic_output <- fread(scenic_output_loc, header = T, sep = '\t')
-# order by the extended
-scenic_output <- scenic_output[order(scenic_output[['is_extended']]), ]
-# and keep only what is non-extended if it was both extended and non-extended
-scenic_output <- scenic_output[!duplicated(paste(scenic_output[['Region']], scenic_output[['Gene']], scenic_output[['TF']])), ]
 # remove what SCENIC thinks is less likely
 scenic_output <- scenic_output[scenic_output[['Gene_signature_direction']] %in% c('+/+', '-/+'), ]
+# order by the extended
+scenic_output <- scenic_output[order(scenic_output[['is_extended']]), ]
+# get which are non-extended if it was both extended and non-extended
+scenic_eregs <- unique(scenic_output[, c('TF', 'Gene_signature_direction', 'Gene_signature_name', 'source')])
+scenic_eregs <-scenic_eregs[order(scenic_eregs[['source']]), ]
+scenic_eregs_to_keep <- scenic_eregs[!duplicated(paste(scenic_eregs[['TF']], scenic_eregs[['Gene_signature_direction']])), ]
+# then use that to filer
+scenic_output <- scenic_output[scenic_output[['Gene_signature_name']] %in% scenic_eregs_to_keep[['Gene_signature_name']], ]
 # rename the regions
 scenic_output[['region_cpeaks']] <- gsub(':', '-', scenic_output[['Region']])
 
@@ -580,6 +674,69 @@ qtl_top_var_feature_per_cs_r_all_both <- unique(rbind(
 qtl_top_var_feature_per_cs_r_all_both <- qtl_top_var_feature_per_cs_r_all_both[order(qtl_top_var_feature_per_cs_r_all_both[['variant']], qtl_top_var_feature_per_cs_r_all_both[['region']], qtl_top_var_feature_per_cs_r_all_both[['feature']]), ]
 
 # write this file
-r_to_gene_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/region_interaction/mo_var_region_gene_confinement_inclcaqtls.tsv.gz'
+r_to_gene_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/region_interaction/mo_var_region_gene_confinement_inclcaqtls.tsv.gz'
 write.table(qtl_top_var_feature_per_cs_r_all_both, gzfile(r_to_gene_output_loc), row.names = F, col.names = T, sep = '\t')
 mdfiver::create_sha256_for_file(r_to_gene_output_loc)
+
+# add scenic region info
+eqtl_outputs_scenic_regions <- add_associated_region(eqtl_outputs, scenic_output, scenic_region_column = 'region_cpeaks')
+# read the cpeaks annotation
+cpeaks_anno_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/cPeaks/cPeaks_wscreenv4.tsv.gz'
+cpeaks_anno <- fread(cpeaks_anno_loc, header = T, sep = '\t')
+# add the Signac style name
+cpeaks_anno[['signac_hg38']] <- paste(cpeaks_anno[['chr_hg38']], cpeaks_anno[['start_hg38']], cpeaks_anno[['end_hg38']], sep = '-')
+# as well as the SCENIC+ style name
+cpeaks_anno[['scenic_hg38']] <- paste0(cpeaks_anno[['chr_hg38']], ':', cpeaks_anno[['start_hg38']], '-', cpeaks_anno[['end_hg38']])
+# set names
+colnames(cpeaks_anno) <- paste('atac', colnames(cpeaks_anno), sep = '_')
+# store filtered regions
+eqtl_outputs_scenic_regions_filtered <- list()
+# the region location for each cpeaks region
+for (ct in names(eqtl_outputs_scenic_regions)) {
+  # get the table
+  eqtl_outputs_scenic_regions_ct <- eqtl_outputs_scenic_regions[[ct]]
+  # add to the overlap table
+  eqtl_outputs_scenic_regions_ct <- cbind(eqtl_outputs_scenic_regions_ct, cpeaks_anno[match(eqtl_outputs_scenic_regions_ct[['region']], cpeaks_anno[['atac_signac_hg38']]), c('atac_chr_hg38', 'atac_start_hg38', 'atac_end_hg38', 'atac_housekeeping', 'atac_screen_all')])
+  # get the distances
+  eqtl_outputs_scenic_regions_ct_gene_distances <- get_closest_flanks(eqtl_outputs_scenic_regions_ct, 'atac_start_hg38', 'atac_end_hg38', 'feature_start', 'feature_end')
+  # add that to the original table
+  eqtl_outputs_scenic_regions_ct[['region_gene_distance']] <- eqtl_outputs_scenic_regions_ct_gene_distances[['min_dist']]
+  # get the distances
+  eqtl_outputs_scenic_regions_ct_esnp_distances <- get_closest_flanks(eqtl_outputs_scenic_regions_ct, 'atac_start_hg38', 'atac_end_hg38', 'snp_position', 'snp_position')
+  # add that to the original table
+  eqtl_outputs_scenic_regions_ct[['region_esnp_distance']] <- eqtl_outputs_scenic_regions_ct_esnp_distances[['min_dist']]
+  # now keep only where the variant is in the chromatin region, and the chromatin region does not overlap the gene
+  eqtl_outputs_scenic_regions_ct <- eqtl_outputs_scenic_regions_ct[
+    !is.na(eqtl_outputs_scenic_regions_ct[['region_gene_distance']]) &
+    !is.na(eqtl_outputs_scenic_regions_ct[['region_esnp_distance']]) &
+    eqtl_outputs_scenic_regions_ct[['region_gene_distance']] > 0 &
+    eqtl_outputs_scenic_regions_ct[['region_esnp_distance']] == 0,  
+  ]
+  # put that back into the list
+  eqtl_outputs_scenic_regions_filtered[[ct]] <- eqtl_outputs_scenic_regions_ct
+}
+# get the top effects per credible set again, after filtering
+eqtl_top_var_feature_per_cs_filtered <- get_top_effect_per_cs(eqtl_outputs_scenic_regions_filtered)
+# merge the output
+eqtl_outputs_scenic_regions_filtered_merged <- rbindlist(eqtl_outputs_scenic_regions_filtered)
+# and add the region to the top effects
+eqtl_top_var_feature_per_cs_filtered[['region']] <- eqtl_outputs_scenic_regions_filtered_merged[
+  match(paste(eqtl_top_var_feature_per_cs_filtered[['variant']], eqtl_top_var_feature_per_cs_filtered[['feature']]), 
+        paste(eqtl_outputs_scenic_regions_filtered_merged[['snp_id']], eqtl_outputs_scenic_regions_filtered_merged[['feature_id']])
+  ), 
+][['region']]
+# keep across all cell types
+eqtl_top_var_feature_per_cs_filtered_r_all <- unique(eqtl_top_var_feature_per_cs_filtered[, c('variant', 'region', 'feature')])
+# set column names
+colnames(eqtl_top_var_feature_per_cs_filtered_r_all) <- c('variant', 'region', 'feature')
+# merge the gene-TF results from the eQTLs and caQTLs
+qtl_top_var_feature_per_cs_r_all_filtered_both <- unique(rbind(
+  eqtl_top_var_feature_per_cs_filtered_r_all, 
+  caqtl_top_var_feature_per_cs_r_all
+))
+# sort to make comparisons easier
+qtl_top_var_feature_per_cs_r_all_filtered_both <- qtl_top_var_feature_per_cs_r_all_filtered_both[order(qtl_top_var_feature_per_cs_r_all_filtered_both[['variant']], qtl_top_var_feature_per_cs_r_all_filtered_both[['region']], qtl_top_var_feature_per_cs_r_all_filtered_both[['feature']]), ]
+# write this file
+r_to_gene_filtered_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/region_interaction/mo_var_region_gene_confinement_inclcaqtls_varinregion.tsv.gz'
+write.table(qtl_top_var_feature_per_cs_r_all_filtered_both, gzfile(r_to_gene_filtered_output_loc), row.names = F, col.names = T, sep = '\t')
+mdfiver::create_sha256_for_file(r_to_gene_filtered_output_loc)
