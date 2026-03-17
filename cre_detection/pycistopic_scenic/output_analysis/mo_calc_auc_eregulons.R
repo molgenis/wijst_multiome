@@ -475,53 +475,53 @@ for (ereg in eregs_to_plot) {
   ereg_plots[[ereg]] <- p_ereg
 }
 
-# remove the top gene from the eregulon lists
-ereg_to_genes_iegenes <- list()
-for (ereg in names(ereg_to_genes)) {
-  # check if there is an interaction
-  if (ereg %in% sc_tf_ieqtl_sig[['region']]) {
-    # get the genes
-    genes_ereg <- ereg_to_genes[[ereg]]
-    # get the genes
-    tf_i_egenes <- unlist(as.vector(sc_tf_ieqtl_sig_top_tf_per_gene[sc_tf_ieqtl_sig_top_tf_per_gene[['region']] == ereg, ][['gene']]))
-    # check each gene
-    for (tf_i_egene in tf_i_egenes) {
-      # and thate one
-      genes_ereg_no_tf_i_egene <- setdiff(genes_ereg, tf_i_egene)
-      # put in the list
-      ereg_to_genes_iegenes[[paste(ereg, tf_i_egene, sep = '_')]] <- genes_ereg_no_tf_i_egene
-    }
-  }
-}
-# recalculate enrichment scores
-cells_AUC_notop <- AUCell_run(expr_mat_included, ereg_to_genes_iegenes)
-# extract the auc matrix
-cells_AUC_notop_mtx <- getAUC(cells_AUC_notop)
-# as matrix
-cells_AUC_notop_mtx <- as.matrix(cells_AUC_notop_mtx)
-# extract dimension names
-cells_AUC_notop_eregs <- rownames(cells_AUC_notop_mtx)
-cells_AUC_notop_barcodes <- colnames(cells_AUC_notop_mtx)
-# make into data.table
-cells_AUC_notop_dt <- data.table(cells_AUC_notop_mtx)
-# but add the eregulon as the first column
-cells_AUC_notop_dt <- cbind(data.table('eregulon' = cells_AUC_notop_eregs), cells_AUC_notop_dt)
-# set export location
-cells_AUC_notop_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/mo_tf_interaction_eregulon_gene_removed_auc_all_nonsparse_transposed.tsv.gz'
-# write the output
-write.table(cells_AUC_notop_dt, gzfile(cells_AUC_notop_loc), row.names = F, col.names = T, sep = '\t', quote = F)
-# with a checksum
-mdfiver::create_sha256_for_file(cells_AUC_notop_loc)
-
-# make a new confinement file
-sc_tf_ieqtl_sig_confinement <- sc_tf_ieqtl_sig[, c('variant', 'region', 'gene')]
-# and replace the region with the eregulon name and the gene, as we generated for the new AUC matrix
-sc_tf_ieqtl_sig_confinement[['region']] <- paste(sc_tf_ieqtl_sig[['region']], sc_tf_ieqtl_sig[['gene']], sep = '_')
-# update the column names to actually reflect what we do
-colnames(sc_tf_ieqtl_sig_confinement) <- c('variant', 'eregulon', 'gene')
-# set output loc
-sc_tf_ieqtl_sig_confinement_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/mo_var_tf_gene_confinement_inclcaqtls_significant.tsv.gz'
-# write output
-write.table(sc_tf_ieqtl_sig_confinement, gzfile(sc_tf_ieqtl_sig_confinement_loc), row.names = F, col.names = T, sep = '\t', quote = F)
-# with a checksum
-mdfiver::create_sha256_for_file(sc_tf_ieqtl_sig_confinement_loc)
+# # remove the top gene from the eregulon lists
+# ereg_to_genes_iegenes <- list()
+# for (ereg in names(ereg_to_genes)) {
+#   # check if there is an interaction
+#   if (ereg %in% sc_tf_ieqtl_sig[['region']]) {
+#     # get the genes
+#     genes_ereg <- ereg_to_genes[[ereg]]
+#     # get the genes
+#     tf_i_egenes <- unlist(as.vector(sc_tf_ieqtl_sig_top_tf_per_gene[sc_tf_ieqtl_sig_top_tf_per_gene[['region']] == ereg, ][['gene']]))
+#     # check each gene
+#     for (tf_i_egene in tf_i_egenes) {
+#       # and thate one
+#       genes_ereg_no_tf_i_egene <- setdiff(genes_ereg, tf_i_egene)
+#       # put in the list
+#       ereg_to_genes_iegenes[[paste(ereg, tf_i_egene, sep = '_')]] <- genes_ereg_no_tf_i_egene
+#     }
+#   }
+# }
+# # recalculate enrichment scores
+# cells_AUC_notop <- AUCell_run(expr_mat_included, ereg_to_genes_iegenes)
+# # extract the auc matrix
+# cells_AUC_notop_mtx <- getAUC(cells_AUC_notop)
+# # as matrix
+# cells_AUC_notop_mtx <- as.matrix(cells_AUC_notop_mtx)
+# # extract dimension names
+# cells_AUC_notop_eregs <- rownames(cells_AUC_notop_mtx)
+# cells_AUC_notop_barcodes <- colnames(cells_AUC_notop_mtx)
+# # make into data.table
+# cells_AUC_notop_dt <- data.table(cells_AUC_notop_mtx)
+# # but add the eregulon as the first column
+# cells_AUC_notop_dt <- cbind(data.table('eregulon' = cells_AUC_notop_eregs), cells_AUC_notop_dt)
+# # set export location
+# cells_AUC_notop_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/mo_tf_interaction_eregulon_gene_removed_auc_all_nonsparse_transposed.tsv.gz'
+# # write the output
+# write.table(cells_AUC_notop_dt, gzfile(cells_AUC_notop_loc), row.names = F, col.names = T, sep = '\t', quote = F)
+# # with a checksum
+# mdfiver::create_sha256_for_file(cells_AUC_notop_loc)
+# 
+# # make a new confinement file
+# sc_tf_ieqtl_sig_confinement <- sc_tf_ieqtl_sig[, c('variant', 'region', 'gene')]
+# # and replace the region with the eregulon name and the gene, as we generated for the new AUC matrix
+# sc_tf_ieqtl_sig_confinement[['region']] <- paste(sc_tf_ieqtl_sig[['region']], sc_tf_ieqtl_sig[['gene']], sep = '_')
+# # update the column names to actually reflect what we do
+# colnames(sc_tf_ieqtl_sig_confinement) <- c('variant', 'eregulon', 'gene')
+# # set output loc
+# sc_tf_ieqtl_sig_confinement_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/mo_var_tf_gene_confinement_inclcaqtls_significant.tsv.gz'
+# # write output
+# write.table(sc_tf_ieqtl_sig_confinement, gzfile(sc_tf_ieqtl_sig_confinement_loc), row.names = F, col.names = T, sep = '\t', quote = F)
+# # with a checksum
+# mdfiver::create_sha256_for_file(sc_tf_ieqtl_sig_confinement_loc)
