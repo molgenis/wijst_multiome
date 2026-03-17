@@ -60,6 +60,8 @@ rownames(auc_mtx) <- eregnames
 scenic_eregs_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eRegulon_signatures.tsv.gz'
 # read that
 scenic_eregs <- fread(scenic_eregs_loc, header = T, sep = '\t')
+# store in a list
+ereg_to_genes <- list()
 # check each of the gene based ones
 for (ereg in unique(scenic_eregs[scenic_eregs[['modality']] == 'Gene_based', ][['signature_name']])) {
   # get the genes
@@ -75,19 +77,20 @@ seurat_object_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/
 # laod the data
 seurat_object <- readRDS(seurat_object_loc)
 # extract expression matrix
-expr_mat <- seurat_object@assays$RNA@layers$counts
+# expr_mat <- seurat_object@assays$RNA@layers$counts
+expr_mat <- seurat_object@assays$SCT@counts
 # set the barcodes as column names
-colnames(expr_mat) <- colnames(seurat_object)
+# colnames(expr_mat) <- colnames(seurat_object)
 # extract genes
-gene_names <- data.frame(seurat_object@assays$RNA@features)
-gene_names_counts <- rownames(gene_names[gene_names[['counts']], , drop = F])
+# gene_names <- data.frame(seurat_object@assays$RNA@features)
+# gene_names_counts <- rownames(gene_names[gene_names[['counts']], , drop = F])
 # set those as row names
-rownames(expr_mat) <- gene_names_counts
+# rownames(expr_mat) <- gene_names_counts
 # subset the expression matrix
 expr_mat_included <- expr_mat[, colnames(expr_mat) %in% barcodes]
 
 # read the TF-interaction-QTL output
-tf_i_eqtl_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/sc/all/lane_donor_countrna_inclcaqtls/merged/results_fdr.tsv.gz'
+tf_i_eqtl_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/sc/all/lane_donor_countrna_inclcaqtls_varinregion/merged/results_fdr.tsv.gz'
 tf_i_eqtl <- fread(tf_i_eqtl_loc,  header = T, sep = '\t')
 # get what is significant
 sc_tf_ieqtl_sig <- tf_i_eqtl[
@@ -104,7 +107,7 @@ for (ereg in names(ereg_to_genes)) {
     # get the genes
     genes_ereg <- ereg_to_genes[[ereg]]
     # get the genes
-    tf_i_egenes <- unlist(as.vector(sc_tf_ieqtl_sig_top_tf_per_gene[sc_tf_ieqtl_sig_top_tf_per_gene[['region']] == ereg, ][['gene']]))
+    tf_i_egenes <- unique(unlist(as.vector(sc_tf_ieqtl_sig[sc_tf_ieqtl_sig[['region']] == ereg, ][['gene']])))
     # check each gene
     for (tf_i_egene in tf_i_egenes) {
       # and thate one
