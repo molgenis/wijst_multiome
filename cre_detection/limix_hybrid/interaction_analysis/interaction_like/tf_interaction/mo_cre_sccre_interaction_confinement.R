@@ -516,6 +516,32 @@ get_top_effect_per_cs <- function(cs_output_per_ct, feature_column='feature_id',
   return(var_feature_all)
 }
 
+
+add_associated_region <- function(eqtl_outputs, scenic_output, eqtl_gene_column='feature_id', scenic_gene_column='Gene', scenic_region_column='Region') {
+  # keep a list per cell type
+  cs_output_per_ct_region <- list()
+  # check each cell type
+  for (cell_type in names(eqtl_outputs)) {
+    # extract for cell type
+    cs_output_ct <- eqtl_outputs[[cell_type]]
+    # subset scenic
+    scenic_relevant <- scenic_output[, c(..scenic_gene_column, ..scenic_region_column)]
+    # with standardised columns
+    colnames(scenic_relevant) <- c('feature', 'region')
+    # add associated region to gene
+    cs_output_ct <- merge(
+      cs_output_ct, 
+      scenic_relevant, 
+      by.x = eqtl_gene_column, 
+      by.y = 'feature'
+    )
+    # put back in the list
+    cs_output_per_ct_region[[cell_type]] <- cs_output_ct
+  }
+  return(cs_output_per_ct_region)
+}
+
+
 ####################
 # Settings         #
 ####################
