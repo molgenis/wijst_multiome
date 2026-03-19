@@ -119,6 +119,10 @@ for (ereg in names(ereg_to_genes)) {
 }
 # recalculate enrichment scores
 cells_AUC_notop <- AUCell_run(expr_mat_included, ereg_to_genes_iegenes)
+# save result somewhere
+cells_AUC_notop_loc <- '~/multiome/rds/mo_auc_mtx_noiegene_fromscenic.rds'
+saveRDS(cells_AUC_notop, cells_AUC_notop_loc)
+mdfiver::create_sha256_for_file(cells_AUC_notop_loc)
 # extract the auc matrix
 cells_AUC_notop_mtx <- getAUC(cells_AUC_notop)
 # as matrix
@@ -128,6 +132,19 @@ cells_AUC_notop_eregs <- rownames(cells_AUC_notop_mtx)
 cells_AUC_notop_barcodes <- colnames(cells_AUC_notop_mtx)
 # make into data.table
 cells_AUC_notop_dt <- data.table(cells_AUC_notop_mtx)
+# extract the repressors
+cells_AUC_notop_eregs_repressors_i <- grep('-/+', cells_AUC_notop_eregs)
+# subset both the eregs and the dt on those
+cells_AUC_notop_eregs_repressors <- cells_AUC_notop_eregs[cells_AUC_notop_eregs_repressors_i]
+cells_AUC_notop_dt_repressors <- cells_AUC_notop_dt[cells_AUC_notop_eregs_repressors_i, ]
+# and modify
+cells_AUC_notop_dt_repressors <- 1 - cells_AUC_notop_dt_repressors
+# take the originals as well
+cells_AUC_notop_eregs_activators <- cells_AUC_notop_eregs[-cells_AUC_notop_eregs_repressors_i]
+cells_AUC_notop_dt_activators <- cells_AUC_notop_dt[-cells_AUC_notop_eregs_repressors_i, ]
+# merge them again
+cells_AUC_notop_dt <- rbind(cells_AUC_notop_dt_repressors, cells_AUC_notop_dt_activators)
+cells_AUC_notop_eregs <- c(cells_AUC_notop_eregs_repressors, cells_AUC_notop_eregs_activators)
 # but add the eregulon as the first column
 cells_AUC_notop_dt <- cbind(data.table('eregulon' = cells_AUC_notop_eregs), cells_AUC_notop_dt)
 # set export location
@@ -144,7 +161,7 @@ sc_tf_ieqtl_sig_confinement[['region']] <- paste(sc_tf_ieqtl_sig[['region']], sc
 # update the column names to actually reflect what we do
 colnames(sc_tf_ieqtl_sig_confinement) <- c('variant', 'eregulon', 'gene')
 # set output loc
-sc_tf_ieqtl_sig_confinement_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/mo_var_tf_gene_confinement_inclcaqtls_significant.tsv.gz'
+sc_tf_ieqtl_sig_confinement_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/mo_var_tf_gene_confinement_inclcaqtls_varinregion_significant.tsv.gz'
 # write output
 write.table(sc_tf_ieqtl_sig_confinement, gzfile(sc_tf_ieqtl_sig_confinement_loc), row.names = F, col.names = T, sep = '\t', quote = F)
 # with a checksum
