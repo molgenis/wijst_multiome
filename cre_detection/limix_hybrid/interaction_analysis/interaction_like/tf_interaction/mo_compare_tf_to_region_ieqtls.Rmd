@@ -620,8 +620,58 @@ tf_eqtl_rep_region_ieqtls_overlap <- tf_eqtl_rep_region_ieqtls_overlap[order(tf_
 # with most significant region per TF
 tf_eqtl_rep_region_ieqtls_overlap_toptf <- tf_eqtl_rep_region_ieqtls_overlap[!duplicated(paste(tf_eqtl_rep_region_ieqtls_overlap[['variant']], tf_eqtl_rep_region_ieqtls_overlap[['TF']])), ]
 
-plot_concondance(tf_eqtl_region_ieqtls_overlap[tf_eqtl_rep_region_ieqtls_overlap[['is_eqtl']] & !(tf_eqtl_rep_region_ieqtls_overlap[['is_caqtl']]), ], d1_effect_column = 'region:genotype_beta.y_directed', d2_effect_column = 'region:genotype_beta.x_directed') + ggtitle('only eQTL i-egene beta')
+plot_concondance(tf_eqtl_rep_region_ieqtls_overlap[tf_eqtl_rep_region_ieqtls_overlap[['is_eqtl']] & !(tf_eqtl_rep_region_ieqtls_overlap[['is_caqtl']]), ], d1_effect_column = 'region:genotype_beta.y_directed', d2_effect_column = 'region:genotype_beta.x_directed') + ggtitle('only eQTL i-egene beta')
 plot_concondance(tf_eqtl_rep_region_ieqtls_overlap_toptf[tf_eqtl_rep_region_ieqtls_overlap_toptf[['is_eqtl']] & !(tf_eqtl_rep_region_ieqtls_overlap_toptf[['is_caqtl']]), ], d1_effect_column = 'region:genotype_beta.y_directed', d2_effect_column = 'region:genotype_beta.x_directed') + ggtitle('only eQTL i-egene beta')
+
+```
+
+```{r compare_corrected_tf, include=TRUE, fig.height=5, fig.width=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# merge significant in either
+tf_ieqtls_sig_both <- merge(
+  tf_ieqtls_sig, 
+  tf_ieqtls_rep_sig, 
+  by = c('variant', 'region', 'gene')
+)
+# add info on the direction of the TF
+tf_ieqtls_sig_both[['region_gene_direction']] <- str_extract(tf_ieqtls_sig_both[['region']], '\\+\\/\\+|\\-\\/\\-|\\+\\/\\-|\\-\\/\\+')
+# add a signed beta to show how the effect size becomes stronger
+tf_ieqtls_sig_both[['region:genotype_beta.x_directed']] <- sign(tf_ieqtls_sig_both[['genotype_beta.x']]) * tf_ieqtls_sig_both[['region:genotype_beta.x']]
+tf_ieqtls_sig_both[['region:genotype_beta.y_directed']] <- sign(tf_ieqtls_sig_both[['genotype_beta.y']]) * tf_ieqtls_sig_both[['region:genotype_beta.y']]
+# flip the beta again
+tf_ieqtls_sig_both[tf_ieqtls_sig_both[['region_gene_direction']] == '-/+'][['region:genotype_beta.x_directed']] <- tf_ieqtls_sig_both[tf_ieqtls_sig_both[['region_gene_direction']] == '-/+'][['region:genotype_beta.x_directed']] * -1
+# add z
+tf_ieqtls_sig_both[['region:genotype_z.x_directed']] <- tf_ieqtls_sig_both[['region:genotype_beta.x_directed']] / tf_ieqtls_sig_both[['region:genotype_se.x']]
+tf_ieqtls_sig_both[['region:genotype_z.y_directed']] <- tf_ieqtls_sig_both[['region:genotype_beta.y_directed']] / tf_ieqtls_sig_both[['region:genotype_se.y']]
+
+# then show them
+plot_concondance(tf_ieqtls_sig_both, d1_effect_column = 'region:genotype_beta.x_directed', d2_effect_column = 'region:genotype_beta.y_directed') + 
+  xlab('uncorrected TF-i-eQTL beta') +
+  ylab('corrected TF-i-eQTL beta') +
+  ggtitle('Uncorrected vs corrected TF-i-eQTL beta')
+
+plot_concondance(tf_ieqtls_sig_both[
+  tf_ieqtls_sig_both[['anova_bf.x']] < 0.05 &
+  tf_ieqtls_sig_both[['anova_bf.y']] < 0.05 &
+  tf_ieqtls_sig_both[['region:genotype_bf.x']] < 0.05 &
+  tf_ieqtls_sig_both[['region:genotype_bf.y']] < 0.05, 
+  
+], d1_effect_column = 'region:genotype_beta.x_directed', d2_effect_column = 'region:genotype_beta.y_directed') + 
+  xlab('uncorrected TF-i-eQTL beta') +
+  ylab('corrected TF-i-eQTL beta') +
+  ggtitle('Uncorrected vs corrected TF-i-eQTL beta')
+
+plot_concondance(tf_ieqtls_sig_both[
+  tf_ieqtls_sig_both[['anova_bf.x']] < 0.05 &
+  tf_ieqtls_sig_both[['anova_bf.y']] < 0.05 &
+  tf_ieqtls_sig_both[['region:genotype_bf.x']] < 0.05 &
+  tf_ieqtls_sig_both[['region:genotype_bf.y']] < 0.05, 
+  
+], d1_effect_column = 'region:genotype_z.x_directed', d2_effect_column = 'region:genotype_z.y_directed') + 
+  xlab('uncorrected TF-i-eQTL Z-score') +
+  ylab('corrected TF-i-eQTL Z-score') +
+  ggtitle('Uncorrected vs corrected TF-i-eQTL Z-score')
 
 ```
 
