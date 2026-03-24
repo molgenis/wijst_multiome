@@ -1,0 +1,439 @@
+---
+title: "mo_plot_celltype_tf_activities"
+author: "Roy Oelen"
+date: "2026-03-24"
+output: html_document
+---
+
+```{r header, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+#!/usr/bin/env Rscript
+############################################################################################################################
+# Authors: Roy Oelen
+# Name: mo_plot_celltype_tf_activities.Rmd
+# Function: plot TF activities of eRegulons per cell type
+############################################################################################################################
+
+```
+
+```{r libraries, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+####################
+# libraries        #
+####################
+
+library(data.table)
+library(ggplot2)
+library(roycols)
+library(cowplot)
+library(Matrix)
+
+
+```
+
+```{r functions, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+####################
+# Functions        #
+####################
+
+get_color_coding_dict <- function() {
+  # medhigh
+  color_coding_dict <- list()
+  color_coding_dict[["B"]] <- "#71BC4B"
+  #color_coding_dict[['CD4_T_cells']] <- '#7FC97F'
+  color_coding_dict[['CD4_T_cells']] <- '#153057'
+  color_coding_dict[['CD4T']] <- '#153057'
+  #color_coding_dict[['CD8_T_cells']] <- '#BEAED4'
+  color_coding_dict[['CD8_T_cells']] <- '#009DDB'
+  color_coding_dict[['CD8T']] <- '#009DDB'
+  #color_coding_dict[['Dendritic_cells']] <- '#FDC086'
+  color_coding_dict[['Dendritic_cells']] <- '#965EC8'
+  color_coding_dict[['DC']] <- '#965EC8'
+  color_coding_dict[['Endothelial_cells']] <- '#FFFFB3'
+  color_coding_dict[['Fibroblasts']] <- '#386CB0'
+  color_coding_dict[['Glia_cells']] <- '#F0027F'
+  color_coding_dict[['Mast_cells']] <- '#BF5B17'
+  color_coding_dict[['Mature_absorptive_enterocytes']] <- '#A6CEE3'
+  color_coding_dict[['Mature_secretory_enterocytes']] <- '#1B9E77'
+  color_coding_dict[['Memory_B']] <- '#D95F02'
+  color_coding_dict[['Microfold_cell']] <- '#BEAED4'
+  #color_coding_dict[['Monocytes']] <- '#7570B3'
+  color_coding_dict[['Monocyte']] <- '#EDBA1B'
+  color_coding_dict[['monocyte']] <- '#EDBA1B'
+  color_coding_dict[['Naive_B_cells']] <- '#FDC086'
+  color_coding_dict[['NK']] <- '#E64B50'
+  #color_coding_dict[['Plasma_cells']] <- '#E7298A'
+  color_coding_dict[['Plasma_cells']] <- '#DB8E00'
+  color_coding_dict[['Stem_cells']] <- '#66A61E'
+  color_coding_dict[['Stromal_cells']] <- '#8DD3C7'
+  #color_coding_dict[['T_others']] <- '#A6761D'
+  color_coding_dict[['T_others']] <- '#FF63B6'
+  color_coding_dict[['T_other']] <- '#FF63B6'
+  color_coding_dict[['Transit_amplifying_cells']] <- '#FF7F00'
+  color_coding_dict[['disconcordant']] <- 'gray'
+  #color_coding_dict[['CD4+ T cells']] <- '#7FC97F'
+  color_coding_dict[['CD4+ T cells']] <- '#153057'
+  color_coding_dict[['CD4+ T']] <- '#153057'
+  #color_coding_dict[['CD8+ T cells']] <- '#BEAED4'
+  color_coding_dict[['CD8+ T cells']] <- '#009DDB'
+  color_coding_dict[['CD8+ T']] <- '#009DDB'
+  #color_coding_dict[['Dendritic cells']] <- '#FDC086'
+  color_coding_dict[['Dendritic cells']] <- '#965EC8'
+  color_coding_dict[['Endothelial cells']] <- '#FFFFB3'
+  color_coding_dict[['Endothelial\ncells']] <- '#FFFFB3'
+  color_coding_dict[['Fibroblasts']] <- '#386CB0'
+  color_coding_dict[['Glia cells']] <- '#F0027F'
+  color_coding_dict[['MAST cells']] <- '#BF5B17'
+  color_coding_dict[['Mature absorptive enterocytes']] <- '#A6CEE3'
+  color_coding_dict[['Mature\nabsorptive\nenterocytes']] <- '#A6CEE3'
+  color_coding_dict[['Mature secretory enterocytes']] <- '#1B9E77'
+  color_coding_dict[['Mature secretory\nenterocytes']] <- '#1B9E77'
+  color_coding_dict[['Memory B cells']] <- '#D95F02'
+  #color_coding_dict[['Monocytes']] <- '#7570B3'
+  color_coding_dict[['Microfold cells']] <- '#BEAED4'
+  color_coding_dict[['Monocytes']] <- '#EDBA1B'
+  color_coding_dict[['Naive B cells']] <- '#FDC086'
+  #color_coding_dict[['Plasma cells']] <- '#E7298A'
+  color_coding_dict[['Plasma cells']] <- '#DB8E00'
+  color_coding_dict[['Plasma cell']] <- '#DB8E00'
+  color_coding_dict[['Plasmablast']] <- '#DB8E00'
+  color_coding_dict[['Plasmablasts']] <- '#DB8E00'
+  color_coding_dict[['Stem cells']] <- '#66A61E'
+  color_coding_dict[['Stromal cells']] <- '#8DD3C7'
+  #color_coding_dict[['other T cells']] <- '#A6761D'
+  color_coding_dict[['other T cells']] <- '#FF63B6'
+  color_coding_dict[['other T']] <- '#FF63B6'
+  color_coding_dict[['other T cell']] <- '#FF63B6'
+  color_coding_dict[['Transit amplifying cells']] <- '#FF7F00'
+  color_coding_dict[['Transit\namplifying cells']] <- '#FF7F00'
+  color_coding_dict[['disconcordant']] <- 'gray'
+  color_coding_dict[['lymphoid']] <- '#5B7573'
+  color_coding_dict[['myeloid']] <- '#C28C72'
+  # up and down regulation will be added to, we need a whitening percentage
+  pct_whitening <- 40
+  # then we will check each cell type
+  for (cell_type in names(color_coding_dict)) {
+    # the up color is the same as the regular one
+    color_coding_dict[[paste(cell_type, 'up')]] <- color_coding_dict[[cell_type]]
+    # but the down one will have a more faded colour
+    color_coding_dict[[paste(cell_type, 'down')]] <- colorRampPalette(c(color_coding_dict[[cell_type]], "white"))(100)[pct_whitening]
+    # we'll do something similiar when we have multiple conditions
+    color_coding_dict[[paste(cell_type, 'combined')]] <- color_coding_dict[[cell_type]]
+    color_coding_dict[[paste(cell_type, 'UT')]] <- colorRampPalette(c(color_coding_dict[[cell_type]], "white"))(100)[pct_whitening]
+    color_coding_dict[[paste(cell_type, '24hCA')]] <- colorRampPalette(c(color_coding_dict[[cell_type]], "black"))(100)[pct_whitening]
+  }
+  # general
+  color_coding_dict[['AI']] <- 'darkblue'
+  color_coding_dict[['NI']] <- 'darkred'
+  color_coding_dict[['Actively Inflamed']] <- 'darkblue'
+  color_coding_dict[['Non-Inflamed']] <- 'darkred'
+  color_coding_dict[['UT']] <- 'lightgrey'
+  color_coding_dict[['24hCA']] <- 'forestgreen'
+  return(color_coding_dict)
+}
+
+
+#' get a label dict that replaces the posix safe names into printable versions
+#' 
+#' @returns a label dict that replaces the posix safe names into printable versions
+#' label_dict_names <- get_label_dict()
+get_label_dict <- function() {
+  label_dict <- list()
+  label_dict[['CD4_T_cells']] <- 'CD4+ T cells'
+  label_dict[['CD8_T_cells']] <- 'CD8+ T cells'
+  label_dict[['CD4T']] <- 'CD4+ T'
+  label_dict[['CD8T']] <- 'CD8+ T'
+  label_dict[['CD4_T']] <- 'CD4+ T'
+  label_dict[['CD8_T']] <- 'CD8+ T'
+  label_dict[['Dendritic_cells']] <- 'Dendritic cells'
+  label_dict[['Endothelial_cells']] <- 'Endothelial cells'
+  label_dict[['Fibroblasts']] <- 'Fibroblasts'
+  label_dict[['Glia_cells']] <- 'Glia cells'
+  label_dict[['Mast_cells']] <- 'MAST cells'
+  label_dict[['Mature_absorptive_enterocytes']] <- 'Mature absorptive enterocytes'
+  label_dict[['Mature_secretory_enterocytes']] <- 'Mature secretory enterocytes'
+  label_dict[['Memory_B']] <- 'Memory B cells'
+  label_dict[['Monocytes']] <- 'Monocytes'
+  label_dict[['monocyte']] <- 'Monocyte'
+  label_dict[['Mono']] <- 'Monocyte'
+  label_dict[['Plasma_cells']] <- 'Plasmablast'
+  label_dict[['plasmablast']] <- 'Plasmablast'
+  label_dict[['Stem_cells']] <- 'Stem cells'
+  label_dict[['Stromal_cells']] <- 'Stromal cells'
+  label_dict[['T_others']] <- 'other T'
+  label_dict[['T_other']] <- 'other T'
+  label_dict[['Transit_amplifying_cells']] <- 'Transit amplifying cells'
+  label_dict[['AI']] <- 'Actively Inflamed'
+  label_dict[['NI']] <- 'Non-Inflamed'
+  return(label_dict)
+}
+
+remap_with_label_dict <- function(vector_of_names) {
+  # get the label dict
+  relabels <- get_label_dict()
+  # get the labels available for renaming
+  labels_available <- names(relabels)
+  # get the ones we cant remap
+  unmappable <- setdiff(unique(vector_of_names), labels_available)
+  # report on those
+  if (length(unmappable) > 0) {
+    print(paste('cannot remap the following names, they will be returned unchanged:', paste(unmappable, collapse = ',')))
+    # and put those in our remapping list as their originals
+    relabels[unmappable] <- unmappable
+  }
+  # now actually do the remapping
+  remapped <- as.vector(unlist(relabels[vector_of_names]))
+  return(remapped)
+}
+
+
+
+```
+
+```{r settings, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+####################
+# Settings         #
+####################
+
+
+
+```
+
+```{r path_setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+####################
+# Main code        #
+####################
+
+# location of the AUC matrix
+auc_mtx_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eregulon_gene_auc.mtx.gz'
+# location of the barcodes
+auc_barcodes_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eregulon_gene_auc_barcodes.txt.gz'
+# and the eregulon names
+ereg_names_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eregulon_gene_auc_eregnames.txt.gz'
+
+# location of the SCENIC outout
+scenic_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eRegulon_both_filtered.tsv.gz'
+
+# location of the relevant metadata
+metadata_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/mo_celllevel_metadata_nounannotated.tsv.gz'
+
+```
+
+```{r read_scenic, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# read that
+scenic_output <- fread(scenic_output_loc, header = T, sep = '\t')
+# order by the extended
+scenic_output <- scenic_output[order(scenic_output[['is_extended']]), ]
+# get which are non-extended if it was both extended and non-extended
+scenic_eregs <- unique(scenic_output[, c('TF', 'Gene_signature_direction', 'Gene_signature_name', 'source')])
+scenic_eregs <-scenic_eregs[order(scenic_eregs[['source']]), ]
+scenic_eregs_to_keep <- scenic_eregs[!duplicated(paste(scenic_eregs[['TF']], scenic_eregs[['Gene_signature_direction']])), ]
+# then use that to filer
+scenic_output <- scenic_output[scenic_output[['Gene_signature_name']] %in% scenic_eregs_to_keep[['Gene_signature_name']], ]
+
+```
+
+```{r read_auc, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# read the matrix
+auc_mtx <- Matrix::readMM(auc_mtx_loc)
+# read the barcodes and eregnames
+barcodes <- fread(auc_barcodes_loc, header = F)[[1]]
+eregnames <- fread(ereg_names_loc, header = F)[[1]]
+# keep only the eregulons that we kept in our output
+auc_mtx <- auc_mtx[eregnames %in% scenic_output[['Gene_signature_name']], ]
+eregnames <- eregnames[eregnames %in% scenic_output[['Gene_signature_name']]]
+# construct matrix in Seurat format
+colnames(auc_mtx) <- barcodes
+rownames(auc_mtx) <- eregnames
+
+```
+
+```{r read_metadata, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# read the metadata
+metadata <- fread(metadata_loc, header = T, sep = '\t')
+
+```
+
+```{r transpose_auc, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# turn into plottable table
+auc_dt <- data.table(t(Matrix::as.matrix(auc_mtx)))
+# now set the rownames
+colnames(auc_dt) <- eregnames
+# the set the cell id as explicit column
+auc_dt[['barcode_lane']] <- barcodes
+# then merge the metadata onto the AUC matrix
+auc_dt <- merge(auc_dt, metadata, by = 'barcode_lane')
+
+```
+
+```{r add_condition_ct, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# add nicer cell type annotaiton column
+auc_dt[['cell_type_nice']] <- remap_with_label_dict(auc_dt[['celltype_imputed_lowerres']])
+# add column with CT and condition
+auc_dt[['celltype_condition']] <- paste(auc_dt[['cell_type_nice']], auc_dt[['condition_final']])
+# add ordered cell type and condition
+auc_dt[['cell_type_nice_ordered']] <- factor(auc_dt[['cell_type_nice']], levels = c('Plasmablast', 'B', 'CD4+ T', 'CD8+ T', 'other T', 'NK', 'DC', 'Monocyte'))
+auc_dt[['condition_ordered']] <- factor(auc_dt[['condition_final']], levels = c('UT', '24hCA', 'unknown'))
+# extract condition and cell type combinations
+ct_cond_combs <- unique(auc_dt[, c('celltype_condition', 'cell_type_nice_ordered', 'condition_ordered')])
+# then order
+ct_cond_combs <- ct_cond_combs[order(ct_cond_combs[['cell_type_nice_ordered']], ct_cond_combs[['condition_ordered']]), ]
+# then use that to order the cell type and condition in the original table
+auc_dt[['celltype_condition_ordered']] <- factor(auc_dt[['celltype_condition']], levels = ct_cond_combs[['celltype_condition']])
+
+```
+
+```{r plot_activity_ct, include=TRUE, fig.width=10, fig.height=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# set major cts
+major_cts <- c('B', 'CD4+ T', 'CD8+ T', 'DC', 'Monocyte', 'NK')
+
+# this is the ereg to plot
+ereg <- 'EBF1_direct_+/+_(142g)'
+# make the plot
+p_auc_ct <- ggplot(data = NULL, mapping = aes(x = auc_dt[['cell_type_nice_ordered']], y = auc_dt[[ereg]], fill= auc_dt[['cell_type_nice_ordered']])) +
+  geom_boxplot(outlier.shape = NA) + 
+  # and add jitter
+  geom_jitter(size = 0.5, alpha = 0.1) +
+  # and labels
+  xlab('Cell type') + 
+  ylab(paste(ereg, 'TF activity')) +
+  theme(axis.text.x=element_blank(), 
+        axis.ticks = element_blank()) + 
+  theme(legend.position = 'none') + 
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) + 
+  scale_fill_manual(values = get_color_coding_dict())
+
+# and with major cell types
+p_auc_ct_major <- ggplot(data = NULL, mapping = aes(x = auc_dt[auc_dt[['cell_type_nice_ordered']] %in% major_cts, ][['cell_type_nice_ordered']], y = auc_dt[auc_dt[['cell_type_nice_ordered']] %in% major_cts, ][[ereg]], fill= auc_dt[auc_dt[['cell_type_nice_ordered']] %in% major_cts, ][['cell_type_nice_ordered']])) +
+  geom_boxplot(outlier.shape = NA) + 
+  # and add jitter
+  geom_jitter(size = 0.5, alpha = 0.1) +
+  # and labels
+  xlab('Cell type') + 
+  ylab(paste(ereg, 'TF activity')) +
+  theme(axis.text.x=element_blank(), 
+        axis.ticks = element_blank()) + 
+  theme(legend.position = 'none') + 
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) + 
+  scale_fill_manual(values = get_color_coding_dict())
+
+
+# show the plot
+p_auc_ct
+p_auc_ct_major <- p_auc_ct_major  +
+      theme(legend.title = element_text(size=14), 
+            legend.text = element_text(size=14),
+            axis.title.x = element_text(size=16),
+            axis.title.y = element_text(size=16),
+            axis.text.y = element_text(size=14),
+            axis.text.x = element_text(size=14),
+            strip.text.x = element_text(size=14))
+
+
+# and save them
+ggsave(filename = '~/multiome/plots/mo_tf_activity_ebf1_ctmajor.pdf', plot = p_auc_ct_major, width = 10, height = 5)
+
+
+```
+
+```{r plot_activity_ct_cond, include=TRUE, fig.width=10, fig.height=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# this is the ereg to plot
+ereg <- 'EBF1_direct_+/+_(142g)'
+# make the plot
+p_auc_ct_cond <- ggplot(data = NULL, mapping = aes(x = auc_dt[['celltype_condition_ordered']], y = auc_dt[[ereg]], fill= auc_dt[['celltype_condition_ordered']])) +
+  geom_boxplot(outlier.shape = NA) + 
+  # and add jitter
+  geom_jitter(size = 0.5, alpha = 0.1) +
+  # and labels
+  xlab('Cell type and condition') + 
+  ylab(paste(ereg, 'TF activity')) +
+  theme(axis.text.x=element_blank(), 
+        axis.ticks = element_blank()) + 
+  theme(legend.position = 'none') + 
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) + 
+  scale_fill_manual(values = get_color_coding_dict())
+
+# and with major cell types
+p_auc_ct_major_cond <- ggplot(data = NULL, mapping = aes(x = auc_dt[auc_dt[['cell_type_nice_ordered']] %in% major_cts, ][['celltype_condition_ordered']], y = auc_dt[auc_dt[['cell_type_nice_ordered']] %in% major_cts, ][[ereg]], fill = auc_dt[auc_dt[['cell_type_nice_ordered']] %in% major_cts, ][['celltype_condition_ordered']])) +
+  geom_boxplot(outlier.shape = NA) + 
+  # and add jitter
+  geom_jitter(size = 0.5, alpha = 0.1) +
+  # and labels
+  xlab('Cell type and condition') + 
+  ylab(paste(ereg, 'TF activity')) +
+  theme(axis.text.x=element_blank(), 
+        axis.ticks = element_blank()) + 
+  theme(legend.position = 'none') + 
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) + 
+  scale_fill_manual(values = get_color_coding_dict())
+
+
+# show the plot
+p_auc_ct_cond
+p_auc_ct_major_cond
+
+```
+
+```{r plot_activity_b_cond, include=TRUE, fig.width=3, fig.height=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# this is the ereg to plot
+ereg <- 'EBF1_direct_+/+_(142g)'
+
+# and with B
+p_auc_ct_major_b <- ggplot(data = NULL, mapping = aes(x = auc_dt[auc_dt[['cell_type_nice_ordered']] %in% c('B'), ][['celltype_condition_ordered']], y = auc_dt[auc_dt[['cell_type_nice_ordered']] %in% c('B'), ][[ereg]], fill = auc_dt[auc_dt[['cell_type_nice_ordered']] %in% c('B'), ][['celltype_condition_ordered']])) +
+  geom_boxplot(outlier.shape = NA) + 
+  # and add jitter
+  geom_jitter(size = 0.5, alpha = 0.1) +
+  # and labels
+  xlab('Cell type and condition') + 
+  ylab(paste(ereg, 'TF activity')) +
+  theme(axis.text.x=element_blank(), 
+        axis.ticks = element_blank()) + 
+  theme(legend.position = 'none') + 
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) + 
+  scale_fill_manual(values = get_color_coding_dict())
+
+
+# show the plot
+p_auc_ct_major_b
+
+```
+
+```{r plot_activity_b_cond, include=TRUE, fig.width=3, fig.height=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# this is the ereg to plot
+ereg <- 'EBF1_direct_+/+_(142g)'
+
+# get difference in activity
+b_diff_stat <- wilcox.test(auc_dt[auc_dt[['celltype_condition_ordered']] %in% c('B UT'), ][[ereg]], auc_dt[auc_dt[['celltype_condition_ordered']] %in% c('B 24hCA'), ][[ereg]], alternative = 'less')
+# get average LFC
+b_diff_avglfc <- -log2(mean(auc_dt[auc_dt[['celltype_condition_ordered']] %in% c('B 24hCA'), ][[ereg]]) / mean(auc_dt[auc_dt[['celltype_condition_ordered']] %in% c('B UT'), ][[ereg]]))
+
+```
