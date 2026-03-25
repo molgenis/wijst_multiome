@@ -44,8 +44,8 @@ get_color_coding_dict <- function() {
   color_coding_dict <- list()
   color_coding_dict[["B"]] <- "#71BC4B"
   #color_coding_dict[['CD4_T_cells']] <- '#7FC97F'
-  color_coding_dict[['CD4_T_cells']] <- '#153057'
-  color_coding_dict[['CD4T']] <- '#153057'
+  color_coding_dict[['CD4_T_cells']] <- '#264F88'
+  color_coding_dict[['CD4T']] <- '#264F88'
   #color_coding_dict[['CD8_T_cells']] <- '#BEAED4'
   color_coding_dict[['CD8_T_cells']] <- '#009DDB'
   color_coding_dict[['CD8T']] <- '#009DDB'
@@ -75,8 +75,8 @@ get_color_coding_dict <- function() {
   color_coding_dict[['Transit_amplifying_cells']] <- '#FF7F00'
   color_coding_dict[['disconcordant']] <- 'gray'
   #color_coding_dict[['CD4+ T cells']] <- '#7FC97F'
-  color_coding_dict[['CD4+ T cells']] <- '#153057'
-  color_coding_dict[['CD4+ T']] <- '#153057'
+  color_coding_dict[['CD4+ T cells']] <- '#264F88'
+  color_coding_dict[['CD4+ T']] <- '#264F88'
   #color_coding_dict[['CD8+ T cells']] <- '#BEAED4'
   color_coding_dict[['CD8+ T cells']] <- '#009DDB'
   color_coding_dict[['CD8+ T']] <- '#009DDB'
@@ -337,9 +337,31 @@ p_auc_ct_major <- ggplot(data = NULL, mapping = aes(x = auc_dt[auc_dt[['cell_typ
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) + 
   scale_fill_manual(values = get_color_coding_dict())
 
+# and without major jitter
+p_auc_ct_major_nojitter <- ggplot(data = NULL, mapping = aes(x = auc_dt[auc_dt[['cell_type_nice_ordered']] %in% major_cts, ][['cell_type_nice_ordered']], y = auc_dt[auc_dt[['cell_type_nice_ordered']] %in% major_cts, ][[ereg]], fill= auc_dt[auc_dt[['cell_type_nice_ordered']] %in% major_cts, ][['cell_type_nice_ordered']])) +
+  geom_boxplot(outlier.shape = NA) + 
+  # and add jitter
+  # geom_jitter(size = 0.5, alpha = 0.1) +
+  # and labels
+  xlab('Cell type') + 
+  ylab(paste(ereg, 'TF activity')) +
+  theme(axis.text.x=element_blank(), 
+        axis.ticks = element_blank()) + 
+  theme(legend.position = 'none') + 
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) + 
+  scale_fill_manual(values = get_color_coding_dict())
 
-# show the plot
-p_auc_ct
+
+# add some text size changes
+p_auc_ct <- p_auc_ct  +
+      theme(legend.title = element_text(size=14), 
+            legend.text = element_text(size=14),
+            axis.title.x = element_text(size=16),
+            axis.title.y = element_text(size=16),
+            axis.text.y = element_text(size=14),
+            axis.text.x = element_text(size=14),
+            strip.text.x = element_text(size=14))
 p_auc_ct_major <- p_auc_ct_major  +
       theme(legend.title = element_text(size=14), 
             legend.text = element_text(size=14),
@@ -348,10 +370,23 @@ p_auc_ct_major <- p_auc_ct_major  +
             axis.text.y = element_text(size=14),
             axis.text.x = element_text(size=14),
             strip.text.x = element_text(size=14))
+p_auc_ct_major_nojitter  <- p_auc_ct_major_nojitter  +
+      theme(legend.title = element_text(size=14), 
+            legend.text = element_text(size=14),
+            axis.title.x = element_text(size=16),
+            axis.title.y = element_text(size=16),
+            axis.text.y = element_text(size=14),
+            axis.text.x = element_text(size=14),
+            strip.text.x = element_text(size=14))
 
+# show the plots
+p_auc_ct
+p_auc_ct_major
+p_auc_ct_major_nojitter
 
 # and save them
 ggsave(filename = '~/multiome/plots/mo_tf_activity_ebf1_ctmajor.pdf', plot = p_auc_ct_major, width = 10, height = 5)
+ggsave(filename = '~/multiome/plots/mo_tf_activity_ebf1_ctmajor_nojitter.pdf', plot = p_auc_ct_major_nojitter, width = 6, height = 6)
 
 
 ```
