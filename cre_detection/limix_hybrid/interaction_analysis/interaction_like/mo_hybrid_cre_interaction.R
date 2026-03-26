@@ -413,8 +413,12 @@ option_list <- list(
               help="comma separated list of random effects to correct for [default= %default]", metavar="character"),
   make_option(c("-n", "--accessibility_gausnorm"), action="store_true", default=FALSE,
               help="Apply the yeo-johnson transformation on accessibility before modelling [default: %default]"), 
+  make_option(c("-z", "--accessibility_boxcox"), action="store_true", default=FALSE,
+              help="Apply the boxcox transformation on accessibility instead of yeo-johnson [default: %default]"), 
   make_option(c("-y", "--expression_gausnorm"), action="store_true", default=FALSE,
               help="Apply the yeo-johnson transformation on expression before modelling [default: %default]"), 
+  make_option(c("-x", "--expression_boxcox"), action="store_true", default=FALSE,
+              help="Apply the boxcox transformation on expression instead of yeo-johnson [default: %default]"), 
   make_option(c("-t", "--interaction_terms"), type="character", default=NULL,
               help="interaction to model", metavar='character'), 
   make_option(c("-g", "--genotype_loc"), type="character", default=NULL,
@@ -448,9 +452,9 @@ expression_gausnorm <- T
 # whether to gausnorm the accessibility/TF data
 accessibility_gausnorm <- T
 # whether to gausnorm the expression data
-expression_boxcox <- T
+expression_boxcox <- F
 # whether to gausnorm the accessibility/TF data
-accessibility_boxcox <- T
+accessibility_boxcox <- F
 # fixed effects string
 fixed_effects_string <- NULL
 # random effects string
@@ -540,6 +544,8 @@ if (debug) {
   covariates_file <- opt[['covariates_file']]
   accessibility_gausnorm <- opt[['accessibility_gausnorm']]
   expression_gausnorm <- opt[['expression_gausnorm']]
+  accessibility_boxcox <- opt[['accessibility_boxcox']]
+  expression_boxcox <- opt[['expression_boxcox']]
 }
 
 # make the full path to the expression data
@@ -650,12 +656,16 @@ if (nrow(expression_data) > 0) {
     # get overlapping variants
     overlapping_variants <- intersect(variants, variants_in_gt)
     # read the genotypes, but only those in the file and in the confinement
-    genotypes <- read.plink(
-      bed = paste(genotype_loc, '.bed', sep = ''),
-      bim = paste(genotype_loc, '.bim', sep = ''),
-      fam = paste(genotype_loc, '.fam', sep = ''), 
-      select.snps = overlapping_variants
-    )
+    genotypes <- NULL
+    # but only if there were any variants, because we'll get an 'unexpected end of file otherwise'
+    if (length(overlapping_variants) > 0) {
+      genotypes <- read.plink(
+        bed = paste(genotype_loc, '.bed', sep = ''),
+        bim = paste(genotype_loc, '.bim', sep = ''),
+        fam = paste(genotype_loc, '.fam', sep = ''), 
+        select.snps = overlapping_variants
+      )
+    }
     # filter the confinement on the variants we have in the genotype data as well
     confinement <- confinement[confinement[['variant']] %in% overlapping_variants, ]
     # and the genes we have

@@ -5,17 +5,17 @@
 # Function: perform transcription-factor QTL analysis at single-cell level
 # Example: 
 # ~/start_Rscript.sh \
-#   /groups/umcg-franke-scrna/tmp02/users/umcg-roelen/singularity/rstudio-server/simulated_home/mo_sc_tfqtl.R \
-#   --in /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/CD4T/chr12/ \
-#   --out /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/tfqtl/limix_sc/output/tf/CD4T/chr12/ \
-#   --confinement /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/tfqtl/limix_sc/confinement/mo_var_tf.tsv.gz \
-#   --smf_loc /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/CD4T/smf.tsv.gz \
-#   --covariates_file /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/metadata/mo_celllevel_metadata.tsv.gz \
-#   --tf_file /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eregulon_gene_auc_CD4T_nonsparse_transposed.tsv.gz \
+#   /groups/umcg-franke-scrna/tmp04/users/umcg-roelen/singularity/rstudio-server/simulated_home/mo_sc_tfqtl.R \
+#   --in /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/CD4T/chr12/ \
+#   --out /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/tfqtl/limix_sc/output/tf/CD4T/chr12/ \
+#   --confinement /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/tfqtl/limix_sc/confinement/mo_var_tf.tsv.gz \
+#   --smf_loc /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/CD4T/smf.tsv.gz \
+#   --covariates_file /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/metadata/mo_celllevel_metadata.tsv.gz \
+#   --tf_file /groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eregulon_gene_auc_CD4T_nonsparse_transposed.tsv.gz \
 #   --fixed_effects genotype,nCount_RNA \
 #   --random_effects sample_final,lane \
 #   --barcode_column barcode_lane \
-#   --genotype_loc /groups/umcg-franke-scrna/tmp02/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/genotype_input/EUR_imputed_hg38_varFiltered_chr12 \
+#   --genotype_loc /groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/genotype_input/EUR_imputed_hg38_varFiltered_chr12 \
 #   --tf_gausnorm
 # 
 ############################################################################################################################
@@ -221,7 +221,7 @@ do_association_analysis <- function(tf_data,
           }
           
         }, error = function(e) {
-           # warning(paste('Error in model fitting', tf, variant, ':', e$message, '. This can happen if the model fails to converge'))
+          # warning(paste('Error in model fitting', tf, variant, ':', e$message, '. This can happen if the model fails to converge'))
           # put warning in list
           warnings_encountered[[paste(variant, tf, 'model')]] <- paste('Error in model fitting', tf, variant, ':', e$message, '. This can happen if the model fails to converge')
         })
@@ -300,6 +300,8 @@ option_list <- list(
               help="sample mapping file", metavar="character"), 
   make_option(c("-t", "--tf_file"), type="character", default='expression.tsv.gz', 
               help="transcription factor filename for chunk", metavar="character"), 
+  make_option(c("-v", "--covariates_file"), type="character", default=NULL, 
+              help="accessibility filename for chunk", metavar="character"), 
   make_option(c("-f", "--fixed_effects"), type="character", default=NULL,
               help="comman separated list of fixed effects to correct for [default= %default]", metavar="character"),
   make_option(c("-r", "--random_effects"), type="character", default=NULL,
@@ -346,13 +348,13 @@ tf_boxcox <- F
 
 if (debug) {
   # set all of the variables hardcoded for a testing debug run
-  confinement_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/tfqtl/limix_sc/confinement/mo_var_tf.tsv.gz'
-  in_dir <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/all/chr22/'
-  smf_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/all/smf.tsv.gz'
-  output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/tfqtl/limix_sc/output/tf/all/chr22/'
-  tf_file <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eregulon_gene_auc_all_nonsparse_transposed.tsv.gz'
-  genotype_loc <- '/groups/umcg-franke-scrna/tmp02/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/genotype_input/EUR_imputed_hg38_varFiltered_chr22'
-  covariates_file <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/metadata/mo_celllevel_metadata.tsv.gz'
+  confinement_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/tfqtl/limix_sc/confinement/mo_var_tf.tsv.gz'
+  in_dir <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/all/chr22/'
+  smf_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/all/smf.tsv.gz'
+  output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/tfqtl/limix_sc/output/tf/all/chr22/'
+  tf_file <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eregulon_gene_auc_all_nonsparse_transposed.tsv.gz'
+  genotype_loc <- '/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/genotype_input/EUR_imputed_hg38_varFiltered_chr22'
+  covariates_file <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/metadata/mo_celllevel_metadata.tsv.gz'
   fixed_effects_string <- 'nCount_SCT,genotype'
   random_effects_string <- 'sample_final,lane'
   barcode_column <- 'barcode_lane'
