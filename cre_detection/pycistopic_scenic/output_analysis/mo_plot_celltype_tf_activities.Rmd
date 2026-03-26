@@ -250,8 +250,8 @@ auc_mtx <- Matrix::readMM(auc_mtx_loc)
 barcodes <- fread(auc_barcodes_loc, header = F)[[1]]
 eregnames <- fread(ereg_names_loc, header = F)[[1]]
 # keep only the eregulons that we kept in our output
-auc_mtx <- auc_mtx[eregnames %in% scenic_output[['Gene_signature_name']], ]
-eregnames <- eregnames[eregnames %in% scenic_output[['Gene_signature_name']]]
+# auc_mtx <- auc_mtx[eregnames %in% scenic_output[['Gene_signature_name']], ]
+# eregnames <- eregnames[eregnames %in% scenic_output[['Gene_signature_name']]]
 # construct matrix in Seurat format
 colnames(auc_mtx) <- barcodes
 rownames(auc_mtx) <- eregnames
@@ -470,5 +470,29 @@ ereg <- 'EBF1_direct_+/+_(142g)'
 b_diff_stat <- wilcox.test(auc_dt[auc_dt[['celltype_condition_ordered']] %in% c('B UT'), ][[ereg]], auc_dt[auc_dt[['celltype_condition_ordered']] %in% c('B 24hCA'), ][[ereg]], alternative = 'less')
 # get average LFC
 b_diff_avglfc <- -log2(mean(auc_dt[auc_dt[['celltype_condition_ordered']] %in% c('B 24hCA'), ][[ereg]]) / mean(auc_dt[auc_dt[['celltype_condition_ordered']] %in% c('B UT'), ][[ereg]]))
+
+```
+
+```{r plot_activity_b_cond, include=TRUE, fig.width=5, fig.height=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# plot eregs for major cell types
+eregs_vector <- c("KLF10_direct_+/+_(59g)", "KLF12_direct_+/+_(1093g)", "KLF12_direct_-/+_(464g)", "KLF3_direct_+/+_(256g)", "KLF3_direct_-/+_(18g)", "KLF6_direct_+/+_(419g)", "KLF6_direct_-/+_(27g)", "KLF9_direct_+/+_(14g)", "PLAG1_direct_+/+_(25g)")
+for (ereg in eregs_vector) {
+  p_specific_ereg <- ggplot(data = NULL, mapping = aes(x = auc_dt[auc_dt[['cell_type_nice_ordered']] %in% major_cts, ][['cell_type_nice_ordered']], y = auc_dt[auc_dt[['cell_type_nice_ordered']] %in% major_cts, ][[ereg]], fill= auc_dt[auc_dt[['cell_type_nice_ordered']] %in% major_cts, ][['cell_type_nice_ordered']])) +
+  geom_boxplot(outlier.shape = NA) + 
+  # and add jitter
+  geom_jitter(size = 0.5, alpha = 0.1) +
+  # and labels
+  xlab('Cell type') + 
+  ylab(paste(ereg, 'TF activity')) +
+  theme(axis.text.x=element_blank(), 
+        axis.ticks = element_blank()) + 
+  theme(legend.position = 'none') + 
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) + 
+  scale_fill_manual(values = get_color_coding_dict())
+  print(p_specific_ereg)
+}
 
 ```
