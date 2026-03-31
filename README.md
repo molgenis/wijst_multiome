@@ -314,15 +314,21 @@ Below we will outline the steps taken to process and analyse the data
 '*qtl/interaction_eqtl/mo_create_limix_interaction_qtl_input.R*'    create interaction-eQTL input files\
 '*qtl/interaction_eqtl/limix_interactions.smk*'    LIMIX-QTL interaction snakemake file\
 '*qtl/interaction_eqtl/mo_interaction_template.yaml*'    LIMIX-QTL interaction yaml file for interaction-eQTLs\
+'*qtl/interaction_eqtl/mo_compare_ieqtls_vs_non_ieqtls.R*'    compar characteristics of interacting vs not interacting eQTLs\
+'*qtl/interaction_eqtl/mo_compare_interaction_qtls_vs_de_or_dar.R*'    compare characteristics of interaction-QTLs vs DE/DAR numbers\
+'*qtl/interaction_eqtl/mo_plot_interaction_qtls.ipynb*'    plot interaction-QTLs\
+'*qtl/interaction_eqtl/mo_plot_interaction_vs_condition_qtls.Rmd*'    plot interaction-QTLs versus NC2022 data\
 '*qtl/interaction_caqtl/mo_create_limix_chromatin_interaction_input.R*'    create interaction-caQTL input files\
-'*qtl/interaction_caqtl/mo_interaction_caqtls.yaml*'    LIMIX-QTL interaction yaml file for interaction-caQTL
+'*qtl/interaction_caqtl/mo_interaction_caqtls.yaml*'    LIMIX-QTL interaction yaml file for interaction-caQTL\
+'*qtl/interaction_caqtl/mo_compare_icaqtls_vs_non_icaqtls.R*'    compare interacting vs non interacting caQTLs
 
 
 ### QTL mediation
 '*qtl/mediation/mo_create_mediation_confinements.R*'    create confinement files for eQTL-by-caQTL mediation analyses\
 '*qtl/mediation/mo_create_mediation_metadata.R*'    create metadata for eQTL-by-caQTL mediation analyses\
 '*qtl/mediation/mo_perform_qtl_mediation_analysis.R*'    run eQTL-by-caQTL mediaton analysis script\
-'*qtl/mediation/mo_create_mediation_jobs.sh*'    create run eQTL-by-caQTL mediaton analysis jobs
+'*qtl/mediation/mo_create_mediation_jobs.sh*'    create run eQTL-by-caQTL mediaton analysis jobs\
+'*qtl/mediation/mo_merge_mediation_results.R*'    merge mediation results
 
 
 ### QTL finemapping
@@ -360,12 +366,23 @@ Below we will outline the steps taken to process and analyse the data
 '*qtl/cre_qtl/mo_meta_analyse_creqtl_cres*' meta-analyse betas and ses calculated and aggregated in previous steps to get to significant region-gene pairs\
 '*qtl/cre_qtl/mo_plot_replicating_cres.ipynb*'  plot properties of region-gene pairs that were overlapping eQTLs/caQTLs and replicate as CREs\
 '*qtl/cre_qtl/mo_plot_creqtls.Rmd*' plot proportion of region-gene pairs that were overlapping eQTLs/caQTLs and replicate as CREs\
-'*qtl/cre_qtl/mo_compare_naive_cres.Rmd*' compare LIMIX single-cell CRE mapping results across cell types\
-'*qtl/cre_qtl/mo_compare_naive_cres.Rmd*' compare LIMIX single-cell CRE mapping results across cell types\
+'*qtl/cre_qtl/mo_compare_naive_cres.Rmd*' compare LIMIX single-cell CRE mapping results across cell types
+
+
+### Transcript Factor QTL mapping
+'*qtl/tfqtl/mo_sc_tfqtl.R*' run single-cell TF-QTL analysis\
+'*qtl/tfqtl/mo_tf_qtl.smk*' run single-cell TF-QTL analysis using snakemake file\
+'*qtl/tfqtl/mo_tf_qtl_template.yaml*' run single-cell TF-QTL analysis using yaml file\
+
+
+### LD
+'*qtl/ld/mo_calc_lds.R*'    calculate LD with sparse matrices between all variants or two sets of variants\
+'*qtl/ld/mo_get_ld_pairs.R*'    get the variants that are in LD with one another
 
 
 ### QTL utility scripts
 '*qtl/mo_regress_qtlinputs.py*'    regress PCs out of QTL input files\
+'*qtl/mo_regress_pcs_qtlinput.ipynb*'    regress PCs out of QTL input files\
 '*qtl/mo_eigenmt_correct_limix_qtls.R*'    perform eigenMT MTC on QTL outputs
 
 
