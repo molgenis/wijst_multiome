@@ -281,7 +281,7 @@ write_empty_result <- function(output_loc) {
 # luck seed
 set.seed(7777)
 # whether we are in debug mode
-debug <- T
+debug <- F
 
 
 ####################
