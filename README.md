@@ -67,7 +67,8 @@ Below we will outline the steps taken to process and analyse the data
 
 
 ### seurat preprocess
-'*seurat_preprocess/mo_lane_to_seurat.R*'   read the barcodes/features/matrix files into Seurat objects for the RNA counts
+'*seurat_preprocess/mo_lane_to_seurat.R*'   read the barcodes/features/matrix files into Seurat objects for the RNA counts\
+'*seurat_preprocess/mo_lane_to_seuratv4.R*'   read the barcodes/features/matrix files into Seurat objects for the RNA counts, using Seurat v4 format
 
 
 ### cell type assignment
@@ -84,7 +85,6 @@ Below we will outline the steps taken to process and analyse the data
 '*seurat_preprocess/mo_filter_qc.R*'    do QC on the count data\
 '*seurat_preprocess/mo_normalize_and_cluster.R*'    perform SCT normalization, PCA, knn-clustering and 2d UMAP\
 '*seurat_preprocess/mo_add_rna_metadata.R*'     add covid assignments to seurat metadata\
-'*seurat_preprocess/lc_create_per_celltype_objects.R*'  create a Seurat object for each cell type, with only UT or both UT and 24hCA\
 '*seurat_preprocess/mo_create_l2_objects.R*'    create a Seurat object per L2 Azimuth covid19 annotation
 
 
@@ -383,13 +383,18 @@ Below we will outline the steps taken to process and analyse the data
 ### QTL utility scripts
 '*qtl/mo_regress_qtlinputs.py*'    regress PCs out of QTL input files\
 '*qtl/mo_regress_pcs_qtlinput.ipynb*'    regress PCs out of QTL input files\
-'*qtl/mo_eigenmt_correct_limix_qtls.R*'    perform eigenMT MTC on QTL outputs
+'*qtl/mo_eigenmt_correct_limix_qtls.R*'    perform eigenMT MTC on QTL outputs\
+'*qtl/mo_get_ncells_analysis.R*'    get number of cells used for generating each pseudobulk\
+'*qtl/mo_merge_qtl_tables.R*'    merge QTL result tables for supplements\
+'*qtl/mo_plot_pseudobulk_correlations.R*'    plot correlation of pseudobulk gene values against one another\
+'*qtl/mo_qtl_variant_to_region.R*'    match cpeaks or screen regions to variants
 
 
 ### QTL results
 '*qtl/mo_filter_down_significant_results.R*'    subset QTL output by significance\
 '*qtl/mo_regress_pcs_qtlinput.ipynb*'   regress principal components out of QTL input matrices so they plot more like they are modelled\
 '*qtl/mo_plot_qtls.ipynb*'    plot how the QTLs and CREs look\
+'*qtl/mo_plot_qtls.Rmd*'    plot how the QTLs and CREs look\
 '*qtl/mo_qtl_caqtl_eqtl_overlaps.ipynb*'    plot overlapping caQTLs and eQTLs\
 '*qtl/mo_plot_qtl_numbers.Rmd*'     plot the number of QTLs\
 '*qtl/mo_get_finemapped_variants.R*'     extract finemapped and non-finemapped eQTLs from sc-eQTLgen to compare the variants\
@@ -431,6 +436,7 @@ Below we will outline the steps taken to process and analyse the data
 
 ### merge seurat objects
 '*seurat_preprocess/lc_create_per_celltype_objects.R*'  create a Seurat object for each cell type, with only UT or both UT and 24hCA\
+'*seurat_preprocess/lc_export_rna_objects.R*'  export Seurat objects for the long-covid lifelines data
 
 
 ### differentially accessible region detection
