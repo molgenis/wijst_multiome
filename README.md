@@ -124,7 +124,6 @@ Below we will outline the steps taken to process and analyse the data
 '*cpeaks_preprocess_samples/mo_merge_cpeaks_with_screenv4.R*'    merge cpeaks defined regions with screen v4 annotations of regions
 
 
-
 ### ArchR ATAC data processing
 '*archr_preprocess_samples/build-arrowfiles.R*' create Arrow files to use in archR\
 '*archr_preprocess_samples/build-project.R*'  create ArchR project from Arrow chunk_files\
@@ -171,8 +170,6 @@ Below we will outline the steps taken to process and analyse the data
 
 
 ### CRE detection
-'*cre_detection/mo_scenicplus_env.yml*' environment with packages used for CRE detection
-
 
 #### comparisons
 '*cre_detection/comparisons/mo_check_opposite_cre_effects.R'* check CRE-gene pairs that have opposite effects in different methods\
