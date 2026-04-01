@@ -32,4 +32,4 @@ r_command: "~/start_Rscript.sh"
 # script location
 script_loc: "/groups/umcg-franke-scrna/tmp02/users/umcg-roelen/singularity/rstudio-server/simulated_home/mo_sc_tfqtl.R"
 # merging script as well
-merge_script_loc: "/groups/umcg-franke-scrna/tmp02/users/umcg-roelen/singularity/rstudio-server/simulated_home/mo_sc_tfqtl_merge.R"
+merge_script_loc: "/groups/umcg-franke-scrna/tmp02/users/umcg-roelen/singularity/rstudio-server/simulated_home/mo_hybrid_cre_interaction_merge.R"

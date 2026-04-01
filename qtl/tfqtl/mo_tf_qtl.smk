@@ -124,5 +124,6 @@ rule merge_results:
 
         {params.rcmd} "{params.rscript}" \
             --in "{params.in_dir}" \
-            --out "{output.merged}"
+            --out "{output.merged}" \
+            --pattern 'chr\\d+'
         """

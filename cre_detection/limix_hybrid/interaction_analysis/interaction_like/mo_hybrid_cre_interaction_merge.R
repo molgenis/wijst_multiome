@@ -56,7 +56,9 @@ option_list <- list(
   make_option(c("-i", "--in"), type="character", default=NULL, 
               help="input directory of chunks", metavar="character"),
   make_option(c("-o", "--out"), type="character", default=NULL, 
-              help="output file", metavar="character")
+              help="output file", metavar="character"), 
+  make_option(c("-p", "--pattern"), type="character", default='chr\\d+\\-\\d+\\-\\d+', 
+              help="pattern for grabbing chunks", metavar="character")
 )
 
 
@@ -68,11 +70,15 @@ opt <- parse_args(opt_parser)
 in_dir <- NULL
 # location of the output
 output_loc <- NULL
+# get the chunk pattern
+chunk_pattern <- NULL
 
 if (debug) {
   # set all of the variables hardcoded for a testing debug run
   in_dir <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/sc/all/lane_donor/'
   output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/sc/all/lane_donor/merged/results_fdr.tsv.gz'
+  # get the chunk pattern
+  chunk_pattern <- 'chr\\d+\\-\\d+\\-\\d+'
   
 } else {
   # obligatory parameters without a default
@@ -86,10 +92,12 @@ if (debug) {
   } else {
     output_loc <- opt[['out']]
   }
+  # get the chunk pattern
+  chunk_pattern <- opt[['pattern']]
 }
 
 # get the chunk pattern
-chunk_pattern <- 'chr\\d+\\-\\d+\\-\\d+'
+# chunk_pattern <- 'chr\\d+\\-\\d+\\-\\d+'
 # and the name of each file
 chunk_filename <-  'result.tsv.gz'
 
