@@ -14,7 +14,7 @@ library(IRanges)
 library(ggplot2)
 library(cowplot)
 library(stringr)
-
+library(logistf)
 
 ####################
 # Functions        #
@@ -269,7 +269,7 @@ add_introns_to_exons_info <- function(exons_annotations, feature_type_column='fe
       # where we reverse the positions so that the numbers are in the correct order in relation to being on the opposite strand
       intron_annotations <- intron_annotations[order(intron_annotations[[start_column_strand]], 
                                                      intron_annotations[[end_column_strand]], decreasing = T
-                                                         ), ]
+      ), ]
       # but keep the gene order non-reversed
       intron_annotations <- intron_annotations[order(intron_annotations[[gene_column]]), ]
       # add that new number column
@@ -294,6 +294,8 @@ add_introns_to_exons_info <- function(exons_annotations, feature_type_column='fe
 }
 
 add_gene_body_location <- function(qtl_output, intron_exon_annotation, feature_column='feature_id', variant_id_column='snp_id', variant_position_column='snp_position', variant_chromosome_column='snp_chromosome', variant_classification_column='variant_classification', exon_gene_column='feature', exon_type_column='feature', exon_annotation_column='annotation', exon_feature_column='gene_id', exon_start_column='start', exon_end_column='end', exon_number_column='number') {
+  qtl_output <- data.frame(qtl_output)
+  intron_exon_annotation <- data.frame(intron_exon_annotation)
   # filter the qtl output to only in-gene
   qtl_output_gene_body <- qtl_output[
     !is.na(qtl_output[[variant_classification_column]]) &
@@ -317,6 +319,8 @@ add_gene_body_location <- function(qtl_output, intron_exon_annotation, feature_c
       !is.na(intron_exon_annotation[[exon_feature_column]]) &
         intron_exon_annotation[[exon_feature_column]] == feature, 
     ]
+    print(head(qtl_output_feature))
+    print(head(intron_exon_annotation_feature))
     # make iranges objects
     ranges_qtl <- IRanges(start = qtl_output_feature[[variant_position_column]], end = qtl_output_feature[[variant_position_column]])
     ranges_exons <- IRanges(start = intron_exon_annotation_feature[[exon_start_column]], end = intron_exon_annotation_feature[[exon_end_column]])
@@ -345,9 +349,365 @@ add_gene_body_location <- function(qtl_output, intron_exon_annotation, feature_c
   return(qtl_output)
 }
 
+
+add_utr_info <- function(exon_intron_annotation, cds_annotation, feature_id_column='gene_id', start_column='start', end_column='end') {
+  # make a list where we have this info added
+  exon_intro_with_utr_l <- list()
+  # check each feature
+  for (feature in unique(exon_intron_annotation[[feature_id_column]])) {
+    # subset the exon-intro data
+    exon_intron_annotation_feature <- exon_intron_annotation[!is.na(exon_intron_annotation[[feature_id_column]]) & exon_intron_annotation[[feature_id_column]] == feature, ]
+    # get the start and stop of the cds annotation
+    cds_annotation_feature <- cds_annotation[!is.na(cds_annotation[[feature_id_column]]) & cds_annotation[[feature_id_column]] == feature, ]
+    # extract the start of the CDS
+    cds_starts <- as.vector(cds_annotation_feature[, start_column])
+    # keep only non NA and finite values
+    cds_starts <- cds_starts[!is.na(cds_starts) & is.finite(cds_starts)]
+    # same for ends
+    cds_ends <- as.vector(cds_annotation_feature[, end_column])
+    cds_ends <- cds_ends[!is.na(cds_ends) & is.finite(cds_ends)]
+    # check if we have cds info
+    if (!((length(cds_starts) > 0) & (length(cds_ends) > 0))) {
+      exon_intron_annotation_feature[['utr']] <- NA
+      # if we do, we can add UTR info
+    } else {
+      cds_start <- min(cds_starts)
+      cds_end <- max(cds_ends)
+      # check each intron/exon
+      exon_intron_annotation_feature[['utr']] <- apply(exon_intron_annotation_feature, 1, function(x) {
+        # extract the intron/exon start
+        inex_start <- as.numeric(x[[start_column]])
+        inex_stop <- as.numeric(x[[end_column]])
+        # check if the stop is before the CDS
+        if (inex_stop <  cds_start) {
+          return('in_utr')
+          # check if the start is after the CDS
+        } else if (inex_stop < cds_start) {
+          return('in_utr')
+          # check if the intron/exon start overlaps the UTR
+        } else if (inex_start < cds_start & inex_stop > cds_start) {
+          return ('utr_overlap')
+          # check if the intron/exon stop overlaps the UTR
+        } else if (inex_start < cds_end & inex_stop > cds_end) {
+          return ('utr_overlap')
+          # otherwise there is no overlap
+        } else {
+          return ('no_utr')
+        }
+      })
+    }
+    # put feature in the list
+    exon_intro_with_utr_l[[feature]] <- exon_intron_annotation_feature
+  }
+  # merge utr info
+  exon_intro_with_utr <- do.call('rbind', exon_intro_with_utr_l)
+  return(exon_intro_with_utr)
+}
+
+add_pct_cds_info <- function(intron_exon_utr_annotation, feature_id_column='gene_id', start_column='start', end_column='end', strand_column='strand', utr_column='utr', cds_bins=8) {
+  # make into df
+  intron_exon_utr_annotation <- data.frame(intron_exon_utr_annotation)
+  # make a list where we have this info added
+  exon_intro_with_utr_wpct_l <- list()
+  # check each feature
+  for (feature in unique(intron_exon_utr_annotation[[feature_id_column]])) {
+    # extract feature table
+    intex_utr_anno_ft <- intron_exon_utr_annotation[!is.na(intron_exon_utr_annotation[[feature_id_column]]) & intron_exon_utr_annotation[[feature_id_column]] == feature, ]
+    # get the non-UTR annotations
+    intex_utr_anno_ft_nonutr <- intex_utr_anno_ft[!is.na(intex_utr_anno_ft[[utr_column]]) & intex_utr_anno_ft[[utr_column]] == 'no_utr', ]
+    # add new column
+    intex_utr_anno_ft[['full_anno']] <- NA
+    # set the end of the 5' UTR
+    utr_5_end <- NULL
+    # set the start of the 3' UTR
+    utr_3_start <- NULL
+    # check the types of strands
+    strands <- unique(intex_utr_anno_ft[[strand_column]])
+    # check for non NA
+    strands <- strands[!is.na(strands)]
+    # if the length is exactly 1, then we can proceed
+    if (length(strands) == 1) {
+      if (strands[[1]] == '+') {
+        # get start and end
+        utr_5_end <- min(intex_utr_anno_ft_nonutr[[start_column]])
+        utr_3_start <- max(intex_utr_anno_ft_nonutr[[end_column]])
+        # use that to annotate the UTR
+        if (nrow(intex_utr_anno_ft[intex_utr_anno_ft[[end_column]] < utr_5_end, ]) > 0) {
+          intex_utr_anno_ft[intex_utr_anno_ft[[end_column]] < utr_5_end, ][['full_anno']] <- '5 prime UTR'
+        }
+        if (nrow(intex_utr_anno_ft[intex_utr_anno_ft[[start_column]] > utr_3_start, ]) > 0) {
+          intex_utr_anno_ft[intex_utr_anno_ft[[start_column]] > utr_3_start, ][['full_anno']] <- '3 prime UTR'
+        }
+        # calculate fraction where the end of the intron/exon is based on the end of the CDS
+        intex_utr_anno_ft_nonutr[['full_anno']] <- ceiling((intex_utr_anno_ft_nonutr[[end_column]] - min(intex_utr_anno_ft_nonutr[[end_column]])) / (utr_3_start - min(intex_utr_anno_ft_nonutr[[end_column]])) * (cds_bins - 1)) + 1
+        # add that to the original table
+        intex_utr_anno_ft[!is.na(intex_utr_anno_ft[[utr_column]]) & intex_utr_anno_ft[[utr_column]] == 'no_utr',  ][['full_anno']] <- intex_utr_anno_ft_nonutr[['full_anno']]
+        
+      } else if(strands[[1]] == '-'){
+        # get start and end
+        utr_5_start <- max(intex_utr_anno_ft_nonutr[[end_column]])
+        utr_3_end <- min(intex_utr_anno_ft_nonutr[[start_column]])
+        if (nrow(intex_utr_anno_ft[intex_utr_anno_ft[[end_column]] < utr_3_end, ]) > 0) {
+          intex_utr_anno_ft[intex_utr_anno_ft[[end_column]] < utr_3_end, ][['full_anno']] <- '3 prime UTR'
+        }
+        if (nrow(intex_utr_anno_ft[intex_utr_anno_ft[[start_column]] > utr_5_start, ])) {
+          intex_utr_anno_ft[intex_utr_anno_ft[[start_column]] > utr_5_start, ][['full_anno']] <- '5 prime UTR'
+        }
+        # calculate fraction where the end of the intron/exon is based on the end of the CDS
+        intex_utr_anno_ft_nonutr[['full_anno']] <- ceiling(
+          (1 - (
+            (intex_utr_anno_ft_nonutr[[start_column]] - min(intex_utr_anno_ft_nonutr[[start_column]])) / 
+              (max(intex_utr_anno_ft_nonutr[[start_column]]) - min(intex_utr_anno_ft_nonutr[[start_column]]))
+          )) * (cds_bins - 1)
+        ) + 1
+        # add that to the original table
+        intex_utr_anno_ft[!is.na(intex_utr_anno_ft[[utr_column]]) & intex_utr_anno_ft[[utr_column]] == 'no_utr',  ][['full_anno']] <- intex_utr_anno_ft_nonutr[['full_anno']]
+      }
+    }
+    else {
+      intex_utr_anno_ft[['full_anno']] <- NA
+    }
+    # add back to the list
+    exon_intro_with_utr_wpct_l[[feature]] <- intex_utr_anno_ft
+  }
+  # merge all
+  exon_intro_with_utr_wpct <- do.call('rbind', exon_intro_with_utr_wpct_l)
+  return(exon_intro_with_utr_wpct)
+}
+
+add_pct_trons_info <- function(intron_exon_utr_annotation, feature_id_column='gene_id', start_column='start', end_column='end', strand_column='strand', utr_column='utr', cds_bins=8) {
+  # make a list where we have this info added
+  exon_intro_with_utr_wpct_l <- list()
+  intron_exon_utr_annotation <- data.frame(intron_exon_utr_annotation)
+  # check each feature
+  for (feature in unique(intron_exon_utr_annotation[[feature_id_column]])) {
+    # extract feature table
+    intex_utr_anno_ft <- intron_exon_utr_annotation[!is.na(intron_exon_utr_annotation[[feature_id_column]]) & intron_exon_utr_annotation[[feature_id_column]] == feature, ]
+    # get the non-UTR annotations
+    intex_utr_anno_ft_nonutr <- intex_utr_anno_ft[!is.na(intex_utr_anno_ft[[utr_column]]) & intex_utr_anno_ft[[utr_column]] == 'no_utr', ]
+    # add new column
+    intex_utr_anno_ft[['full_anno']] <- NA
+    # check the types of strands
+    strands <- unique(intex_utr_anno_ft[[strand_column]])
+    # check for non NA
+    strands <- strands[!is.na(strands)]
+    if(nrow(intex_utr_anno_ft_nonutr) > 0) {
+      # if the length is exactly 1, then we can proceed
+      if (length(strands) == 1) {
+        if (strands[[1]] == '+') {
+          # get start and end
+          utr_5_end <- min(intex_utr_anno_ft_nonutr[[start_column]])
+          utr_3_start <- max(intex_utr_anno_ft_nonutr[[end_column]])
+          # use that to annotate the UTR
+          if (nrow(intex_utr_anno_ft[intex_utr_anno_ft[[end_column]] < utr_5_end, ]) > 0) {
+            intex_utr_anno_ft[intex_utr_anno_ft[[end_column]] < utr_5_end, ][['full_anno']] <- '5 prime UTR'
+          }
+          if (nrow(intex_utr_anno_ft[intex_utr_anno_ft[[start_column]] > utr_3_start, ]) > 0) {
+            intex_utr_anno_ft[intex_utr_anno_ft[[start_column]] > utr_3_start, ][['full_anno']] <- '3 prime UTR'
+          }
+          # order by start position
+          intex_utr_anno_ft_nonutr <- intex_utr_anno_ft_nonutr[order(intex_utr_anno_ft_nonutr[[start_column]]), ]
+          # then add an increasing number
+          intex_utr_anno_ft_nonutr[['region_nr']] <- 1:nrow(intex_utr_anno_ft_nonutr)
+          # then divide each value by the total
+          intex_utr_anno_ft_nonutr[['full_anno']] <- ceiling(intex_utr_anno_ft_nonutr[['region_nr']] / nrow(intex_utr_anno_ft_nonutr) * (cds_bins))
+          # add that info back to the original table
+          intex_utr_anno_ft[!is.na(intex_utr_anno_ft[[utr_column]]) & intex_utr_anno_ft[[utr_column]] == 'no_utr', ][['full_anno']] <- intex_utr_anno_ft_nonutr[match(intex_utr_anno_ft[!is.na(intex_utr_anno_ft[[utr_column]]) & intex_utr_anno_ft[[utr_column]] == 'no_utr', ][[start_column]], intex_utr_anno_ft_nonutr[[start_column]]), ][['full_anno']]
+        } else if(strands[[1]] == '-'){
+          # get start and end
+          utr_5_start <- max(intex_utr_anno_ft_nonutr[[end_column]])
+          utr_3_end <- min(intex_utr_anno_ft_nonutr[[start_column]])
+          if (nrow(intex_utr_anno_ft[intex_utr_anno_ft[[end_column]] < utr_3_end, ]) > 0) {
+            intex_utr_anno_ft[intex_utr_anno_ft[[end_column]] < utr_3_end, ][['full_anno']] <- '3 prime UTR'
+          }
+          if (nrow(intex_utr_anno_ft[intex_utr_anno_ft[[start_column]] > utr_5_start, ])) {
+            intex_utr_anno_ft[intex_utr_anno_ft[[start_column]] > utr_5_start, ][['full_anno']] <- '5 prime UTR'
+          }
+          # order by start position
+          intex_utr_anno_ft_nonutr <- intex_utr_anno_ft_nonutr[order(intex_utr_anno_ft_nonutr[[start_column]], decreasing = T), ]
+          # then add an increasing number
+          intex_utr_anno_ft_nonutr[['region_nr']] <- 1:nrow(intex_utr_anno_ft_nonutr)
+          # then divide each value by the total
+          intex_utr_anno_ft_nonutr[['full_anno']] <- ceiling(intex_utr_anno_ft_nonutr[['region_nr']] / nrow(intex_utr_anno_ft_nonutr) * (cds_bins))
+          # add that info back to the original table
+          intex_utr_anno_ft[!is.na(intex_utr_anno_ft[[utr_column]]) & intex_utr_anno_ft[[utr_column]] == 'no_utr', ][['full_anno']] <- intex_utr_anno_ft_nonutr[match(intex_utr_anno_ft[!is.na(intex_utr_anno_ft[[utr_column]]) & intex_utr_anno_ft[[utr_column]] == 'no_utr', ][[start_column]], intex_utr_anno_ft_nonutr[[start_column]]), ][['full_anno']]
+        }
+      }
+      else {
+        intex_utr_anno_ft[['full_anno']] <- NA
+      }
+    }
+    else {
+      intex_utr_anno_ft[['full_anno']] <- NA
+    }
+    # add back to the list
+    exon_intro_with_utr_wpct_l[[feature]] <- intex_utr_anno_ft
+  }
+  # merge all
+  exon_intro_with_utr_wpct <- do.call('rbind', exon_intro_with_utr_wpct_l)
+  return(exon_intro_with_utr_wpct)
+}
+
+
+#' Get Color List
+#'
+#' This function generates a list of colors corresponding to a given vector of names. It ensures each unique name is assigned a unique color.
+#'
+#' @param vector_of_names A character vector containing the names for which colors are to be generated.
+#' @param use_sampling A logical value indicating whether to use sampling when generating colors (default is FALSE).
+#' @param color_indices An optional vector of color indices to use for sampling.
+#'
+#' @return A named list of colors, where each name in the input vector is assigned a unique color.
+#'
+#' @examples
+#' \dontrun{
+#' color_list <- get_color_list(c("apple", "banana", "cherry"))
+#' }
+#'
+get_color_list <- function(vector_of_names, use_sampling=F, color_indices=NULL) {
+  # get the unique entries
+  vector_unique <- unique(vector_of_names)
+  # remove any NA
+  vector_unique <- vector_unique[!is.na(vector_unique)]
+  # get some colors
+  colors_to_use <- NULL
+  if (length(vector_unique) > 74) {
+    colors_to_use <- roycols::sample_tons_of_colors(length(vector_unique), use_sampling = use_sampling, color_indices = color_indices)
+  }
+  else{
+    colors_to_use <- roycols::sample_many_colours(length(vector_unique), use_sampling = use_sampling, color_indices = color_indices)
+  }
+  # turn into a list
+  colors_to_use_list <- as.list(colors_to_use)
+  # and add the names
+  names(colors_to_use_list) <- vector_unique
+  return(colors_to_use_list)
+}
+
+####################
+# Setings          #
+####################
+
+# redo some calculations we already did
+recalc <- F
+
 ####################
 # Main code        #
 ####################
+
+# save this info
+exons_annotation_exons_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/ncbi_gencode/GCF_000001405.40/gencode_exons.tsv.gz'
+if (recalc) {
+  # location of the gene annotations with exons
+  exons_annotation_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/ncbi_gencode/GCF_000001405.40/genomic.gtf.gz'
+  # read the annotation file
+  exons_annotation <- read.table(exons_annotation_loc, header = F, sep = '\t')
+  # set column names
+  colnames(exons_annotation) <- c('seqname','source','feature','start','end','score','strand','frame','attributes')
+  # add the gene ID
+  exons_annotation[['gene_id']] <- str_extract(exons_annotation$attributes, "(?<=gene_id )[^;]+")
+  # add biotype
+  exons_annotation[['gene_biotype']] <- str_extract(exons_annotation$attributes, "(?<=gene_biotype )[^;]+")
+  write.table(exons_annotation, gzfile(exons_annotation_exons_loc), row.names = F, col.names = T, sep = '\t', quote = T)
+  # with a checksum
+  mdfiver::create_sha256_for_file(exons_annotation_exons_loc)
+} else {
+  # reload
+  exons_annotation <- fread(exons_annotation_exons_loc, header = T, sep = '\t')
+}
+
+# save this info
+exons_annotatio_transcripts_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/ncbi_gencode/GCF_000001405.40/gencode_with_transcripts.tsv.gz'
+if (recalc) {
+  # subset to the transcripts
+  exons_annotation_transcripts <- exons_annotation[exons_annotation[['feature']] == 'transcript', ]
+  # add a TSS
+  exons_annotation_transcripts[['TSS']] <- exons_annotation_transcripts[['start']]
+  # but make this the end if we are on the negative strand
+  exons_annotation_transcripts[exons_annotation_transcripts[['strand']] == '-', ][['TSS']] <- exons_annotation_transcripts[exons_annotation_transcripts[['strand']] == '-', ][['end']]
+  write.table(exons_annotation_transcripts, gzfile(exons_annotatio_transcripts_loc), row.names = F, col.names = T, sep = '\t', quote = T)
+  # with a checksum
+  mdfiver::create_sha256_for_file(exons_annotatio_transcripts_loc)
+  
+} else {
+  # reload
+  exons_annotation_transcripts <- fread(exons_annotatio_transcripts_loc, header = T, sep = '\t')
+}
+
+# save this info
+exons_annotation_anns_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/ncbi_gencode/GCF_000001405.40/gencode_with_annotations.tsv.gz'
+if (recalc) {
+  # get exon/intron info
+  exon_intron_annotation <- add_introns_to_exons_info(exons_annotation)
+  # add the intron/exon number with the actual annotation
+  exon_intron_annotation[['annotation']] <- paste(exon_intron_annotation[['feature']], exon_intron_annotation[['number']])
+  write.table(exon_intron_utr_annotation, gzfile(exons_annotation_anns_loc), row.names = F, col.names = T, sep = '\t', quote = T)
+  # with a checksum
+  mdfiver::create_sha256_for_file(exons_annotation_anns_loc)
+} else {
+  # reload
+  exon_intron_utr_annotation <- fread(exons_annotation_anns_loc)
+}
+
+# save this info
+exons_annotatio_utr_pct_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/ncbi_gencode/GCF_000001405.40/gencode_with_annotations_bins.tsv.gz'
+if (recalc) {
+  # get the CDS info as well
+  exons_annotation_cds <- exons_annotation[exons_annotation[['feature']] == 'CDS', ]
+  # add pct info
+  exon_intron_utr_annotation_pct <- add_pct_cds_info(exon_intron_utr_annotation)
+  write.table(exon_intron_utr_annotation_pct, gzfile(exons_annotatio_utr_pct_loc), row.names = F, col.names = T, sep = '\t', quote = F)
+  mdfiver::create_sha256_for_file(exons_annotatio_utr_pct_loc)
+} else {
+  # reload
+  exon_intron_utr_annotation_pct <- fread(exons_annotatio_utr_pct_loc, header = T, sep = '\t')
+}
+
+# save this info
+exons_annotatio_utr_pct5_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/ncbi_gencode/GCF_000001405.40/gencode_with_annotations_bins5.tsv.gz'
+if (recalc) {
+  # also with smaller bins
+  exon_intron_utr_annotation_pct_5 <- add_pct_cds_info(exon_intron_annotation, cds_bins = 5)
+  write.table(exon_intron_utr_annotation_pct_5, gzfile(exons_annotatio_utr_pct5_loc), row.names = F, col.names = T, sep = '\t', quote = F)
+  mdfiver::create_sha256_for_file(exons_annotatio_utr_pct5_loc)
+} else {
+  # reload
+  exon_intron_utr_annotation_pct_5 <- fread(exons_annotatio_utr_pct5_loc, header = T, sep = '\t')
+}
+
+# save this info
+exons_annotatio_utr_pcttrons_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/ncbi_gencode/GCF_000001405.40/gencode_with_annotations_bins_pcttrons.tsv.gz'
+if (recalc) {
+  # add pct info
+  exon_intron_utr_annotation_pcttrons <- add_pct_trons_info(exon_intron_utr_annotation)
+  write.table(exon_intron_utr_annotation_pcttrons, gzfile(exons_annotatio_utr_pcttrons_loc), row.names = F, col.names = T, sep = '\t', quote = F)
+  mdfiver::create_sha256_for_file(exons_annotatio_utr_pcttrons_loc)
+} else {
+  # reload this info
+  exon_intron_utr_annotation_pcttrons <- fread(exons_annotatio_utr_pcttrons_loc, header = T, sep = '\t')
+  # also with smaller bins
+  exon_intron_utr_annotation_pcttrons_5 <- add_pct_trons_info(exon_intron_utr_annotation, cds_bins = 5)
+}
+
+
+
+# get the location of the file annotating the QTL variants and their SCREEN annotation
+variant_to_screen_region_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/annotations/mo_qtl_variants_tested_screen_overlap.tsv.gz'
+# read
+variant_to_screen_region <- fread(variant_to_screen_region_loc, header = T, sep = '\t')
+# get the annotation for each region
+screen_region_anno_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/encode_cres/v4/GRCh38-cCREs.bed'
+# read that annotation
+screen_region_anno <- fread(screen_region_anno_loc, sep = '\t', header = F)
+# set column names
+colnames(screen_region_anno) <- c('chromosome', 'start', 'end', 'id1', 'id2', 'function')
+# add identifier as we have them in other data
+screen_region_anno[['feature']] <- paste(screen_region_anno[['chromosome']], screen_region_anno[['start']], screen_region_anno[['end']], sep = '-')
+# make a table which is the variant to screen region
+variant_to_screen_anno <- cbind(
+  variant_to_screen_region, 
+  screen_region_anno[match(variant_to_screen_region[['overlapping_feature']], screen_region_anno[['feature']]), c('function'), drop = F]
+)
 
 # location of the eQTL output
 qtl_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/sc-eqtlgen/output/L1/combined/'
@@ -377,7 +737,7 @@ iqtl_output <- get_qtls_per_celltype_limix(iqtl_output_loc, output_file = 'infla
 iqtl_output_all <- do.call('rbind', iqtl_output)
 # filter on signifiacnce
 iqtl_output_all_sig <- iqtl_output_all[iqtl_output_all[['feature_q_value']] < 0.05 &
-                                       iqtl_output_all[['feature_bf_eigen']] < 0.05, ]
+                                         iqtl_output_all[['feature_bf_eigen']] < 0.05, ]
 # rename the columns
 colnames(iqtl_output_all_sig) <- c('i_beta', 'i_beta_se', 'i_empirical_feature_p_value', 'i_p_value', 'snp_id', 'feature_id', 'i_n_tests_feature', 'i_feature_bf_eigen', 'i_total_bf_eigen', 'i_feature_q_value', 'i_cell_type')
 # merge the iqtl to the qtl output
@@ -394,45 +754,6 @@ qtl_output_all_sig_wi[!is.na(qtl_output_all_sig_wi[['i_beta']]) & sign(qtl_outpu
 # add the end to start distance
 qtl_output_all_sig_wi[['feature_end_start_dist']] <- qtl_output_all_sig_wi[['feature_end']] - qtl_output_all_sig_wi[['feature_start']]
 
-# # location of the GTF
-# gtf_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/refdata-cellranger-arc-GRCh38-2024-A/genes/genes.gtf.gz'
-# gtf <- read.table(gtf_loc, header = F, sep = '\t')
-
-# # and gencode
-# gencode_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/ucsc_gencode/gencode43.tsv.gz'
-# gencode <- read.table(gencode_loc, header = F, sep = '\t')
-# colnames(gencode) <- c('chrom', 'chromStart', 'chromEnd', 'name', 'score', 'strand', 'thickStart', 'thickEnd', 'itemRgb', 'blockCount', 'blockSizes', 'blockStarts')
-# # add this info
-# qtl_output_all_sig_wi[['strand']] <- gencode[match(
-#   paste0('chr', qtl_output_all_sig_wi[['feature_chromosome']], '-', qtl_output_all_sig_wi[['feature_start']], '-', qtl_output_all_sig_wi[['feature_end']]),
-#   paste0(gencode[['chrom']], '-', gencode[['chromStart']], '-', gencode[['chromEnd']])
-# ), ][['strand']]
-
-# # and the annotation of SCENIC+
-# scenic_anno_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/genome_annotation.tsv'
-# scenic_anno <- fread(scenic_anno_loc, header = T, sep = '\t')
-# colnames(scenic_anno) <-c('chrom', 'start', 'end', 'strand', 'gs','Transcription_Start_Site','Transcript_type')
-# # add to the QTL info the TSS
-# qtl_output_all_sig_wi[['TSS']] <- scenic_anno[match(qtl_output_all_sig_wi[['feature_id']], scenic_anno[['gs']]), ][['Transcription_Start_Site']]
-# # add to the QTL info the strand
-# qtl_output_all_sig_wi[['strand']] <- scenic_anno[match(qtl_output_all_sig_wi[['feature_id']], scenic_anno[['gs']]), ][['strand']]
-
-# location of the gene annotations with exons
-exons_annotation_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/ncbi_gencode/GCF_000001405.40/genomic.gtf.gz'
-# read the annotation file
-exons_annotation <- read.table(exons_annotation_loc, header = F, sep = '\t')
-# set column names
-colnames(exons_annotation) <- c('seqname','source','feature','start','end','score','strand','frame','attributes')
-# add the gene ID
-exons_annotation[['gene_id']] <- str_extract(exons_annotation$attributes, "(?<=gene_id )[^;]+")
-# add biotype
-exons_annotation[['gene_biotype']] <- str_extract(exons_annotation$attributes, "(?<=gene_biotype )[^;]+")
-# subset to the transcripts
-exons_annotation_transcripts <- exons_annotation[exons_annotation[['feature']] == 'transcript', ]
-# add a TSS
-exons_annotation_transcripts[['TSS']] <- exons_annotation_transcripts[['start']]
-# but make this the end if we are on the negative strand
-exons_annotation_transcripts[exons_annotation_transcripts[['strand']] == '-', ][['TSS']] <- exons_annotation_transcripts[exons_annotation_transcripts[['strand']] == '-', ][['end']]
 # add to the QTL info the strand
 qtl_output_all_sig_wi[['strand']] <- exons_annotation_transcripts[match(qtl_output_all_sig_wi[['feature_id']], exons_annotation_transcripts[['gene_id']]), ][['strand']]
 # add to the QTL info the TSS
@@ -442,7 +763,6 @@ exons_annotation_genes <- exons_annotation[exons_annotation[['feature']] == 'gen
 # add the biotype
 qtl_output_all_sig_wi[['gene_biotype']] <- exons_annotation_genes[match(qtl_output_all_sig_wi[['feature_id']], exons_annotation_genes[['gene_id']]), ][['gene_biotype']]
 
-
 # add the location of the variant
 qtl_output_all_sig_wi <- classify_variant_location(qtl_output_all_sig_wi)
 # now add a corrected distance
@@ -451,6 +771,261 @@ qtl_output_all_sig_wi[['distance_directional']] <- NA
 qtl_output_all_sig_wi[!is.na(qtl_output_all_sig_wi[['variant_classification']]), 'distance_directional'] <- qtl_output_all_sig_wi[!is.na(qtl_output_all_sig_wi[['variant_classification']]), 'distance']
 # but flipping direction for when in front of gene
 qtl_output_all_sig_wi[!is.na(qtl_output_all_sig_wi[['variant_classification']]) & qtl_output_all_sig_wi[['variant_classification']] == 'before_tss', 'distance_directional'] <- -1 * qtl_output_all_sig_wi[!is.na(qtl_output_all_sig_wi[['variant_classification']]) & qtl_output_all_sig_wi[['variant_classification']] == 'before_tss', 'distance_directional']
+# add the gen-body size
+qtl_output_all_sig_wi[['gb_size']] <- abs(qtl_output_all_sig_wi[['feature_start']] - qtl_output_all_sig_wi[['feature_end']])
+
+# calculate distance to tss
+qtl_output_all_sig_wi[['tss_dist']] <- qtl_output_all_sig_wi[['TSS']] - qtl_output_all_sig_wi[['snp_position']]
+# where the it was on the negative strand, the distance is in the other direction
+qtl_output_all_sig_wi[!is.na(qtl_output_all_sig_wi[['strand']]) & qtl_output_all_sig_wi[['strand']] == -1, ][['tss_dist']] <- -1 * qtl_output_all_sig_wi[!is.na(qtl_output_all_sig_wi[['strand']]) & qtl_output_all_sig_wi[['strand']] == -1, ][['tss_dist']]
+# add info on if the beta is the same direction as the i_beta
+qtl_output_all_sig_wi[['g_i_beta_same']] <- !is.na(qtl_output_all_sig_wi[['beta']]) & !is.na(qtl_output_all_sig_wi[['i_beta']]) & sign(qtl_output_all_sig_wi[['beta']]) == qtl_output_all_sig_wi[['i_beta']]
+# make a classification column
+qtl_output_all_sig_wi[['interaction_beta_direction']] <- 'none'
+qtl_output_all_sig_wi[!is.na(qtl_output_all_sig_wi[['i_beta']]) & 
+                        sign(qtl_output_all_sig_wi[['i_beta']]) == 1 &
+                        sign(qtl_output_all_sig_wi[['beta']]) == 1, 'interaction_beta_direction'] <- '+/+'
+qtl_output_all_sig_wi[!is.na(qtl_output_all_sig_wi[['i_beta']]) & 
+                        sign(qtl_output_all_sig_wi[['i_beta']]) == -1 &
+                        sign(qtl_output_all_sig_wi[['beta']]) == 1, 'interaction_beta_direction'] <- '+/-'
+qtl_output_all_sig_wi[!is.na(qtl_output_all_sig_wi[['i_beta']]) & 
+                        sign(qtl_output_all_sig_wi[['i_beta']]) == 1 &
+                        sign(qtl_output_all_sig_wi[['beta']]) == -1, 'interaction_beta_direction'] <- '-/+'
+qtl_output_all_sig_wi[!is.na(qtl_output_all_sig_wi[['i_beta']]) & 
+                        sign(qtl_output_all_sig_wi[['i_beta']]) == -1 &
+                        sign(qtl_output_all_sig_wi[['beta']]) == -1, 'interaction_beta_direction'] <- '-/-'
+
+# check if there is a difference
+kruskal.test(tss_dist ~ interaction_direction, data = qtl_output_all_sig_wi[qtl_output_all_sig_wi[['is_top_variant']] & !is.na(qtl_output_all_sig_wi[['tss_dist']]), ])
+# for protein coding specifically
+kruskal.test(tss_dist ~ interaction_direction, data = qtl_output_all_sig_wi[qtl_output_all_sig_wi[['is_top_variant']] & !is.na(qtl_output_all_sig_wi[['tss_dist']]) & !is.na(qtl_output_all_sig_wi[['gene_biotype']]) & qtl_output_all_sig_wi[['gene_biotype']] == 'protein_coding', ])
+
+# keep top over all cell types
+qtl_output_all_sig_wi_wi_tc <- qtl_output_all_sig_wi[!is.na(qtl_output_all_sig_wi[['i_beta']]), ]
+qtl_output_all_sig_wi_wi_tc[['i_zscore']] <- qtl_output_all_sig_wi_wi_tc[['i_beta']] / qtl_output_all_sig_wi_wi_tc[['i_beta_se']]
+qtl_output_all_sig_wi_wi_tc[['zscore']] <- qtl_output_all_sig_wi_wi_tc[['beta']] / qtl_output_all_sig_wi_wi_tc[['beta_se']]
+#qtl_output_all_sig_wi_wi_tc <- qtl_output_all_sig_wi[order(qtl_output_all_sig_wi_wi_tc[['i_zscore']]), ]
+qtl_output_all_sig_wi_wi_tc <- qtl_output_all_sig_wi_wi_tc[order(qtl_output_all_sig_wi_wi_tc[['p_value']]), ]
+qtl_output_all_sig_wi_wi_tc <- qtl_output_all_sig_wi_wi_tc[order(qtl_output_all_sig_wi_wi_tc[['i_feature_bf_eigen']]), ]
+qtl_output_all_sig_wi_wi_tc <- qtl_output_all_sig_wi_wi_tc[!duplicated(qtl_output_all_sig_wi_wi_tc[['feature_id']]), ]
+
+# check if there is a difference
+kruskal.test(distance_directional ~ interaction_direction, data = qtl_output_all_sig_wi[qtl_output_all_sig_wi[['is_top_variant']] & !is.na(qtl_output_all_sig_wi[['distance_directional']]), ])
+# p-value < 2.2e-16
+# do post-hoc test for positive vs negative
+wilcox.test(distance_directional ~ interaction_direction, data = qtl_output_all_sig_wi[qtl_output_all_sig_wi[['is_top_variant']] & !is.na(qtl_output_all_sig_wi[['distance_directional']]) & qtl_output_all_sig_wi[['interaction_direction']] != 'none', ])
+# p-value = 0.0059
+
+# check if the MAF values are significantly different as well
+wilcox.test(
+  x = qtl_output_all_sig_wi[qtl_output_all_sig_wi[['is_top_variant']] & !is.na(qtl_output_all_sig_wi[['distance_directional']]) & sign(qtl_output_all_sig_wi[['distance_directional']]) == -1, ][['maf']], 
+  y = qtl_output_all_sig_wi[qtl_output_all_sig_wi[['is_top_variant']] & !is.na(qtl_output_all_sig_wi[['distance_directional']]) & sign(qtl_output_all_sig_wi[['distance_directional']]) == 1, ][['maf']]
+)
+# p-value 0.06335
+
+# check if there is a difference for protein coding or not
+kruskal.test(distance_directional ~ gene_biotype, data = qtl_output_all_sig_wi[qtl_output_all_sig_wi[['is_top_variant']] & !is.na(qtl_output_all_sig_wi[['distance_directional']]), ])
+# p-value = 0.05437
+# check if the maf is related to whether or not it is protein coding
+kruskal.test(maf ~ gene_biotype, data = qtl_output_all_sig_wi[qtl_output_all_sig_wi[['is_top_variant']] & !is.na(qtl_output_all_sig_wi[['distance_directional']]), ])
+# p-value = 0.01058
+# next, try to model multiple variable at once by first checking if the distance at all plays a role
+qtl_output_all_sig_wi_factorized <- qtl_output_all_sig_wi
+# add new columns for just checking each direction separately
+qtl_output_all_sig_wi_factorized[['interaction_any']] <- ifelse(qtl_output_all_sig_wi_factorized[['interaction_direction']] == 'none', 'no_interaction', 'yes_interaction')
+qtl_output_all_sig_wi_factorized[['interaction_positive']] <- ifelse(qtl_output_all_sig_wi_factorized[['interaction_direction']] == 'positive', 'yes_pos_interaction', 'no_pos_interaction')
+qtl_output_all_sig_wi_factorized[['interaction_negative']] <- ifelse(qtl_output_all_sig_wi_factorized[['interaction_direction']] == 'negative', 'yes_neg_interaction', 'no_neg_interaction')
+# full model
+qtl_top_interaction_dir_model_full <- summary(
+  lm(
+    formula = as.formula('distance_directional ~ 
+                          interaction_direction + 
+                          gb_size +
+                          maf +
+                          beta'), 
+    # beta + 
+    # gene_biotype'), 
+    data = qtl_output_all_sig_wi_factorized[qtl_output_all_sig_wi_factorized[['is_top_variant']] & !is.na(qtl_output_all_sig_wi_factorized[['distance_directional']]), ]
+  )
+)
+# model yes/no interaction
+qtl_top_interaction_dir_model_yesno <- summary(
+  lm(
+    formula = as.formula('distance_directional ~ 
+                          interaction_any + 
+                          gb_size +
+                          maf +
+                          beta'), 
+    # beta + 
+    # gene_biotype'), 
+    data = qtl_output_all_sig_wi_factorized[qtl_output_all_sig_wi_factorized[['is_top_variant']] & !is.na(qtl_output_all_sig_wi_factorized[['distance_directional']]), ]
+  )
+)
+# model yes/no positive
+qtl_top_interaction_dir_model_pos_yesno <- summary(
+  lm(
+    formula = as.formula('distance_directional ~ 
+                          interaction_positive + 
+                          gb_size +
+                          maf +
+                          beta'), 
+    # beta + 
+    # gene_biotype'), 
+    data = qtl_output_all_sig_wi_factorized[qtl_output_all_sig_wi_factorized[['is_top_variant']] & !is.na(qtl_output_all_sig_wi_factorized[['distance_directional']]), ]
+  )
+)
+# model yes/no negative
+qtl_top_interaction_dir_model_neg_yesno <- summary(
+  lm(
+    formula = as.formula('distance_directional ~ 
+                          interaction_negative + 
+                          gb_size +
+                          maf +
+                          beta'), 
+    # beta + 
+    # gene_biotype'), 
+    data = qtl_output_all_sig_wi_factorized[qtl_output_all_sig_wi_factorized[['is_top_variant']] & !is.na(qtl_output_all_sig_wi_factorized[['distance_directional']]), ]
+  )
+)
+# model yes/no interaction explicitly with logistic
+qtl_output_all_sig_wi_factorized[['interaction_any']] <- factor(qtl_output_all_sig_wi_factorized[['interaction_any']])
+qtl_top_interaction_dir_model_yesno_logis <- summary(
+  logistf(
+    formula = as.formula('interaction_any  ~ 
+                          distance_directional + 
+                          gb_size +
+                          maf +
+                          beta'), 
+    data = qtl_output_all_sig_wi_factorized[qtl_output_all_sig_wi_factorized[['is_top_variant']] & !is.na(qtl_output_all_sig_wi_factorized[['distance_directional']]), ], 
+    family = binomial
+  )
+)
+# model positive yes/no interaction explicitly with logistic
+qtl_output_all_sig_wi_factorized[['interaction_positive']] <- factor(qtl_output_all_sig_wi_factorized[['interaction_positive']])
+qtl_top_interaction_dir_model_pos_yesno_logis <- summary(
+  logistf(
+    formula = as.formula('interaction_positive  ~ 
+                          distance_directional + 
+                          gb_size +
+                          maf +
+                          beta'), 
+    data = qtl_output_all_sig_wi_factorized[qtl_output_all_sig_wi_factorized[['is_top_variant']] & !is.na(qtl_output_all_sig_wi_factorized[['distance_directional']]), ], 
+    family = binomial
+  )
+)
+# model negative yes/no interaction explicitly with logistic
+qtl_output_all_sig_wi_factorized[['interaction_negative']] <- factor(qtl_output_all_sig_wi_factorized[['interaction_negative']])
+qtl_top_interaction_dir_model_neg_yesno_logis <- summary(
+  logistf(
+    formula = as.formula('interaction_negative  ~ 
+                          distance_directional + 
+                          gb_size +
+                          maf +
+                          beta'), 
+    data = qtl_output_all_sig_wi_factorized[qtl_output_all_sig_wi_factorized[['is_top_variant']] & !is.na(qtl_output_all_sig_wi_factorized[['distance_directional']]), ], 
+    family = binomial
+  )
+)
+# make into tables
+qtl_top_interaction_dir_model_full_tbl <- cbind('term' = gsub(' +', '_', rownames(qtl_top_interaction_dir_model_full[['coefficients']])), data.frame(qtl_top_interaction_dir_model_full[['coefficients']], check.names = F))
+qtl_top_interaction_dir_model_yesno_tbl <- cbind('term' = gsub(' +', '_', rownames(qtl_top_interaction_dir_model_yesno[['coefficients']])), data.frame(qtl_top_interaction_dir_model_yesno[['coefficients']], check.names = F))
+qtl_top_interaction_dir_model_pos_yesno_tbl <- cbind('term' = gsub(' +', '_', rownames(qtl_top_interaction_dir_model_pos_yesno[['coefficients']])), data.frame(qtl_top_interaction_dir_model_pos_yesno[['coefficients']], check.names = F))
+qtl_top_interaction_dir_model_neg_yesno_tbl <- cbind('term' = gsub(' +', '_', rownames(qtl_top_interaction_dir_model_neg_yesno[['coefficients']])), data.frame(qtl_top_interaction_dir_model_neg_yesno[['coefficients']], check.names = F))
+# fix column names where applicable
+colnames(qtl_top_interaction_dir_model_full_tbl) <- gsub(' +', '_', colnames(qtl_top_interaction_dir_model_full_tbl))
+colnames(qtl_top_interaction_dir_model_yesno_tbl) <- gsub(' +', '_', colnames(qtl_top_interaction_dir_model_yesno_tbl))
+colnames(qtl_top_interaction_dir_model_pos_yesno_tbl) <- gsub(' +', '_', colnames(qtl_top_interaction_dir_model_pos_yesno_tbl))
+colnames(qtl_top_interaction_dir_model_neg_yesno_tbl) <- gsub(' +', '_', colnames(qtl_top_interaction_dir_model_neg_yesno_tbl))
+# write these tables
+qtl_top_interaction_dir_model_full_tbl_loc <- '~/multiome/tables/mo_eqtl_interaction_dir_full.tsv.gz'
+qtl_top_interaction_dir_model_yesno_tbl_loc <- '~/multiome/tables/mo_eqtl_interaction_dir_yesno.tsv.gz'
+qtl_top_interaction_dir_model_pos_yesno_tbl_loc <- '~/multiome/tables/mo_eqtl_interaction_pos_yesno.tsv.gz'
+qtl_top_interaction_dir_model_neg_yesno_tbl_loc <- '~/multiome/tables/mo_eqtl_interaction_neg_yesno.tsv.gz'
+# write results with checksum
+write.table(qtl_top_interaction_dir_model_full_tbl, gzfile(qtl_top_interaction_dir_model_full_tbl_loc), row.names = F, col.names = T, sep = '\t', quote = F); mdfiver::create_sha256_for_file(qtl_top_interaction_dir_model_full_tbl_loc)
+write.table(qtl_top_interaction_dir_model_yesno_tbl, gzfile(qtl_top_interaction_dir_model_yesno_tbl_loc), row.names = F, col.names = T, sep = '\t', quote = F); mdfiver::create_sha256_for_file(qtl_top_interaction_dir_model_yesno_tbl_loc)
+write.table(qtl_top_interaction_dir_model_pos_yesno_tbl, gzfile(qtl_top_interaction_dir_model_pos_yesno_tbl_loc), row.names = F, col.names = T, sep = '\t', quote = F); mdfiver::create_sha256_for_file(qtl_top_interaction_dir_model_pos_yesno_tbl_loc)
+write.table(qtl_top_interaction_dir_model_neg_yesno_tbl, gzfile(qtl_top_interaction_dir_model_neg_yesno_tbl_loc), row.names = F, col.names = T, sep = '\t', quote = F); mdfiver::create_sha256_for_file(qtl_top_interaction_dir_model_neg_yesno_tbl_loc)
+
+# when modelling all of these, only yes vs no interaction is significant
+# interaction_directionnone           3.342e+04  8.928e+03   3.744 0.000187 ***
+# interaction_directionpositive       1.915e+04  1.197e+04   1.600 0.109849
+# exclusing the 'none' category
+summary(
+  lm(
+    formula = as.formula('distance_directional ~ 
+                          interaction_direction + 
+                          gb_size +
+                          maf +
+                          beta + 
+                          gene_biotype'), 
+    data = qtl_output_all_sig_wi[qtl_output_all_sig_wi[['is_top_variant']] & !is.na(qtl_output_all_sig_wi[['distance_directional']]) & qtl_output_all_sig_wi[['interaction_direction']] != 'none', ]
+  )
+)
+# not significant at the numerical level
+#                                       Estimate Std. Error t value Pr(>|t|)    
+# (Intercept)                        -5.401e+04  1.862e+04  -2.901 0.004037 ** 
+#   interaction_directionpositive       1.463e+03  8.829e+03   0.166 0.868535    
+# gb_size                            -1.659e-01  6.214e-02  -2.669 0.008080 ** 
+#   maf                                 4.576e+04  3.183e+04   1.438 0.151675    
+# beta                                2.287e+04  5.928e+03   3.857 0.000145 ***
+#   gene_biotypeprotein_coding          3.929e+04  1.327e+04   2.960 0.003356 ** 
+#   gene_biotypetranscribed_pseudogene  1.905e+05  4.793e+04   3.975 9.11e-05 ***
+#   gene_biotypeV_segment               6.577e+03  6.656e+04   0.099 0.921365    
+# now run with the distance as a categorical value
+qtl_output_all_sig_wi_factorized[['distance_directional_category']] <- as.factor(sign(qtl_output_all_sig_wi_factorized[['distance_directional']]))
+summary(
+  glm(
+    formula = as.formula('distance_directional_category ~ 
+                          interaction_direction + 
+                          gb_size + 
+                          maf +
+                          beta + 
+                          gene_biotype'), 
+    data = qtl_output_all_sig_wi_factorized[qtl_output_all_sig_wi_factorized[['is_top_variant']] & !is.na(qtl_output_all_sig_wi_factorized[['distance_directional_category']]), ], 
+    family = 'binomial'
+  )
+)
+# shows a significant effect of positive/negative
+#                                       Estimate Std. Error z value Pr(>|z|)    
+# (Intercept)                        -2.748e+00  1.453e+00  -1.891  0.05866 .  
+# interaction_directionnone           2.630e+00  2.587e-01  10.166  < 2e-16 ***
+#   interaction_directionpositive       8.899e-01  3.149e-01   2.826  0.00471 ** 
+#   gb_size                             1.069e-06  3.971e-07   2.691  0.00712 ** 
+#   maf                                 1.034e+00  4.169e-01   2.480  0.01315 *  
+#   beta                                1.895e-01  7.263e-02   2.609  0.00909 ** 
+#   gene_biotypelncRNA                  3.460e-01  1.428e+00   0.242  0.80856    
+# gene_biotypencRNA_pseudogene       -1.502e+01  8.827e+02  -0.017  0.98643    
+# gene_biotypeprotein_coding          6.869e-01  1.422e+00   0.483  0.62911    
+# gene_biotypetranscribed_pseudogene  1.863e+00  1.628e+00   1.145  0.25224    
+# gene_biotypeV_segment              -1.444e+01  4.560e+02  -0.032  0.97474    
+# gene_biotypeV_segment_pseudogene   -1.471e+01  8.827e+02  -0.017  0.98670   
+
+# this also has UTR info
+exon_intron_utr_annotation <- exon_intron_annotation
+
+# now add the intron/exon info
+qtl_output_all_sig_wi_gb <- add_gene_body_location(qtl_output_all_sig_wi, exon_intron_annotation)
+# add to the ieqtl data
+qtl_output_all_sig_wi_gb[['screen_overlap_func']] <- variant_to_screen_anno[match(qtl_output_all_sig_wi_gb[['snp_id']], variant_to_screen_anno[['snp_id']]), ][['function']]
+
+# add UTR info as well
+qtl_output_all_sig_wi_gb[['utr']] <- exon_intron_utr_annotation[match(paste(qtl_output_all_sig_wi_gb[['feature']], qtl_output_all_sig_wi_gb[['number']]), paste(exon_intron_utr_annotation[['feature']], exon_intron_utr_annotation[['number']])), ][['utr']]
+qtl_output_all_sig_wi_gb[['full_anno']] <- exon_intron_utr_annotation_pct[match(paste(qtl_output_all_sig_wi_gb[['feature']], qtl_output_all_sig_wi_gb[['number']]), paste(exon_intron_utr_annotation_pct[['feature']], exon_intron_utr_annotation_pct[['number']])), ][['full_anno']]
+qtl_output_all_sig_wi_gb[['full_anno5']] <- exon_intron_utr_annotation_pct_5[match(paste(qtl_output_all_sig_wi_gb[['feature']], qtl_output_all_sig_wi_gb[['number']]), paste(exon_intron_utr_annotation_pct_5[['feature']], exon_intron_utr_annotation_pct_5[['number']])), ][['full_anno']]
+qtl_output_all_sig_wi_gb[['tron_bin']] <- exon_intron_utr_annotation_pcttrons[match(paste(qtl_output_all_sig_wi_gb[['feature']], qtl_output_all_sig_wi_gb[['number']]), paste(exon_intron_utr_annotation_pcttrons[['feature']], exon_intron_utr_annotation_pcttrons[['number']])), ][['full_anno']]
+qtl_output_all_sig_wi_gb[['tron_bin_5bin']] <- exon_intron_utr_annotation_pcttrons_5[match(paste(qtl_output_all_sig_wi_gb[['feature']], qtl_output_all_sig_wi_gb[['number']]), paste(exon_intron_utr_annotation_pcttrons_5[['feature']], exon_intron_utr_annotation_pcttrons_5[['number']])), ][['full_anno']]
+# add a new column
+qtl_output_all_sig_wi_gb[['full_anno5_full']] <- qtl_output_all_sig_wi_gb[['full_anno5']]
+# where it is NA, use the variant classification
+qtl_output_all_sig_wi_gb[is.na(qtl_output_all_sig_wi_gb[['full_anno5']]), ][['full_anno5_full']] <- qtl_output_all_sig_wi_gb[is.na(qtl_output_all_sig_wi_gb[['full_anno5']]), ][['variant_classification']]
+
+# save QTL output info
+ieqtl_annotated_loc <- '~/tables/mo_ieqtl_annotated.rds'
+saveRDS(qtl_output_all_sig_wi_gb, ieqtl_annotated_loc)
+mdfiver::create_sha256_for_file(ieqtl_annotated_loc)
+# read back
+qtl_output_all_sig_wi_gb <- readRDS(ieqtl_annotated_loc)
 
 # plot the distances per group
 p_snp_gene_interaction_distances <- ggplot(data = qtl_output_all_sig_wi, mapping = aes(x = distance, fill = interaction_direction)) +
@@ -511,44 +1086,6 @@ p_snp_gene_interaction_distances_distnozero_top_mono <- ggplot(data = qtl_output
   theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
 p_snp_gene_interaction_distances_distnozero_top_mono
 
-# get tss info
-gene_anno_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/genome_annotation.tsv'
-gene_anno <- fread(gene_anno_loc, header = T, sep = '\t')
-# # rename columns to be the same as in limix
-# colnames(gene_anno) <-c('chrom', 'start', 'end', 'strand', 'gs','Transcription_Start_Site','Transcript_type')
-# # add TSS info to the QTL output as well
-# qtl_output_all_sig_wi[['Transcription_Start_Site']] <- gene_anno[match(qtl_output_all_sig_wi[['feature_id']], gene_anno[['gs']]), ][['Transcription_Start_Site']]
-# # get extra annotations for the pseudobulk output
-# strand_information_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eQTA/LimixExpAnnotationFile.incStrand.txt'
-# strand_information <- fread(strand_information_loc, header = T, sep = '\t')
-# # add to the pseudobulk
-# qtl_output_all_sig_wi[['strand']] <- strand_information[match(qtl_output_all_sig_wi[['feature_id']], strand_information[['feature_id']]), ][['strand']]
-# # set the TSS
-# qtl_output_all_sig_wi[['TSS']] <- qtl_output_all_sig_wi[['feature_start']]
-# # to the end if the strand was negative
-# qtl_output_all_sig_wi[!is.na(qtl_output_all_sig_wi[['strand']]) & qtl_output_all_sig_wi[['strand']] == -1, ][['TSS']] <- qtl_output_all_sig_wi[!is.na(qtl_output_all_sig_wi[['strand']]) & qtl_output_all_sig_wi[['strand']] == -1, ][['feature_end']]
-# # set to NA if strand info was NA
-# qtl_output_all_sig_wi[is.na(qtl_output_all_sig_wi[['strand']]), ][['TSS']] <- NA
-# calculate distance to tss
-qtl_output_all_sig_wi[['tss_dist']] <- qtl_output_all_sig_wi[['TSS']] - qtl_output_all_sig_wi[['snp_position']]
-# where the it was on the negative strand, the distance is in the other direction
-qtl_output_all_sig_wi[!is.na(qtl_output_all_sig_wi[['strand']]) & qtl_output_all_sig_wi[['strand']] == -1, ][['tss_dist']] <- -1 * qtl_output_all_sig_wi[!is.na(qtl_output_all_sig_wi[['strand']]) & qtl_output_all_sig_wi[['strand']] == -1, ][['tss_dist']]
-# add info on if the beta is the same direction as the i_beta
-qtl_output_all_sig_wi[['g_i_beta_same']] <- !is.na(qtl_output_all_sig_wi[['beta']]) & !is.na(qtl_output_all_sig_wi[['i_beta']]) & sign(qtl_output_all_sig_wi[['beta']]) == qtl_output_all_sig_wi[['i_beta']]
-# make a classification column
-qtl_output_all_sig_wi[['interaction_beta_direction']] <- 'none'
-qtl_output_all_sig_wi[!is.na(qtl_output_all_sig_wi[['i_beta']]) & 
-                        sign(qtl_output_all_sig_wi[['i_beta']]) == 1 &
-                        sign(qtl_output_all_sig_wi[['beta']]) == 1, 'interaction_beta_direction'] <- '+/+'
-qtl_output_all_sig_wi[!is.na(qtl_output_all_sig_wi[['i_beta']]) & 
-                        sign(qtl_output_all_sig_wi[['i_beta']]) == -1 &
-                        sign(qtl_output_all_sig_wi[['beta']]) == 1, 'interaction_beta_direction'] <- '+/-'
-qtl_output_all_sig_wi[!is.na(qtl_output_all_sig_wi[['i_beta']]) & 
-                        sign(qtl_output_all_sig_wi[['i_beta']]) == 1 &
-                        sign(qtl_output_all_sig_wi[['beta']]) == -1, 'interaction_beta_direction'] <- '-/+'
-qtl_output_all_sig_wi[!is.na(qtl_output_all_sig_wi[['i_beta']]) & 
-                        sign(qtl_output_all_sig_wi[['i_beta']]) == -1 &
-                        sign(qtl_output_all_sig_wi[['beta']]) == -1, 'interaction_beta_direction'] <- '-/-'
 
 # plot the distances per group
 p_snp_tss_interaction_distances <- ggplot(data = qtl_output_all_sig_wi, mapping = aes(x = tss_dist, fill = interaction_direction)) +
@@ -580,10 +1117,6 @@ p_snp_tss_interaction_distances_top_abs <- ggplot(data = qtl_output_all_sig_wi[q
   scale_fill_manual(values = list('none' = 'gray', 'positive' = '#386CB0', 'negative' = '#F0027F')) + 
   theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
 p_snp_tss_interaction_distances_top_abs
-# check if there is a difference
-kruskal.test(tss_dist ~ interaction_direction, data = qtl_output_all_sig_wi[qtl_output_all_sig_wi[['is_top_variant']] & !is.na(qtl_output_all_sig_wi[['tss_dist']]), ])
-# for protein coding specifically
-kruskal.test(tss_dist ~ interaction_direction, data = qtl_output_all_sig_wi[qtl_output_all_sig_wi[['is_top_variant']] & !is.na(qtl_output_all_sig_wi[['tss_dist']]) & !is.na(qtl_output_all_sig_wi[['gene_biotype']]) & qtl_output_all_sig_wi[['gene_biotype']] == 'protein_coding', ])
 
 # show all plots
 plot_grid(
@@ -593,6 +1126,8 @@ plot_grid(
   nrow = 2, 
   ncol = 2
 )
+# save 
+ggsave('~/plots/mo_top_eqtl_distances_interactions.pdf', plot = p_snp_tss_interaction_distances_top, width = 5, height = 5)
 
 p_snp_tss_beta_distances <- ggplot(data = qtl_output_all_sig_wi, mapping = aes(x = tss_dist, fill = interaction_beta_direction)) +
   geom_density(alpha = 0.5) +
@@ -658,26 +1193,6 @@ p_snp_maf_qltdirection_top <- ggplot(data = qtl_output_all_sig_wi[!is.na(qtl_out
   theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
 
 
-# check if there is a difference
-kruskal.test(distance_directional ~ interaction_direction, data = qtl_output_all_sig_wi[qtl_output_all_sig_wi[['is_top_variant']] & !is.na(qtl_output_all_sig_wi[['distance_directional']]), ])
-# p-value < 2.2e-16
-# do post-hoc test for positive vs negative
-wilcox.test(distance_directional ~ interaction_direction, data = qtl_output_all_sig_wi[qtl_output_all_sig_wi[['is_top_variant']] & !is.na(qtl_output_all_sig_wi[['distance_directional']]) & qtl_output_all_sig_wi[['interaction_direction']] != 'none', ])
-# p-value = 0.0059
-
-# check if the MAF values are significantly different as well
-wilcox.test(
-  x = qtl_output_all_sig_wi[qtl_output_all_sig_wi[['is_top_variant']] & !is.na(qtl_output_all_sig_wi[['distance_directional']]) & sign(qtl_output_all_sig_wi[['distance_directional']]) == -1, ][['maf']], 
-  y = qtl_output_all_sig_wi[qtl_output_all_sig_wi[['is_top_variant']] & !is.na(qtl_output_all_sig_wi[['distance_directional']]) & sign(qtl_output_all_sig_wi[['distance_directional']]) == 1, ][['maf']]
-)
-# p-value 0.06335
-
-# check if there is a difference for protein coding or not
-kruskal.test(distance_directional ~ gene_biotype, data = qtl_output_all_sig_wi[qtl_output_all_sig_wi[['is_top_variant']] & !is.na(qtl_output_all_sig_wi[['distance_directional']]), ])
-# p-value = 0.05437
-kruskal.test(maf ~ gene_biotype, data = qtl_output_all_sig_wi[qtl_output_all_sig_wi[['is_top_variant']] & !is.na(qtl_output_all_sig_wi[['distance_directional']]), ])
-# p-value = 0.01058
-
 plot_grid(
   # p_snp_gene_interaction_distances_directional_top, 
   p_snp_maf_directional_top, 
@@ -685,13 +1200,6 @@ plot_grid(
   p_snp_maf_qltdirection_top
 )
 
-# get exon/intron info
-exon_intron_annotation <- add_introns_to_exons_info(exons_annotation)
-# add the intron/exon number with the actual annotation
-exon_intron_annotation[['annotation']] <- paste(exon_intron_annotation[['feature']], exon_intron_annotation[['number']])
-
-# now add the intron/exon info
-qtl_output_all_sig_wi_gb <- add_gene_body_location(qtl_output_all_sig_wi, exon_intron_annotation)
 # check how the variants are located
 variant_gb_numbers <- data.frame(table(qtl_output_all_sig_wi_gb[, c('feature', 'number', 'interaction_direction')]))
 # order
@@ -700,3 +1208,272 @@ variant_gb_numbers <- variant_gb_numbers[order(variant_gb_numbers[['Freq']], dec
 colnames(variant_gb_numbers) <- c('intron_exon', 'intron_exon_nr', 'interaction', 'n_obs')
 # remove zeroes
 variant_gb_numbers <- variant_gb_numbers[variant_gb_numbers[['n_obs']] > 0, ]
+# add intron exon as explicit column
+variant_gb_numbers[['intron_exon_with_number']] <- paste(variant_gb_numbers[['intron_exon']], variant_gb_numbers[['intron_exon_nr']])
+# add the proportion as well
+variant_gb_numbers[['proportion_obs']] <- variant_gb_numbers[['n_obs']] / sum(variant_gb_numbers[['n_obs']])
+# order by number, then intro exon
+variant_gb_numbers <- variant_gb_numbers[order(variant_gb_numbers[['intron_exon_nr']], variant_gb_numbers[['intron_exon']]), ]
+# then make the readable intron/exon and number a factor so that is the order
+variant_gb_numbers[['intron_exon_with_number']] <- factor(variant_gb_numbers[['intron_exon_with_number']], levels = variant_gb_numbers[['intron_exon_with_number']])
+# make into a plot
+p_nrs <- ggplot(
+  data = variant_gb_numbers, 
+  mapping = aes(x = intron_exon_with_number, y = proportion_obs, fill = intron_exon_with_number) 
+) +
+  geom_bar(stat = 'identity') +
+  scale_fill_manual(values = roycols::get_color_list(unique(variant_gb_numbers[['intron_exon_with_number']]))) +
+  xlab('Intron/Exon') + 
+  ylab('Proportion of variants') +
+  ggtitle('Location of variants') + 
+  theme(legend.position = 'none') + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+# save the plot
+ggsave('~/plots/mo_variant_position_eqtls.pdf', width = 14, height = 7, plot = p_nrs)
+
+# make this into a table (remove where there is gene body info, but not where)
+intron_exon_nrs <- data.table(table(qtl_output_all_sig_wi_gb[!is.na(qtl_output_all_sig_wi_gb[['full_anno5_full']]) & qtl_output_all_sig_wi_gb[['full_anno5_full']] != 'in_gene_body', ][['full_anno5_full']]))
+# intron_exon_nrs <- data.table(table(qtl_output_all_sig_wi_gb[!is.na(qtl_output_all_sig_wi_gb[['full_anno5_full']]) & qtl_output_all_sig_wi_gb[['full_anno5_full']] != 'in_gene_body' & qtl_output_all_sig_wi_gb[['interaction_direction']] != 'none', ][['full_anno5_full']]))
+colnames(intron_exon_nrs) <- c('loc', 'n')
+# rename some values to be nicer
+intron_exon_nrs[['loc']] <- gsub('before_tss', 'Before TSS', intron_exon_nrs[['loc']])
+# intron_exon_nrs[['loc']] <- gsub('behind_gene_body', 'Behind gene body', intron_exon_nrs[['loc']])
+intron_exon_nrs[['loc']] <- gsub('behind_gene_body', 'Behind GB', intron_exon_nrs[['loc']])
+# the loc into an factor
+intron_exon_nrs[['loc']] <- factor(intron_exon_nrs[['loc']], levels = c('Before TSS', 'before_tss', '5 prime UTR', 0:5, '3 prime UTR', 'behind_gene_body', 'Behind gene body', 'Behind GB'))
+# make that into a plot
+p_locs <- ggplot(data = intron_exon_nrs, mapping = aes(x = loc, y = n)) +
+  geom_bar(stat = 'identity') +
+  xlab('Variant location') + 
+  ylab('N') +
+  ggtitle('Location of variants') + 
+  theme(legend.position = 'none') + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) +
+  # label sizes
+  theme(
+    axis.title.x = element_text(size = 18),
+    axis.title.y = element_text(size = 18),
+    axis.text.x = element_text(size = 16),
+    axis.text.y = element_blank(),
+    plot.title = element_text(size = 20)
+  )
+# finally also check exon/intron
+prime5_nrs <- data.frame(table(qtl_output_all_sig_wi_gb[!is.na(qtl_output_all_sig_wi_gb[['full_anno5_full']]) & qtl_output_all_sig_wi_gb[['full_anno5_full']] == '5 prime UTR', 'feature']))
+colnames(prime5_nrs) <- c('feature', 'nr')
+prime5_nrs[['frac']] <- prime5_nrs[['nr']] / sum(prime5_nrs[['nr']])
+# add a zero because there is apparently no introns
+prime5_nrs <- rbind(prime5_nrs, data.frame('feature' = c('intron'), 'nr' = c(0), 'frac' = c(0)))
+prime3_nrs <- data.frame(table(qtl_output_all_sig_wi_gb[!is.na(qtl_output_all_sig_wi_gb[['full_anno5_full']]) & qtl_output_all_sig_wi_gb[['full_anno5_full']] == '3 prime UTR', 'feature']))
+colnames(prime3_nrs) <- c('feature', 'nr')
+prime3_nrs[['frac']] <- prime3_nrs[['nr']] / sum(prime3_nrs[['nr']])
+prime3_nrs <- rbind(prime3_nrs, data.frame('feature' = c('intron'), 'nr' = c(0), 'frac' = c(0)))
+no_utr_nrs <- data.frame(table(qtl_output_all_sig_wi_gb[!is.na(qtl_output_all_sig_wi_gb[['full_anno5_full']]) & qtl_output_all_sig_wi_gb[['full_anno5_full']] != '5 prime UTR' & qtl_output_all_sig_wi_gb[['full_anno']] != '3 prime UTR', 'feature']))
+colnames(no_utr_nrs) <- c('feature', 'nr')
+no_utr_nrs[['frac']] <- no_utr_nrs[['nr']] / sum(no_utr_nrs[['nr']])
+# into plots
+prime5_p <- ggplot(data = prime5_nrs, mapping = aes(x = feature, y = frac, fill = feature)) +
+  geom_bar(stat = 'identity') +
+  xlab('Variant location') + 
+  ylab('Fraction of variants') +
+  ggtitle('5\'prime UTR') + 
+  theme(legend.position = 'none') + 
+  #theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) +
+  # label sizes
+  theme(
+    axis.title.x = element_text(size = 18),
+    axis.title.y = element_text(size = 18),
+    axis.text.x = element_text(size = 16),
+    axis.text.y = element_blank(),
+    plot.title = element_text(size = 20)
+  ) +
+  scale_fill_manual(values = list('exon' = 'darkblue', 'intron' = 'darkred'))
+prime3_p <- ggplot(data = prime3_nrs, mapping = aes(x = feature, y = frac, fill = feature)) +
+  geom_bar(stat = 'identity') +
+  xlab('Variant location') + 
+  ylab('Fraction of variants') +
+  ggtitle('3\'prime UTR') + 
+  theme(legend.position = 'none') + 
+  #theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) +
+  # label sizes
+  theme(
+    axis.title.x = element_text(size = 18),
+    axis.title.y = element_text(size = 18),
+    axis.text.x = element_text(size = 16),
+    axis.text.y = element_blank(),
+    plot.title = element_text(size = 20)
+  ) +
+  scale_fill_manual(values = list('exon' = 'darkblue', 'intron' = 'darkred'))
+noutr_p <- ggplot(data = no_utr_nrs, mapping = aes(x = feature, y = frac, fill = feature)) +
+  geom_bar(stat = 'identity') +
+  xlab('Variant location') + 
+  ylab('Fraction of variants') +
+  ggtitle('CDS') + 
+  theme(legend.position = 'none') + 
+  #theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) +
+  # label sizes
+  theme(
+    axis.title.x = element_text(size = 18),
+    axis.title.y = element_text(size = 18),
+    axis.text.x = element_text(size = 16),
+    axis.text.y = element_blank(),
+    plot.title = element_text(size = 20)
+  ) +
+  scale_fill_manual(values = list('exon' = 'darkblue', 'intron' = 'darkred'))
+# finally put in a full plot
+p_locs_combined <- plot_grid(
+  p_locs + xlab(''), 
+  plot_grid(
+    prime5_p, 
+    noutr_p + ylab(''), 
+    prime3_p + ylab(''), 
+    nrow = 1, 
+    ncol = 3
+  ),
+  nrow = 2, 
+  ncol = 1, 
+  rel_heights = c(2,1)
+)
+# show the plot
+p_locs_combined
+# save the plot
+ggsave('~/plots/mo_ievariants_locs_5bins.pdf', p_locs_combined, width = 9, height = 6)
+
+
+# do the same, but now with the intron/exons numbered
+intron_exon_nrs <- data.table(table(qtl_output_all_sig_wi_gb[!is.na(qtl_output_all_sig_wi_gb$tron_bin), ]$tron_bin))
+colnames(intron_exon_nrs) <- c('loc', 'n')
+# the loc into an factor
+intron_exon_nrs[['loc']] <- factor(intron_exon_nrs[['loc']], levels = c('5 prime UTR', 0:8, '3 prime UTR'))
+# make that into a plot
+p_locs <- ggplot(data = intron_exon_nrs, mapping = aes(x = loc, y = n)) +
+  geom_bar(stat = 'identity') +
+  xlab('Variant location') + 
+  ylab('N') +
+  ggtitle('Location of variants') + 
+  theme(legend.position = 'none') + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) +
+  # label sizes
+  theme(
+    axis.title.x = element_text(size = 18),
+    axis.title.y = element_text(size = 18),
+    axis.text.x = element_text(size = 16),
+    axis.text.y = element_blank(),
+    plot.title = element_text(size = 20)
+  )
+# the the exon/intron fractions
+prime5_nrs <- data.frame(table(qtl_output_all_sig_wi_gb[!is.na(qtl_output_all_sig_wi_gb[['tron_bin']]) & qtl_output_all_sig_wi_gb[['tron_bin']] == '5 prime UTR', 'feature']))
+colnames(prime5_nrs) <- c('feature', 'nr')
+prime5_nrs[['frac']] <- prime5_nrs[['nr']] / sum(prime5_nrs[['nr']])
+# add a zero because there is apparently no introns
+prime5_nrs <- rbind(prime5_nrs, data.frame('feature' = c('intron'), 'nr' = c(0), 'frac' = c(0)))
+prime3_nrs <- data.frame(table(qtl_output_all_sig_wi_gb[!is.na(qtl_output_all_sig_wi_gb[['tron_bin']]) & qtl_output_all_sig_wi_gb[['tron_bin']] == '3 prime UTR', 'feature']))
+colnames(prime3_nrs) <- c('feature', 'nr')
+prime3_nrs[['frac']] <- prime3_nrs[['nr']] / sum(prime3_nrs[['nr']])
+prime3_nrs <- rbind(prime3_nrs, data.frame('feature' = c('intron'), 'nr' = c(0), 'frac' = c(0)))
+no_utr_nrs <- data.frame(table(qtl_output_all_sig_wi_gb[!is.na(qtl_output_all_sig_wi_gb[['tron_bin']]) & qtl_output_all_sig_wi_gb[['tron_bin']] != '5 prime UTR' & qtl_output_all_sig_wi_gb[['tron_bin']] != '3 prime UTR', 'feature']))
+colnames(no_utr_nrs) <- c('feature', 'nr')
+no_utr_nrs[['frac']] <- no_utr_nrs[['nr']] / sum(no_utr_nrs[['nr']])
+# into plots
+prime5_p <- ggplot(data = prime5_nrs, mapping = aes(x = feature, y = frac, fill = feature)) +
+  geom_bar(stat = 'identity') +
+  xlab('Variant location') + 
+  ylab('Fraction of variants') +
+  ggtitle('Location of variants') + 
+  theme(legend.position = 'none') + 
+  #theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) +
+  # label sizes
+  theme(
+    axis.title.x = element_text(size = 18),
+    axis.title.y = element_text(size = 18),
+    axis.text.x = element_text(size = 16),
+    axis.text.y = element_blank(),
+    plot.title = element_text(size = 20)
+  ) +
+  scale_fill_manual(values = list('exon' = 'darkblue', 'intron' = 'darkred'))
+prime3_p <- ggplot(data = prime3_nrs, mapping = aes(x = feature, y = frac, fill = feature)) +
+  geom_bar(stat = 'identity') +
+  xlab('Variant location') + 
+  ylab('Fraction of variants') +
+  ggtitle('Location of variants') + 
+  theme(legend.position = 'none') + 
+  #theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) +
+  # label sizes
+  theme(
+    axis.title.x = element_text(size = 18),
+    axis.title.y = element_text(size = 18),
+    axis.text.x = element_text(size = 16),
+    axis.text.y = element_blank(),
+    plot.title = element_text(size = 20)
+  ) +
+  scale_fill_manual(values = list('exon' = 'darkblue', 'intron' = 'darkred'))
+noutr_p <- ggplot(data = no_utr_nrs, mapping = aes(x = feature, y = frac, fill = feature)) +
+  geom_bar(stat = 'identity') +
+  xlab('Variant location') + 
+  ylab('Fraction of variants') +
+  ggtitle('Location of variants') + 
+  theme(legend.position = 'none') + 
+  #theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) +
+  # label sizes
+  theme(
+    axis.title.x = element_text(size = 18),
+    axis.title.y = element_text(size = 18),
+    axis.text.x = element_text(size = 16),
+    axis.text.y = element_blank(),
+    plot.title = element_text(size = 20)
+  ) +
+  scale_fill_manual(values = list('exon' = 'darkblue', 'intron' = 'darkred'))
+# finally put in a full plot
+p_locs_combined <- plot_grid(
+  p_locs + xlab(''), 
+  plot_grid(
+    prime5_p, 
+    noutr_p + ylab(''), 
+    prime3_p + ylab(''), 
+    nrow = 1, 
+    ncol = 3
+  ),
+  nrow = 2, 
+  ncol = 1, 
+  rel_heights = c(2,1)
+)
+ggsave('~/plots/mo_ievariants_locs.pdf', p_locs_combined, width = 9, height = 6)
+
+# now instead plot the distances
+p_distance_wiedirection <- ggplot(data = qtl_output_all_sig_wi_wi_tc, mapping = aes(y = interaction_direction, x = distance, fill = interaction_direction)) +
+  geom_boxplot(outlier.shape = NA) + 
+  # and add jitter
+  geom_jitter(size = 0.5, alpha = 0.5) +
+  # and labels
+  xlab('interaction') + 
+  ylab('distance to gene') +
+  ggtitle('Gene distance per interaction direction') + 
+  theme(axis.text.x=element_blank(), 
+        axis.ticks = element_blank()) + 
+  theme(legend.position = 'none') + 
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) + 
+  scale_fill_manual(values = get_color_list(qtl_output_all_sig_wi_gb[['interaction_direction']]))
+# with the forward and back
+p_distance_wiedirection_both <- ggplot(data = qtl_output_all_sig_wi_wi_tc, mapping = aes(y = interaction_direction, x = distance_directional, fill = interaction_direction)) +
+  geom_boxplot(outlier.shape = NA) + 
+  # and add jitter
+  geom_jitter(size = 0.5, alpha = 0.5) +
+  # and labels
+  xlab('interaction') + 
+  ylab('distance to gene') +
+  ggtitle('Gene distance per interaction direction') + 
+  theme(axis.text.x=element_blank(), 
+        axis.ticks = element_blank()) + 
+  theme(legend.position = 'none') + 
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) + 
+  scale_fill_manual(values = get_color_list(qtl_output_all_sig_wi_gb[['interaction_direction']]))

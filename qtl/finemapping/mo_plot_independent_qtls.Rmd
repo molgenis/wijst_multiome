@@ -667,8 +667,8 @@ knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 ####################
 
 # location of the QTL outputs
-caqtl_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/finemapping/caqtl/sc-eqtlgen/combined_with_qtl/combined/L1/'
-eqtl_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/finemapping/eqtl/sc-eqtlgen/combined_with_qtl/combined/L1/'
+caqtl_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/finemapping/caqtl/sc-eqtlgen/combined_with_qtl/combined/L1/'
+eqtl_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/finemapping/eqtl/sc-eqtlgen/combined_with_qtl/combined/L1/'
 
 ```
 
@@ -986,7 +986,7 @@ p_n_peak_per_gene
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # location of the eQTL to caQTL coloc output
-qtl_coloc_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/colocalization/eqtl_caqtl/'
+qtl_coloc_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/colocalization/eqtl_caqtl/'
 # read this data
 qtl_coloc <- get_output_per_celltype_coloc(qtl_coloc_loc)
 
@@ -1057,7 +1057,7 @@ p_n_egene_epeak_coloc
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # base location of overlapping effects
-overlapping_effects_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl_caqtl_overlap/combined/L1/'
+overlapping_effects_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/eqtl_caqtl_overlap/combined/L1/'
 # check each cell type
 for (cell_type in names(qtl_outputs_overlapping)) {
   # paste the path together
@@ -1094,11 +1094,52 @@ overlapping_effects_region_to_gene <- unique(overlapping_effect_all[, c('feature
 # order
 overlapping_effects_region_to_gene <- overlapping_effects_region_to_gene[order(overlapping_effects_region_to_gene[['feature_caqtl']], overlapping_effects_region_to_gene[['feature_eqtl']]), ]
 # which we will place somewhere
-combined_overlapping_region_to_gene_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/cre_eqtl/eqtl_caqtl_overlap/combined/confinements/region_to_peak_variant_overlaps.tsv.gz'
+combined_overlapping_region_to_gene_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/cre_eqtl/eqtl_caqtl_overlap/combined/confinements/region_to_peak_variant_overlaps.tsv.gz'
 # and write
 write.table(overlapping_effects_region_to_gene, gzfile(combined_overlapping_region_to_gene_loc), row.names = F, col.names = F, sep = '\t', quote = F)
 # and make checksum
 mdfiver::create_md5_for_file(combined_overlapping_region_to_gene_loc)
+
+```
+
+```{r n_cts_qtls, include=TRUE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# get the unique egenes for each celltype
+egenes_ct_l <- list()
+# by checeking each cell type
+for (ct in names(eqtl_outputs)) {
+  # get the unique features
+  ct_features <- unique(eqtl_outputs[[ct]][['feature_id']])
+  # make into df
+  ct_features_df <- data.frame('cell_type' = rep(ct, times = length(ct_features)), 'feature_id' = ct_features)
+  # put in the list
+  egenes_ct_l[[ct]] <- ct_features_df
+}
+# merge all of them
+egenes_ct <- do.call('rbind', egenes_ct_l)
+# get how many cell types these are present
+egenes_ct_occ <- data.frame(table(egenes_ct[['feature_id']]))
+# set column names
+colnames(egenes_ct_occ) <- c('feature_id', 'n_celltypes')
+
+# get the unique capeaks for each celltype
+capeaks_ct_l <- list()
+# by checeking each cell type
+for (ct in names(eqtl_outputs)) {
+  # get the unique features
+  ct_features <- unique(eqtl_outputs[[ct]][['feature_id']])
+  # make into df
+  ct_features_df <- data.frame('cell_type' = rep(ct, times = length(ct_features)), 'feature_id' = ct_features)
+  # put in the list
+  capeaks_ct_l[[ct]] <- ct_features_df
+}
+# merge all of them
+capeaks_ct <- do.call('rbind', capeaks_ct_l)
+# get how many cell types these are present
+capeaks_ct_occ <- data.frame(table(capeaks_ct[['feature_id']]))
+# set column names
+colnames(capeaks_ct_occ) <- c('feature_id', 'n_celltypes')
 
 ```
 

@@ -130,17 +130,29 @@ get_closest_flanks <- function(position_table, left_flank_column1, right_flank_c
 ####################
 
 # location of the REUNION output
-reunion_output_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/reunion_yang2024_cres/df_pbmc_region_tf_gene_link.2_2.txt.gz'
+reunion_output_loc <- '/groups/umcg-franke-scrna/tmp02/external_datasets/reunion_yang2024_cres/df_pbmc_region_tf_gene_link.2_2.txt.gz'
 
 # location of our scenic+ output
-scenic_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eRegulon_both.tsv.gz'
+scenic_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eRegulon_both.tsv.gz'
 # and cpeaks annotation we used
-cpeaks_annotation_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/cPeaks/cPeaks_info.tsv'
+cpeaks_annotation_loc <- '/groups/umcg-franke-scrna/tmp02/external_datasets/cPeaks/cPeaks_info.tsv'
 
 # read the REUNION table
 reunion_output <- fread(reunion_output_loc, header = T, sep = '\t')
 # get the scenic+ table
 scenic_output <- fread(scenic_output_loc, header = T, sep = '\t')
+
+# keep only +/-
+scenic_output <- scenic_output[scenic_output[['Gene_signature_direction']] %in% c('+/+', '-/+'), ]
+# order by the extended
+scenic_output <- scenic_output[order(scenic_output[['is_extended']]), ]
+# get which are non-extended if it was both extended and non-extended
+scenic_eregs <- unique(scenic_output[, c('TF', 'Gene_signature_direction', 'Gene_signature_name', 'source')])
+scenic_eregs <-scenic_eregs[order(scenic_eregs[['source']]), ]
+scenic_eregs_to_keep <- scenic_eregs[!duplicated(paste(scenic_eregs[['TF']], scenic_eregs[['Gene_signature_direction']])), ]
+# then use that to filer
+scenic_output <- scenic_output[scenic_output[['Gene_signature_name']] %in% scenic_eregs_to_keep[['Gene_signature_name']], ]
+
 
 # get cpeaks
 cpeaks_annotation <- fread(cpeaks_annotation_loc, header = T, sep = ' ')
@@ -148,7 +160,7 @@ cpeaks_annotation <- fread(cpeaks_annotation_loc, header = T, sep = ' ')
 cpeaks_annotation[['scenic_hg38']] <- paste0(cpeaks_annotation[['chr_hg38']], ':', cpeaks_annotation[['start_hg38']], '-', cpeaks_annotation[['end_hg38']])
 
 # read gene annotations
-gene_anno_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/genome_annotation.tsv'
+gene_anno_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/genome_annotation.tsv'
 gene_anno <- fread(gene_anno_loc, header = T, sep = '\t')
 # rename columns to be the same as in limix
 colnames(gene_anno) <-c('chrom', 'start', 'end', 'strand', 'gs','Transcription_Start_Site','Transcript_type')
@@ -228,8 +240,8 @@ ggvenn::ggvenn(
 ) + ggtitle('Overlap of triplets between multiome and REUNION')
 
 # write the unfiltered reunion output as well
-write.table(reunion_output_unfiltered, gzfile('/groups/umcg-franke-scrna/tmp04/external_datasets/reunion_yang2024_cres/df_pbmc_region_tf_gene_link.2_2_cpeaksmatched.tsv.gz'), row.names = F, col.names = T, sep = '\t', quote = F)
-mdfiver::create_md5_for_file('/groups/umcg-franke-scrna/tmp04/external_datasets/reunion_yang2024_cres/df_pbmc_region_tf_gene_link.2_2_cpeaksmatched.tsv.gz')
+write.table(reunion_output_unfiltered, gzfile('/groups/umcg-franke-scrna/tmp02/external_datasets/reunion_yang2024_cres/df_pbmc_region_tf_gene_link.2_2_cpeaksmatched.tsv.gz'), row.names = F, col.names = T, sep = '\t', quote = F)
+mdfiver::create_md5_for_file('/groups/umcg-franke-scrna/tmp02/external_datasets/reunion_yang2024_cres/df_pbmc_region_tf_gene_link.2_2_cpeaksmatched.tsv.gz')
 
 # add columns that are region-to-gene
 reunion_output[['r2g']] <- paste(reunion_output[['overlapping_feature']], reunion_output[['gene_id']], reunion_output[['motif_id']])
@@ -249,8 +261,8 @@ min_sig_rho_mo <- min(abs(matched_output[['cor_scenic']]))
 max_sig_rho_10x <- max(abs(matched_output[['cor_reunion']]))
 max_sig_rho_mo <- max(abs(matched_output[['cor_scenic']]))
 # plot the correlations
-ggplot(data = matched_output, mapping = aes(x = cor_scenic, y = cor_reunion)) + 
-  geom_point() +
+p_mo_vs_reunion <- ggplot(data = matched_output, mapping = aes(x = cor_scenic, y = cor_reunion)) + 
+  geom_point(size = .1) +
   xlab('R2G Rho in multiome') + 
   ylab('R2G Rho in reunion') + 
   ggtitle('R2G correlations in multiome vs reunion (matched TF only)') + 
@@ -276,6 +288,11 @@ ggplot(data = matched_output, mapping = aes(x = cor_scenic, y = cor_reunion)) +
   # add the concordance
   annotate("label", x = max_sig_rho_mo * 0.75 , y = max_sig_rho_10x * -0.75, label = paste('concordance', round(mo_reunion_rho_concordance, digits = 2), sep = ':\n')) +
   # add the names of the concordant and non-concordant blocks
-  annotate("text", x = max_sig_rho_mo * -0.70 , y = max_sig_rho_10x * 0.75, label = 'disconcordant', colour = '#D55E00', fontface = 'bold') +
+  annotate("text", x = max_sig_rho_mo * -0.70 , y = max_sig_rho_10x * 0.75, label = 'discordant', colour = '#D55E00', fontface = 'bold') +
   # add the names of the concordant and non-concordant blocks
   annotate("text", x = max_sig_rho_mo * 0.70 , y = max_sig_rho_10x * 0.75, label = 'concordant', colour = '#0072B2', fontface = 'bold')
+
+# show the plot
+p_mo_vs_reunion
+# save the plot
+ggsave(filename = '~/multiome/plots/mo_multiome_vs_reunion.pdf', plot = p_mo_vs_reunion, width = 5, height = 5)

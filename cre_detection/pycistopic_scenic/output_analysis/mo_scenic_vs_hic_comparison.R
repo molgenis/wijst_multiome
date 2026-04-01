@@ -128,7 +128,7 @@ randomly_sample_regions_per_gene <- function(true_table, table_to_sample_from, r
   samplings_per_gene <- list()
   # check each gene
   samplings_per_gene <- foreach (i = 1: length(true_genes)) %dopar% {
-  #for (i in 1:length(true_genes)) {
+    #for (i in 1:length(true_genes)) {
     # get the gene
     true_gene <- true_genes[i]
     # get the sample table for that gene
@@ -190,7 +190,7 @@ randomly_sample_regions_per_gene <- function(true_table, table_to_sample_from, r
             # subset to regions that fall into this distance
             sampled_regions_comparable_distance <- sample_from_gene[
               #sample_from_gene[[region_column_sampling]] != true_region & 
-                sample_from_gene[[distance_column_sampling]] >= flank_left & 
+              sample_from_gene[[distance_column_sampling]] >= flank_left & 
                 sample_from_gene[[distance_column_sampling]] <= flank_right, ]
             # if there is anything to select, we can continue on
             if (nrow(sampled_regions_comparable_distance) > 0) {
@@ -253,26 +253,39 @@ registerDoParallel(cores=4)
 ####################
 
 # location of the CREs identified by SCENIC
-scenic_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eRegulon_both.tsv.gz'
+scenic_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eRegulon_both_filtered.tsv.gz'
 # location of the hiC output
-hic_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/cPeaks/cpeaks_to_screenv4_blood_hic.tsv.gz'
+hic_loc <- '/groups/umcg-franke-scrna/tmp02/external_datasets/cPeaks/cpeaks_to_screenv4_blood_hic.tsv.gz'
 # location of 150k window file
-window_pairs_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eQTA/featureVariantFile.w150k.filtered0.0001_cts.txt'
+window_pairs_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/eQTA/featureVariantFile.w150k.filtered0.0001_cts.txt.gz'
 
-# read the tables
+# read that
 scenic_output <- fread(scenic_output_loc, header = T, sep = '\t')
+# keep only +/-
+scenic_output <- scenic_output[scenic_output[['Gene_signature_direction']] %in% c('+/+', '-/+'), ]
+# order by the extended
+scenic_output <- scenic_output[order(scenic_output[['is_extended']]), ]
+# get which are non-extended if it was both extended and non-extended
+scenic_eregs <- unique(scenic_output[, c('TF', 'Gene_signature_direction', 'Gene_signature_name', 'source')])
+scenic_eregs <-scenic_eregs[order(scenic_eregs[['source']]), ]
+scenic_eregs_to_keep <- scenic_eregs[!duplicated(paste(scenic_eregs[['TF']], scenic_eregs[['Gene_signature_direction']])), ]
+# then use that to filer
+scenic_output <- scenic_output[scenic_output[['Gene_signature_name']] %in% scenic_eregs_to_keep[['Gene_signature_name']], ]
+
+# read hiC
 hic <- fread(hic_loc, header = T, sep = '\t')
+# read the pairs
 window_pairs <- fread(window_pairs_loc, header = T, sep = '\t')
 
 # rename the columns for the window pairs
 colnames(window_pairs) <- c('gene', 'region')
 
 # location of ensemble ID to gene symbol mapping
-gene_anno_loc <- '/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/input/LimixAnnotationFile.txt'
+gene_anno_loc <- '/groups/umcg-franke-scrna/tmp02/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/input/LimixAnnotationFile.txt'
 gene_anno <- fread(gene_anno_loc, header = T, sep = '\t')
 
 # read the cpeaks annotation
-cpeaks_anno_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/cPeaks/cPeaks_wscreenv4.tsv.gz'
+cpeaks_anno_loc <- '/groups/umcg-franke-scrna/tmp02/external_datasets/cPeaks/cPeaks_wscreenv4.tsv.gz'
 cpeaks_anno <- fread(cpeaks_anno_loc, header = T, sep = '\t')
 # add the Signac style name
 cpeaks_anno[['signac_hg38']] <- paste(cpeaks_anno[['chr_hg38']], cpeaks_anno[['start_hg38']], cpeaks_anno[['end_hg38']], sep = '-')
@@ -363,22 +376,32 @@ contingency_table
 fexact <- fisher.test(contingency_table)
 # show fexact result
 fexact
-# 	Fisher's Exact Test for Count Data
+# Fisher's Exact Test for Count Data
 # 
 # data:  contingency_table
 # p-value < 2.2e-16
 # alternative hypothesis: true odds ratio is not equal to 1
 # 95 percent confidence interval:
-#   4.548432 4.843781
+#  4.447867 4.834595
 # sample estimates:
-#   odds ratio 
-# 4.694678 
+# odds ratio 
+#   4.638168 
 
 # randomly sample regions to genes without taking the region into consideration
 random_scenic_samplings_noregion <- list()
-for (i in 1:20) {
+# do x amount of samplings
+n_samplings <- 20
+# start a progress bar
+pb = txtProgressBar(min = 0, max = n_samplings, initial = 0) 
+# do actual samplings
+for (i in 1:n_samplings) {
+  # update progress
+  setTxtProgressBar(pb,i)
+  # do actual sampling
   random_scenic_samplings_noregion[[i]] <- randomly_sample_regions_per_gene(scenic_output_autosomal[scenic_output_autosomal[['distance']] > 0 & scenic_output_autosomal[['distance']] <= 150000, ], window_pairs, region_column_true = 'signac_region_name', gene_column_true = 'Gene', distance_column_true = 'distance', distance_column_sampling = 'distance', distance_overshoot = 10000)
 }
+# close progress bar
+close(pb)
 
 # check each of the samplings
 sampling_stats <- list()
@@ -409,9 +432,19 @@ for (sampling_i in 1 : length(random_scenic_samplings_noregion)) {
 
 # randomly sample regions to genes without taking the region into consideration
 random_scenic_samplings_in_vs_out <- list()
-for (i in 1:20) {
+# do x amount of samplings
+n_samplings <- 20
+# start a progress bar
+pb = txtProgressBar(min = 0, max = n_samplings, initial = 0) 
+# then do that for the number of samplings
+for (i in 1:n_samplings) {
+  # update progress
+  setTxtProgressBar(pb,i)
+  # do actual sampling
   random_scenic_samplings_in_vs_out[[i]] <- randomly_sample_regions_per_gene(scenic_output_autosomal[scenic_output_autosomal[['distance']] > 0 & scenic_output_autosomal[['distance']] <= 150000, ], window_pairs, region_column_true = 'signac_region_name', gene_column_true = 'Gene', distance_column_true = 'distance', distance_column_sampling = 'distance', distance_overshoot = 10000, filter_trues = T)
 }
+# close progress bar
+close(pb)
 
 # do the statistics again
 sampling_stats_in_vs_out <- list()
@@ -449,4 +482,94 @@ for (sampling_i in 1 : length(random_scenic_samplings_in_vs_out)) {
 #  2.505260 2.806209
 # sample estimates:
 # odds ratio 
-#   2.651049 
+#   2.651049
+
+# get the odds ratios of each comparison
+ors <- rep(NA, times = length(sampling_stats_in_vs_out))
+# and the p-values
+ps <- rep(NA, times = length(sampling_stats_in_vs_out))
+for (fexact_i in 1:length(sampling_stats_in_vs_out)) {
+  # grab the odds ratio
+  ors[fexact_i] <- sampling_stats_in_vs_out[[fexact_i]]$estimate
+  ps[fexact_i] <- sampling_stats_in_vs_out[[fexact_i]]$p.value
+}
+
+# plot the expected vs observed
+max_p_index <- which(ps == max(ps))
+# get that specific sampling
+max_p_sampling <- random_scenic_samplings_noregion[[max_p_index]]
+# add region to gene
+max_p_sampling[['r2g']] <- paste(max_p_sampling[['region']], max_p_sampling[['gene']])
+# and get the expected overlap
+max_p_overlap <- length(unique(intersect(max_p_sampling[['r2g']], hic[['r2g']])))
+# make into a plot
+p_overlap_expected_observed <- ggplot(data = data.frame('group' = c('Observed', 'Expected'), 'n' = c(scenic_r_gene_in_hic, max_p_overlap)), mapping = aes(x = group, y = n, fill= group)) + 
+  geom_bar(stat = 'identity') + 
+  ylim(c(0, scenic_r_gene_in_hic*1.25)) +
+  scale_fill_manual(values = list('Observed' = 'darkgreen', 'Expected' = 'gray')) +
+  ylab('Number of region-gene combinations\noverlapping with HiC') +
+  xlab('') +
+  ggtitle('Odds ratios of HiC enrichment in\nSCENIC+ vs random samplings from SCENIC+ (worst)') +
+  theme(legend.position = 'none') + 
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) +
+  # horizontal comparison
+  geom_segment(data = NULL, aes(x = 'Expected', xend = 'Observed', y = scenic_r_gene_in_hic*1.1, yend = scenic_r_gene_in_hic*1.1), colour = "darkgray", size = 1) +
+  # vertical comparison on Expected side
+  geom_segment(data = NULL, aes(x = 'Expected', xend = 'Expected', y = scenic_r_gene_in_hic*1.1, yend = max_p_overlap*1.05), colour = "darkgray", size = 1) +
+  # vertical comparison on Observed side
+  geom_segment(data = NULL, aes(x = 'Observed', xend = 'Observed', y = scenic_r_gene_in_hic*1.1, yend = scenic_r_gene_in_hic*1.05), colour = "darkgray", size = 1) +
+  # add OR text
+  annotate('text', x = 1.5, y = scenic_r_gene_in_hic*1.2, label = paste('OR =', formatC(ors[max_p_index], digits = 2)), size = 5) +
+  # add p text
+  annotate('text', x = 1.5, y = scenic_r_gene_in_hic*1.15, label = paste('p =', formatC(ps[max_p_index], format = "e", digits = 2)), size = 5) +
+  # make ticks bigger
+  theme(axis.text.x = element_text(size = 14)) +
+  # make y label bigger
+  theme(axis.title.y = element_text(size = 14))
+
+# show the plot
+p_overlap_expected_observed
+ggsave(filename = '~/multiome/plots/mo_scenic_hic_enrichment_worst.pdf', plot = p_overlap_expected_observed, width = 5, height = 5)
+
+# get the mean p
+p_mean <- mean(ps)
+# get the mean OR
+or_mean <- mean(ors)
+# get the mean expected
+expected_mean <- mean(
+  do.call('c', lapply(random_scenic_samplings_noregion, function(x) {
+    length(unique(intersect(paste(x[['region']], x[['gene']]), hic[['r2g']])))
+  }))
+)
+# make into a plot
+p_overlap_expected_observed <- ggplot(data = data.frame('group' = c('Observed', 'Expected'), 'n' = c(scenic_r_gene_in_hic, expected_mean)), mapping = aes(x = group, y = n, fill= group)) + 
+  geom_bar(stat = 'identity') + 
+  ylim(c(0, scenic_r_gene_in_hic*1.25)) +
+  scale_fill_manual(values = list('Observed' = 'darkgreen', 'Expected' = 'gray')) +
+  ylab('Number of region-gene combinations\noverlapping with HiC') +
+  xlab('') +
+  ggtitle('Odds ratios of HiC enrichment in\nSCENIC+ vs random samplings from SCENIC+ (mean)') +
+  theme(legend.position = 'none') + 
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) +
+  # horizontal comparison
+  geom_segment(data = NULL, aes(x = 'Expected', xend = 'Observed', y = scenic_r_gene_in_hic*1.1, yend = scenic_r_gene_in_hic*1.1), colour = "darkgray", size = 1) +
+  # vertical comparison on Expected side
+  geom_segment(data = NULL, aes(x = 'Expected', xend = 'Expected', y = scenic_r_gene_in_hic*1.1, yend = max_p_overlap*1.05), colour = "darkgray", size = 1) +
+  # vertical comparison on Observed side
+  geom_segment(data = NULL, aes(x = 'Observed', xend = 'Observed', y = scenic_r_gene_in_hic*1.1, yend = scenic_r_gene_in_hic*1.05), colour = "darkgray", size = 1) +
+  # add OR text
+  annotate('text', x = 1.5, y = scenic_r_gene_in_hic*1.2, label = paste('OR =', formatC(or_mean, digits = 2)), size = 5) +
+  # add p text
+  annotate('text', x = 1.5, y = scenic_r_gene_in_hic*1.15, label = paste('p =', formatC(p_mean, format = "e", digits = 2)), size = 5) +
+  # make ticks bigger
+  theme(axis.text.x = element_text(size = 14)) +
+  # make y label bigger
+  theme(axis.title.y = element_text(size = 14))
+
+# show the plot
+p_overlap_expected_observed
+ggsave(filename = '~/multiome/plots/mo_scenic_hic_enrichment_mean.pdf', plot = p_overlap_expected_observed, width = 5, height = 5)
+
+# save the samplings as well
+saveRDS(random_scenic_samplings_in_vs_out, '~/multiome/rds/mo_scenic_vs_hic_random_samplings.rds')
+mdfiver::create_sha256_for_file('~/multiome/rds/mo_scenic_vs_hic_random_samplings.rds')

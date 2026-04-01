@@ -172,6 +172,8 @@ get_color_coding_dict <- function() {
   #color_coding_dict[['CD4_T_cells']] <- '#7FC97F'
   color_coding_dict[['CD4_T_cells']] <- '#153057'
   color_coding_dict[['CD4T']] <- '#153057'
+  color_coding_dict[['CD4_T_cells']] <- '#264F88'
+  color_coding_dict[['CD4T']] <- '#264F88'
   #color_coding_dict[['CD8_T_cells']] <- '#BEAED4'
   color_coding_dict[['CD8_T_cells']] <- '#009DDB'
   color_coding_dict[['CD8T']] <- '#009DDB'
@@ -202,6 +204,8 @@ get_color_coding_dict <- function() {
   #color_coding_dict[['CD4+ T cells']] <- '#7FC97F'
   color_coding_dict[['CD4+ T cells']] <- '#153057'
   color_coding_dict[['CD4+ T']] <- '#153057'
+  color_coding_dict[['CD4+ T cells']] <- '#264F88'
+  color_coding_dict[['CD4+ T']] <- '#264F88'
   #color_coding_dict[['CD8+ T cells']] <- '#BEAED4'
   color_coding_dict[['CD8+ T cells']] <- '#009DDB'
   color_coding_dict[['CD8+ T']] <- '#009DDB'
@@ -581,6 +585,67 @@ p_all_variant_openatac_overlap_lead_seplegend <- plot_grid(
   )
 # save the plot
 ggsave('~/plots/mo_lead_esnp_chromatin_overlap.pdf', width = 8, height = 8, plot = p_all_variant_openatac_overlap_lead_seplegend)
+
+# redo this, but add the total frequences
+qtl_output_all_snpsig_openatac_occurences_total <- aggregate(Freq ~ cell_type, qtl_output_all_snpsig_openatac_occurences[, c('cell_type', 'Freq')], sum)
+# add that frequency to the table
+qtl_output_all_snpsig_openatac_occurences[['total']] <- qtl_output_all_snpsig_openatac_occurences_total[match(qtl_output_all_snpsig_openatac_occurences[['cell_type']], qtl_output_all_snpsig_openatac_occurences_total[['cell_type']]), ][['Freq']]
+# the add the fraction
+qtl_output_all_snpsig_openatac_occurences[['frac']] <- qtl_output_all_snpsig_openatac_occurences[['Freq']] / qtl_output_all_snpsig_openatac_occurences[['total']]
+# same for the leads
+qtl_output_all_snpsig_openatac_occurences_leads_total <- aggregate(Freq ~ cell_type, qtl_output_all_snpsig_openatac_occurences_leads[, c('cell_type', 'Freq')], sum)
+qtl_output_all_snpsig_openatac_occurences_leads[['total']] <- qtl_output_all_snpsig_openatac_occurences_leads_total[match(qtl_output_all_snpsig_openatac_occurences_leads[['cell_type']], qtl_output_all_snpsig_openatac_occurences_leads_total[['cell_type']]), ][['Freq']]
+qtl_output_all_snpsig_openatac_occurences_leads[['frac']] <- qtl_output_all_snpsig_openatac_occurences_leads[['Freq']] / qtl_output_all_snpsig_openatac_occurences_leads[['total']]
+# make the figure again, but plot the fractions instead
+p_all_variant_openatac_overlap_lead_frac <- ggplot(data = qtl_output_all_snpsig_openatac_occurences_leads[qtl_output_all_snpsig_openatac_occurences_leads[['in_open_chromatin']] != 'none', ], mapping = aes(x = cell_type_nice, y = frac, fill = celltype_in_open_chromatin)) +
+  # barplots specifically
+  geom_bar(stat = 'identity', position = 'stack') +
+  # with manual colors
+  scale_fill_manual(values = get_color_coding_dict()) +
+  # labels
+  xlab('Cell type') + 
+  ylab('Fraction of variants') + 
+  ggtitle('Open chromatin state of lead eSNPs') + 
+  # add more whitespace
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+  # rotate the x axis ticks
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  # and set the label for the SCREEN annotation
+  labs(fill = "Open chromatin state") +
+  # and set the y axis limits to be between 0 and 1
+  ylim(0, 1)
+# make with a nicer legend
+p_all_variant_openatac_overlap_lead_seplegend_frac <- plot_grid(
+  # plot without a legend
+  p_all_variant_openatac_overlap_lead_frac + theme(legend.position='none') +
+    # label sizes
+    theme(
+      axis.title.x = element_text(size = 18),
+      axis.title.y = element_text(size = 18),
+      axis.text.x = element_text(size = 16),
+      axis.text.y = element_text(size = 16),
+      plot.title = element_text(size = 20)
+    ), 
+  # with a dummy legend
+  plot_grid(
+    cowplot::get_legend(
+      ggplot(
+        data = data.frame('open_chromatin_state' = factor(c('unmatched', 'matched'), levels = c('unmatched', 'matched')), 'y' = c(1,2)), mapping = aes(x = open_chromatin_state, fill = open_chromatin_state, y = y)
+      ) + 
+        geom_bar(stat = 'identity') + 
+        scale_fill_manual(values = list('unmatched' = 'black', 'matched' = 'darkgray')) + 
+        labs(fill = "Chromatin\nstate") + 
+        theme(legend.title = element_text(size = 18), legend.text = element_text(size = 16))
+    ), 
+    nrow = 2
+  ), 
+  ncol = 2, 
+  rel_widths = c(0.8, 0.2)
+)
+# save the plot
+ggsave('~/plots/mo_lead_esnp_chromatin_overlap_frac.pdf', width = 8, height = 8, plot = p_all_variant_openatac_overlap_lead_seplegend_frac)
+
+
 
 # get the screen matches for each variant
 qtl_variants_all_screen_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/annotations/mo_qtl_variants_tested_screen_overlap.tsv.gz'

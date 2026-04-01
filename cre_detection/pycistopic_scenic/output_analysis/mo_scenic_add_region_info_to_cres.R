@@ -185,6 +185,61 @@ add_region_qtl_info <- function(table_to_annotate, group_to_regions_list, to_ann
 }
 
 
+get_qtls_per_celltype_limix <- function(qtl_output_loc, output_file='qtl_results_all_qval_allchroms_fdr005_significant.txt.gz', gene_column='feature_id', significance_column='feature_q_value', significance_cutoff=0.05, nominal_cutoff_column='pval_nominal_threshold_global', nominal_significance_column='p_value', verbose=T) {
+  # get the folders in the directory, which should be the cell types
+  cell_types <- list.dirs(qtl_output_loc, full.names = F, recursive = F)
+  # we will store the results in a list for now
+  qtls_per_celltype <- list()
+  # check each cell type
+  for (cell_type in cell_types) {
+    # paste together the full path
+    full_cell_type_path <- paste(qtl_output_loc, '/', cell_type, '/', output_file, sep = '')
+    # log if requested
+    if (verbose) {
+      print(paste('reading', full_cell_type_path))
+    }
+    # read the file
+    cell_type_output <- read.table(full_cell_type_path, sep = '\t', header = T)
+    # filter the results on significance
+    if (!is.null(significance_column)) {
+      # print progress if requested
+      if (verbose) {
+        print(paste('variant+phenotype before filtering by significance column', nrow(cell_type_output)))
+      }
+      # filter
+      cell_type_output <- cell_type_output[
+        !is.na(cell_type_output[[significance_column]]) &
+          cell_type_output[[significance_column]] < significance_cutoff, 
+      ]
+      if (verbose) {
+        print(paste('variant+phenotype after filtering by significance column', nrow(cell_type_output)))
+      }
+    }
+    if (!is.null(nominal_cutoff_column) & !is.null(nominal_significance_column)) {
+      # print progress if requested
+      if (verbose) {
+        print(paste('variant+phenotype before filtering by nominal cutoff', nrow(cell_type_output)))
+      }
+      # filter
+      cell_type_output <- cell_type_output[
+        !is.na(cell_type_output[[nominal_cutoff_column]]) & 
+          !is.na(cell_type_output[[nominal_significance_column]]) &
+          cell_type_output[[nominal_significance_column]] <= cell_type_output[[nominal_cutoff_column]], 
+      ]
+      if (verbose) {
+        print(paste('variant+phenotype after filtering by nominal cutoff', nrow(cell_type_output)))
+      }
+    }
+    # add the celltype as a column
+    cell_type_output[['cell_type']] <- cell_type
+    # add to the list
+    qtls_per_celltype[[cell_type]] <- cell_type_output
+  }
+  # turn into a dataframe
+  return(qtls_per_celltype)
+}
+
+
 ####################
 # Main Code        #
 ####################
@@ -239,12 +294,55 @@ caqtl_epeaks_combined <- get_egenes_per_celltype_limix(caqtl_output_combined_loc
 scenic_output <- add_region_qtl_info(table_to_annotate = scenic_output, group_to_regions_list = caqtl_epeaks_combined, to_annotate_region_column = 'Region', column_to_add = 'caqtl_celltype')
 scenic_output <- add_region_qtl_info(table_to_annotate = scenic_output, group_to_regions_list = eqtl_egenes_combined, to_annotate_region_column = 'Gene', column_to_add = 'eqtl_celltype')
 
+# get all the QTL output
+eqtl_output <- get_qtls_per_celltype_limix(eqtl_output_combined_loc)
+# merge all the results
+eqtl_output_all <- do.call('rbind', eqtl_output)
+# filter on significance
+eqtl_output_all_sig <- eqtl_output_all[eqtl_output_all[['feature_q_value']] < 0.05 &
+                                        eqtl_output_all[['p_value']] < eqtl_output_all[['pval_nominal_threshold_global']], ]
+# get the locations of the genetic variants
+qtl_variants_all_cpeaks_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/annotations/mo_qtl_variants_tested_cpeaks_overlap.tsv.gz'
+# and read that
+qtl_variants_all_cpeaks <- fread(qtl_variants_all_cpeaks_loc, header = T, sep = '\t')
+# now add the region info for each variant
+eqtl_output_all_sig[['variant_region']] <- qtl_variants_all_cpeaks[match(eqtl_output_all_sig[['snp_id']], qtl_variants_all_cpeaks[['snp_id']]), ][['overlapping_feature']]
+# make a list to store each region-gene pair per cell type
+eqtl_r2g_per_celltype <- list()
+# check each cell type
+for (cell_type in unique(eqtl_output_all_sig[['cell_type']])) {
+  # extract unique entries for cell type
+  eqtl_output_celltype <- eqtl_output_all_sig[eqtl_output_all_sig[['cell_type']] == cell_type &
+                                                !is.na(eqtl_output_all_sig[['variant_region']]), ]
+  # get the unique region-gene pairs
+  eqtl_r2g_per_celltype[[cell_type]] <- unique(paste(eqtl_output_celltype[['variant_region']], eqtl_output_celltype[['feature_id']], sep = '_'))
+}
+# add r2g
+scenic_output[['r2g']] <- paste(scenic_output[['Region']], scenic_output[['Gene']], sep = '_')
+# and add the variant-region info
+scenic_output <- add_region_qtl_info(table_to_annotate = scenic_output, group_to_regions_list = eqtl_r2g_per_celltype, to_annotate_region_column = 'r2g', column_to_add = 'eqtl_varregion_celltype')
+
 # save this file somewhere
 scenic_output_region_info <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eRegulon_both.tsv.gz'
 write.table(scenic_output, gzfile(scenic_output_region_info), row.names = F, col.names = T, sep = '\t')
 # and make a checksum
 mdfiver::create_md5_for_file(scenic_output_region_info)
+# perform a filtering step, remove what SCENIC thinks is less likely
+scenic_output <- scenic_output[scenic_output[['Gene_signature_direction']] %in% c('+/+', '-/+'), ]
+# and keep only what is non-extended if it was both extended and non-extended
+scenic_output <- scenic_output[!duplicated(paste(scenic_output[['Region']], scenic_output[['Gene']], scenic_output[['Gene_signature_direction']])), ]
+# store this somewhere again
+scenic_output_region_info_filtered <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eRegulon_both_filtered.tsv.gz'
+write.table(scenic_output, gzfile(scenic_output_region_info_filtered), row.names = F, col.names = T, sep = '\t')
+mdfiver::create_md5_for_file(scenic_output_region_info_filtered)
+mdfiver::create_sha256_for_file(scenic_output_region_info_filtered)
 
+
+# check now many effects are under genetic regulation
+n_cre_genreg <- nrow(scenic_output[!is.na(scenic_output[['caqtl_celltype']]) | !is.na(scenic_output[['eqtl_varregion_celltype']]), ])
+# and the proportion
+prop_cre_genreg <- n_cre_genreg / nrow(scenic_output)
+# [1] 0.1375937
 
 # get the total number of eGenes
 n_egenes <- length(unique(do.call('c', eqtl_egenes_combined)))

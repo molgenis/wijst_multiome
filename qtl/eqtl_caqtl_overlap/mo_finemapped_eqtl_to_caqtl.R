@@ -2,7 +2,7 @@
 ############################################################################################################################
 # Authors: Roy Oelen
 # Name: mo_finemapped_eqtl_to_caqtl.R
-# Function: 
+# Function: check overlap of caQTLs and eQTLs and colocalizing signals
 ############################################################################################################################
 
 ####################
@@ -528,6 +528,179 @@ plot_concordanace <- function(qtl_effect_table, ca_effect_column='ca_effect', e_
   # 5,5
 }
 
+add_significant_celltypes_as_strings <- function(overlap_table, variant1_col='hit1', variant2_col='hit2', trait1_col='trait1', trait2_col='trait2', cell_type_column='cell_type') {
+  # we'll store the cell types in a list
+  overlap_cts_per_overlap <- list()
+  # make into dataframe
+  overlap_table_df <- data.frame(overlap_table)
+  # add column that is combination of these
+  overlap_table_df[['full_overlap']] <- paste(overlap_table_df[[variant1_col]], overlap_table_df[[variant2_col]], overlap_table_df[[trait1_col]], overlap_table_df[[trait2_col]])
+  # get the unique overlaps
+  overlaps_unique <- unique(overlap_table_df[['full_overlap']])
+  # get how many
+  overlaps_unique_n <- length(overlaps_unique)
+  # create progress bar for this
+  progressbar <- txtProgressBar(min = 0, max = overlaps_unique_n, style = 3)
+  # check each of these entries
+  for (overlap_i in 1 : overlaps_unique_n) {
+    # update progress bar
+    setTxtProgressBar(progressbar, overlap_i)
+    # extract overlap
+    overlap <- overlaps_unique[overlap_i]
+    # subset to this overlap
+    overlap_this <- overlap_table_df[!is.na(overlap_table_df[['full_overlap']]) & overlap_table_df[['full_overlap']] == overlap, ]
+    # extract the cell types
+    overlap_cts_this <- unique(overlap_this[[cell_type_column]])
+    # order them
+    overlap_cts_this <- overlap_cts_this[order(overlap_cts_this)]
+    # make into string
+    overlap_cts_string <- paste(as.character(overlap_cts_this), collapse = ',')
+    # put into list
+    overlap_cts_per_overlap[[overlap]] <- data.frame('overlap' = c(overlap), 'other_ct' = c(overlap_cts_string))
+  }
+  close(progressbar)
+  # merge tables
+  overlap_cts_all_overlaps <- do.call('rbind', overlap_cts_per_overlap)
+  # now add this to the original table
+  overlap_table[['other_ct']] <- overlap_cts_all_overlaps[match(overlap_table_df[['full_overlap']], overlap_cts_all_overlaps[['overlap']]), ][['other_ct']]
+  return(overlap_table)
+}
+
+
+
+add_significant_celltypes_as_strings_vectorised <- function(overlap_table, variant1_col='hit1', variant2_col='hit2', trait1_col='trait1', trait2_col='trait2', cell_type_column='cell_type') {
+  # convert to dataframe format
+  overlap_table_df <- data.frame(overlap_table)
+  # add overlap 
+  overlap_table_df[['full_overlap']] <- paste(overlap_table_df[[variant1_col]], overlap_table_df[[variant2_col]],
+                                         overlap_table_df[[trait1_col]], overlap_table_df[[trait2_col]])
+  
+  # split into groups
+  split_cts <- split(overlap_table_df[[cell_type_column]], overlap_table_df[['full_overlap']])
+  
+  # summarise to string per group
+  ct_strings <- sapply(split_cts, function(x) {
+    ct_string <- paste(sort(unique(x)), collapse = ",")
+    return(ct_string)
+  })
+  
+  # map back
+  overlap_table_df[['other_ct']] <- ct_strings[overlap_table_df[['full_overlap']]]
+  # back to data table format
+  return(data.table(overlap_table_df))
+}
+
+
+#' get the eGenes per cell type from QTL output
+#' 
+#' @param qtl_output_loc base location of the QTL output per cell type
+#' @returns a list with the output tables per cell type
+#' 
+get_output_per_celltype_coloc <- function(coloc_output_loc, file_prepend='', file_append='_eqtl_caqtl_coloc.tsv.gz', h4_column='PP.H4.abf') {
+  # get the folders in the directory, which should be the cell types
+  cell_type_files <- list.files(coloc_output_loc, full.names = F, recursive = F)
+  # filter these on the pattern
+  cell_type_pattern <- paste0(file_prepend, '.*', file_append, '$')
+  cell_type_files <- cell_type_files[grep(cell_type_pattern, cell_type_files)]
+  # store the result per cell type
+  coloc_per_celltype <- list()
+  # check each file
+  for (cell_type_file in cell_type_files) {
+    # paste the full path together
+    cell_type_file_full <- paste0(coloc_output_loc, '/', cell_type_file)
+    # read the file
+    coloc_celltype <- fread(cell_type_file_full, header = T, sep = '\t')
+    # filter on existing h4
+    coloc_celltype <- coloc_celltype[!is.na(coloc_celltype[[h4_column]]), ]
+    # remove the prepend from the file
+    cell_type <- gsub(file_prepend, '', cell_type_file)
+    # and the append
+    cell_type <- gsub(file_append, '', cell_type)
+    # add the cell type to the table
+    coloc_celltype[['cell_type']] <- cell_type
+    # and put in list
+    coloc_per_celltype[[cell_type]] <- coloc_celltype
+  }
+  return(coloc_per_celltype)
+}
+
+
+#' get the eGenes per cell type from QTL output
+#' 
+#' @param qtl_output_loc base location of the QTL output per cell type
+#' @param output_file which output file to read for the results
+#' @param gene_column which column to use as the gene identifier
+#' @returns a list with the output tables per cell type
+#' 
+get_output_per_celltype_limix <- function(qtl_output_loc, output_file='qtl_results_all_qval_allchroms_fdr005_significant_cs.tsv.gz', gene_column='feature_id', significance_column='feature_q_value', significance_cutoff=0.05, verbose=T, add_nominal_cutoff=T, nominal_p_value_column='p_value') {
+  # get the folders in the directory, which should be the cell types
+  cell_types <- list.dirs(qtl_output_loc, full.names = F, recursive = F)
+  # we will store the results in a list for now
+  egenes_per_celltype <- list()
+  # check each cell type
+  for (cell_type in cell_types) {
+    # paste together the full path
+    full_cell_type_path <- paste(qtl_output_loc, '/', cell_type, '/', output_file, sep = '')
+    # log if requested
+    if (verbose) {
+      print(paste('reading', full_cell_type_path))
+    }
+    # read the file
+    cell_type_output <- read.table(full_cell_type_path, sep = '\t', header = T)
+    # filter the results on significance
+    if (!is.null(significance_column)) {
+      # print progress if requested
+      if (verbose) {
+        print(paste('variant+phenotype before filtering', nrow(cell_type_output)))
+      }
+      # filter
+      cell_type_output <- cell_type_output[
+        !is.na(cell_type_output[[significance_column]]) &
+          cell_type_output[[significance_column]] < significance_cutoff, 
+      ]
+      if (verbose) {
+        print(paste('variant+phenotype after filtering', nrow(cell_type_output)))
+      }
+      # add nominal cutoff by first getting the top effects
+      cell_type_output_top <- cell_type_output[order(cell_type_output[[nominal_p_value_column]]), ]
+      cell_type_output_top <- cell_type_output_top[!duplicated(cell_type_output_top[[gene_column]]), ]
+      # get the highest still significant p value
+      max_sig_p <- max(cell_type_output_top[[nominal_p_value_column]])
+      # and add that to the output
+      cell_type_output[['nominal_p_value_cutoff']] <- max_sig_p
+    }
+    # add to the list
+    egenes_per_celltype[[cell_type]] <- cell_type_output
+  }
+  # turn into a dataframe
+  return(egenes_per_celltype)
+}
+
+
+add_associated_region <- function(eqtl_outputs, scenic_output, eqtl_gene_column='feature_id', scenic_gene_column='Gene', scenic_region_column='Region') {
+  # keep a list per cell type
+  cs_output_per_ct_region <- list()
+  # check each cell type
+  for (cell_type in names(eqtl_outputs)) {
+    # extract for cell type
+    cs_output_ct <- eqtl_outputs[[cell_type]]
+    # subset scenic
+    scenic_relevant <- scenic_output[, c(..scenic_gene_column, ..scenic_region_column)]
+    # with standardised columns
+    colnames(scenic_relevant) <- c('feature', 'region')
+    # add associated region to gene
+    cs_output_ct <- merge(
+      cs_output_ct, 
+      scenic_relevant, 
+      by.x = eqtl_gene_column, 
+      by.y = 'feature'
+    )
+    # put back in the list
+    cs_output_per_ct_region[[cell_type]] <- cs_output_ct
+  }
+  return(cs_output_per_ct_region)
+}
+
 
 ####################
 # Main Code        #
@@ -739,9 +912,150 @@ overlap_complete <- cbind(overlap_complete, cpeaks_anno[match(overlap_complete[[
 # get the distances
 overlap_distances <- get_closest_flanks(overlap_complete, 'atac_start_hg38', 'atac_end_hg38', 'gene_start', 'gene_end')
 # add that to the original table
-overlap_complete[['distance']] <- overlap_distances[['min_dist']]
+overlap_complete[['gene_to_atac_distance']] <- overlap_distances[['min_dist']]
+# get the distances between the variant and the region
+variant_region_distances <- get_closest_flanks(overlap_complete, 'atac_start_hg38', 'atac_end_hg38', 'atac_snp_position', 'atac_snp_position')
+# add to the original table again
+overlap_complete[['cavariant_to_atac_distance']] <- variant_region_distances[['min_dist']]
+# get the distances between the variant and the gene
+variant_region_distances <- get_closest_flanks(overlap_complete, 'gene_start', 'gene_end', 'gene_snp_position', 'gene_snp_position')
+# add to the original table again
+overlap_complete[['evariant_to_atac_distance']] <- variant_region_distances[['min_dist']]
+
+
+# location of the CREs identified by SCENIC
+scenic_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eRegulon_both.tsv.gz'
+# read the scenic output
+scenic_output <- fread(scenic_output_loc, header = T, sep = '\t')
+# order by the extended
+scenic_output <- scenic_output[order(scenic_output[['is_extended']]), ]
+# and keep only what is non-extended if it was both extended and non-extended
+scenic_output <- scenic_output[!duplicated(paste(scenic_output[['Region']], scenic_output[['Gene']], scenic_output[['TF']])), ]
+# replace the ':' with '-' for the gene
+scenic_output[['Region']] <- gsub(':', '-', scenic_output[['Region']])
+# add the r2g
+scenic_output[['r2g']] <- paste(scenic_output[['Region']], scenic_output[['Gene']], sep = '+')
+# also for eQTL-caQTL
+overlap_complete[['r2g']] <- paste(overlap_complete[['trait1']], overlap_complete[['trait2']], sep = '+')
+# merge what is interesting
+overlap_complete <- merge(overlap_complete, unique(scenic_output[, c('r2g', 'TF', 'eRegulon_name', 'rho_R2G')]), by = 'r2g', all.x = T)
+# check if the directions are concordant
+overlap_complete[['qtl_scenic_concordant']] <- sign(overlap_complete[['e_effect']] * overlap_complete[['ca_effect']]) == sign(overlap_complete[['rho_R2G']])
+
+# rename some columns
+colnames(overlap_complete) <- gsub('atac_chr_hg38', 'atac_chr', colnames(overlap_complete))
+colnames(overlap_complete) <- gsub('atac_start_hg38', 'atac_start', colnames(overlap_complete))
+colnames(overlap_complete) <- gsub('atac_end_hg38', 'atac_end', colnames(overlap_complete))
+colnames(overlap_complete) <- gsub('^distance$', 'atac_gene_distance', colnames(overlap_complete))
+
+# gwas data location
+gwas_catalogue_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/GWAS_enrichment/GWAS_vars/immune-gwas-catalog-download-associations-alt-full-chromposrefalt.tsv.gz'
+gwas_catalogue <- fread(gwas_catalogue_loc, header = T, sep = '\t')
+# keep only what is GWS
+gwas_catalogue[['P-VALUE']] <- gsub(',', '.', gwas_catalogue[['P-VALUE']])
+gwas_catalogue[['P-VALUE']] <- gsub('E', 'e', gwas_catalogue[['P-VALUE']])
+gwas_catalogue[['P-VALUE']] <- as.numeric(gwas_catalogue[['P-VALUE']])
+gwas_catalogue <- gwas_catalogue[gwas_catalogue[['P-VALUE']] < 5e10-8, ]
+# get the ld data
+ld_data_gwas_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/GWAS_enrichment/GWAS_vars/moldpairs/1000G_HC/eurpop/immune-gwas-catalog-download-associations-alt-full-moldpairs_ld_pairs.tsv.gz'
+ld_data_gwas <- fread(ld_data_gwas_loc, header = T, sep = '\t')
+# keep only where one of the ld variants is the GWAS variant
+ld_data_gwas <- ld_data_gwas[ld_data_gwas[['ld_variant']] %in% gwas_catalogue[['chromposaltref']], ]
+# and where the index variant is one of our QTL variants
+ld_data_gwas <- ld_data_gwas[ld_data_gwas[['index_variant']] %in% c(overlap_complete[['hit1']], overlap_complete[['hit2']]), ]
+# add info on whether the variant was in the gwas
+overlap_complete[['hit1_in_imm_gwas']] <- overlap_complete[['hit1']] %in% gwas_catalogue[['chromposaltref']]
+overlap_complete[['hit2_in_imm_gwas']] <- overlap_complete[['hit2']] %in% gwas_catalogue[['chromposaltref']]
+# or had an LD variant
+overlap_complete[['hit1_ld_imm_gwas']] <- overlap_complete[['hit1']] %in% ld_data_gwas[['ld_variant']]
+overlap_complete[['hit2_ld_imm_gwas']] <- overlap_complete[['hit2']] %in% ld_data_gwas[['ld_variant']]
+# and if either
+overlap_complete[['hit1_imm_gwas']] <- overlap_complete[['hit1_in_imm_gwas']] | overlap_complete[['hit1_ld_imm_gwas']]
+overlap_complete[['hit2_imm_gwas']] <- overlap_complete[['hit2_in_imm_gwas']] | overlap_complete[['hit2_ld_imm_gwas']]
+
+# add which cell types are present
+overlap_complete <- add_significant_celltypes_as_strings_vectorised(overlap_complete)
+
+# add the Z score
+overlap_complete[['ca_z']] <- overlap_complete[['ca_effect']] / overlap_complete[['ca_effect_se']]
+overlap_complete[['e_z']] <- overlap_complete[['e_effect']] / overlap_complete[['e_effect_se']]
+
+# add the overlapping screen feature as wel
+overlap_complete[['hit1_overlapping_feature']] <- qtl_variants_all_screen[match(overlap_complete[['hit1']], qtl_variants_all_screen[['snp_id']]), ][['overlapping_feature']]
+overlap_complete[['hit2_overlapping_feature']] <- qtl_variants_all_screen[match(overlap_complete[['hit2']], qtl_variants_all_screen[['snp_id']]), ][['overlapping_feature']]
+# location of the identifier to location
+encode_cre_mapping_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/encode_cres/v4/GRCh38-cCREs.bed.gz'
+# read that
+encode_cre_mapping <- fread(encode_cre_mapping_loc, header = F, sep = '\t')
+# set the column names
+colnames(encode_cre_mapping) <- c('chromosome', 'start', 'end', 'id1', 'id2', 'category')
+# and add the naming as we used it
+encode_cre_mapping[['id3']] <- paste(encode_cre_mapping[['chromosome']], encode_cre_mapping[['start']], encode_cre_mapping[['end']], sep = '-')
+# add the varian-level screen annotation
+overlap_complete[['hit1_screen']] <- encode_cre_mapping[match(overlap_complete[['hit1_overlapping_feature']], encode_cre_mapping[['id3']])][['category']]
+overlap_complete[['hit2_screen']] <- encode_cre_mapping[match(overlap_complete[['hit2_overlapping_feature']], encode_cre_mapping[['id3']])][['category']]
+
+# get the locations of the K562 STARR-seq assay data
+encsr661fow_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/encode_cres/v4/CAPRA/ENCSR661FOW-DESeq2.Solo-Filtered.V7.txt.gz'
+encsr858mps_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/encode_cres/v4/CAPRA/ENCSR858MPS-DESeq2.Solo-Filtered.V7.txt.gz'
+# read these
+encsr661fow <- read.table(encsr661fow_loc, header = T, sep = '\t', row.names = 1)
+encsr858mps <- read.table(encsr858mps_loc, header = T, sep = '\t', row.names = 1)
+# then add that annotation to the STARR-seq data
+encsr661fow <- cbind(data.frame('ccre' = encode_cre_mapping[match(rownames(encsr661fow), encode_cre_mapping[['id1']]), ][['id3']]), encsr661fow)
+encsr858mps <- cbind(data.frame('ccre' = encode_cre_mapping[match(rownames(encsr858mps), encode_cre_mapping[['id1']]), ][['id3']]), encsr858mps)
+# add the classification
+encsr661fow[['classification']] <- 'none'
+encsr661fow[!is.na(encsr661fow[['padj']]) & encsr661fow[['padj']] < 0.05 & encsr661fow[['log2FoldChange']] < 0, ][['classification']] <- 'silencer'
+encsr661fow[!is.na(encsr661fow[['padj']]) & encsr661fow[['padj']] < 0.05 & encsr661fow[['log2FoldChange']] > 0, ][['classification']] <- 'enhancer'
+encsr858mps[['classification']] <- 'none'
+encsr858mps[!is.na(encsr858mps[['padj']]) & encsr858mps[['padj']] < 0.05 & encsr858mps[['log2FoldChange']] < 0, ][['classification']] <- 'silencer'
+encsr858mps[!is.na(encsr858mps[['padj']]) & encsr858mps[['padj']] < 0.05 & encsr858mps[['log2FoldChange']] > 0, ][['classification']] <- 'enhancer'
+# then add this to the table
+overlap_complete[['hit1_ENCSR661FOW']] <- encsr661fow[match(overlap_complete[['hit1_overlapping_feature']], encsr661fow[['ccre']]), ][['classification']]
+overlap_complete[['hit1_ENCSR858MPS']] <- encsr858mps[match(overlap_complete[['hit1_overlapping_feature']], encsr858mps[['ccre']]), ][['classification']]
+overlap_complete[['hit2_ENCSR661FOW']] <- encsr661fow[match(overlap_complete[['hit2_overlapping_feature']], encsr661fow[['ccre']]), ][['classification']]
+overlap_complete[['hit2_ENCSR858MPS']] <- encsr858mps[match(overlap_complete[['hit2_overlapping_feature']], encsr858mps[['ccre']]), ][['classification']]
+
+# write the result
+overlap_complete_wmetadata_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/colocalization/eqtl_caqtl/ut_and_24hca_significant/mo_eqtl_cqtl_coloc_and_overlapping_wmetadata.tsv.gz'
+write.table(overlap_complete, gzfile(overlap_complete_wmetadata_loc), row.names = F, col.names = T, sep = '\t', quote = F)
+# with a checksum
+mdfiver::create_sha256_for_file(overlap_complete_wmetadata_loc)
+
+# also keep one for the supplementary information
+supp_colnames <- setdiff(colnames(overlap_complete), c('atac_housekeeping', 'atac_screen_all', 'TF', 'eRegulon_name', 'rho_R2G', 'qtl_scenic_concordant', 'full_overlap'))
+overlap_complete_supp <- unique(overlap_complete[, ..supp_colnames, drop = F])
+# write the result
+overlap_complete_supp_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/colocalization/eqtl_caqtl/ut_and_24hca_significant/mo_eqtl_cqtl_coloc_and_overlapping_supp.tsv.gz'
+write.table(overlap_complete_supp, gzfile(overlap_complete_supp_loc), row.names = F, col.names = T, sep = '\t', quote = F)
+# with a checksum
+mdfiver::create_sha256_for_file(overlap_complete_supp_loc)
+# reload the file
+overlap_complete_supp <- fread(overlap_complete_supp_loc, header = T, sep = '\t')
+
+# read the data again
+overlap_complete <- fread(overlap_complete_wmetadata_loc, header = T, sep = '\t')
+
+# sort again
+overlap_complete <- overlap_complete[order(abs(overlap_complete[['e_z']]), abs(overlap_complete[['ca_z']]), decreasing = T), ]
+# do each cell type
+for (cell_type in unique(overlap_complete[['cell_type']])) {
+  # filter to cell type and overlap, because that is easier variant-wise
+  overlap_complete_ct <- overlap_complete[
+    overlap_complete[['cell_type']] == cell_type &
+    overlap_complete[['method']] == 'overlap', 
+  ]
+  # keep the first entry
+  overlap_complete_ct_unique_r2g <- overlap_complete_ct[!duplicated(paste(overlap_complete_ct[['trait1']], overlap_complete_ct[['trait2']])), ]
+  # save this plot
+  pdf(file = paste0('~/plots/mo_scatter_mo_caqtl_vs_eqtl_top_caqtl_per_gene_', cell_type, '_z.pdf'), width=5, height=5)
+  plot_concordanace(overlap_complete_ct_unique_r2g[!duplicated(overlap_complete_ct_unique_r2g[['trait2']]), ], main = paste0('Effect sizes of caQTLs versus eQTLs for ', cell_type, '\n(top caQTL effect per gene)'), ca_effect_column = 'ca_z', e_effect_column = 'e_z')
+  dev.off()
+}
+
 # make a version where we remove entries where the gene and region physically overlap
-overlap_complete_distbiggerzero <- overlap_complete[overlap_complete[['distance']] > 0, ]
+overlap_complete_distbiggerzero <- overlap_complete[overlap_complete[['gene_to_atac_distance']] > 0, ]
 
 # keep the first entry
 overlap_complete_unique_r2g <- overlap_complete[!duplicated(paste(overlap_complete[['trait1']], overlap_complete[['trait2']])), ]
@@ -766,3 +1080,129 @@ plot_concordanace(overlap_complete_unique_r2g_cd4t, main = 'Effect sizes of caQT
 plot_concordanace(overlap_complete_unique_distbiggerzero_r2g[!duplicated(overlap_complete_unique_distbiggerzero_r2g[['trait2']]), ], main = 'Effect sizes of caQTLs versus eQTLs\n(no region/gene overlap, top caQTL effect per gene)')
 plot_concordanace(overlap_complete_unique_r2g_mono[!duplicated(overlap_complete_unique_r2g_mono[['trait2']]), ], main = 'Effect sizes of caQTLs versus eQTLs for monocytes\n(top caQTL effect per gene)')
 plot_concordanace(overlap_complete_unique_r2g_cd4t[!duplicated(overlap_complete_unique_r2g_cd4t[['trait2']]), ], main = 'Effect sizes of caQTLs versus eQTLs for CD4+ T(top caQTL effect per gene)')
+
+# plot the one we'll use in the end
+plot_concordanace(overlap_complete_unique_r2g_mono[!duplicated(overlap_complete_unique_r2g_mono[['trait2']]), ], main = 'Effect sizes of caQTLs versus eQTLs for monocytes\n(top caQTL effect per gene)', ca_effect_column = 'ca_z', e_effect_column = 'e_z')
+# save this plot
+pdf(file = '~/plots/mo_scatter_mo_caqtl_vs_eqtl_top_caqtl_per_gene_mono_z.pdf', width=5, height=5)
+plot_concordanace(overlap_complete_unique_r2g_mono[!duplicated(overlap_complete_unique_r2g_mono[['trait2']]), ], main = 'Effect sizes of caQTLs versus eQTLs for monocytes\n(top caQTL effect per gene)', ca_effect_column = 'ca_z', e_effect_column = 'e_z')
+dev.off()
+
+# location of the QTL outputs
+eqtl_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/finemapping/eqtl/sc-eqtlgen/combined_with_qtl/combined/L1/'
+# read the eQTL output
+eqtl_outputs <- get_output_per_celltype_limix(eqtl_output_loc)
+# add scenic region info
+eqtl_outputs_scenic_regions <- add_associated_region(eqtl_outputs, scenic_output, scenic_region_column = 'Region')
+# add the cell type
+for(ct in names(eqtl_outputs_scenic_regions)) {
+  eqtl_outputs_scenic_regions[[ct]] <- cbind(data.table('cell_type' = rep(ct, times = nrow(eqtl_outputs_scenic_regions[[ct]]))), eqtl_outputs_scenic_regions[[ct]])
+}
+# location of variant to cpeaks region
+var_to_cpeaks_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/annotations/mo_qtl_variants_tested_cpeaks_overlap.tsv.gz'
+# and read that
+var_to_cpeaks <- fread(var_to_cpeaks_loc, header = T, sep = '\t')
+# merge the celltype outputs
+eqtl_outputs_all <- rbindlist(eqtl_outputs_scenic_regions)
+# filter by significance
+eqtl_outputs_all_sig <- eqtl_outputs_all[eqtl_outputs_all[['p_value']] < eqtl_outputs_all[['pval_nominal_threshold_global']], ]
+# add the region the variant is in, to the output
+eqtl_outputs_all_sig[['var_region']] <- var_to_cpeaks[match(eqtl_outputs_all_sig[['snp_id']], var_to_cpeaks[['snp_id']]), ][['overlapping_feature']]
+# keep only the sets where the variant is in the relevant region
+eqtl_outputs_all_sig_var_in_region <- eqtl_outputs_all_sig[!is.na(eqtl_outputs_all_sig[['region']]) & !is.na(eqtl_outputs_all_sig[['var_region']]) & eqtl_outputs_all_sig[['region']] == eqtl_outputs_all_sig[['var_region']], ]
+# add the columns as in the other overlap
+eqtl_outputs_all_sig_var_in_region_formatted <- data.table(
+  'r2g' = paste(eqtl_outputs_all_sig_var_in_region[['region']], eqtl_outputs_all_sig_var_in_region[['feature_id']], sep = '+'), 
+  'cell_type' = eqtl_outputs_all_sig_var_in_region[['cell_type']], 
+  'trait1' = eqtl_outputs_all_sig_var_in_region[['var_region']], 
+  'hit2' = eqtl_outputs_all_sig_var_in_region[['snp_id']], 
+  'trait2' = eqtl_outputs_all_sig_var_in_region[['feature_id']], 
+  'dataset2' = 'eQTLs', 
+  'variant2' = eqtl_outputs_all_sig_var_in_region[['snp_id']], 
+  'e_effect' = eqtl_outputs_all_sig_var_in_region[['beta']], 
+  'e_allele' = eqtl_outputs_all_sig_var_in_region[['assessed_allele']], 
+  'e_effect_se' = eqtl_outputs_all_sig_var_in_region[['beta_se']], 
+  'e_pvalue' = eqtl_outputs_all_sig_var_in_region[['p_value']], 
+  'e_pvalue_cutoff' = eqtl_outputs_all_sig_var_in_region[['pval_nominal_threshold_global']], 
+  'e_qvalue' = eqtl_outputs_all_sig_var_in_region[['feature_q_value']], 
+  'method' = 'esnp_in_scenic', 
+  'gene_chromosome' = eqtl_outputs_all_sig_var_in_region[['feature_chromosome']], 
+  'gene_start' = eqtl_outputs_all_sig_var_in_region[['feature_start']], 
+  'gene_end' = eqtl_outputs_all_sig_var_in_region[['feature_end']], 
+  'gene_snp_position' = eqtl_outputs_all_sig_var_in_region[['snp_position']]
+)
+# add the info we had in the overlap as well
+eqtl_outputs_all_sig_var_in_region_formatted[['hit2_overlapping_feature']] <- qtl_variants_all_screen[match(eqtl_outputs_all_sig_var_in_region_formatted[['hit2']], qtl_variants_all_screen[['snp_id']]), ][['overlapping_feature']]
+eqtl_outputs_all_sig_var_in_region_formatted[['hit2_ENCSR661FOW']] <- encsr661fow[match(eqtl_outputs_all_sig_var_in_region_formatted[['hit2_overlapping_feature']], encsr661fow[['ccre']]), ][['classification']]
+eqtl_outputs_all_sig_var_in_region_formatted[['hit2_ENCSR858MPS']] <- encsr858mps[match(eqtl_outputs_all_sig_var_in_region_formatted[['hit2_overlapping_feature']], encsr858mps[['ccre']]), ][['classification']]
+eqtl_outputs_all_sig_var_in_region_formatted[['e_z']] <- eqtl_outputs_all_sig_var_in_region_formatted[['e_effect']] / eqtl_outputs_all_sig_var_in_region_formatted[['e_effect_se']]
+eqtl_outputs_all_sig_var_in_region_formatted[['hit2_in_imm_gwas']] <- eqtl_outputs_all_sig_var_in_region_formatted[['hit2']] %in% gwas_catalogue[['chromposaltref']]
+eqtl_outputs_all_sig_var_in_region_formatted[['hit2_ld_imm_gwas']] <- eqtl_outputs_all_sig_var_in_region_formatted[['hit2']] %in% ld_data_gwas[['ld_variant']]
+eqtl_outputs_all_sig_var_in_region_formatted[['hit2_imm_gwas']] <- eqtl_outputs_all_sig_var_in_region_formatted[['hit2_in_imm_gwas']] | eqtl_outputs_all_sig_var_in_region_formatted[['hit2_ld_imm_gwas']]
+eqtl_outputs_all_sig_var_in_region_formatted <- cbind(eqtl_outputs_all_sig_var_in_region_formatted, cpeaks_anno[match(eqtl_outputs_all_sig_var_in_region_formatted[['trait1']], cpeaks_anno[['atac_signac_hg38']]), c('atac_chr_hg38', 'atac_start_hg38', 'atac_end_hg38', 'atac_housekeeping', 'atac_screen_all')])
+eqtl_outputs_all_sig_var_in_region_formatted_distances <- get_closest_flanks(eqtl_outputs_all_sig_var_in_region_formatted, 'atac_start_hg38', 'atac_end_hg38', 'gene_start', 'gene_end')
+eqtl_outputs_all_sig_var_in_region_formatted[['gene_to_atac_distance']] <- eqtl_outputs_all_sig_var_in_region_formatted_distances[['min_dist']]
+eqtl_outputs_all_sig_var_in_region_formatted_variant_region_distances <- get_closest_flanks(eqtl_outputs_all_sig_var_in_region_formatted, 'gene_start', 'gene_end', 'gene_snp_position', 'gene_snp_position')
+eqtl_outputs_all_sig_var_in_region_formatted[['evariant_to_atac_distance']] <- eqtl_outputs_all_sig_var_in_region_formatted_variant_region_distances[['min_dist']]
+eqtl_outputs_all_sig_var_in_region_formatted[['hit2_screen']] <- encode_cre_mapping[match(eqtl_outputs_all_sig_var_in_region_formatted[['hit2_overlapping_feature']], encode_cre_mapping[['id3']])][['category']]
+
+# keep what Jelmer wanted
+overlap_complete_j <- overlap_complete[overlap_complete[['gene_to_atac_distance']] > 0, ]
+# remove column we don't need
+overlap_complete_j[['full_overlap']] <- NULL
+
+# keep what Jelmer wanted for the variants in open chromatin as well
+eqtl_outputs_all_sig_var_in_region_formatted_j <- eqtl_outputs_all_sig_var_in_region_formatted[eqtl_outputs_all_sig_var_in_region_formatted[['gene_to_atac_distance']] > 0, ]
+# and combine them
+overlap_complete_j_both <- rbindlist(list(overlap_complete_j, eqtl_outputs_all_sig_var_in_region_formatted_j), fill = T)
+# other columns to remov
+overlap_complete_j_both <- overlap_complete_j_both[, c('cell_type', 
+                                             'dataset1','dataset2', 
+                                             'hit1', 'trait1', 'hit2', 'trait2', 'ca_allele', 'e_allele', 'ca_z', 'e_z', 'ca_pvalue', 'e_pvalue', 'method', 
+                                             'gene_to_atac_distance', 
+                                             'cavariant_to_atac_distance', 
+                                             'evariant_to_atac_distance', 
+                                             'atac_screen_all', 
+                                             'hit1_in_imm_gwas','hit2_in_imm_gwas','hit1_ld_imm_gwas','hit2_ld_imm_gwas','hit1_imm_gwas','hit2_imm_gwas',
+                                             'other_ct', 
+                                             'hit1_ENCSR661FOW','hit1_ENCSR858MPS', 
+                                             'hit2_ENCSR661FOW','hit2_ENCSR858MPS',
+                                             'TF', 'qtl_scenic_concordant')]
+# add credible set info
+overlap_complete_j_both[['e_cs']] <- eqtl_outputs_all[match(paste(overlap_complete_j_both[['cell_type']], overlap_complete_j_both[['hit2']], overlap_complete_j_both[['trait2']]),paste(eqtl_outputs_all[['cell_type']], eqtl_outputs_all[['snp_id']], eqtl_outputs_all[['feature_id']]) ), ][['CS']]
+overlap_complete_j_both_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/colocalization/eqtl_caqtl/ut_and_24hca_significant/mo_eqtl_cqtl_coloc_and_overlapping_wmetadata_varinregion_jelmer.tsv.gz'
+write.table(overlap_complete_j_both, gzfile(overlap_complete_j_both_loc), row.names = F, col.names = T, sep = '\t', quote = F)
+mdfiver::create_sha256_for_file(overlap_complete_j_both_loc)
+
+# cell_type   "cell type the eQTL was found in"
+# dataset1    "dataset the first QTL is from (always caQTL)"
+# dataset2    "dataset the second QTL is from (always eQTL)"
+# hit1    "the variant in the first set (always caQTL)"
+# trait1  "the trait in the first set (caPeak or eSNP peak location)"
+# hit2    "the variant in the first set (always eQTL)"
+# trait2  "the trait in the first set (always eGene)"
+# ca_allele   "effect allele for first set (always caQTL effect allele)"
+# e_allele   "effect allele for second set (always eQTL effect allele)"
+# ca_z    "caQTL Z-score"
+# e_z "eQTL Z-score"
+# ca_pvalue   "caQTL p-value (nominal)"
+# e_pvalue    "eQTL p-value (nominal)"
+# method  "method peak and gene are linked, through overlap for caQTL/eQTL variant, colocalization or eSNP being in SCENIC+ linked chromatin region"
+# gene_to_atac_distance   "distance between peak and gene"
+# cavariant_to_atac_distance  "distance between caSNP and peak"
+# evariant_to_atac_distance   "distance between eSNP and peak"
+# atac_screen_all "screen annotation of peak"
+# hit1_in_imm_gwas    "is variant from first set (caSNP) in immune GWAS"
+# hit2_in_imm_gwas    "is variant from second set (eSNP) in immune GWAS"
+# hit1_ld_imm_gwas    "is variant from first set (caSNP) in LD with a immune GWAS variant"
+# hit2_ld_imm_gwas    "is variant from second set (eSNP) in LD with a immune GWAS variant"
+# hit1_imm_gwas   "is variant from first set (caSNP) in, or in LD with a immune GWAS variant"
+# hit2_imm_gwas   "is variant from second set (eSNP) in, or in LD with a immune GWAS variant"
+# other_ct    "what cell types was this peak-gene pair found"
+# hit1_ENCSR661FOW    "is variant from first set (caSNP) in ENCSR661FOW K562 STARR-seq region"
+# hit1_ENCSR858MPS    "is variant from first set (caSNP) in ENCSR858MPS K562 STARR-seq region"
+# hit2_ENCSR661FOW    "is variant from second set (eSNP) in ENCSR661FOW K562 STARR-seq region"
+# hit2_ENCSR858MPS    "is variant from second set (eSNP) in ENCSR858MPS K562 STARR-seq region"
+# TF  "TF linked to region-gene pair via SCENIC+"
+# qtl_scenic_concordant   "is eQTL*caQTL sign concordant with SCENIC+ sign"
+# e_cs    "eSNP credible set in gene"
