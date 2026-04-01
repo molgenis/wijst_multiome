@@ -369,7 +369,7 @@ Below we will outline the steps taken to process and analyse the data
 ### Transcript Factor QTL mapping
 '*qtl/tfqtl/mo_sc_tfqtl.R*' run single-cell TF-QTL analysis\
 '*qtl/tfqtl/mo_tf_qtl.smk*' run single-cell TF-QTL analysis using snakemake file\
-'*qtl/tfqtl/mo_tf_qtl_template.yaml*' run single-cell TF-QTL analysis using yaml file\
+'*qtl/tfqtl/mo_tf_qtl_template.yaml*' run single-cell TF-QTL analysis using yaml file
 
 
 ### LD
@@ -410,8 +410,8 @@ Below we will outline the steps taken to process and analyse the data
 ## scripts for other papers
 
 ### aging
-'*aging_subset_atac_objects.R*' subset ATAC data object to samples to try in aging analysis
-'*aging_merge_atac_objects.R*' merge ATAC data objects that were subsetted for samples to try in aging analysis
+'*aging_subset_atac_objects.R*' subset ATAC data object to samples to try in aging analysis\
+'*aging_merge_atac_objects.R*' merge ATAC data objects that were subsetted for samples to try in aging analysis\
 '*aging_subset_rna_object.R*' subset RNA data object to samples to try in aging analysis
 
 
