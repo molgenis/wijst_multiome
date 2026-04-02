@@ -1145,16 +1145,23 @@ eqtl_outputs_all_sig_var_in_region_formatted[['gene_to_atac_distance']] <- eqtl_
 eqtl_outputs_all_sig_var_in_region_formatted_variant_region_distances <- get_closest_flanks(eqtl_outputs_all_sig_var_in_region_formatted, 'gene_start', 'gene_end', 'gene_snp_position', 'gene_snp_position')
 eqtl_outputs_all_sig_var_in_region_formatted[['evariant_to_atac_distance']] <- eqtl_outputs_all_sig_var_in_region_formatted_variant_region_distances[['min_dist']]
 eqtl_outputs_all_sig_var_in_region_formatted[['hit2_screen']] <- encode_cre_mapping[match(eqtl_outputs_all_sig_var_in_region_formatted[['hit2_overlapping_feature']], encode_cre_mapping[['id3']])][['category']]
+# add the r2g in scenic
+scenic_output[['r2g']] <- paste(scenic_output[['Region']], scenic_output[['Gene']], sep = '+')
+eqtl_outputs_all_sig_var_in_region_formatted <- merge(eqtl_outputs_all_sig_var_in_region_formatted, unique(scenic_output[, c('r2g', 'TF')]), by = 'r2g', all.x = T)
 
+# also add the caQTL/eQTL eQTLs where the variant is in the chromatin region, but not that exact variant
+eqtl_outputs_all_sig_var_in_region_also_caqtl_pair <- eqtl_outputs_all_sig_var_in_region_formatted[
+  eqtl_outputs_all_sig_var_in_region_formatted[['r2g']] %in% overlap_complete[overlap_complete[['method']] == 'overlap', ][['r2g']], 
+]
+# but update the method
+eqtl_outputs_all_sig_var_in_region_also_caqtl_pair[['method']] <- 'overlap_other_esnp'
 # keep what Jelmer wanted
-overlap_complete_j <- overlap_complete[overlap_complete[['gene_to_atac_distance']] > 0, ]
-# remove column we don't need
-overlap_complete_j[['full_overlap']] <- NULL
+# overlap_complete_j <- overlap_complete[overlap_complete[['gene_to_atac_distance']] > 0, ]
 
 # keep what Jelmer wanted for the variants in open chromatin as well
 eqtl_outputs_all_sig_var_in_region_formatted_j <- eqtl_outputs_all_sig_var_in_region_formatted[eqtl_outputs_all_sig_var_in_region_formatted[['gene_to_atac_distance']] > 0, ]
 # and combine them
-overlap_complete_j_both <- rbindlist(list(overlap_complete_j, eqtl_outputs_all_sig_var_in_region_formatted_j), fill = T)
+overlap_complete_j_both <- rbindlist(list(overlap_complete, eqtl_outputs_all_sig_var_in_region_formatted_j, eqtl_outputs_all_sig_var_in_region_also_caqtl_pair), fill = T)
 # other columns to remov
 overlap_complete_j_both <- overlap_complete_j_both[, c('cell_type', 
                                              'dataset1','dataset2', 
@@ -1170,6 +1177,9 @@ overlap_complete_j_both <- overlap_complete_j_both[, c('cell_type',
                                              'TF', 'qtl_scenic_concordant')]
 # add credible set info
 overlap_complete_j_both[['e_cs']] <- eqtl_outputs_all[match(paste(overlap_complete_j_both[['cell_type']], overlap_complete_j_both[['hit2']], overlap_complete_j_both[['trait2']]),paste(eqtl_outputs_all[['cell_type']], eqtl_outputs_all[['snp_id']], eqtl_outputs_all[['feature_id']]) ), ][['CS']]
+# keep what Jelmer wanted
+overlap_complete_j_both <- overlap_complete_j_both[overlap_complete_j_both[['gene_to_atac_distance']] > 0, ]
+# and save the result
 overlap_complete_j_both_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/colocalization/eqtl_caqtl/ut_and_24hca_significant/mo_eqtl_cqtl_coloc_and_overlapping_wmetadata_varinregion_jelmer.tsv.gz'
 write.table(overlap_complete_j_both, gzfile(overlap_complete_j_both_loc), row.names = F, col.names = T, sep = '\t', quote = F)
 mdfiver::create_sha256_for_file(overlap_complete_j_both_loc)
@@ -1187,7 +1197,7 @@ mdfiver::create_sha256_for_file(overlap_complete_j_both_loc)
 # e_z "eQTL Z-score"
 # ca_pvalue   "caQTL p-value (nominal)"
 # e_pvalue    "eQTL p-value (nominal)"
-# method  "method peak and gene are linked, through overlap for caQTL/eQTL variant, colocalization or eSNP being in SCENIC+ linked chromatin region"
+# method  "method peak and gene are linked, through overlap for caQTL/eQTL variant, colocalization, eSNP being in SCENIC+ linked chromatin region or caQTL/eQTL overlap with different variant in peak"
 # gene_to_atac_distance   "distance between peak and gene"
 # cavariant_to_atac_distance  "distance between caSNP and peak"
 # evariant_to_atac_distance   "distance between eSNP and peak"
@@ -1206,3 +1216,68 @@ mdfiver::create_sha256_for_file(overlap_complete_j_both_loc)
 # TF  "TF linked to region-gene pair via SCENIC+"
 # qtl_scenic_concordant   "is eQTL*caQTL sign concordant with SCENIC+ sign"
 # e_cs    "eSNP credible set in gene"
+
+# start reformatting, so that if a region-gene pairs is found multiple times, it is not put on a separate line
+# overlap_complete_j_both_overlap <- overlap_complete_j_both[overlap_complete_j_both[['method']] == 'overlap', ]
+# overlap_complete_j_both_coloc <- overlap_complete_j_both[overlap_complete_j_both[['method']] == 'coloc', ]
+overlap_complete_j_both_overlap <- overlap_complete_j_both[overlap_complete_j_both[['method']] %in% c('overlap', 'coloc'), ]
+overlap_complete_j_both_esnp_in_scenic <- overlap_complete_j_both[overlap_complete_j_both[['method']] == 'esnp_in_scenic', ]
+overlap_complete_j_both_overlapotheresnp <- overlap_complete_j_both[overlap_complete_j_both[['method']] == 'overlap_other_esnp', ]
+# add other cell type for non overlap/coloc
+# add which cell types are present
+overlap_complete_j_both_overlap <- add_significant_celltypes_as_strings_vectorised(overlap_complete_j_both_overlap)
+overlap_complete_j_both_esnp_in_scenic <- add_significant_celltypes_as_strings_vectorised(overlap_complete_j_both_esnp_in_scenic, variant1_col = 'hit2')
+overlap_complete_j_both_overlapotheresnp <- add_significant_celltypes_as_strings_vectorised(overlap_complete_j_both_overlapotheresnp, variant1_col = 'hit2')
+
+
+# make into new table
+overlap_complete_j_both_reformatted <- overlap_complete_j_both_overlap
+# check which of these also have the esnp in overlap already
+overlap_complete_j_both_reformatted_in_esnp_in_scenic <- which(
+  paste(overlap_complete_j_both_reformatted[['cell_type']], overlap_complete_j_both_reformatted[['trait1']], overlap_complete_j_both_reformatted[['hit2']], overlap_complete_j_both_reformatted[['trait2']]) %in% 
+  paste(overlap_complete_j_both_esnp_in_scenic[['cell_type']], overlap_complete_j_both_esnp_in_scenic[['trait1']], overlap_complete_j_both_esnp_in_scenic[['hit2']], overlap_complete_j_both_esnp_in_scenic[['trait2']])
+)
+# update the reformatted
+overlap_complete_j_both_reformatted[overlap_complete_j_both_reformatted_in_esnp_in_scenic, ][['method']] <- paste(overlap_complete_j_both_reformatted[overlap_complete_j_both_reformatted_in_esnp_in_scenic, ][['method']], 'esnp_in_scenic', sep = ',')
+# now do the opposite, check what was not there
+overlap_complete_j_both_reformatted_in_esnp_in_scenic_missing <- which(
+  !(
+    paste(overlap_complete_j_both_esnp_in_scenic[['cell_type']], overlap_complete_j_both_esnp_in_scenic[['trait1']], overlap_complete_j_both_esnp_in_scenic[['hit2']], overlap_complete_j_both_esnp_in_scenic[['trait2']]) %in%
+    paste(overlap_complete_j_both_reformatted[['cell_type']], overlap_complete_j_both_reformatted[['trait1']], overlap_complete_j_both_reformatted[['hit2']], overlap_complete_j_both_reformatted[['trait2']])
+  ) 
+)
+# and rbind that below what is already there
+overlap_complete_j_both_reformatted <- rbind(
+  overlap_complete_j_both_reformatted, 
+  overlap_complete_j_both_esnp_in_scenic[overlap_complete_j_both_reformatted_in_esnp_in_scenic_missing, ]
+)
+# check which of these also have the esnp in an other pair already
+overlap_complete_j_both_reformatted_in_overlapanothersnp <- which(
+  paste(overlap_complete_j_both_reformatted[['cell_type']], overlap_complete_j_both_reformatted[['trait1']], overlap_complete_j_both_reformatted[['hit2']], overlap_complete_j_both_reformatted[['trait2']]) %in% 
+  paste(overlap_complete_j_both_overlapotheresnp[['cell_type']], overlap_complete_j_both_overlapotheresnp[['trait1']], overlap_complete_j_both_overlapotheresnp[['hit2']], overlap_complete_j_both_overlapotheresnp[['trait2']])
+)
+# update the reformatted
+overlap_complete_j_both_reformatted[overlap_complete_j_both_reformatted_in_overlapanothersnp, ][['method']] <- paste(overlap_complete_j_both_reformatted[overlap_complete_j_both_reformatted_in_overlapanothersnp, ][['method']], 'overlap_other_esnp', sep = ',')
+# now do the opposite, check what was not there
+overlap_complete_j_both_reformatted_in_esnp_in_scenic_missing <- which(
+  !(
+    paste(overlap_complete_j_both_esnp_in_scenic[['cell_type']], overlap_complete_j_both_esnp_in_scenic[['hit2']], overlap_complete_j_both_esnp_in_scenic[['trait2']]) %in%
+      paste(overlap_complete_j_both_reformatted[['cell_type']], overlap_complete_j_both_reformatted[['hit2']], overlap_complete_j_both_reformatted[['trait2']])
+  ) 
+)
+# and add those
+overlap_complete_j_both_reformatted <- rbind(
+  overlap_complete_j_both_reformatted, 
+  overlap_complete_j_both_esnp_in_scenic[overlap_complete_j_both_reformatted_in_esnp_in_scenic_missing, ]
+)
+
+# set credible set if NA
+overlap_complete_j_both_reformatted[is.na(overlap_complete_j_both_reformatted[['e_cs']]), ][['e_cs']] <- 'none'
+# get the number of credible sets per gene
+number_of_cs_per_gene <- data.frame(table(unique(overlap_complete_j_both_reformatted[overlap_complete_j_both_reformatted[['e_cs']] != 'none', c('trait2', 'e_cs')][['trait2']])))
+# add n credible set info
+overlap_complete_j_both_reformatted[['n_e_cs_per_gene']] <- number_of_cs_per_gene[match(overlap_complete_j_both_reformatted[['trait2']], number_of_cs_per_gene[['Var1']]), ][['Freq']]
+# save the result
+overlap_complete_j_both_reformatted_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/colocalization/eqtl_caqtl/ut_and_24hca_significant/mo_eqtl_cqtl_coloc_and_overlapping_wmetadata_varinregion_jelmer_reformatted.tsv.gz'
+write.table(overlap_complete_j_both_reformatted, gzfile(overlap_complete_j_both_reformatted_loc), row.names = F, col.names = T, sep = '\t', quote = F)
+mdfiver::create_sha256_for_file(overlap_complete_j_both_reformatted_loc)

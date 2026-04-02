@@ -10,6 +10,7 @@
 ####################
 
 library(xlsx)
+library(data.table)
 
 
 ####################
@@ -238,11 +239,11 @@ debug <- F
 ####################
 
 # location of the QTL outputs
-eqtl_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/finemapping/eqtl/sc-eqtlgen/combined_with_qtl/combined/L1/'
+eqtl_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/finemapping/eqtl/sc-eqtlgen/combined_with_qtl/combined/L1/'
 # read the eQTL output
 eqtl_outputs <- get_output_per_celltype_limix(eqtl_output_loc)
 # location of the QTL outputs
-caqtl_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/finemapping/caqtl/sc-eqtlgen/combined_with_qtl/combined/L1/'
+caqtl_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/finemapping/caqtl/sc-eqtlgen/combined_with_qtl/combined/L1/'
 # read the eQTL output
 caqtl_outputs <- get_output_per_celltype_limix(caqtl_output_loc)
 
@@ -255,7 +256,9 @@ eqtl_outputs_cs_all <- rbindlist(eqtl_outputs_cs, fill = T)
 caqtl_outputs_cs_all <- rbindlist(caqtl_outputs_cs, fill = T)
 # remove variants not at threshold
 eqtl_outputs_cs_all <- eqtl_outputs_cs_all[eqtl_outputs_cs_all[['p_value']] <= eqtl_outputs_cs_all[['pval_nominal_threshold_global']], ]
+caqtl_outputs_cs_all[is.na(caqtl_outputs_cs_all[['pval_nominal_threshold_global']]), ][['pval_nominal_threshold_global']] <- caqtl_outputs_cs_all[is.na(caqtl_outputs_cs_all[['pval_nominal_threshold_global']]), ][['nominal_p_value_cutoff']]
 caqtl_outputs_cs_all <- caqtl_outputs_cs_all[caqtl_outputs_cs_all[['p_value']] <= caqtl_outputs_cs_all[['pval_nominal_threshold_global']], ]
+# update if necessary
 
 # remove confusing column
 eqtl_outputs_cs_all[['pval_nominal_threshold_local']] <- NULL
@@ -269,3 +272,12 @@ caqtl_output_excel_loc <- paste(caqtl_output_loc, 'caqtls_significant.xlsx', sep
 # and write the result
 write_output_to_excel(eqtl_outputs_cs_all, eqtl_output_excel_loc)
 write_output_to_excel(caqtl_outputs_cs_all, caqtl_output_excel_loc)
+
+# save top effects per cell type
+caqtl_outputs_cs_all <- caqtl_outputs_cs_all[order(caqtl_outputs_cs_all[['cell_type']], caqtl_outputs_cs_all[['feature_id']], caqtl_outputs_cs_all[['CS']], caqtl_outputs_cs_all[['p_value']]), ]
+caqtl_outputs_cs_all_top <- caqtl_outputs_cs_all[!duplicated(paste(caqtl_outputs_cs_all[['cell_type']], caqtl_outputs_cs_all[['feature_id']], caqtl_outputs_cs_all[['CS']])), ]
+# set the Excel output location
+caqtl_output_top_excel_loc <- paste(caqtl_output_loc, 'caqtls_significant_top.xlsx', sep = '/')
+# and write the result
+write_output_to_excel(caqtl_outputs_cs_all_top, caqtl_output_top_excel_loc)
+
