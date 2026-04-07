@@ -427,7 +427,7 @@ debug <- T
 ####################
 
 # location of the expression data
-exp_data_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/input/L1/combined/'
+exp_data_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/input/L1/combined/'
 # and the sample mapping files
 eqtl_smf_loc <- paste(exp_data_loc, '/smf.txt', sep = '/')
 # read the sample mapping files
@@ -437,15 +437,15 @@ eqtl_inputs <- read_expression_files_per_celltype(exp_data_loc)
 # read the cell count data as well
 eqtl_covariates <- read_expression_files_per_celltype(exp_data_loc, expression_file_append = '.covariates.txt.gz', row.names = NULL)
 # read the proportion expressed as well
-prop_expressed_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/frac_exp/'
+prop_expressed_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/frac_exp/'
 eqtl_ct_props <- read_expression_files_per_celltype(prop_expressed_loc, expression_file_append = '_persample.tsv.gz', row.names = 1)
 # read the metadata
-mtdt_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/metadata/mo_celllevel_metadata.tsv.gz'
+mtdt_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/metadata/mo_celllevel_metadata.tsv.gz'
 mtdt <- fread(mtdt_loc, header = T, sep = '\t')
 # add to the smf the condition
 eqtl_smf[['condition']] <- mtdt[match(eqtl_smf[['phenotype_id']], paste(mtdt[['sample_final']], mtdt[['lane']], sep = ';;'))][['condition_final']]
 # which genotype to use
-genotype_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/genotype/imputed_hg38_all_anc_qtl_tested_variants'
+genotype_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/genotype/imputed_hg38_all_anc_qtl_tested_variants'
 # read the genotypes, but only those in the file and in the confinement
 genotypes <- read.plink(
   bed = paste(genotype_loc, '.bed', sep = ''),
@@ -453,7 +453,7 @@ genotypes <- read.plink(
   fam = paste(genotype_loc, '.fam', sep = '')
 )
 # CD4T UT
-cor(
+cor.test(
   x = as.vector(
     unlist(
       eqtl_inputs$CD4T['BLK', 
@@ -470,9 +470,9 @@ cor(
                                      eqtl_smf[['condition']] == 'UT', ][['phenotype_id']])])), 
   method = 'spearman'
 )
-# -0.02010506
+# rho -0.02010506, p 0.7642
 # CD4T 24hCA
-cor(
+cor.test(
   x = as.vector(
     unlist(
       eqtl_inputs$CD4T['BLK', 
@@ -489,28 +489,28 @@ cor(
                                      eqtl_smf[['condition']] == '24hCA', ][['phenotype_id']])])), 
   method = 'spearman'
 )
-# 0.0310517
+# rho 0.0310517, p 0.5604
 # B UT
-cor(
+cor.test(
   x = as.vector(
     unlist(
       eqtl_inputs$B['BLK', 
-                    intersect(colnames(eqtl_inputs$B), 
-                              eqtl_smf[
-                                !is.na(eqtl_smf[['condition']]) &
-                                  eqtl_smf[['condition']] == 'UT', ][['phenotype_id']])])), 
+                       intersect(colnames(eqtl_inputs$B), 
+                                 eqtl_smf[
+                                   !is.na(eqtl_smf[['condition']]) &
+                                     eqtl_smf[['condition']] == 'UT', ][['phenotype_id']])])), 
   y = as.vector(
     unlist(
       eqtl_inputs$B['FAM167A', 
-                    intersect(colnames(eqtl_inputs$B), 
-                              eqtl_smf[
-                                !is.na(eqtl_smf[['condition']]) &
-                                  eqtl_smf[['condition']] == 'UT', ][['phenotype_id']])])), 
+                       intersect(colnames(eqtl_inputs$B), 
+                                 eqtl_smf[
+                                   !is.na(eqtl_smf[['condition']]) &
+                                     eqtl_smf[['condition']] == 'UT', ][['phenotype_id']])])), 
   method = 'spearman'
 )
-# -0.1068247
+# rho -0.1068247, p 0.11
 # B 24hCA
-cor(
+cor.test(
   x = as.vector(
     unlist(
       eqtl_inputs$B['BLK', 
@@ -527,7 +527,7 @@ cor(
                                   eqtl_smf[['condition']] == '24hCA', ][['phenotype_id']])])), 
   method = 'spearman'
 )
-# -0.1382585
+# rho -0.1382585, p 0.009604
 
 # create a frame to plot
 plot_df <- rbind(
@@ -547,9 +547,9 @@ plot_df <- rbind(
                                   !is.na(eqtl_smf[['condition']]) &
                                     eqtl_smf[['condition']] == '24hCA', ][['phenotype_id']])])), 
     'phenotype_id' = intersect(colnames(eqtl_inputs$B), 
-                               eqtl_smf[
-                                 !is.na(eqtl_smf[['condition']]) &
-                                   eqtl_smf[['condition']] == '24hCA', ][['phenotype_id']]), 
+              eqtl_smf[
+                !is.na(eqtl_smf[['condition']]) &
+                  eqtl_smf[['condition']] == '24hCA', ][['phenotype_id']]), 
     'condition' = '24hCA'
   ), 
   data.frame(
@@ -610,7 +610,6 @@ ggplot(data = plot_df, mapping = aes(x = BLK, y = FAM167A, colour = condition)) 
         axis.text.x = element_text(size=12),
         strip.text.x = element_text(size=12)) + 
   theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
-ggsave('~/multiome/plots/BLK_FAM167A_coexpression_B.pdf', width = 6, height = 6)
 # and plot that
 ggplot(data = plot_df, mapping = aes(x = BLK, y = FAM167A, colour = `8_11491452_G_A_string`)) +
   geom_point() +
@@ -718,85 +717,3 @@ plot_grid(
           strip.text.x = element_text(size=12)) + 
     theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
 )
-
-# create a frame to plot
-plot_df_cd4t <- rbind(
-  data.frame(
-    'BLK' = as.vector(
-      unlist(
-        eqtl_inputs$CD4T['BLK', 
-                      intersect(colnames(eqtl_inputs$CD4T), 
-                                eqtl_smf[
-                                  !is.na(eqtl_smf[['condition']]) &
-                                    eqtl_smf[['condition']] == '24hCA', ][['phenotype_id']])])), 
-    'FAM167A' = as.vector(
-      unlist(
-        eqtl_inputs$CD4T['FAM167A', 
-                      intersect(colnames(eqtl_inputs$CD4T), 
-                                eqtl_smf[
-                                  !is.na(eqtl_smf[['condition']]) &
-                                    eqtl_smf[['condition']] == '24hCA', ][['phenotype_id']])])), 
-    'phenotype_id' = intersect(colnames(eqtl_inputs$CD4T), 
-                               eqtl_smf[
-                                 !is.na(eqtl_smf[['condition']]) &
-                                   eqtl_smf[['condition']] == '24hCA', ][['phenotype_id']]), 
-    'condition' = '24hCA'
-  ), 
-  data.frame(
-    'BLK' = as.vector(
-      unlist(
-        eqtl_inputs$CD4T['BLK', 
-                      intersect(colnames(eqtl_inputs$CD4T), 
-                                eqtl_smf[
-                                  !is.na(eqtl_smf[['condition']]) &
-                                    eqtl_smf[['condition']] == 'UT', ][['phenotype_id']])])), 
-    'FAM167A' = as.vector(
-      unlist(
-        eqtl_inputs$CD4T['FAM167A', 
-                      intersect(colnames(eqtl_inputs$CD4T), 
-                                eqtl_smf[
-                                  !is.na(eqtl_smf[['condition']]) &
-                                    eqtl_smf[['condition']] == 'UT', ][['phenotype_id']])])), 
-    'phenotype_id' = intersect(colnames(eqtl_inputs$CD4T), 
-                               eqtl_smf[
-                                 !is.na(eqtl_smf[['condition']]) &
-                                   eqtl_smf[['condition']] == 'UT', ][['phenotype_id']]), 
-    'condition' = 'UT'
-  )
-)
-# add genotype id
-plot_df_cd4t[['genotype_id']] <- eqtl_smf[match(plot_df_cd4t[['phenotype_id']], eqtl_smf[['phenotype_id']]), ][['genotype_id']]
-# add info for variant
-genotype <- genotypes$genotypes[plot_df_cd4t[['genotype_id']], '8:11491452:G:A']
-# then to numeric
-genotype_numeric <- as.vector(as(genotype, 'numeric'))
-# add the genotype
-plot_df_cd4t[[gsub(':', '_', '8:11491452:G:A')]] <- genotype_numeric
-# and as string
-plot_df_cd4t[[gsub(':', '_', '8:11491452:G:A_string')]] <- as.character(plot_df_cd4t[[gsub(':', '_', '8:11491452:G:A')]])
-# set the order
-plot_df_cd4t[['condition']] <- factor(plot_df_cd4t[['condition']], c('UT', '24hCA'))
-# add cell count as well
-plot_df_cd4t[['cell_count']] <- eqtl_covariates[['B']][match(plot_df_cd4t[['phenotype_id']], eqtl_covariates[['B']][['Donor_Pool']]), ][['CellCount']]
-# add the proportions
-prot_df_props <- data.frame('phenotype_id' = colnames(eqtl_ct_props[['B']]), 'prop_FAM167A' = as.vector(unlist(eqtl_ct_props[['B']]['FAM167A', ])), 'prop_BLK' = as.vector(unlist(eqtl_ct_props[['B']]['BLK', ])))
-plot_df_cd4t <- merge(plot_df_cd4t, prot_df_props, all.x = T, by = 'phenotype_id')
-# and plot that
-ggplot(data = plot_df_cd4t, mapping = aes(x = BLK, y = FAM167A, colour = condition)) +
-  geom_point() +
-  geom_smooth(method = 'lm') +
-  # and colour of ncell
-  scale_colour_manual(values = get_color_coding_dict()) + 
-  xlab(paste('BLK', 'expression')) + 
-  ylab(paste('FAM167A', 'expression')) + 
-  labs(fill = 'condition', colour = 'condition') + 
-  ggtitle(paste('BLK', 'FAM167A', 'co-expression')) +
-  theme(legend.title = element_text(size=14), 
-        legend.text = element_text(size=12),
-        axis.title.x = element_text(size=14),
-        axis.title.y = element_text(size=14),
-        axis.text.y = element_text(size=12),
-        axis.text.x = element_text(size=12),
-        strip.text.x = element_text(size=12)) + 
-  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
-ggsave('~/multiome/plots/BLK_FAM167A_coexpression_CD4T.pdf', width = 6, height = 6)
