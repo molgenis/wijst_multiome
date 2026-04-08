@@ -1,0 +1,36 @@
+######################################################
+# Authors: Roy Oelen
+# Name: mo_tf_qtl_template.yaml
+# Function: configuration yaml for mo_tf_qtl.smk
+#####################################################
+
+# location of the genotype files
+genotype_prefix_template: "/groups/umcg-franke-scrna/tmp02/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/genotype_input/EUR_imputed_hg38_varFiltered_chr{chrom}"
+# base location of chunks (shared input dir)
+chunk_input_dir: "/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/all/"
+# location to store chunk outputs
+results_base: "/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/tfqtl/limix_sc/output/tf_noiegene/all/"
+# absolute confinement file loc
+confinement: "/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/tfqtl/limix_sc/confinement/mo_var_tf_noiegen.tsv.gz"
+# absolute smf file loc
+smf: "/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/all/smf.tsv.gz"
+# absolute covariates file loc
+covariates: "/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/metadata/mo_celllevel_metadata.tsv.gz"
+# transcription factor activity file
+tf_file: "/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/mo_tf_interaction_eregulon_gene_removed_auc_all_nonsparse_transposed.tsv.gz"
+# barcode column in covariate file
+barcode_column: "barcode_lane"
+# fixed effects to consider
+fixed_effects: "genotype,nCount_RNA"
+# random effects to consider
+random_effects: "sample_final,lane"
+# apply gausnorm (Yeo-Johnson) on TF activity
+tf_gausnorm: true
+
+# R command
+r_command: "~/start_Rscript.sh"
+# script location
+script_loc: "/groups/umcg-franke-scrna/tmp02/users/umcg-roelen/singularity/rstudio-server/simulated_home/mo_sc_tfqtl.R"
+# merging script as well
+merge_script_loc: "/groups/umcg-franke-scrna/tmp02/users/umcg-roelen/singularity/rstudio-server/simulated_home/mo_hybrid_cre_interaction_merge.R"
+
