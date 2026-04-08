@@ -542,6 +542,13 @@ plot_concondance(tf_region_ieqtls_overlap[tf_region_ieqtls_overlap[['var_peak_di
 plot_concondance(tf_region_ieqtls_overlap[((tf_region_ieqtls_overlap[['is_eqtl']])) & (tf_region_ieqtls_overlap[['is_caqtl']]) & tf_region_ieqtls_overlap[['var_peak_dist']] == 0, ], d1_effect_column = 'region:genotype_beta.y_directed', d2_effect_column = 'region:genotype_beta.x_directed') + ggtitle('only caQTL+eQTL in chromatin region i-egene beta')
 
 
+# we want to save this one specifically
+p_interaction_beta_cre_vs_tf <- plot_concondance(tf_region_ieqtls_overlap, d1_effect_column = 'region:genotype_beta.y_directed', d2_effect_column = 'region:genotype_beta.x_directed') + 
+  ggtitle('') + 
+  xlab('CRE-i-eQTL interaction beta') + 
+  ylab('TF-i-eQTL interaction beta')
+ggsave(filename = '~/multiome/plots/mo_tf_vs_cre_interaction_betas.pdf', plot = p_interaction_beta_cre_vs_tf, width = 5, height = 5)
+
 ```
 
 ```{r filter_inputs, include=TRUE, fig.width=10, fig.height=10}
@@ -675,6 +682,25 @@ plot_concondance(tf_ieqtls_sig_both[
 
 ```
 
+```{r get_tf_qtls, include=TRUE, fig.width=10, fig.height=10}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# get the replication set
+tfqtls_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/tfqtl/limix_sc/output/tf/all/merged/results_fdr.tsv.gz'
+tfqtls <- fread(tfqtls_loc, header = T, sep = '\t')
+
+```
+
+```{r filter_tf_qtls, include=TRUE, fig.width=10, fig.height=10}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# filter by bf significant
+tfqtls_sig <- tfqtls[
+  !is.na(tfqtls[['genotype_bf']]) & tfqtls[['genotype_bf']] < 0.05, 
+]
+
+```
+
 ```{r annotate_input, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
@@ -710,6 +736,10 @@ tf_ieqtls[['tf:genotype_beta_rep']] <- tf_ieqtls_rep[match(paste(tf_ieqtls[['var
 tf_ieqtls[['tf_gene_direction']] <- str_extract(tf_ieqtls[['tf']], '\\+\\/\\+|\\-\\/\\-|\\+\\/\\-|\\-\\/\\+')
 # and whether it was flipped for the replication
 tf_ieqtls[['replication_flip']] <- tf_ieqtls[['tf_gene_direction']] == '-/+'
+
+# add information on TF-QTLs
+tf_ieqtls[['has_tfqtl']] <- paste(tf_ieqtls[['variant']], tf_ieqtls[['tf']]) %in% paste(tfqtls_sig[['variant']], tfqtls_sig[['tf']])
+
 # filter by significant as well
 tf_ieqtls_repsig <- tf_ieqtls[
   !is.na(tf_ieqtls[['anova_bh_rep']]) &
