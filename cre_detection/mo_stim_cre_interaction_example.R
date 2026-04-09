@@ -2,7 +2,7 @@
 ############################################################################################################################
 # Authors: Roy Oelen
 # Name: mo_stim_cre_interaction_example.R
-# Function: plots for Monique her plant conference
+# Function: get the interaction examples where stim status has an impact on CRE-gene relationship
 ############################################################################################################################
 
 
@@ -114,6 +114,41 @@ create_qtl_plot_table <- function(feature, variant, feature_table, genotypes, sa
 }
 
 
+normalize_mj <- function(seurat_object) {
+  # get the count matrix where we have the correct cell type
+  count_matrix <- GetAssayData(seurat_object, slot = "counts")
+  # ignore genes that are never expressed
+  count_matrix <-  count_matrix[which(rowSums(count_matrix) != 0), ]
+  # create new object to store the counts in
+  norm_count_matrix <- count_matrix
+  # do mean sample-sum normalization
+  sample_sum_info = colSums(norm_count_matrix)
+  mean_sample_sum = mean(sample_sum_info)
+  sample_scale = sample_sum_info / mean_sample_sum
+  # divide each column by sample_scale
+  norm_count_matrix@x <- norm_count_matrix@x / rep.int(sample_scale, diff(norm_count_matrix@p))
+  if ('layers' %in% slotNames(seurat_object[['RNA']])) {
+    print('using Seurat v5 style \'layer\'')
+    seurat_object[['MJ']] <- CreateAssay5Object(data = norm_count_matrix)
+    
+  } else {
+    print('using Seurat v3/4 style \'slot\'')
+    seurat_object[['MJ']] <- CreateAssayObject(data = norm_count_matrix)
+  }
+  return(seurat_object)
+}
+
+
+binarize_matrix <- function(seurat_object, input_assay='peaks', output_assay='peaks_bin') {
+  # add new assay
+  seurat_object[[output_assay]] <- GetAssay(seurat_object, input_assay)
+  # binarize
+  BinarizeCounts(seurat_object, assay = output_assay)
+  return(seurat_object)
+}
+  
+
+
 ####################
 # Settings         #
 ####################
@@ -124,9 +159,19 @@ set.seed(7777)
 debug <- T
 
 
-####################
-# Main code        #
-####################
+###################
+# interested data #
+###################
+
+# get specific variant, region and gene
+gene <- 'LY86'
+region <- 'chr6-6587847-6589226'
+variant <- '6:6586961:A:G'
+cell_type <- 'B'
+
+#########################
+# Main code bulk method #
+#########################
 
 # location of the expression data
 exp_data_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/input/L1/combined/'
@@ -156,11 +201,6 @@ genotypes <- read.plink(
   bim = paste(genotype_loc, '.bim', sep = ''),
   fam = paste(genotype_loc, '.fam', sep = '')
 )
-# get specific variant, region and gene
-gene <- 'LY86'
-region <- 'chr6-6586717-6587570'
-variant <- '6:6586961:A:G'
-cell_type <- 'B'
 # get eQTL
 eqtl_data_gene <- create_qtl_plot_table(feature=gene, variant=variant, feature_table=eqtl_inputs[[cell_type]], genotypes=genotypes, eqtl_smf)
 # get caQTL
@@ -185,3 +225,42 @@ stim_cre_base_model <- lmerTest::lmer(formula = stim_cre_base_formula, data = qt
 stim_cre_interaction_model <- lmerTest::lmer(formula = stim_cre_interaction_formula, data = qtl_data_region_gene)
 # check if they are different
 ftest_res <- anova(stim_cre_base_model, stim_cre_interaction_model, refit = FALSE, test = 'F')
+
+
+################################
+# Main code single-cell method #
+################################
+
+# location of the Seurat object
+seurat_object_loc <- paste0('/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/seurat_preprocess_samples/objects/mo_multimodal_', tolower(cell_type), '_1_80_20240521.rds')
+# read the object
+seurat_object <- readRDS(seurat_object_loc)
+# add MJ normalization
+seurat_object <- normalize_mj(seurat_object)
+# binarize atac
+seurat_object <- binarize_matrix(seurat_object)
+# make plot table
+plot_table_sc <- data.frame(
+  'gene' = as.vector(unlist(seurat_object@assays$MJ@data[gene, ])), 
+  'region' = as.vector(unlist(seurat_object@assays$peaks_bin@counts[region, ])), 
+  'phenotype_id' = rownames(seurat_object@meta.data)
+)
+# add the genotype id
+plot_table_sc[['genotype_id']] <- seurat_object@meta.data[match(plot_table_sc[['phenotype_id']], seurat_object@meta.data[['barcode_lane']]), ][['sample_final']]
+# add the lane
+plot_table_sc[['lane']] <- seurat_object@meta.data[match(plot_table_sc[['phenotype_id']], seurat_object@meta.data[['barcode_lane']]), ][['lane']]
+# add the stimulation status
+plot_table_sc[['stim_status']] <- seurat_object@meta.data[match(plot_table_sc[['phenotype_id']], seurat_object@meta.data[['barcode_lane']]), ][['condition_final']]
+# create a formula
+stim_cre_base_formula_sc <- as.formula(
+  'gene ~ region + stim_status + (1|genotype_id) + (1|lane)'
+)
+# and for the interaction
+stim_cre_interaction_formula_sc <- as.formula(
+  'gene ~ region + stim_status + (1|genotype_id) + (1|lane) + region * stim_status'
+)
+# do the two models
+stim_cre_base_model_sc <- lmerTest::lmer(formula = stim_cre_base_formula_sc, data = plot_table_sc)
+stim_cre_interaction_model_sc <- lmerTest::lmer(formula = stim_cre_interaction_formula_sc, data = plot_table_sc)
+# check if they are different
+ftest_res_sc <- anova(stim_cre_base_model_sc, stim_cre_interaction_model_sc, refit = FALSE, test = 'F')

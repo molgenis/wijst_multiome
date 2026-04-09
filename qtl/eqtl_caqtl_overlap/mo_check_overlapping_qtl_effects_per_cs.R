@@ -639,6 +639,36 @@ p_frac_gene_and_cs_wcaqtl
 # and save
 ggsave(filename = '~/multiome/plots/mo_egene_cs_with_caqtl_overlap_fraction.pdf', plot = p_frac_gene_and_cs_wcaqtl, width = 5, height = 5)
 
+# get number of unique gene-CS combinations in the original eQTL output
+n_gene_tbl <- data.frame(table(unique(eqtl_outputs_cs_all[, c('cell_type', 'e_feature_id')])[['cell_type']]))
+# set columns
+colnames(n_gene_tbl) <- c('cell_type', 'n_total')
+# get unique gene-CS combinations in the overlap
+n_gene_overlap_tbl <- data.frame(table(unique(qtl_outputs_cs_overlapping[, c('cell_type', 'e_feature_id')])[['cell_type']]))
+# set columns
+colnames(n_gene_overlap_tbl) <- c('cell_type', 'n_overlapping')
+# now merge both
+n_gene_merged <- merge(x = n_gene_tbl, y = n_gene_overlap_tbl, by = 'cell_type')
+# calculate percentage of gene-CS combinations that are in the overlap
+n_gene_merged[['frac_with_caqtl']] <- n_gene_merged[['n_overlapping']] / n_gene_merged[['n_total']]
+# plot these numbers
+p_frac_gene_wcaqtl <- egene_numbers_to_plot(n_gene_merged, celltype_column='cell_type', number_column='frac_with_caqtl', use_label_dict = T, use_color_dict = T, split_long_labels_to_lines = F, use_distinct_colours = F, legendless = T) + 
+  xlab('Cell type') + 
+  ylab('Fraction of eGenes with caQTL overlap')
+# show the plot
+p_frac_gene_wcaqtl
+# and save
+ggsave(filename = '~/multiome/plots/mo_egene_with_caqtl_overlap_fraction.pdf', plot = p_frac_gene_wcaqtl, width = 5, height = 5)
+
+# get the number of unique eGenes
+egenes_all <- unique(eqtl_outputs_cs_all[['e_feature_id']])
+# get which are are at any point overlapping with a caQTL
+egenes_all_caqtl_overlap <- egenes_all[egenes_all %in% qtl_outputs_cs_overlapping[['e_feature_id']]]
+# and what the fraction is
+length(egenes_all_caqtl_overlap) / length(egenes_all)
+# 0.8523234
+
+
 # add zscores
 qtl_outputs_cs_overlapping[['e_z']] <- qtl_outputs_cs_overlapping[['e_beta']] / qtl_outputs_cs_overlapping[['e_beta_se']]
 qtl_outputs_cs_overlapping[['ca_z']] <- qtl_outputs_cs_overlapping[['ca_beta']] / qtl_outputs_cs_overlapping[['ca_beta_se']]
