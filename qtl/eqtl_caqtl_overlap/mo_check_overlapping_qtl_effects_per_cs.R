@@ -446,6 +446,61 @@ egene_numbers_to_plot <- function(egene_numbers, celltype_column='cell_type', nu
 }
 
 
+get_qtls_per_celltype_limix <- function(qtl_output_loc, output_file='qtl_results_all_qval_allchroms_fdr005_significant.txt.gz', gene_column='feature_id', significance_column='feature_q_value', significance_cutoff=0.05, nominal_cutoff_column='pval_nominal_threshold_global', nominal_significance_column='p_value', verbose=T) {
+  # get the folders in the directory, which should be the cell types
+  cell_types <- list.dirs(qtl_output_loc, full.names = F, recursive = F)
+  # we will store the results in a list for now
+  qtls_per_celltype <- list()
+  # check each cell type
+  for (cell_type in cell_types) {
+    # paste together the full path
+    full_cell_type_path <- paste(qtl_output_loc, '/', cell_type, '/', output_file, sep = '')
+    # log if requested
+    if (verbose) {
+      print(paste('reading', full_cell_type_path))
+    }
+    # read the file
+    cell_type_output <- read.table(full_cell_type_path, sep = '\t', header = T)
+    # filter the results on significance
+    if (!is.null(significance_column)) {
+      # print progress if requested
+      if (verbose) {
+        print(paste('variant+phenotype before filtering by significance column', nrow(cell_type_output)))
+      }
+      # filter
+      cell_type_output <- cell_type_output[
+        !is.na(cell_type_output[[significance_column]]) &
+          cell_type_output[[significance_column]] < significance_cutoff, 
+      ]
+      if (verbose) {
+        print(paste('variant+phenotype after filtering by significance column', nrow(cell_type_output)))
+      }
+    }
+    if (!is.null(nominal_cutoff_column) & !is.null(nominal_significance_column)) {
+      # print progress if requested
+      if (verbose) {
+        print(paste('variant+phenotype before filtering by nominal cutoff', nrow(cell_type_output)))
+      }
+      # filter
+      cell_type_output <- cell_type_output[
+        !is.na(cell_type_output[[nominal_cutoff_column]]) & 
+          !is.na(cell_type_output[[nominal_significance_column]]) &
+          cell_type_output[[nominal_significance_column]] <= cell_type_output[[nominal_cutoff_column]], 
+      ]
+      if (verbose) {
+        print(paste('variant+phenotype after filtering by nominal cutoff', nrow(cell_type_output)))
+      }
+    }
+    # add the celltype as a column
+    cell_type_output[['cell_type']] <- cell_type
+    # add to the list
+    qtls_per_celltype[[cell_type]] <- cell_type_output
+  }
+  # turn into a dataframe
+  return(qtls_per_celltype)
+}
+
+
 ####################
 # Settings         #
 ####################
@@ -601,3 +656,49 @@ ly86_overlaps <- qtl_outputs_cs_overlapping[qtl_outputs_cs_overlapping[['e_featu
 ly86_overlaps_loc <- '~/multiome/tables/mo_ly86_caqtl_eqtl_pairs_b_monocyte.tsv.gz'
 write.table(ly86_overlaps, gzfile(ly86_overlaps_loc), sep = '\t', quote = F, row.names = F, col.names = T)
 mdfiver::create_sha256_for_file(ly86_overlaps_loc)
+
+# location of the i-eqtl output
+ieqtl_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/output/ut_and_24hca_significant/L1/'
+# get all the QTL output
+ieqtl_output <- get_qtls_per_celltype_limix(ieqtl_output_loc, output_file = 'inflammation_final/iqtl_results_all_eigenmt_qval.tsv.gz', gene_column='feature', significance_column='feature_q_value', significance_cutoff=0.05, nominal_cutoff_column=NULL, nominal_significance_column=NULL)
+# merge all the results
+ieqtl_output_all <- do.call('rbind', ieqtl_output)
+# filter on signifiacnce
+ieqtl_output_all_sig <- ieqtl_output_all[ieqtl_output_all[['feature_q_value']] < 0.05 &
+                                         ieqtl_output_all[['feature_bf_eigen']] < 0.05, ]
+# rename the columns
+colnames(ieqtl_output_all_sig) <- c('i_beta', 'i_beta_se', 'i_empirical_feature_p_value', 'i_p_value', 'snp_id', 'feature_id', 'i_n_tests_feature', 'i_feature_bf_eigen', 'i_total_bf_eigen', 'i_feature_q_value', 'i_cell_type')
+# merge the iqtl to the qtl output
+eqtl_outputs_cs_all <- merge(eqtl_outputs_cs_all, ieqtl_output_all_sig, all.x = T, by.x = c('variant_id', 'e_feature_id', 'cell_type'), by.y = c('snp_id', 'feature_id', 'i_cell_type'))
+
+# location of the i-eqtl output
+icaqtl_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_caqtl/sc-eqtlgen/output/ut_and_24hca_significant/L1/'
+# get all the QTL output
+icaqtl_output <- get_qtls_per_celltype_limix(icaqtl_output_loc, output_file = '/inflammation_final/iqtl_results_all_eigenmt_qval.tsv.gz', gene_column='feature', significance_column='feature_q_value', significance_cutoff=0.05, nominal_cutoff_column=NULL, nominal_significance_column=NULL)
+# merge all the results
+icaqtl_output_all <- do.call('rbind', icaqtl_output)
+# filter on signifiacnce
+icaqtl_output_all_sig <- icaqtl_output_all[icaqtl_output_all[['feature_q_value']] < 0.05 &
+                                         icaqtl_output_all[['feature_bf_eigen']] < 0.05, ]
+# rename the columns
+colnames(icaqtl_output_all_sig) <- c('i_beta', 'i_beta_se', 'i_empirical_feature_p_value', 'i_p_value', 'snp_id', 'feature_id', 'i_n_tests_feature', 'i_feature_bf_eigen', 'i_total_bf_eigen', 'i_feature_q_value', 'i_cell_type')
+# merge the iqtl to the qtl output
+caqtl_outputs_cs_all <- merge(caqtl_outputs_cs_all, icaqtl_output_all_sig, all.x = T, by.x = c('variant_id', 'ca_feature_id', 'cell_type'), by.y = c('snp_id', 'feature_id', 'i_cell_type'))
+
+# add Zs here
+eqtl_outputs_cs_all[['e_z']] <- eqtl_outputs_cs_all[['e_beta']] / eqtl_outputs_cs_all[['e_beta_se']]
+caqtl_outputs_cs_all[['ca_z']] <- caqtl_outputs_cs_all[['ca_beta']] / caqtl_outputs_cs_all[['ca_beta_se']]
+# and absolute z score to make things easier for Monique
+eqtl_outputs_cs_all[['e_z_abs']] <- abs(eqtl_outputs_cs_all[['e_z']])
+caqtl_outputs_cs_all[['ca_z_abs']] <- abs(caqtl_outputs_cs_all[['ca_z']])
+
+# export specifically the LY86 examples Monique is interested in
+eqtl_outputs_cs_ly86 <- eqtl_outputs_cs_all[eqtl_outputs_cs_all[['e_feature_id']] == 'LY86' & 
+                                              eqtl_outputs_cs_all[['cell_type']] %in% c('B', 'monocyte'), 
+                                            c('cell_type', 'variant_id', 'e_assessed_allele', 
+                                              'e_feature_id', 'e_CS', 'e_pip', 'e_p_value', 'e_beta', 'e_beta_se', 'e_z', 'e_z_abs', 
+                                              'i_p_value', 'i_beta', 'i_beta_se', 'i_feature_bf_eigen', 'i_feature_q_value')]
+# save that specifically
+eqtl_outputs_cs_ly86_loc <- '~/multiome/tables/mo_ly86_eqtl_b_monocyte.tsv.gz'
+write.table(eqtl_outputs_cs_ly86, gzfile(eqtl_outputs_cs_ly86_loc), sep = '\t', quote = F, row.names = F, col.names = T)
+mdfiver::create_sha256_for_file(eqtl_outputs_cs_ly86_loc)
