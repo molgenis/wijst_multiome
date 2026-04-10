@@ -235,6 +235,10 @@ tf_ieqtls_rep <- fread(tf_ieqtl_rep_loc, header = T, sep = '\t')
 # remove the TF-i-eGene that was removed from the name (it was added in the second pass)
 tf_ieqtls_rep[['region']] <- gsub('\\)_.*', ')', tf_ieqtls_rep[['region']])
 
+# rename region to TF where applicable
+colnames(tf_ieqtls) <- gsub('region', 'tf', colnames(tf_ieqtls))
+colnames(tf_ieqtls_rep) <- gsub('region', 'tf', colnames(tf_ieqtls_rep))
+
 
 ############################
 # Read SCENIC+ information #
@@ -374,15 +378,16 @@ tf_ieqtls[['is_icaqtl_variant']] <- icaqtl_output_all[match(paste(tf_ieqtls[['va
 ########################
 
 # and add the second round info
-tf_ieqtls[['tf:genotype_p_rep']] <- tf_ieqtls_rep[match(paste(tf_ieqtls[['variant']], tf_ieqtls[['region']], tf_ieqtls[['gene']]), paste(tf_ieqtls_rep[['variant']], tf_ieqtls_rep[['region']], tf_ieqtls_rep[['gene']])), ][['region:genotype_p']]
-tf_ieqtls[['tf:genotype_bh_rep']] <- tf_ieqtls_rep[match(paste(tf_ieqtls[['variant']], tf_ieqtls[['region']], tf_ieqtls[['gene']]), paste(tf_ieqtls_rep[['variant']], tf_ieqtls_rep[['region']], tf_ieqtls_rep[['gene']])), ][['region:genotype_bh']]
-tf_ieqtls[['anova_p_rep']] <- tf_ieqtls_rep[match(paste(tf_ieqtls[['variant']], tf_ieqtls[['region']], tf_ieqtls[['gene']]), paste(tf_ieqtls_rep[['variant']], tf_ieqtls_rep[['region']], tf_ieqtls_rep[['gene']])), ][['anova_p']]
-tf_ieqtls[['anova_bh_rep']] <- tf_ieqtls_rep[match(paste(tf_ieqtls[['variant']], tf_ieqtls[['region']], tf_ieqtls[['gene']]), paste(tf_ieqtls_rep[['variant']], tf_ieqtls_rep[['region']], tf_ieqtls_rep[['gene']])), ][['anova_bh']]
-tf_ieqtls[['tf:genotype_beta_rep']] <- tf_ieqtls_rep[match(paste(tf_ieqtls[['variant']], tf_ieqtls[['region']], tf_ieqtls[['gene']]), paste(tf_ieqtls_rep[['variant']], tf_ieqtls_rep[['region']], tf_ieqtls_rep[['gene']])), ][['region:genotype_beta']]
-tf_ieqtls[['tf_bh_rep']] <- tf_ieqtls_rep[match(paste(tf_ieqtls[['variant']], tf_ieqtls[['region']], tf_ieqtls[['gene']]), paste(tf_ieqtls_rep[['variant']], tf_ieqtls_rep[['region']], tf_ieqtls_rep[['gene']])), ][['region_bh']]
+tf_ieqtls[['tf:genotype_p_rep']] <- tf_ieqtls_rep[match(paste(tf_ieqtls[['variant']], tf_ieqtls[['tf']], tf_ieqtls[['gene']]), paste(tf_ieqtls_rep[['variant']], tf_ieqtls_rep[['tf']], tf_ieqtls_rep[['gene']])), ][['tf:genotype_p']]
+tf_ieqtls[['tf:genotype_bh_rep']] <- tf_ieqtls_rep[match(paste(tf_ieqtls[['variant']], tf_ieqtls[['tf']], tf_ieqtls[['gene']]), paste(tf_ieqtls_rep[['variant']], tf_ieqtls_rep[['tf']], tf_ieqtls_rep[['gene']])), ][['tf:genotype_bh']]
+tf_ieqtls[['anova_p_rep']] <- tf_ieqtls_rep[match(paste(tf_ieqtls[['variant']], tf_ieqtls[['tf']], tf_ieqtls[['gene']]), paste(tf_ieqtls_rep[['variant']], tf_ieqtls_rep[['tf']], tf_ieqtls_rep[['gene']])), ][['anova_p']]
+tf_ieqtls[['anova_bh_rep']] <- tf_ieqtls_rep[match(paste(tf_ieqtls[['variant']], tf_ieqtls[['tf']], tf_ieqtls[['gene']]), paste(tf_ieqtls_rep[['variant']], tf_ieqtls_rep[['tf']], tf_ieqtls_rep[['gene']])), ][['anova_bh']]
+tf_ieqtls[['tf:genotype_beta_rep']] <- tf_ieqtls_rep[match(paste(tf_ieqtls[['variant']], tf_ieqtls[['tf']], tf_ieqtls[['gene']]), paste(tf_ieqtls_rep[['variant']], tf_ieqtls_rep[['tf']], tf_ieqtls_rep[['gene']])), ][['tf:genotype_beta']]
+tf_ieqtls[['tf:genotype_se_rep']] <- tf_ieqtls_rep[match(paste(tf_ieqtls[['variant']], tf_ieqtls[['tf']], tf_ieqtls[['gene']]), paste(tf_ieqtls_rep[['variant']], tf_ieqtls_rep[['tf']], tf_ieqtls_rep[['gene']])), ][['tf:genotype_se']]
+tf_ieqtls[['tf_bh_rep']] <- tf_ieqtls_rep[match(paste(tf_ieqtls[['variant']], tf_ieqtls[['tf']], tf_ieqtls[['gene']]), paste(tf_ieqtls_rep[['variant']], tf_ieqtls_rep[['tf']], tf_ieqtls_rep[['gene']])), ][['tf_bh']]
 
 # add info on the direction of the TF
-tf_ieqtls[['tf_gene_direction']] <- str_extract(tf_ieqtls[['region']], '\\+\\/\\+|\\-\\/\\-|\\+\\/\\-|\\-\\/\\+')
+tf_ieqtls[['tf_gene_direction']] <- str_extract(tf_ieqtls[['tf']], '\\+\\/\\+|\\-\\/\\-|\\+\\/\\-|\\-\\/\\+')
 # and whether it was flipped for the replication
 tf_ieqtls[['replication_flip']] <- tf_ieqtls[['tf_gene_direction']] == '-/+'
 
@@ -409,13 +414,16 @@ tf_ieqtls[['is_cre_ieqtl']] <- paste(tf_ieqtls[['variant']], tf_ieqtls[['gene']]
 ##########################
 
 # location of TFQTL output
-tfqtl_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/tfqtl/limix_sc/output/tf/all/merged/results_fdr.tsv.gz'
+# tfqtl_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/tfqtl/limix_sc/output/tf/all/merged/results_fdr.tsv.gz'
+tfqtl_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/tfqtl/limix_sc/output/tf_noiegene/all/merged/results_fdr.tsv.gz'
 # read table
 tfqtl_output <- fread(tfqtl_output_loc, header = T, sep = '\t')
 # subset to what is significant
 tfqtl_output_sig <- tfqtl_output[tfqtl_output[['genotype_bf']] < 0.05, ]
+# remove the gene that was removed
+tfqtl_output_sig[['tf']]<- gsub('\\)_.*', ')', tfqtl_output_sig[['tf']])
 # add whether the variant-gene pair is also a significant CRE-i-eQTL
-tf_ieqtls[['is_tfqtl']] <- paste(tf_ieqtls[['variant']], tf_ieqtls[['region']]) %in% paste(region_ieqtls_sig[['variant']], region_ieqtls_sig[['tf']])
+tf_ieqtls[['is_tfqtl']] <- paste(tf_ieqtls[['variant']], tf_ieqtls[['tf']]) %in% paste(tfqtl_output_sig[['variant']], tfqtl_output_sig[['tf']])
 
 
 #########################
@@ -424,9 +432,9 @@ tf_ieqtls[['is_tfqtl']] <- paste(tf_ieqtls[['variant']], tf_ieqtls[['region']]) 
 
 # add significance
 tf_ieqtls[['significant']] <- 
-  (tf_ieqtls[['region:genotype_bh']] < 0.05 & 
+  (tf_ieqtls[['tf:genotype_bh']] < 0.05 & 
   tf_ieqtls[['anova_bh']] < 0.05 & 
-  tf_ieqtls[['region_bh']] < 0.05 & 
+  tf_ieqtls[['tf_bh']] < 0.05 & 
   !is.na(tf_ieqtls[['tf:genotype_bh_rep']] < 0.05) & 
   tf_ieqtls[['tf:genotype_bh_rep']] < 0.05 & 
   !is.na(tf_ieqtls[['tf:genotype_bh_rep']]) &
@@ -448,7 +456,13 @@ mdfiver::create_sha256_for_file(tf_ieqtls_annotated_loc)
 write.table(tf_ieqtls[tf_ieqtls[['significant']], ], gzfile(tf_ieqtls_annotated_significant_loc), col.names = T, sep = '\t', quote = F, row.names = F)
 mdfiver::create_sha256_for_file(tf_ieqtls_annotated_significant_loc)
 
+
+#####################
+# check enrichments #
+#####################
+
 # relative enrichment of TF-i-eQTLs in stimulation-i-eQTLs
+tf_ieqtls[['is_any_ieqtl']] <- !is.na(tf_ieqtls[['is_ieqtl']])
 table(tf_ieqtls[, c('significant', 'is_any_ieqtl')])
 fisher.test(table(tf_ieqtls[, c('significant', 'is_any_ieqtl')]))
 # 
@@ -463,5 +477,22 @@ fisher.test(table(tf_ieqtls[, c('significant', 'is_any_ieqtl')]))
 # odds ratio 
 #    2.50783 
 
-
+# location of eQTLgen cis-trans pairs
+cistrans_eqtlgen_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/replication/bulkeqtl_positives_annotated.csv.gz'
+# read that file
+cistrans_eqtlgen <- fread(cistrans_eqtlgen_loc, header = T, sep = ',')
+# read the location of the genes
+gene_anno_arc_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/annotations/cellranger_arc_gene_annotations.tsv.gz'
+gene_anno_arc <- fread(gene_anno_arc_loc, header = F, sep = '\t')
+# add columns
+colnames(gene_anno_arc) <- c('ens', 'gs', 'modality', 'chrom', 'start', 'end')
+# add gene symbols to the genes in scenic
+tf_ieqtls[['gene_ens']] <- gene_anno_arc[match(tf_ieqtls[['gene']], gene_anno_arc[['gs']]), ][['ens']]
+# remove the annotations behind the TF to just get the TF
+tf_ieqtls[['tf_short']] <- gsub('_.*', '', tf_ieqtls[['tf']])
+# add that gene symbol as well
+tf_ieqtls[['tf_ens']] <- gene_anno_arc[match(tf_ieqtls[['tf_short']], gene_anno_arc[['gs']]), ][['ens']]
+# add info on whether this is a cis-trans TF
+tf_ieqtls[['tf2g_cistrans_eqtlgen']] <- paste(tf_ieqtls[['tf_ens']], tf_ieqtls[['gene_ens']]) %in% paste(cistrans_eqtlgen[['CisGene']], cistrans_eqtlgen[['TransGene']])
+tf_ieqtls[['g2tf_cistrans_eqtlgen']] <- paste(tf_ieqtls[['tf_ens']], tf_ieqtls[['gene_ens']]) %in% paste(cistrans_eqtlgen[['TransGene']], cistrans_eqtlgen[['CisGene']])
 

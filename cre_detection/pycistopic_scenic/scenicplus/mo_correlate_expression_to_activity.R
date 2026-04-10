@@ -182,18 +182,18 @@ get_color_coding_dict <- function() {
 ################################
 
 # location of the Seurat object
-seurat_object_loc <- paste0('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/seurat_preprocess_samples/objects/mo_all_20240517_seuratv5_annotated_agesexcovid.rds')
+seurat_object_loc <- paste0('/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/seurat_preprocess_samples/objects/mo_all_20240517_seuratv5_annotated_agesexcovid.rds')
 # read the object
 seurat_object <- readRDS(seurat_object_loc)
 # add MJ normalization
 seurat_object <- normalize_mj(seurat_object)
 
 # location of the AUC matrix
-auc_mtx_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eregulon_gene_auc.mtx.gz'
+auc_mtx_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eregulon_gene_auc.mtx.gz'
 # location of the barcodes
-auc_barcodes_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eregulon_gene_auc_barcodes.txt.gz'
+auc_barcodes_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eregulon_gene_auc_barcodes.txt.gz'
 # and the eregulon names
-ereg_names_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eregulon_gene_auc_eregnames.txt.gz'
+ereg_names_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eregulon_gene_auc_eregnames.txt.gz'
 # read the matrix
 auc_mtx <- Matrix::readMM(auc_mtx_loc)
 # read the barcodes and eregnames
@@ -234,7 +234,7 @@ cor_tf_ereg_ut[['condition']] <- 'UT'
 cor_tf_ereg_all <- do.call('rbind', list(cor_tf_ereg, cor_tf_ereg_stim, cor_tf_ereg_ut))
 
 # location of the SCENIC outout
-scenic_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eRegulon_both_filtered.tsv.gz'
+scenic_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eRegulon_both_filtered.tsv.gz'
 # read that
 scenic_output <- fread(scenic_output_loc, header = T, sep = '\t')
 # order by the extended
@@ -249,7 +249,7 @@ scenic_output <- scenic_output[scenic_output[['Gene_signature_name']] %in% sceni
 scenic_output[['region_cpeaks']] <- gsub(':', '-', scenic_output[['Region']])
 
 # get TF-i-eQTLs
-tf_ieqtl_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/sc/all/lane_donor_countrna_inclcaqtls_varinregion/merged/results_fdr_with_replication_significant.tsv.gz'
+tf_ieqtl_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/sc/all/lane_donor_countrna_inclcaqtls_varinregion/merged/results_fdr_with_replication_significant.tsv.gz'
 tf_ieqtls <- fread(tf_ieqtl_loc, header = T, sep = '\t')
 tf_ieqtls_sig <- tf_ieqtls[tf_ieqtls[['significant']], ]
 
@@ -318,3 +318,34 @@ p_scenic_tf_expression_activity_correlation_density <- ggplot(
 p_scenic_tf_expression_activity_correlation_density
 # and save the result
 ggsave(filename = '~/multiome/plots/mo_scenic_tf_expression_activity_correlation_density.pdf', plot = p_scenic_tf_expression_activity_correlation_density, width = 6, height = 4)
+
+# check the correlations that we could get in both
+cor_tf_ereg_horizontal <- merge(cor_tf_ereg_all[cor_tf_ereg_all[['condition']] == 'UT', c('eregulon', 'correlation_corrected')], cor_tf_ereg_all[cor_tf_ereg_all[['condition']] == '24hCA', c('eregulon', 'correlation_corrected')], by = 'eregulon')
+# check for a difference
+wilcox.test(x = cor_tf_ereg_horizontal[['correlation_corrected.x']], cor_tf_ereg_horizontal[['correlation_corrected.y']], paired = T, alternative = 'less')
+# 
+# Wilcoxon signed rank test with continuity correction
+# 
+# data:  cor_tf_ereg_horizontal[["correlation_corrected.x"]] and cor_tf_ereg_horizontal[["correlation_corrected.y"]]
+# V = 25814, p-value = 1.282e-14
+# alternative hypothesis: true location shift is less than 0
+
+# make this df again, but this time keep everything
+cor_tf_ereg_horizontal_all <- merge(cor_tf_ereg_all[cor_tf_ereg_all[['condition']] == 'UT', c('eregulon', 'correlation_corrected')], cor_tf_ereg_all[cor_tf_ereg_all[['condition']] == '24hCA', c('eregulon', 'correlation_corrected')], by = 'eregulon', all.x = T, all.y = T)
+# set column names
+colnames(cor_tf_ereg_horizontal_all) <- c('eregulon', 'rho_ut', 'rho_24hca') 
+# order by name
+cor_tf_ereg_horizontal_all <- cor_tf_ereg_horizontal_all[order(cor_tf_ereg_horizontal_all[['eregulon']]), ]
+# save this result
+cor_tf_ereg_horizontal_all_loc <- '~/multiome/tables/mo_tfe_vs_tfa_correlation_conditions.tsv.gz'
+write.table(cor_tf_ereg_horizontal_all, gzfile(cor_tf_ereg_horizontal_all_loc), row.names = F, col.names = T, sep = '\t')
+# with a checksum
+mdfiver::create_sha256_for_file(cor_tf_ereg_horizontal_all_loc)
+# and ones where the rho for either is higher than .5
+cor_tf_ereg_horizontal_all_either5 <- cor_tf_ereg_horizontal_all[cor_tf_ereg_horizontal_all[['rho_ut']] > 0.5 | cor_tf_ereg_horizontal_all[['rho_24hca']] > 0.5, ]
+# and where the result is in SCENIC
+cor_tf_ereg_horizontal_all_either5 <- cor_tf_ereg_horizontal_all_either5[gsub('-', '_', cor_tf_ereg_horizontal_all_either5[['eregulon']]) %in% scenic_output[['Gene_signature_name']], ]
+# then write that as well
+cor_tf_ereg_horizontal_all_either5_loc <- '~/multiome/tables/mo_tfe_vs_tfa_correlation_conditions_cor5scenic.tsv.gz'
+write.table(cor_tf_ereg_horizontal_all_either5, gzfile(cor_tf_ereg_horizontal_all_either5_loc), row.names = F, col.names = T, sep = '\t')
+mdfiver::create_sha256_for_file(cor_tf_ereg_horizontal_all_either5_loc)
