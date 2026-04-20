@@ -76,7 +76,9 @@ option_list <- list(
   make_option(c("-d", "--depth"), type="numeric", default=1000, 
               help="number of consecutive variants to check for LD", metavar="numeric"), 
   make_option(c("-l", "--ld_cutoff"), type="numeric", default=0.0, 
-              help="make values smaller than the cutoff into 0, so the matrix is more sparse", metavar="numeric")
+              help="make values smaller than the cutoff into 0, so the matrix is more sparse", metavar="numeric"), 
+  make_option(c("-n", "--chromosomes"), type="character", default=NULL, 
+              help="comma separacted string of specific chromosomes to calculate LD for", metavar="character")
 )
 
 
@@ -88,14 +90,14 @@ opt <- parse_args(opt_parser)
 if (debug) {
   opt <- list(
     genotypes = '/groups/umcg-franke-scrna/tmp04/external_datasets/sc-eqtlgen-imputation-ref-hg38/ref_panel_QC/30x-GRCh38-EUR-norsid',
-    output_file = '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/annotations/mo_qtl_variants_tested_ld/eurpop/',
-    # output_file = '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/GWAS_enrichment/GWAS_vars/immune-gwas-catalog-download-associations-alt-full-moldpairs',
-    variant_list_file = '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/annotations/mo_qtl_variants_tested_cpeaks_overlap.tsv.gz',
-    variant_list_column = 'snp_id',
-    # second_variant_list_file = '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/GWAS_enrichment/GWAS_vars/immune-gwas-catalog-download-associations-alt-full-chromposrefalt.tsv.gz', 
+    output_file = '/groups/umcg-fg/tmp04/projects/mpra/generate_panel/mo_qtl_1000g_ld/ld_matrices/mpra_top_qtl_1000g_eur_chr',
+    variant_list_file = '/groups/umcg-fg/tmp04/projects/mpra/generate_panel/mo_qtl_1000g_ld/mo_qtl_top_variants.txt.gz',
+    # variant_list_column = 'snp_id',
+    second_variant_list_file = '/groups/umcg-fg/tmp04/projects/mpra/generate_panel/mo_qtl_1000g_ld/1000g_all_eur_variants_chr22.txt.gz', 
     # second_variant_list_column = 'chromposaltref',
     depth = 1000, 
-    ld_cutoff = 0
+    ld_cutoff = 0.29, 
+    chromosomes = '22'
   )
 }
 # set non-optional parameters
@@ -125,6 +127,14 @@ if (!is.null(opt[['variant_list_file']])) {
 depth <- as.numeric(opt[['depth']])
 # get ld cutoff
 ld_cutoff <- as.numeric(opt[['ld_cutoff']])
+# set chromosomes string
+chromosomes_string <- opt[['chromosomes']]
+# as vector
+chromosomes_to_do <- NULL
+# then into list
+if (!is.null(chromosomes_string)) {
+  chromosomes_to_do <- strsplit(chromosomes_string, ',')[[1]]
+}
 
 # load first set of variants
 first_variants <- NULL
@@ -169,6 +179,10 @@ if (!is.null(second_variants)) {
 overlapping_variants <- unique(c(first_variants, second_variants))
 # get the chromosomes present
 chromosomes_gt <- unique(genotypes$map$chromosome)
+# if we defined the chromosome, filter
+if (!is.null(chromosomes_to_do)) {
+  chromosomes_gt <- intersect(chromosomes_gt, chromosomes_to_do)
+}
 
 # check each chromosome
 for (chromosome in chromosomes_gt) {
