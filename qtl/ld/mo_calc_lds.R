@@ -275,6 +275,10 @@ for (chromosome in chromosomes_gt) {
       ld_mat_chr@x[ld_mat_chr@x < ld_cutoff] <- 0
       ld_mat_chr <- drop0(ld_mat_chr)
     }
+    # set the LD low for where the value does not make sense, remove R2 much larger than 1, as these are the NA values
+    ld_mat_chr[ld_mat_chr > 1.001] <- -0.0001
+    ld_mat_chr@x[ld_mat_chr@x > 1.001] <- -0.0001
+
     # set the output file loc
     output_file_chrom_full <- paste(output_file, chromosome, '.mtx', sep = '')
     Matrix::writeMM(ld_mat_chr, output_file_chrom_full)
