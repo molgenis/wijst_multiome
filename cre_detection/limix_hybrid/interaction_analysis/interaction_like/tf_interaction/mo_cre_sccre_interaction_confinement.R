@@ -542,6 +542,45 @@ add_associated_region <- function(eqtl_outputs, scenic_output, eqtl_gene_column=
 }
 
 
+get_closest_flanks <- function(position_table, left_flank_column1, right_flank_column1, left_flank_column2, right_flank_column2) {
+  # get the distance between left flanks
+  dist_left_flank1_to_left_flank2 <- position_table[[left_flank_column1]] - position_table[[left_flank_column2]]
+  # distance between the right flanks
+  dist_right_flank1_to_right_flank2 <- position_table[[right_flank_column1]] - position_table[[right_flank_column2]]
+  # distance between left flank 1 and right flank 2
+  dist_left_flank1_to_right_flank2 <- position_table[[left_flank_column1]] - position_table[[right_flank_column2]]
+  # distance between right flank 1 and left flank 2
+  dist_right_flank1_to_left_flank2 <- position_table[[right_flank_column1]] - position_table[[left_flank_column2]]
+  # put in a table for convenience sake
+  distances_tbl <- data.table(
+    'lf1_to_lf2' = dist_left_flank1_to_left_flank2, 
+    'rf1_to_rf2' = dist_right_flank1_to_right_flank2, 
+    'lf1_to_rf2' = dist_left_flank1_to_right_flank2, 
+    'rf1_to_lf2' = dist_right_flank1_to_left_flank2
+  )
+  # add the minimum absolute distance
+  distances_tbl[['min_dist']] <- apply(distances_tbl, 1, function(x) {
+    return(min(abs(x)))
+  })
+  # but set this to zero if any of the flanks end in the bodies
+  #              -----
+  #                 ++++
+  distances_tbl[(distances_tbl[['lf1_to_lf2']] < 0 & distances_tbl[['lf1_to_rf2']] > 0) |
+                  #                   ----
+                #                 ++++
+                (distances_tbl[['rf1_to_lf2']] > 0 & distances_tbl[['lf1_to_rf2']] < 0) |
+                  #                   ----
+                #                 +++++++++
+                (distances_tbl[['lf1_to_lf2']] > 0 & distances_tbl[['rf1_to_rf2']] < 0) |
+                  #                 ---------
+                #                   ++++
+                (distances_tbl[['lf1_to_lf2']] < 0 & distances_tbl[['rf1_to_rf2']] > 0)
+                , 'min_dist'] <- 0
+  return(distances_tbl)
+}
+
+
+
 ####################
 # Settings         #
 ####################
@@ -557,21 +596,21 @@ debug <- F
 ####################
 
 # location of the QTL outputs
-eqtl_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/finemapping/eqtl/sc-eqtlgen/combined_with_qtl/combined/L1/'
+eqtl_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/finemapping/eqtl/sc-eqtlgen/combined_with_qtl/combined/L1/'
 # read the eQTL output
 eqtl_outputs <- get_output_per_celltype_limix(eqtl_output_loc)
 # get the top effects per credible set
 eqtl_top_var_feature_per_cs <- get_top_effect_per_cs(eqtl_outputs)
 
 # location of the QTL outputs
-caqtl_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/finemapping/caqtl/sc-eqtlgen/combined_with_qtl/combined/L1/'
+caqtl_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/finemapping/caqtl/sc-eqtlgen/combined_with_qtl/combined/L1/'
 # read the eQTL output
 caqtl_outputs <- get_output_per_celltype_limix(caqtl_output_loc)
 # get the top effects per credible set
 caqtl_top_var_feature_per_cs <- get_top_effect_per_cs(caqtl_outputs)
 
 # the location of SCENIC output
-scenic_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eRegulon_both.tsv.gz'
+scenic_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eRegulon_both.tsv.gz'
 # read the scenic output
 scenic_output <- fread(scenic_output_loc, header = T, sep = '\t')
 # remove what SCENIC thinks is less likely
@@ -610,14 +649,14 @@ qtl_top_var_feature_per_cs_tf_all_both <- unique(rbind(
 qtl_top_var_feature_per_cs_tf_all_both <- qtl_top_var_feature_per_cs_tf_all_both[order(qtl_top_var_feature_per_cs_tf_all_both[['variant']], qtl_top_var_feature_per_cs_tf_all_both[['eregulon']], qtl_top_var_feature_per_cs_tf_all_both[['feature']]), ]
 
 # write this file
-tf_to_gene_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/mo_var_tf_gene_confinement_inclcaqtls.tsv.gz'
+tf_to_gene_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/mo_var_tf_gene_confinement_inclcaqtls.tsv.gz'
 write.table(qtl_top_var_feature_per_cs_tf_all_both, gzfile(tf_to_gene_output_loc), row.names = F, col.names = T, sep = '\t')
 mdfiver::create_sha256_for_file(tf_to_gene_output_loc)
 
 # add scenic region info
 eqtl_outputs_scenic_regions <- add_associated_region(eqtl_outputs, scenic_output, scenic_region_column = 'region_cpeaks')
 # read the cpeaks annotation
-cpeaks_anno_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/cPeaks/cPeaks_wscreenv4.tsv.gz'
+cpeaks_anno_loc <- '/groups/umcg-franke-scrna/tmp02/external_datasets/cPeaks/cPeaks_wscreenv4.tsv.gz'
 cpeaks_anno <- fread(cpeaks_anno_loc, header = T, sep = '\t')
 # add the Signac style name
 cpeaks_anno[['signac_hg38']] <- paste(cpeaks_anno[['chr_hg38']], cpeaks_anno[['start_hg38']], cpeaks_anno[['end_hg38']], sep = '-')
@@ -675,6 +714,6 @@ qtl_top_var_feature_per_cs_tf_all_both <- unique(rbind(
 # sort to make comparisons easier
 qtl_top_var_feature_per_cs_tf_all_both <- qtl_top_var_feature_per_cs_tf_all_both[order(qtl_top_var_feature_per_cs_tf_all_both[['variant']], qtl_top_var_feature_per_cs_tf_all_both[['eregulon']], qtl_top_var_feature_per_cs_tf_all_both[['feature']]), ]
 # write this file
-tf_to_gene_filtered_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/mo_var_tf_gene_confinement_inclcaqtls_varinregion.tsv.gz'
+tf_to_gene_filtered_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/mo_var_tf_gene_confinement_inclcaqtls_varinregion.tsv.gz'
 write.table(qtl_top_var_feature_per_cs_tf_all_both, gzfile(tf_to_gene_filtered_output_loc), row.names = F, col.names = T, sep = '\t')
 mdfiver::create_sha256_for_file(tf_to_gene_filtered_output_loc)

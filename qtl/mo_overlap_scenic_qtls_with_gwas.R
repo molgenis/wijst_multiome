@@ -256,7 +256,7 @@ tf_ieqtls_gwas_variants_to_traits <- add_all_gwas_traits(tf_ieqtls_gwas_variants
 tf_ieqtls[['gwas']] <- tf_ieqtls_gwas_variants_to_traits[match(tf_ieqtls[['variant']], tf_ieqtls_gwas_variants_to_traits[['variant']]), ][['trait']]
 # write the result
 tf_ieqtls_wgwas_loc <- '~/multiome/tables/tf_ieqtls_gwas_overlap.tsv.gz'
-write.table(tf_ieqtls_wgwas, gzfile(tf_ieqtls_wgwas_loc), col.names = T, row.names = F, sep = '\t')
+write.table(tf_ieqtls, gzfile(tf_ieqtls_wgwas_loc), col.names = T, row.names = F, sep = '\t')
 mdfiver::create_sha256_for_file(tf_ieqtls_wgwas_loc)
 
 
@@ -318,6 +318,13 @@ eqtl_outputs_scenic_regions_all_varinregion_variants <- unique(eqtl_outputs_scen
 eqtl_outputs_scenic_regions_all_varinregion_variants_to_traits <- add_all_gwas_traits(eqtl_outputs_scenic_regions_all_varinregion_variants, ld_data_gwas, gwas_catalogue[, c('chromposaltref', 'MAPPED_TRAIT')], variant_to_trait_var_column = 'chromposaltref', variant_to_trait_trait_column = 'MAPPED_TRAIT')
 # and add to the table
 eqtl_outputs_scenic_regions_all_varinregion[['gwas']] <- eqtl_outputs_scenic_regions_all_varinregion_variants_to_traits[match(eqtl_outputs_scenic_regions_all_varinregion[['snp_id']], eqtl_outputs_scenic_regions_all_varinregion_variants_to_traits[['variant']]), ][['trait']]
+# add r2g
+eqtl_outputs_scenic_regions_all_varinregion[['r2g']] <- paste(eqtl_outputs_scenic_regions_all_varinregion[['region']], eqtl_outputs_scenic_regions_all_varinregion[['feature_id']], sep = '_')
+scenic_output[['r2g']] <- paste(scenic_output[['region_cpeaks']], scenic_output[['Gene']], sep = '_')
+# add the TF info
+eqtl_outputs_scenic_regions_all_varinregion <- merge(eqtl_outputs_scenic_regions_all_varinregion, scenic_output[, c('r2g', 'TF')])
+# remove the r2g
+eqtl_outputs_scenic_regions_all_varinregion[['r2g']] <- NULL
 # store the overlapping data
 eqtl_output_scenic_overlap_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/finemapping/eqtl/sc-eqtlgen/combined_with_qtl/combined/L1/mo_eqtl_overlap_scenic_then_gwas.tsv.gz'
 write.table(eqtl_outputs_scenic_regions_all_varinregion, gzfile(eqtl_output_scenic_overlap_loc), col.names = T, row.names = F, sep = '\t')
@@ -359,6 +366,10 @@ dual_qtl_outputs_variants <- unique(qtl_outputs_all_overlapping[['variant_id']])
 dual_qtl_outputs_variants_to_traits <- add_all_gwas_traits(dual_qtl_outputs_variants, ld_data_gwas, gwas_catalogue[, c('chromposaltref', 'MAPPED_TRAIT')], variant_to_trait_var_column = 'chromposaltref', variant_to_trait_trait_column = 'MAPPED_TRAIT')
 # and add to the table
 qtl_outputs_all_overlapping[['gwas']] <- dual_qtl_outputs_variants_to_traits[match(qtl_outputs_all_overlapping[['variant_id']], dual_qtl_outputs_variants_to_traits[['variant']]), ][['trait']]
+# add r2g
+qtl_outputs_all_overlapping[['r2g']] <- paste(qtl_outputs_all_overlapping[['ca_feature_id']], qtl_outputs_all_overlapping[['e_feature_id']], sep = '_')
+# add TF (where possible)
+qtl_outputs_all_overlapping <- merge(qtl_outputs_all_overlapping, scenic_output[, c('r2g', 'TF')], all.x = T)
 # store the overlapping data
 dual_qtl_outputs_variants_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/finemapping/eqtl/sc-eqtlgen/combined_with_qtl/combined/L1/mo_dual_qtl_overlap_then_gwas.tsv.gz'
 write.table(qtl_outputs_all_overlapping, gzfile(dual_qtl_outputs_variants_loc), col.names = T, row.names = F, sep = '\t')
