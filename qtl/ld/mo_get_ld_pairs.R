@@ -189,7 +189,7 @@ process_matrix <- function(mat_file, matrix_dir, matrix_append, ld_cutoff, progr
 # luck seed
 set.seed(7777)
 # whether we are in debug mode
-debug <- T
+debug <- F
 
 
 ####################
