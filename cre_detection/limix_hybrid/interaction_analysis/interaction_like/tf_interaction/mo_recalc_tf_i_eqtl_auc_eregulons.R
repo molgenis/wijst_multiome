@@ -26,14 +26,14 @@ library(AUCell)
 ####################
 
 # location of the AUC matrix
-auc_mtx_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eregulon_gene_auc.mtx.gz'
+auc_mtx_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eregulon_gene_auc.mtx.gz'
 # location of the barcodes
-auc_barcodes_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eregulon_gene_auc_barcodes.txt.gz'
+auc_barcodes_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eregulon_gene_auc_barcodes.txt.gz'
 # and the eregulon names
-ereg_names_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eregulon_gene_auc_eregnames.txt.gz'
+ereg_names_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eregulon_gene_auc_eregnames.txt.gz'
 
 # location of the SCENIC outout
-scenic_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eRegulon_both_filtered.tsv.gz'
+scenic_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eRegulon_both_filtered.tsv.gz'
 # read that
 scenic_output <- fread(scenic_output_loc, header = T, sep = '\t')
 # order by the extended
@@ -57,7 +57,7 @@ colnames(auc_mtx) <- barcodes
 rownames(auc_mtx) <- eregnames
 
 # location of the eregulon from scenics
-scenic_eregs_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eRegulon_signatures.tsv.gz'
+scenic_eregs_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eRegulon_signatures.tsv.gz'
 # read that
 scenic_eregs <- fread(scenic_eregs_loc, header = T, sep = '\t')
 # store in a list
@@ -73,7 +73,7 @@ for (ereg in unique(scenic_eregs[scenic_eregs[['modality']] == 'Gene_based', ][[
 }
 
 # location of the Seurat object
-seurat_object_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/seurat_preprocess_samples/objects/mo_all_20240223_seuratv5_normalized.rds'
+seurat_object_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/seurat_preprocess_samples/objects/mo_all_20240223_seuratv5_normalized.rds'
 # laod the data
 seurat_object <- readRDS(seurat_object_loc)
 # extract expression matrix
@@ -90,14 +90,14 @@ expr_mat <- seurat_object@assays$SCT@counts
 expr_mat_included <- expr_mat[, colnames(expr_mat) %in% barcodes]
 
 # read the TF-interaction-QTL output
-tf_i_eqtl_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/sc/all/lane_donor_countrna_inclcaqtls_varinregion/merged/results_fdr.tsv.gz'
+tf_i_eqtl_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/sc/all/lane_donor_countrna_inclcaqtls_varinregion/merged/results_fdr.tsv.gz'
 tf_i_eqtl <- fread(tf_i_eqtl_loc,  header = T, sep = '\t')
 # get what is significant
 sc_tf_ieqtl_sig <- tf_i_eqtl[
   tf_i_eqtl[['region:genotype_bh']] < 0.05 & 
     tf_i_eqtl[['anova_bh']] < 0.05 & 
     tf_i_eqtl[['region_bh']] < 0.05, # & 
-    # tf_i_eqtl[['genotype_bh']] < 0.05, 
+  # tf_i_eqtl[['genotype_bh']] < 0.05, 
 ]
 # remove the top gene from the eregulon lists
 ereg_to_genes_iegenes <- list()
@@ -138,7 +138,9 @@ cells_AUC_notop_eregs_repressors_i <- grep('-/+', cells_AUC_notop_eregs)
 cells_AUC_notop_eregs_repressors <- cells_AUC_notop_eregs[cells_AUC_notop_eregs_repressors_i]
 cells_AUC_notop_dt_repressors <- cells_AUC_notop_dt[cells_AUC_notop_eregs_repressors_i, ]
 # and modify
-cells_AUC_notop_dt_repressors <- 1 - cells_AUC_notop_dt_repressors
+# cells_AUC_notop_dt_repressors <- 1 - cells_AUC_notop_dt_repressors
+cells_AUC_notop_dt_repressors <- -1 * cells_AUC_notop_dt_repressors
+
 # take the originals as well
 cells_AUC_notop_eregs_activators <- cells_AUC_notop_eregs[-cells_AUC_notop_eregs_repressors_i]
 cells_AUC_notop_dt_activators <- cells_AUC_notop_dt[-cells_AUC_notop_eregs_repressors_i, ]
@@ -148,7 +150,7 @@ cells_AUC_notop_eregs <- c(cells_AUC_notop_eregs_repressors, cells_AUC_notop_ere
 # but add the eregulon as the first column
 cells_AUC_notop_dt <- cbind(data.table('eregulon' = cells_AUC_notop_eregs), cells_AUC_notop_dt)
 # set export location
-cells_AUC_notop_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/mo_tf_interaction_eregulon_gene_removed_auc_all_nonsparse_transposed.tsv.gz'
+cells_AUC_notop_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/mo_tf_interaction_eregulon_gene_removed_auc_all_nonsparse_transposed.tsv.gz'
 # write the output
 write.table(cells_AUC_notop_dt, gzfile(cells_AUC_notop_loc), row.names = F, col.names = T, sep = '\t', quote = F)
 # with a checksum
@@ -161,7 +163,7 @@ sc_tf_ieqtl_sig_confinement[['region']] <- paste(sc_tf_ieqtl_sig[['region']], sc
 # update the column names to actually reflect what we do
 colnames(sc_tf_ieqtl_sig_confinement) <- c('variant', 'eregulon', 'gene')
 # set output loc
-sc_tf_ieqtl_sig_confinement_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/mo_var_tf_gene_confinement_inclcaqtls_varinregion_significant.tsv.gz'
+sc_tf_ieqtl_sig_confinement_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/mo_var_tf_gene_confinement_inclcaqtls_varinregion_significant.tsv.gz'
 # write output
 write.table(sc_tf_ieqtl_sig_confinement, gzfile(sc_tf_ieqtl_sig_confinement_loc), row.names = F, col.names = T, sep = '\t', quote = F)
 # with a checksum
