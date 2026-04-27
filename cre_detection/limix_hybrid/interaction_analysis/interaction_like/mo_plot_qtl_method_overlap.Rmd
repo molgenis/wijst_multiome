@@ -306,15 +306,15 @@ knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 ####################
 
 # location of the tf-i-ieqtls
-tf_ieqtl_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/sc/all/lane_donor_countrna_inclcaqtls_varinregion/merged/results_fdr.tsv.gz'
-tf_ieqtl_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/sc/all/lane_donor_countrna_inclcaqtls_varinregion/merged/results_fdr_with_replication_significant.tsv.gz'
-tf_ieqtl_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/sc/all/lane_donor_countrna_inclcaqtls_varinregion/merged/results_fdr_with_replication.tsv.gz'
+tf_ieqtl_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/sc/all/lane_donor_countrna_inclcaqtls_varinregion/merged/results_fdr.tsv.gz'
+tf_ieqtl_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/sc/all/lane_donor_countrna_inclcaqtls_varinregion/merged/results_fdr_with_replication_significant.tsv.gz'
+tf_ieqtl_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/sc/all/lane_donor_countrna_inclcaqtls_varinregion/merged/results_fdr_with_replication.tsv.gz'
 # location of the region-i-ieqtls
-region_ieqtl_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/region_interaction/sc/all/lane_donor_countrna_inclcaqtls_varinregion/merged/results_fdr.tsv.gz'
+region_ieqtl_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/region_interaction/sc/all/lane_donor_countrna_inclcaqtls_varinregion/merged/results_fdr.tsv.gz'
 # location of the QTL outputs
-eqtl_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/finemapping/eqtl/sc-eqtlgen/combined_with_qtl/combined/L1/'
+eqtl_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/finemapping/eqtl/sc-eqtlgen/combined_with_qtl/combined/L1/'
 # location of the QTL outputs
-caqtl_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/finemapping/caqtl/sc-eqtlgen/combined_with_qtl/combined/L1/'
+caqtl_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/finemapping/caqtl/sc-eqtlgen/combined_with_qtl/combined/L1/'
 
 
 ```
@@ -358,7 +358,7 @@ region_ieqtls_sig <- region_ieqtls[
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # location of the SCENIC outout
-scenic_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eRegulon_both_filtered.tsv.gz'
+scenic_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eRegulon_both_filtered.tsv.gz'
 # read that
 scenic_output <- fread(scenic_output_loc, header = T, sep = '\t')
 # order by the extended
@@ -378,7 +378,7 @@ scenic_output[['region_cpeaks']] <- gsub(':', '-', scenic_output[['Region']])
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # location of the variant annotations
-variant_annotation_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/annotations/mo_qtl_variants_tested_cpeaks_overlap.tsv.gz'
+variant_annotation_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/eqtl/annotations/mo_qtl_variants_tested_cpeaks_overlap.tsv.gz'
 variant_annotation <- fread(variant_annotation_loc, header = T, sep = '\t')
 
 ```
@@ -431,7 +431,7 @@ caqtl_outputs_all <- caqtl_outputs_all[caqtl_outputs_all[['p_value']] <= caqtl_o
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # location of the finemapped results
-finemapped_colocs_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/colocalization/eqtl_caqtl/ut_and_24hca_significant/'
+finemapped_colocs_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/colocalization/eqtl_caqtl/ut_and_24hca_significant/'
 # read the tabel
 finemapped_colocs <- get_coloc_output(finemapped_colocs_loc)
 # add the way that we merged these
@@ -469,7 +469,7 @@ knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 # add scenic region info
 eqtl_outputs_scenic_regions <- add_associated_region(eqtl_outputs, scenic_output, scenic_region_column = 'region_cpeaks')
 # read the cpeaks annotation
-cpeaks_anno_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/cPeaks/cPeaks_wscreenv4.tsv.gz'
+cpeaks_anno_loc <- '/groups/umcg-franke-scrna/tmp02/external_datasets/cPeaks/cPeaks_wscreenv4.tsv.gz'
 cpeaks_anno <- fread(cpeaks_anno_loc, header = T, sep = '\t')
 # add the Signac style name
 cpeaks_anno[['signac_hg38']] <- paste(cpeaks_anno[['chr_hg38']], cpeaks_anno[['start_hg38']], cpeaks_anno[['end_hg38']], sep = '-')
@@ -544,7 +544,7 @@ p_triplet_cat1to3 <- ggplot(
   mapping = aes(x = category, y = pct, fill = category) 
 ) +
   geom_bar(stat = 'identity') +
-  scale_fill_manual(values = roycols::get_color_list(unique(scenic_qtl_categories_n[['category']]))) +
+  scale_fill_manual(values = roycols::get_color_list(unique(scenic_qtl_categories_n[['category']]), color_indices = c(47,63,56,16))) +
   xlab('Tier') + 
   ylab('Proportion of triplets') +
   theme(legend.position = 'none') + 
@@ -555,7 +555,7 @@ p_triplet_cat1to4 <- ggplot(
   mapping = aes(x = category, y = pct, fill = category) 
 ) +
   geom_bar(stat = 'identity') +
-  scale_fill_manual(values = roycols::get_color_list(unique(scenic_qtl_categories_n[['category']]))) +
+  scale_fill_manual(values = roycols::get_color_list(unique(scenic_qtl_categories_n[['category']]), color_indices = c(47,63,56,16))) +
   xlab('Tier') + 
   ylab('Proportion of triplets') +
   theme(legend.position = 'none') + 
@@ -565,6 +565,11 @@ p_triplet_cat1to4 <- ggplot(
 # show plots
 p_triplet_cat1to3
 p_triplet_cat1to4
+# and save them
+# save that
+ggsave(filename = '~/multiome/plots/mo_scenic_triplet_qtl_overlap_simple_cat1to3.pdf', plot = p_triplet_cat1to3, width = 5, height = 5)
+ggsave(filename = '~/multiome/plots/mo_scenic_triplet_qtl_overlap_simple_cat1to4.pdf', plot = p_triplet_cat1to4, width = 5, height = 5)
+
 
 ```
 
@@ -717,6 +722,26 @@ p_triplet_interaction <- ggplot(
   theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
 # show plot
 p_triplet_interaction
+# save that
+ggsave(filename = '~/multiome/plots/mo_scenic_triplet_tf_cre_i_eqtl_overlap_simple.pdf', plot = p_triplet_interaction, width = 5, height = 5)
+
+# again for category 1 to 3
+p_triplet_interaction_cat1to3 <- ggplot(
+  data = scenic_interaction_categories_n[scenic_interaction_categories_n[['category']] != 'neither'],  
+  mapping = aes(x = category, y = pct, fill = category) 
+) +
+  geom_bar(stat = 'identity') +
+  scale_fill_manual(values = roycols::get_color_list(unique(scenic_interaction_categories_n[['category']]), color_indices = c(56,57,58,59))) +
+  xlab('Interaction type') + 
+  ylab('Proportion of triplets') +
+  theme(legend.position = 'none') + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+# show that plot
+p_triplet_interaction_cat1to3
+# save that
+ggsave(filename = '~/multiome/plots/mo_scenic_triplet_tf_cre_i_eqtl_overlap_simple_cat1to3.pdf', plot = p_triplet_interaction_cat1to3, width = 5, height = 5)
+
 
 ```
 
