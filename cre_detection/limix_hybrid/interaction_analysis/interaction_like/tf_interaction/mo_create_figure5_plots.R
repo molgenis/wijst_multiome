@@ -25,8 +25,8 @@ library(cowplot)
 
 # the ERAP levels in non-risk
 nr_erap_df <- data.frame(
-  x = factor(c(rep('NF-KB\n100%', times = 10), rep('50/50', times = 10), rep('CREL\n100%', times = 10)), levels = c('NF-KB\n100%', '50/50', 'CREL\n100%')), 
-  erap2 = c(seq(1.5, 1.6, length.out = 10), 
+  x = factor(c(rep('NF-KB\n100%', times = 20), rep('50/50', times = 10), rep('CREL\n100%', times = 10)), levels = c('NF-KB\n100%', '50/50', 'CREL\n100%')), 
+  erap2 = c(seq(1.5, 1.6, length.out = 20), 
             seq(0.75, 0.85, length.out = 10), 
             seq(0, 0.1, length.out = 10))
 )
@@ -40,10 +40,10 @@ nr_erap_df_p <- ggplot(
   theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
 # the ERAP levels in risk
 ra_erap_df <- data.frame(
-  x = factor(c(rep('NF-KB\n100%', times = 10), rep('50/50', times = 10), rep('CREL\n100%', times = 10)), levels = c('NF-KB\n100%', '50/50', 'CREL\n100%')), 
+  x = factor(c(rep('NF-KB\n100%', times = 10), rep('50/50', times = 10), rep('CREL\n100%', times = 20)), levels = c('NF-KB\n100%', '50/50', 'CREL\n100%')), 
   erap2 = c(seq(2, 2.1, length.out = 10), 
             seq(1, 1.1, length.out = 10), 
-            seq(0, 0.1, length.out = 10))
+            seq(0, 0.1, length.out = 20))
 )
 ra_erap_df_p <- ggplot(
   data = ra_erap_df, 
