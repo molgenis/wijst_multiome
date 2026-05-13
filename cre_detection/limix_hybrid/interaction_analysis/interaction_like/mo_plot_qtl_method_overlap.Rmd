@@ -94,6 +94,62 @@ get_output_per_celltype_limix <- function(qtl_output_loc, output_file='qtl_resul
 }
 
 
+get_qtls_per_celltype_limix <- function(qtl_output_loc, output_file='qtl_results_all_qval_allchroms_fdr005_significant.txt.gz', gene_column='feature_id', significance_column='feature_q_value', significance_cutoff=0.05, nominal_cutoff_column='pval_nominal_threshold_global', nominal_significance_column='p_value', verbose=T) {
+  # get the folders in the directory, which should be the cell types
+  cell_types <- list.dirs(qtl_output_loc, full.names = F, recursive = F)
+  # we will store the results in a list for now
+  qtls_per_celltype <- list()
+  # check each cell type
+  for (cell_type in cell_types) {
+    # paste together the full path
+    full_cell_type_path <- paste(qtl_output_loc, '/', cell_type, '/', output_file, sep = '')
+    # log if requested
+    if (verbose) {
+      print(paste('reading', full_cell_type_path))
+    }
+    # read the file
+    cell_type_output <- read.table(full_cell_type_path, sep = '\t', header = T)
+    # filter the results on significance
+    if (!is.null(significance_column)) {
+      # print progress if requested
+      if (verbose) {
+        print(paste('variant+phenotype before filtering by significance column', nrow(cell_type_output)))
+      }
+      # filter
+      cell_type_output <- cell_type_output[
+        !is.na(cell_type_output[[significance_column]]) &
+          cell_type_output[[significance_column]] < significance_cutoff, 
+      ]
+      if (verbose) {
+        print(paste('variant+phenotype after filtering by significance column', nrow(cell_type_output)))
+      }
+    }
+    if (!is.null(nominal_cutoff_column) & !is.null(nominal_significance_column)) {
+      # print progress if requested
+      if (verbose) {
+        print(paste('variant+phenotype before filtering by nominal cutoff', nrow(cell_type_output)))
+      }
+      # filter
+      cell_type_output <- cell_type_output[
+        !is.na(cell_type_output[[nominal_cutoff_column]]) & 
+          !is.na(cell_type_output[[nominal_significance_column]]) &
+          cell_type_output[[nominal_significance_column]] <= cell_type_output[[nominal_cutoff_column]], 
+      ]
+      if (verbose) {
+        print(paste('variant+phenotype after filtering by nominal cutoff', nrow(cell_type_output)))
+      }
+    }
+    # add the celltype as a column
+    cell_type_output[['cell_type']] <- cell_type
+    # add to the list
+    qtls_per_celltype[[cell_type]] <- cell_type_output
+  }
+  # turn into a dataframe
+  return(qtls_per_celltype)
+}
+
+
+
 add_associated_region <- function(eqtl_outputs, scenic_output, eqtl_gene_column='feature_id', scenic_gene_column='Gene', scenic_region_column='Region') {
   # keep a list per cell type
   cs_output_per_ct_region <- list()
@@ -869,5 +925,32 @@ p_triplet_interaction_onlqtlcat1to3
 # we want to save the plot as well
 ggsave(filename = '~/multiome/plots/mo_scenic_geneticcontrol_ieqtls.pdf', plot = p_triplet_interaction_onlqtlcat1to3, width = 5, height = 5)
 
+
+```
+
+```{r get_ieqtl_results, include=TRUE, fig.width=5, fig.height=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# location of the i-eqtl output
+iqtl_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/output/ut_and_24hca_significant/L1/'
+# get all the QTL output
+iqtl_output <- get_qtls_per_celltype_limix(iqtl_output_loc, output_file = 'inflammation_final/iqtl_results_all_eigenmt_qval.tsv.gz', gene_column='feature', significance_column='feature_q_value', significance_cutoff=0.05, nominal_cutoff_column=NULL, nominal_significance_column=NULL)
+# merge all the results
+iqtl_output_all <- do.call('rbind', iqtl_output)
+# filter on signifiacnce
+iqtl_output_all_sig <- iqtl_output_all[iqtl_output_all[['feature_q_value']] < 0.05 &
+                                         iqtl_output_all[['feature_bf_eigen']] < 0.05, ]
+
+```
+
+```{r merge_ieqtl_results, include=TRUE, fig.width=5, fig.height=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# add directions
+iqtl_output_all_sig[['direction']] <- 'none'
+iqtl_output_all_sig[!is.na(iqtl_output_all_sig[['beta']]) & iqtl_output_all_sig[['beta']] > 0, 'direction'] <- 'stronger'
+iqtl_output_all_sig[!is.na(iqtl_output_all_sig[['beta']]) & iqtl_output_all_sig[['beta']] < 0, 'direction'] <- 'weaker'
+# merge with tf-i-eqtls
+tf_stim_ieqtls_sig <- merge(iqtl_output_all_sig, tf_ieqtls_sig, by.x = c('snp_id', 'feature'), by.y = c('variant', 'gene'))
 
 ```

@@ -55,16 +55,16 @@ saveRDS(okada_object, okada_merged_major_loc)
 # create checksum
 mdfiver::create_sha256_for_file(okada_merged_major_loc)
 # do SCT normalization
-okada_object <- SCTransform(okada_object)
+okada_object <- readRDS(okada_merged_major_loc)
+#okada_object <- SCTransform(okada_object)
 # extract the expression matrix
-# expr_mat <- seurat_object@assays$RNA@layers$counts
-expr_mat <- okada_object@assays$SCT@counts
+expr_mat <- okada_object@assays$RNA@counts
+#expr_mat <- okada_object@assays$SCT@counts
 # set the barcodes as column names
-colnames(expr_mat) <- colnames(okada_object)
+#colnames(expr_mat) <- colnames(okada_object)
 # extract genes
-gene_names <- data.frame(okada_object@assays$SCT@features)
-gene_names_counts <- rownames(gene_names[gene_names[['counts']], , drop = F])
-
+#gene_names <- data.frame(okada_object@assays$SCT@features)
+#gene_names_counts <- rownames(gene_names[gene_names[['counts']], , drop = F])
 
 # location of the SCENIC outout
 scenic_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eRegulon_both_filtered.tsv.gz'
@@ -79,6 +79,23 @@ scenic_eregs_to_keep <- scenic_eregs[!duplicated(paste(scenic_eregs[['TF']], sce
 # then use that to filer
 scenic_output <- scenic_output[scenic_output[['Gene_signature_name']] %in% scenic_eregs_to_keep[['Gene_signature_name']], ]
 
+# location of the eregulon from scenics
+scenic_eregs_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eRegulon_signatures.tsv.gz'
+# read that
+scenic_eregs <- fread(scenic_eregs_loc, header = T, sep = '\t')
+# store in a list
+ereg_to_genes <- list()
+# check each of the gene based ones
+for (ereg in unique(scenic_eregs[scenic_eregs[['modality']] == 'Gene_based', ][['signature_name']])) {
+  # get the genes
+  genes_ereg <- unique(scenic_eregs[
+    scenic_eregs[['signature_name']] == ereg,
+  ][['gene_or_region']])
+  # put in the list
+  ereg_to_genes[[ereg]] <- unique(genes_ereg)
+}
+
+
 # read the TF-interaction-QTL output
 tf_i_eqtl_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/sc/all/lane_donor_countrna_inclcaqtls_varinregion/merged/results_fdr.tsv.gz'
 tf_i_eqtl <- fread(tf_i_eqtl_loc,  header = T, sep = '\t')
@@ -89,6 +106,7 @@ sc_tf_ieqtl_sig <- tf_i_eqtl[
     tf_i_eqtl[['region_bh']] < 0.05, # & 
   # tf_i_eqtl[['genotype_bh']] < 0.05, 
 ]
+
 # remove the top gene from the eregulon lists
 ereg_to_genes_iegenes <- list()
 for (ereg in names(ereg_to_genes)) {
@@ -108,7 +126,7 @@ for (ereg in names(ereg_to_genes)) {
   }
 }
 # recalculate enrichment scores
-cells_AUC_notop <- AUCell_run(expr_mat_included, ereg_to_genes_iegenes)
+cells_AUC_notop <- AUCell_run(expr_mat, ereg_to_genes_iegenes)
 # save result somewhere
 cells_AUC_notop_loc <- '~/multiome/rds/okada_auc_mtx_noiegene_fromscenic.rds'
 saveRDS(cells_AUC_notop, cells_AUC_notop_loc)
