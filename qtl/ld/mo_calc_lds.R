@@ -79,7 +79,7 @@ option_list <- list(
               help="make values smaller than the cutoff into 0, so the matrix is more sparse", metavar="numeric"), 
   make_option(c("-n", "--chromosomes"), type="character", default=NULL, 
               help="comma separacted string of specific chromosomes to calculate LD for", metavar="character"), 
-  make_option(c("-d", "--n_chunks"), type="numeric", default=NULL, 
+  make_option(c("-k", "--n_chunks"), type="numeric", default=NULL, 
               help="chunks to divide work into for l1 vs l2 type of LDs", metavar="numeric")
 )
 
