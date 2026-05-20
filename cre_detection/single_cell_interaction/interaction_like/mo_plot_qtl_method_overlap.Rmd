@@ -805,12 +805,16 @@ ggsave(filename = '~/multiome/plots/mo_scenic_triplet_tf_cre_i_eqtl_overlap_simp
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # add assignment that captures both TF and accessibility i-eQTLs
-scenic_output[['is_tfqtl']] <- 'untested'
-scenic_output[scenic_output[['Gene_signature_name']] %in% tf_ieqtls[tf_ieqtls[['is_tfqtl']] == F, ][['tf']]][['is_tfqtl']] <- 'no TF-QTL'
-scenic_output[scenic_output[['Gene_signature_name']] %in% tf_ieqtls[tf_ieqtls[['is_tfqtl']] == T, ][['tf']]][['is_tfqtl']] <- 'TF-QTL'
+scenic_output[['is_also_tfqtl']] <- 'untested'
+if (nrow(scenic_output[scenic_output[['Gene_signature_name']] %in% tf_ieqtls[tf_ieqtls[['is_tfqtl']] == F, ][['tf']]]) > 0) {
+  scenic_output[scenic_output[['Gene_signature_name']] %in% tf_ieqtls[tf_ieqtls[['is_tfqtl']] == F, ][['tf']]][['is_also_tfqtl']] <- 'no TF-QTL'
+}
+if (nrow(scenic_output[scenic_output[['Gene_signature_name']] %in% tf_ieqtls[tf_ieqtls[['is_tfqtl']] == T, ][['tf']]]) > 0) {
+  scenic_output[scenic_output[['Gene_signature_name']] %in% tf_ieqtls[tf_ieqtls[['is_tfqtl']] == T, ][['tf']]][['is_also_tfqtl']] <- 'TF-QTL'
+}
 
 # now add a column that has the combination of the TF-QTL and the interaction type
-scenic_output[['is_tf_or_accessibility_ieqtl_and_tfqtl']] <- paste(scenic_output[['is_tf_or_accessibility_ieqtl']], scenic_output[['is_tfqtl']])
+scenic_output[['is_tf_or_accessibility_ieqtl_and_tfqtl']] <- paste(scenic_output[['is_tf_or_accessibility_ieqtl']], scenic_output[['is_also_tfqtl']])
 # but keep the original neither separate
 scenic_output[scenic_output[['is_tf_or_accessibility_ieqtl']] == 'neither', ][['is_tf_or_accessibility_ieqtl_and_tfqtl']] <- 'neither'
 scenic_output[scenic_output[['is_tf_or_accessibility_ieqtl']] == 'only accessibility-i-eQTL', ][['is_tf_or_accessibility_ieqtl_and_tfqtl']] <- 'only accessibility-i-eQTL'
@@ -954,3 +958,91 @@ iqtl_output_all_sig[!is.na(iqtl_output_all_sig[['beta']]) & iqtl_output_all_sig[
 tf_stim_ieqtls_sig <- merge(iqtl_output_all_sig, tf_ieqtls_sig, by.x = c('snp_id', 'feature'), by.y = c('variant', 'gene'))
 
 ```
+
+```{r check_percentages_any_qtls, include=TRUE, fig.width=5, fig.height=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# get the occurences of i-eQTLs in the QTLs
+n_any_qtl_to_ieqtl <- data.frame(table(scenic_output[scenic_output[['tier']] != '4. no QTL', c('tier', 'is_tf_or_accessibility_ieqtl')]))
+# get the totals for the tiers
+n_any_qtl_tier_totals <- aggregate(as.formula('Freq ~ tier'), data = n_any_qtl_to_ieqtl[, c('tier', 'Freq')], FUN = 'sum')
+# rename that Freq to 'total'
+colnames(n_any_qtl_tier_totals) <- c('tier', 'cat_total')
+# then add that to the original
+n_any_qtl_to_ieqtl <- merge(n_any_qtl_to_ieqtl, n_any_qtl_tier_totals, on = 'tier')
+# also add full total
+n_any_qtl_to_ieqtl[['total']] <- sum(n_any_qtl_to_ieqtl[['Freq']])
+# add percentage
+n_any_qtl_to_ieqtl[['frac_total']] <- n_any_qtl_to_ieqtl[['Freq']] / n_any_qtl_to_ieqtl[['total']]
+# add combination of tier and ieqtl
+n_any_qtl_to_ieqtl[['tier_ieqtl']] <- paste(n_any_qtl_to_ieqtl[['tier']], n_any_qtl_to_ieqtl[['is_tf_or_accessibility_ieqtl']])
+# and opposite direction
+n_any_qtl_to_ieqtl[['ieqtl_tier']] <- paste(n_any_qtl_to_ieqtl[['is_tf_or_accessibility_ieqtl']], n_any_qtl_to_ieqtl[['tier']])
+# the plot colors
+any_qtl_to_ieqtl_plot_cols <-roycols::get_color_list(unique(n_any_qtl_to_ieqtl[['tier']]), color_indices = c(47,63,56,16))
+# add colouring
+for (tier in names(any_qtl_to_ieqtl_plot_cols)) {
+  # percentage of whitening 
+  pct_whitening=40
+  any_qtl_to_ieqtl_plot_cols[[paste(tier, 'only TF-i-eQTL')]] <- colorRampPalette(c(any_qtl_to_ieqtl_plot_cols[[tier]], "white"))(100)[pct_whitening]
+  any_qtl_to_ieqtl_plot_cols[[paste(tier, 'only accessibility-i-eQTL')]] <- colorRampPalette(c(any_qtl_to_ieqtl_plot_cols[[tier]], "black"))(100)[pct_whitening]
+  any_qtl_to_ieqtl_plot_cols[[paste(tier, 'TF- and accessibility-i-eQTL')]] <- any_qtl_to_ieqtl_plot_cols[[tier]]
+  any_qtl_to_ieqtl_plot_cols[[paste(tier, 'neither')]] <- colorRampPalette(c(any_qtl_to_ieqtl_plot_cols[[tier]], "white"))(100)[pct_whitening*2]
+}
+# the plot colors but opposite
+ieqtl_to_any_qtl_plot_cols <-roycols::get_color_list(unique(n_any_qtl_to_ieqtl[['is_tf_or_accessibility_ieqtl']]), color_indices = c(56,59,58,57))
+# add colouring
+for (ieqtl in names(ieqtl_to_any_qtl_plot_cols)) {
+  # percentage of whitening 
+  pct_whitening=40
+  ieqtl_to_any_qtl_plot_cols[[paste(ieqtl, '1. has dual acting QTL')]] <- colorRampPalette(c(ieqtl_to_any_qtl_plot_cols[[ieqtl]], "white"))(100)[pct_whitening]
+  ieqtl_to_any_qtl_plot_cols[[paste(ieqtl, '2. has eQTL in region')]] <- colorRampPalette(c(ieqtl_to_any_qtl_plot_cols[[ieqtl]], "black"))(100)[pct_whitening]
+  ieqtl_to_any_qtl_plot_cols[[paste(ieqtl, '3. has caQTL')]] <- ieqtl_to_any_qtl_plot_cols[[ieqtl]]
+  ieqtl_to_any_qtl_plot_cols[[paste(ieqtl, '4. no QTL')]] <- colorRampPalette(c(ieqtl_to_any_qtl_plot_cols[[ieqtl]], "gray"))(100)[pct_whitening]
+}
+p_triplet_interaction_onlqtlcat1to3_wtiers <- plot_grid(
+  ggplot(
+  data = n_any_qtl_to_ieqtl[n_any_qtl_to_ieqtl[['is_tf_or_accessibility_ieqtl']] != 'neither', ],  
+  mapping = aes(x = is_tf_or_accessibility_ieqtl, y = frac_total, fill = ieqtl_tier) 
+) +
+  geom_bar(stat = 'identity') +
+  scale_fill_manual(values = ieqtl_to_any_qtl_plot_cols) +
+  xlab('Interaction type') + 
+  ylab('Proportion of triplets with QTL') +
+  theme(legend.position = 'none') + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")), 
+  get_legend(
+    ggplot(data = data.frame(x = c('1. has dual acting QTL', '2. has eQTL in region', '3. has caQTL'), y = c(1,1,1)), mapping = aes(x = x, y = y, fill = x)) + 
+      geom_bar(stat = 'identity') + 
+      scale_fill_manual(values = c('lightgray', 'black', 'darkgray')) +
+      labs(fill = 'tier')
+  )
+)
+p_triplet_interaction_onlqtlcat1to3_wtiers
+
+# plot
+p_triplet_cat1to3_wieqtl <- plot_grid(
+  ggplot(
+  data = n_any_qtl_to_ieqtl[n_any_qtl_to_ieqtl[['tier']] != '4. no QTL', ], 
+  mapping = aes(x = tier, y = frac_total, fill = tier_ieqtl) 
+) +
+    geom_bar(stat = 'identity') +
+    scale_fill_manual(values = any_qtl_to_ieqtl_plot_cols) +
+    xlab('Tier') + 
+    ylab('Proportion of triplets') +
+    theme(legend.position = 'none') + 
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+    theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")), 
+  get_legend(
+    ggplot(data = data.frame(x = c('neither', 'only ca-i-eQTL', 'only TFa-i-eQTL', 'both TFa- and ca-i-eQTL'), y = c(1,1,1,1)), mapping = aes(x = x, y = y, fill = x)) + 
+      geom_bar(stat = 'identity') + 
+      scale_fill_manual(values = c('#F5F5F5', 'lightgray', 'black', 'darkgray')) +
+      labs(fill = 'i-eQTL')
+  )
+)
+
+p_triplet_cat1to3_wieqtl
+
+```
+
