@@ -14,7 +14,7 @@ library(Seurat)
 library(Matrix)
 library(data.table)
 library(AUCell)
-
+library(R.utils)
 
 ####################
 # Functions        #
@@ -162,3 +162,36 @@ cells_AUC_notop_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/onek1k
 write.table(cells_AUC_notop_dt, gzfile(cells_AUC_notop_loc), row.names = F, col.names = T, sep = '\t', quote = F)
 # with a checksum
 mdfiver::create_sha256_for_file(cells_AUC_notop_loc)
+
+# write cells
+cells_AUC_notop_barcodes_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/onek1k//tf_interaction/onek1k_tf_interaction_eregulon_gene_removed_auc_all_nonsparse_transposed_barcodes.txt.gz'
+# write the barcode names
+write.table(data.frame(x = cells_AUC_notop_barcodes), gzfile(cells_AUC_notop_barcodes_loc), row.names = F, col.names = F, quote = F)
+# checksum
+mdfiver::create_sha256_for_file(cells_AUC_notop_barcodes_loc)
+# chunk  max of 1000 eregs at a time
+chunk_i_start <- 1
+while(chunk_i_start <= nrow(cells_AUC_notop_mtx)) {
+  # get the end
+  chunk_i_end <- chunk_i_start + 999
+  # except if bigger than the end
+  if (chunk_i_end > nrow(cells_AUC_notop_mtx)) {
+    chunk_i_end <- nrow(cells_AUC_notop_mtx)
+  }
+  # write matrix as well
+  cells_AUC_notop_mtx_loc <- paste0('/groups/umcg-franke-scrna/tmp04/external_datasets/onek1k//tf_interaction/onek1k_tf_interaction_eregulon_gene_removed_auc_all_nonsparse_transposed_', chunk_i_start, '_' , chunk_i_end, '.mtx')
+  cells_AUC_notop_eregs_loc <- paste0('/groups/umcg-franke-scrna/tmp04/external_datasets/onek1k//tf_interaction/onek1k_tf_interaction_eregulon_gene_removed_auc_all_nonsparse_transposed_', chunk_i_start, '_' , chunk_i_end, '_ergenames.txt.gz')
+  # write the matrix
+  writeMM(Matrix(cells_AUC_notop_mtx[chunk_i_start:chunk_i_end, ], sparse = TRUE), cells_AUC_notop_mtx_loc)
+  # zip the file
+  gzip(filename = cells_AUC_notop_mtx_loc)
+  # make checksum
+  mdfiver::create_sha256_for_file(paste0(cells_AUC_notop_mtx_loc, '.gz'))
+  # write the ereg names
+  write.table(data.frame(x = cells_AUC_notop_eregs[chunk_i_start:chunk_i_end]), gzfile(cells_AUC_notop_eregs_loc), row.names = F, col.names = F, quote = F)
+  # checksum
+  mdfiver::create_sha256_for_file(cells_AUC_notop_eregs_loc)
+  
+  # increase count
+  chunk_i_start <- chunk_i_start + 1000
+}
