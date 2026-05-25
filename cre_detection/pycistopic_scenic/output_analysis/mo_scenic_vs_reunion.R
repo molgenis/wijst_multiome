@@ -12,6 +12,7 @@
 
 library(data.table)
 library(ggplot2)
+library(ggrastr)
 library(ggvenn)
 library(cowplot)
 library(stringr)
@@ -263,7 +264,7 @@ max_sig_rho_10x <- max(abs(matched_output[['cor_reunion']]))
 max_sig_rho_mo <- max(abs(matched_output[['cor_scenic']]))
 # plot the correlations
 p_mo_vs_reunion <- ggplot(data = matched_output, mapping = aes(x = cor_scenic, y = cor_reunion)) + 
-  geom_point(size = .1) +
+  geom_point_rast(size = .1) +
   xlab('R2G Rho in multiome') + 
   ylab('R2G Rho in reunion') + 
   ggtitle('R2G correlations in multiome vs reunion (matched TF only)') + 
@@ -308,7 +309,7 @@ max_sig_rhotf_10x <- max(abs(matched_output[['tfcor_reunion']]))
 max_sig_rhotf_mo <- max(abs(matched_output[['tfcor_scenic']]))
 # plot the correlations
 p_mo_vs_reunion_tf <- ggplot(data = matched_output, mapping = aes(x = tfcor_scenic, y = tfcor_reunion)) + 
-  geom_point(size = .1) +
+  geom_point_rast(size = .1) +
   xlab('TF2G Rho in multiome') + 
   ylab('TF2G Rho in reunion') + 
   ggtitle('TF2G correlations in multiome vs reunion (matched TF only)') + 
@@ -342,3 +343,17 @@ p_mo_vs_reunion_tf <- ggplot(data = matched_output, mapping = aes(x = tfcor_scen
 p_mo_vs_reunion_tf
 # save the plot
 ggsave(filename = '~/multiome/plots/mo_multiome_vs_reunion_tf2g.pdf', plot = p_mo_vs_reunion_tf, width = 5, height = 5)
+
+# now add only r2g columns
+reunion_output[['r2g']] <- paste(reunion_output[['overlapping_feature']], reunion_output[['gene_id']])
+scenic_output[['r2g']] <- paste(scenic_output[['Region']], scenic_output[['Gene']])
+# merge these on only the r2g
+matched_output_r2gonly <- merge(unique(reunion_output[, c('r2g', 'peak_gene_corr')]), unique(scenic_output[, c('r2g', 'rho_R2G')]), by = 'r2g')
+# rename columns
+colnames(matched_output_r2gonly) <- c('r2g', 'cor_reunion', 'cor_scenic')
+# and make unique
+matched_output_r2gonly <- unique(matched_output_r2gonly)
+# calculate the concordance
+mo_reunion_rho_concordance_r2gonly <- sum(sign(matched_output_r2gonly[['cor_scenic']]) == sign(matched_output_r2gonly[['cor_reunion']])) / nrow(matched_output_r2gonly)
+# [1] 0.9234896
+
