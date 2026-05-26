@@ -237,7 +237,7 @@ do_interaction_analysis <- function(expression_data,
   unique_regions <- unique(accessibility_data[['region']])
   n_regions <- length(unique_regions)
   # set a progress bar
-  pb <- progress_bar$new(total = n_tf)
+  pb <- progress_bar$new(total = n_regions)
   # initialize the progress bar
   pb$tick(0)
   # check each region
