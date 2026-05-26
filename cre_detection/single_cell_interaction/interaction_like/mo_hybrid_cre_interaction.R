@@ -494,6 +494,20 @@ if (debug) {
   interaction_terms_string <- 'genotype,region'
   barcode_column <- 'ps_column'
   
+  confinement_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/mo_var_tf_gene_confinement.tsv.gz'
+  in_dir <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/onek1k/L1/all/chr1-150515244-151166478/'
+  smf_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/onek1k/L1/all/smf.tsv.gz'
+  output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/onek1k/L1/all/chunk_1_1000/chr1-150515244-151166478/'
+  expression_file <- 'expression.tsv.gz'
+  accessibility_file <- '/groups/umcg-franke-scrna/tmp04/external_datasets/onek1k/tf_interaction/onek1k_tf_interaction_eregulon_gene_removed_auc_all_nonsparse_transposed_1_1000.tsv.gz'
+  #accessibility_file <- '/groups/umcg-franke-scrna/tmp04/external_datasets/onek1k/tf_interaction/onek1k_tf_interaction_eregulon_gene_removed_auc_all_nonsparse_transposed.rds'
+  genotype_loc <- '/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_oneK1k/genotype_input/EUR_imputed_hg38_varFiltered1'
+  covariates_file <- '/groups/umcg-franke-scrna/tmp04/external_datasets/onek1k/metadata/onek1k_celllevel_metadata.tsv.gz'
+  fixed_effects_string <- 'region,genotype,nCount_RNA'
+  random_effects_string <- 'sample_final,lane'
+  interaction_terms_string <- 'sample_final,sequencing_run'
+  barcode_column <- 'barcode'
+  
 } else {
   # obligatory parameters without a default
   if (is.null(opt[['in']])) {
@@ -602,20 +616,27 @@ if (length(count.fields(full_exp_path)) > 1) {
   expression_data <- data.table('gene' = c())
 }
 # check if there is TF/accessibility data
-if (length(count.fields(full_acc_path)) > 1) {
+if (endsWith(full_acc_path, 'rds') | length(count.fields(full_acc_path)) > 1) {
   # read the TF/accessibility data
-  # accessibility_data <- read.table(full_acc_path, header = T, sep = '\t', check.names = F, row.names = 1)
-  accessibility_data <- fread(full_acc_path, header = T, sep = '\t', check.names = F, skip = 1)
-  # read the header
-  accessibility_data_header_line <- readLines(full_acc_path, n = 1)
-  # split by sep
-  accessibility_data_header <- strsplit(accessibility_data_header_line, '\t')[[1]]
-  # add this header
-  if (length(accessibility_data_header) == ncol(accessibility_data)) {
-    colnames(accessibility_data) <- accessibility_data_header
+  accessibility_data <- NULL
+  # if it is an RDS, we can just load that
+  if (endsWith(full_acc_path, 'rds')) {
+    accessibility_data <- readRDS(full_acc_path)
   } else {
-    # otherwise we need an extra column
-    colnames(accessibility_data) <- c('region', accessibility_data_header)
+    # otherwise it has to be (gzipped) text
+    # accessibility_data <- read.table(full_acc_path, header = T, sep = '\t', check.names = F, row.names = 1)
+    accessibility_data <- fread(full_acc_path, header = T, sep = '\t', check.names = F, skip = 1)
+    # read the header
+    accessibility_data_header_line <- readLines(full_acc_path, n = 1)
+    # split by sep
+    accessibility_data_header <- strsplit(accessibility_data_header_line, '\t')[[1]]
+    # add this header
+    if (length(accessibility_data_header) == ncol(accessibility_data)) {
+      colnames(accessibility_data) <- accessibility_data_header
+    } else {
+      # otherwise we need an extra column
+      colnames(accessibility_data) <- c('region', accessibility_data_header)
+    }
   }
   # set same colnames always
   colnames(accessibility_data)[[1]] <- 'region'

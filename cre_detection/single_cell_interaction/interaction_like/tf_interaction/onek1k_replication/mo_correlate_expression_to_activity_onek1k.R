@@ -16,6 +16,7 @@ library(ggplot2)
 library(cowplot)
 library(stringr)
 library(ggpubr)
+library(Matrix)
 
 
 ####################
@@ -196,6 +197,8 @@ get_color_coding_dict <- function() {
   color_coding_dict[['disconcordant']] <- 'gray'
   color_coding_dict[['UT']] <- 'gray'
   color_coding_dict[['24hCA']] <- 'darkgreen'
+  color_coding_dict[['okada']] <- 'lightgreen'
+  color_coding_dict[['onek1k']] <- 'lightpink'
   # up and down regulation will be added to, we need a whitening percentage
   pct_whitening <- 40
   # then we will check each cell type
@@ -223,8 +226,59 @@ get_color_coding_dict <- function() {
 ################################
 
 # get AUC location
-cells_AUC_notop_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/onek1k//tf_interaction/onek1k_tf_interaction_eregulon_gene_removed_auc_all_nonsparse_transposed.tsv.gz'
-cells_AUC_notop <- read.table(cells_AUC_notop_loc, header = T, sep = '\t')
+# cells_AUC_notop_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/onek1k//tf_interaction/onek1k_tf_interaction_eregulon_gene_removed_auc_all_nonsparse_transposed.tsv.gz'
+# cells_AUC_notop <- read.table(cells_AUC_notop_loc, header = T, sep = '\t')
+barcodes <- read.table('/groups/umcg-franke-scrna/tmp04/external_datasets/onek1k/tf_interaction/onek1k_tf_interaction_eregulon_gene_removed_auc_all_nonsparse_transposed_barcodes.txt.gz', header = F)[[1]]
+# load chunk 1
+mtx1 <- Matrix::readMM('/groups/umcg-franke-scrna/tmp04/external_datasets/onek1k/tf_interaction/onek1k_tf_interaction_eregulon_gene_removed_auc_all_nonsparse_transposed_1_1000.mtx.gz')
+ereg1 <- read.table('/groups/umcg-franke-scrna/tmp04/external_datasets/onek1k/tf_interaction/onek1k_tf_interaction_eregulon_gene_removed_auc_all_nonsparse_transposed_1_1000_ergenames.txt.gz', header = F)[[1]]
+rownames(mtx1) <- ereg1
+colnames(mtx1) <- barcodes
+dt1 <- data.table(as.matrix(mtx1))
+dt1 <- cbind(data.table('eregulon' = ereg1), dt1)
+# write.table(dt1, gzfile('/groups/umcg-franke-scrna/tmp04/external_datasets/onek1k/tf_interaction/onek1k_tf_interaction_eregulon_gene_removed_auc_all_nonsparse_transposed_1_1000.tsv.gz'), row.names = F, col.names = T, sep = '\t', quote = F)
+# mdfiver::create_sha256_for_file('/groups/umcg-franke-scrna/tmp04/external_datasets/onek1k/tf_interaction/onek1k_tf_interaction_eregulon_gene_removed_auc_all_nonsparse_transposed_1_1000.tsv.gz')
+# load chunk 2
+mtx2 <- Matrix::readMM('/groups/umcg-franke-scrna/tmp04/external_datasets/onek1k/tf_interaction/onek1k_tf_interaction_eregulon_gene_removed_auc_all_nonsparse_transposed_1001_2000.mtx.gz')
+ereg2 <- read.table('/groups/umcg-franke-scrna/tmp04/external_datasets/onek1k/tf_interaction/onek1k_tf_interaction_eregulon_gene_removed_auc_all_nonsparse_transposed_1001_2000_ergenames.txt.gz', header = F)[[1]]
+rownames(mtx2) <- ereg2
+colnames(mtx2) <- barcodes
+dt2 <- data.table(as.matrix(mtx2))
+dt2 <- cbind(data.table('eregulon' = ereg2), dt2)
+# write.table(dt2, gzfile('/groups/umcg-franke-scrna/tmp04/external_datasets/onek1k/tf_interaction/onek1k_tf_interaction_eregulon_gene_removed_auc_all_nonsparse_transposed_1001_2000.tsv.gz'), row.names = F, col.names = T, sep = '\t', quote = F)
+# mdfiver::create_sha256_for_file('/groups/umcg-franke-scrna/tmp04/external_datasets/onek1k/tf_interaction/onek1k_tf_interaction_eregulon_gene_removed_auc_all_nonsparse_transposed_1001_2000.tsv.gz')
+# load chunk 3
+mtx3 <- Matrix::readMM('/groups/umcg-franke-scrna/tmp04/external_datasets/onek1k/tf_interaction/onek1k_tf_interaction_eregulon_gene_removed_auc_all_nonsparse_transposed_2001_3000.mtx.gz')
+ereg3 <- read.table('/groups/umcg-franke-scrna/tmp04/external_datasets/onek1k/tf_interaction/onek1k_tf_interaction_eregulon_gene_removed_auc_all_nonsparse_transposed_2001_3000_ergenames.txt.gz', header = F)[[1]]
+rownames(mtx3) <- ereg3
+colnames(mtx3) <- barcodes
+dt3 <- data.table(as.matrix(mtx3))
+dt3 <- cbind(data.table('eregulon' = ereg3), dt3)
+# write.table(dt3, gzfile('/groups/umcg-franke-scrna/tmp04/external_datasets/onek1k/tf_interaction/onek1k_tf_interaction_eregulon_gene_removed_auc_all_nonsparse_transposed_2001_3000.tsv.gz'), row.names = F, col.names = T, sep = '\t', quote = F)
+# mdfiver::create_sha256_for_file('/groups/umcg-franke-scrna/tmp04/external_datasets/onek1k/tf_interaction/onek1k_tf_interaction_eregulon_gene_removed_auc_all_nonsparse_transposed_2001_3000.tsv.gz')
+# load chunk 4
+mtx4 <- Matrix::readMM('/groups/umcg-franke-scrna/tmp04/external_datasets/onek1k/tf_interaction/onek1k_tf_interaction_eregulon_gene_removed_auc_all_nonsparse_transposed_3001_4000.mtx.gz')
+ereg4 <- read.table('/groups/umcg-franke-scrna/tmp04/external_datasets/onek1k/tf_interaction/onek1k_tf_interaction_eregulon_gene_removed_auc_all_nonsparse_transposed_3001_4000_ergenames.txt.gz', header = F)[[1]]
+rownames(mtx4) <- ereg4
+colnames(mtx4) <- barcodes
+dt4 <- data.table(as.matrix(mtx4))
+dt4 <- cbind(data.table('eregulon' = ereg4), dt4)
+# write.table(dt4, gzfile('/groups/umcg-franke-scrna/tmp04/external_datasets/onek1k/tf_interaction/onek1k_tf_interaction_eregulon_gene_removed_auc_all_nonsparse_transposed_3001_4000.tsv.gz'), row.names = F, col.names = T, sep = '\t', quote = F)
+# mdfiver::create_sha256_for_file('/groups/umcg-franke-scrna/tmp04/external_datasets/onek1k/tf_interaction/onek1k_tf_interaction_eregulon_gene_removed_auc_all_nonsparse_transposed_3001_4000.tsv.gz')
+# and the final chunk
+mtx5 <- Matrix::readMM('/groups/umcg-franke-scrna/tmp04/external_datasets/onek1k/tf_interaction/onek1k_tf_interaction_eregulon_gene_removed_auc_all_nonsparse_transposed_4001_4354.mtx.gz')
+ereg5 <- read.table('/groups/umcg-franke-scrna/tmp04/external_datasets/onek1k/tf_interaction/onek1k_tf_interaction_eregulon_gene_removed_auc_all_nonsparse_transposed_4001_4354_ergenames.txt.gz', header = F)[[1]]
+rownames(mtx5) <- ereg5
+colnames(mtx5) <- barcodes
+dt5 <- data.table(as.matrix(mtx5))
+dt5 <- cbind(data.table('eregulon' = ereg5), dt5)
+# write.table(dt5, gzfile('/groups/umcg-franke-scrna/tmp04/external_datasets/onek1k/tf_interaction/onek1k_tf_interaction_eregulon_gene_removed_auc_all_nonsparse_transposed_4001_4354.tsv.gz'), row.names = F, col.names = T, sep = '\t', quote = F)
+# mdfiver::create_sha256_for_file('/groups/umcg-franke-scrna/tmp04/external_datasets/onek1k/tf_interaction/onek1k_tf_interaction_eregulon_gene_removed_auc_all_nonsparse_transposed_4001_4354.tsv.gz')
+cells_AUC_notop <- do.call('rbind', list(dt1, dt2, dt3, dt4, dt5))
+# save as binary
+# cells_AUC_notop_loc_rds <- '/groups/umcg-franke-scrna/tmp04/external_datasets/onek1k/tf_interaction/onek1k_tf_interaction_eregulon_gene_removed_auc_all_nonsparse_transposed.rds'
+# saveRDS(cells_AUC_notop, cells_AUC_notop_loc_rds)
+# mdfiver::create_sha256_for_file(cells_AUC_notop_loc_rds)
 
 # create a mapping of the eregulon+iegene to just the eregulon
 mapping <- data.frame(
@@ -296,7 +350,7 @@ ggsave(filename = '~/multiome/plots/mo_scenic_tf_expression_activity_correlation
 p_scenic_tf_expression_activity_correlation_density_onek1k <- ggplot(
   data = cor_tf_ereg, 
   aes(x = correlation, fill = dataset)
-) + geom_density(alpha = .5) + scale_fill_manual(values = list('onek1k' = 'lightgreen')) + 
+) + geom_density(alpha = .5) + scale_fill_manual(values = list('onek1k' = 'lightpink')) + 
   theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
   xlab('Rho') + ylab('Density') + labs(fill = 'Dataset')
 # show the plot
@@ -304,12 +358,12 @@ p_scenic_tf_expression_activity_correlation_density_onek1k
 # and save the result
 ggsave(filename = '~/multiome/plots/mo_scenic_tf_expression_activity_correlation_density_onek1k.pdf', plot = p_scenic_tf_expression_activity_correlation_density_onek1k, width = 6, height = 4)
 
-# save the object temporarily
-seurat_object_tfa_loc <- paste0('/groups/umcg-franke-scrna/tmp04/external_datasets/onek1k/seurat_objects/onek1k_major_cts_tfa.rds')
-saveRDS(seurat_object, seurat_object_tfa_loc)
-mdfiver::create_sha256_for_file(seurat_object_tfa_loc)
-
 # save result as well
 onek1k_tfe_tfa_correlations_loc <- '~/multiome/tables/mo_tfe_vs_tfa_correlation_onek1k.tsv.gz'
 write.table(cor_tf_ereg, gzfile(onek1k_tfe_tfa_correlations_loc), row.names = F, col.names = T, sep = '\t')
 mdfiver::create_sha256_for_file(onek1k_tfe_tfa_correlations_loc)
+
+# save the object temporarily
+seurat_object_tfa_loc <- paste0('/groups/umcg-franke-scrna/tmp04/external_datasets/onek1k/seurat_objects/onek1k_major_cts_tfa.rds')
+saveRDS(seurat_object, seurat_object_tfa_loc)
+mdfiver::create_sha256_for_file(seurat_object_tfa_loc)
