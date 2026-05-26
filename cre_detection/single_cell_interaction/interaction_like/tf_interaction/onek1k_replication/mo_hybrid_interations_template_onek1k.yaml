@@ -11,7 +11,7 @@ chunk_base: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detec
 # location to store chunk outputs
 results_base: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/onek1k/L1/all/"
 # absolute confinement file loc
-confinement: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/mo_var_tf_gene_confinement_inclcaqtls_varinregion.tsv.gz"
+confinement: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/mo_var_tf_gene_confinement_inclcaqtls_varinregion_significant.tsv.gz"
 # absolute smf file loc
 smf: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/onek1k/L1/all/smf.tsv.gz"
 # absolute covariates file loc
