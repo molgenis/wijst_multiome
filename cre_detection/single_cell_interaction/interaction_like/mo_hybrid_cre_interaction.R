@@ -37,6 +37,8 @@ library(bestNormalize)
 # for the model
 library(lme4)
 library(lmerTest)
+# progress
+library(progress)
 
 
 ####################
@@ -231,8 +233,19 @@ do_interaction_analysis <- function(expression_data,
   }
   # put all results in a list
   res_per_comparison <- list()
+  # count the number of regions
+  unique_regions <- unique(accessibility_data[['region']])
+  n_regions <- length(unique_regions)
+  # set a progress bar
+  pb <- progress_bar$new(total = n_tf)
+  # initialize the progress bar
+  pb$tick(0)
   # check each region
-  for (region in unique(accessibility_data[['region']])) {
+  for (region_i in 1 : n_regions) {
+    # update the progress bar
+    pb$tick()
+    # get the region
+    region <- unique_regions[region_i]
     # extract the genes and variants
     confinement_region <- confinement[confinement[['region']] == region, ]
     # the specific genes then
@@ -496,12 +509,15 @@ if (debug) {
   
   confinement_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/mo_var_tf_gene_confinement.tsv.gz'
   in_dir <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/onek1k/L1/all/chr1-150515244-151166478/'
+  in_dir <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/onek1k/L1/all/chr2-137963866-143149194/' #chr6-158079997-158870311
   smf_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/onek1k/L1/all/smf.tsv.gz'
   output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/onek1k/L1/all/chunk_1_1000/chr1-150515244-151166478/'
+  output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/onek1k/L1/all/chr2-137963866-143149194/'
   expression_file <- 'expression.tsv.gz'
   accessibility_file <- '/groups/umcg-franke-scrna/tmp04/external_datasets/onek1k/tf_interaction/onek1k_tf_interaction_eregulon_gene_removed_auc_all_nonsparse_transposed_1_1000.tsv.gz'
-  #accessibility_file <- '/groups/umcg-franke-scrna/tmp04/external_datasets/onek1k/tf_interaction/onek1k_tf_interaction_eregulon_gene_removed_auc_all_nonsparse_transposed.rds'
+  accessibility_file <- '/groups/umcg-franke-scrna/tmp04/external_datasets/onek1k/tf_interaction/onek1k_tf_interaction_eregulon_gene_removed_auc_all_nonsparse_transposed.rds'
   genotype_loc <- '/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_oneK1k/genotype_input/EUR_imputed_hg38_varFiltered1'
+  genotype_loc <- '/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_oneK1k/genotype_input/EUR_imputed_hg38_varFiltered2'
   covariates_file <- '/groups/umcg-franke-scrna/tmp04/external_datasets/onek1k/metadata/onek1k_celllevel_metadata.tsv.gz'
   fixed_effects_string <- 'region,genotype,nCount_RNA'
   random_effects_string <- 'sample_final,lane'
@@ -832,4 +848,3 @@ if (is.null(interaction_result)) {
   # so we'll store an empty file
   write_empty_result(tsv_output_loc_full)
 }
-
