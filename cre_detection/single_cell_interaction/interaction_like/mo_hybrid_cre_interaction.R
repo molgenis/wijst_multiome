@@ -234,18 +234,23 @@ do_interaction_analysis <- function(expression_data,
   # put all results in a list
   res_per_comparison <- list()
   # count the number of regions
-  unique_regions <- unique(accessibility_data[['region']])
+  unique_regions <- unique(confinement[['region']])
   n_regions <- length(unique_regions)
+  # show the user how many we have
+  message(paste('processing', as.character(n_regions), 'regions/TFs'))
   # set a progress bar
   pb <- progress_bar$new(total = n_regions)
   # initialize the progress bar
   pb$tick(0)
   # check each region
   for (region_i in 1 : n_regions) {
+    # check whether we gausnormed
+    gausnormed_region <- F
     # update the progress bar
     pb$tick()
     # get the region
     region <- unique_regions[region_i]
+    #print(region)
     # extract the genes and variants
     confinement_region <- confinement[confinement[['region']] == region, ]
     # the specific genes then
@@ -256,30 +261,55 @@ do_interaction_analysis <- function(expression_data,
     ]
     # extract the region values
     region_values <- as.vector(unlist(accessibility_data[accessibility_data[['region']] == region, 2:ncol(accessibility_data)]))
+    # add values
+    covariates_data[['region']] <- region_values
     # check each gene
     for (gene in unique(genes_region)) {
+      #print(gene)
+      # check whether we gausnormed the gene
+      gausnormed_gene <- F
       # extract the gene
       gene_values <- as.vector(unlist(expression_data_region[expression_data_region[['gene']] == gene, 2:ncol(expression_data_region)]))
-      # merge the metadata with the gene and the region
-      covariates_data[['region']] <- region_values
+      # add values
       covariates_data[['expression']] <- gene_values
-      # gausnorm them if requested
-      if (accessibility_gausnorm) {
-        covariates_data[['region']] <- gausnorm_independent_variable(covariates_data[['region']], accessibility_boxcox)
-      }
-      if(expression_gausnorm) {
-        covariates_data[['expression']] <- gausnorm_independent_variable(covariates_data[['expression']], expression_boxcox)
-      }
       # get the variants for this region-gene combination
       variants_region_gene <- unique(confinement_region[confinement_region[['gene']] == gene, ][['variant']])
       # check each variant
       for (variant in variants_region_gene) {
+        #print(variant)
+        # gausnorm them if requested (only do it if we get to this step to save time)
+        if (accessibility_gausnorm & !(gausnormed_region)) {
+          covariates_data[['region']] <- gausnorm_independent_variable(covariates_data[['region']], accessibility_boxcox)
+          gausnormed_region <- T
+        }
+        if(expression_gausnorm & !(gausnormed_gene)) {
+          covariates_data[['expression']] <- gausnorm_independent_variable(covariates_data[['expression']], expression_boxcox)
+          gausnormed_gene <- T
+        }
+        # get participants in sample mapping file
+        participants_smf <- unique(smf[['participant']])
+        # get donors for which there is genotype data
+        participants_with_geno <- unique(intersect(rownames(genotype_data$genotypes), participants_smf))
+        # get those genotypes
+        participants_genotypes <- genotype_data$genotypes[participants_with_geno, variant]
+        # make into df
+        participant_to_geno <- data.frame('participant' = participants_with_geno, 'genotype' = as.vector(as(participants_genotypes, 'numeric')))
+        # if there are participants not present, add them with NA values
+        if (length(participants_with_geno) < length(participants_smf)) {
+          # get the missing participants
+          participants_without_geno <- setdiff(participants_smf, participants_with_geno)
+          # then add those with NA
+          participant_to_geno <- rbind(participant_to_geno, 
+                                       data.frame('participant' = participants_without_geno, 'genotype' = rep(NA, times = length(participants_without_geno))))
+        }
         # extract genotypes
-        genotype <- genotype_data$genotypes[smf[['participant']], variant]
+        #genotype <- genotype_data$genotypes[smf[['participant']], variant]
+        genotype <- participant_to_geno[match(smf[['participant']], participant_to_geno[['participant']]), ][['genotype']]
         # then to numeric
-        genotype_numeric <- as.vector(as(genotype, 'numeric'))
+        #genotype_numeric <- as.vector(as(genotype, 'numeric'))
         # add the genotype
-        covariates_data[['genotype']] <- genotype_numeric
+        #covariates_data[['genotype']] <- genotype_numeric
+        covariates_data[['genotype']] <- genotype
         # keep only complete cases
         covariates_data_complete <- covariates_data[complete.cases(covariates_data), ]
         # and only finite values
@@ -507,21 +537,24 @@ if (debug) {
   interaction_terms_string <- 'genotype,region'
   barcode_column <- 'ps_column'
   
-  confinement_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/mo_var_tf_gene_confinement.tsv.gz'
+  confinement_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/mo_var_tf_gene_confinement_inclcaqtls_varinregion_significant.tsv.gz'
   in_dir <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/onek1k/L1/all/chr1-150515244-151166478/'
-  in_dir <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/onek1k/L1/all/chr2-137963866-143149194/' #chr6-158079997-158870311
+  in_dir <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/onek1k/L1/all/chr2-137963866-143149194/'
+  in_dir <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/onek1k/L1/all/chr6-158079997-158870311/'
   smf_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/onek1k/L1/all/smf.tsv.gz'
   output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/onek1k/L1/all/chunk_1_1000/chr1-150515244-151166478/'
   output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/onek1k/L1/all/chr2-137963866-143149194/'
+  output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/onek1k/L1/all/chr6-158079997-158870311/'
   expression_file <- 'expression.tsv.gz'
   accessibility_file <- '/groups/umcg-franke-scrna/tmp04/external_datasets/onek1k/tf_interaction/onek1k_tf_interaction_eregulon_gene_removed_auc_all_nonsparse_transposed_1_1000.tsv.gz'
   accessibility_file <- '/groups/umcg-franke-scrna/tmp04/external_datasets/onek1k/tf_interaction/onek1k_tf_interaction_eregulon_gene_removed_auc_all_nonsparse_transposed.rds'
   genotype_loc <- '/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_oneK1k/genotype_input/EUR_imputed_hg38_varFiltered1'
   genotype_loc <- '/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_oneK1k/genotype_input/EUR_imputed_hg38_varFiltered2'
+  genotype_loc <- '/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_oneK1k/genotype_input/EUR_imputed_hg38_varFiltered6'
   covariates_file <- '/groups/umcg-franke-scrna/tmp04/external_datasets/onek1k/metadata/onek1k_celllevel_metadata.tsv.gz'
   fixed_effects_string <- 'region,genotype,nCount_RNA'
-  random_effects_string <- 'sample_final,lane'
-  interaction_terms_string <- 'sample_final,sequencing_run'
+  random_effects_string <- 'sample_final,sequencing_run'
+  interaction_terms_string <- 'genotype,region'
   barcode_column <- 'barcode'
   
 } else {
@@ -799,18 +832,18 @@ if (nrow(expression_data) > 0) {
           message('Starting analysis..')
           # into a variable
           interaction_result <- do_interaction_analysis(
-            expression_data = expression_data, 
-            accessibility_data = accessibility_data, 
-            genotype_data = genotypes, 
-            smf = smf, 
+            expression_data = expression_data,
+            accessibility_data = accessibility_data,
+            genotype_data = genotypes,
+            smf = smf,
             confinement = confinement,
-            covariates_data = covariates_data, 
-            fixed_effects = fixed_effects, 
-            random_effects = random_effects, 
-            interactions = interactions, 
-            accessibility_gausnorm = accessibility_gausnorm, 
-            expression_gausnorm = expression_gausnorm, 
-            accessibility_boxcox = accessibility_boxcox, 
+            covariates_data = covariates_data,
+            fixed_effects = fixed_effects,
+            random_effects = random_effects,
+            interactions = interactions,
+            accessibility_gausnorm = accessibility_gausnorm,
+            expression_gausnorm = expression_gausnorm,
+            accessibility_boxcox = accessibility_boxcox,
             expression_boxcox = expression_boxcox
           )
           # extract the last part of the folder
@@ -848,3 +881,4 @@ if (is.null(interaction_result)) {
   # so we'll store an empty file
   write_empty_result(tsv_output_loc_full)
 }
+
