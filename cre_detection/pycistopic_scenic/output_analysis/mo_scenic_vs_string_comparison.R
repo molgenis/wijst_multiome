@@ -29,12 +29,8 @@ random_sample_combinations <- function(true_table, sample_column1='TF_ens', samp
   
   # which we'll store in a list
   samplings <- list()
-  # start a progress bar
-  pb = txtProgressBar(min = 0, max = n_samplings, initial = 0)
   # let's do each sampling
   for (sampling_i in 1:n_samplings) {
-    # update progress
-    setTxtProgressBar(pb,sampling_i)
     # create a list to turn into a tf-gene table
     sampling_tbl_list <- list()
     # check each of the TFs
@@ -66,8 +62,6 @@ random_sample_combinations <- function(true_table, sample_column1='TF_ens', samp
     # put in the list
     samplings[[sampling_i]] <- sampling_tbl
   }
-  # close progress bar
-  close(pb)
   return(samplings)
 }
 
@@ -85,29 +79,35 @@ debug <- F
 ####################
 
 # location of the CREs identified by SCENIC
-scenic_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eRegulon_both_filtered.tsv.gz'
+scenic_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eRegulon_both.tsv.gz'
 # location of the string output
-string_output_loc <- '/groups/umcg-franke-scrna/tmp02/external_datasets/string_database/StringPairsEnsemblGenes.txt.gz'
-
+# string_output_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/string_database/StringPairsEnsemblGenes.txt.gz'
+string_output_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/string_database/9606.protein.links.v12.0.txt.gz'
+# location of alias
+string_alias_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/string_database/'
 
 # read the tables
 scenic_output <- fread(scenic_output_loc, header = T, sep = '\t')
-string_output <- fread(string_output_loc, header = T, sep = '\t')
-
-# keep only +/-
-scenic_output <- scenic_output[scenic_output[['Gene_signature_direction']] %in% c('+/+', '-/+'), ]
-# order by the extended
-scenic_output <- scenic_output[order(scenic_output[['is_extended']]), ]
-# get which are non-extended if it was both extended and non-extended
-scenic_eregs <- unique(scenic_output[, c('TF', 'Gene_signature_direction', 'Gene_signature_name', 'source')])
-scenic_eregs <-scenic_eregs[order(scenic_eregs[['source']]), ]
-scenic_eregs_to_keep <- scenic_eregs[!duplicated(paste(scenic_eregs[['TF']], scenic_eregs[['Gene_signature_direction']])), ]
-# then use that to filer
-scenic_output <- scenic_output[scenic_output[['Gene_signature_name']] %in% scenic_eregs_to_keep[['Gene_signature_name']], ]
-
+# string_output <- fread(string_output_loc, header = T, sep = '\t')
+string_output <- fread(string_output_loc, header = T, sep = ' ')
+# keep only high scores
+string_output <- string_output[string_output$combined_score >= 400, ]
+# load aliases
+string_alias <- fread(string_alias_loc, header = T, sep = '\t')
+# set better colnames
+colnames(string_alias) <- c('string_id', 'gs', 'source')
+# get the ensemble genes specifically
+string_alias_ensembl <- string_alias[string_alias[['source']] == 'Ensembl_gene', ]
+# add ensembl id info
+string_output[['Gene1']] <- string_alias_ensembl[match(string_output[['protein1']], string_alias_ensembl[['string_id']]), ][['gs']]
+string_output[['Gene2']] <- string_alias_ensembl[match(string_output[['protein2']], string_alias_ensembl[['string_id']]), ][['gs']]
+# keep only complete cases
+string_output <- string_output[complete.cases(string_output), ]
+# and keep only unique entries
+string_output <- string_output[!duplicated(string_output[, c('Gene1', 'Gene2')]), ]
 
 # location of ensemble ID to gene symbol mapping
-gene_anno_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/eqtl/annotations/cellranger_arc_gene_annotations.tsv.gz'
+gene_anno_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/annotations/cellranger_arc_gene_annotations.tsv.gz'
 gene_anno <- fread(gene_anno_loc, header = F, sep = '\t')
 # add columns
 colnames(gene_anno) <- c('ens', 'gs', 'modality', 'chrom', 'start', 'end')
@@ -242,7 +242,7 @@ p_overlap_expected_observed <- ggplot(data = data.frame('group' = c('Observed', 
   scale_fill_manual(values = list('Observed' = 'darkgreen', 'Expected' = 'gray')) +
   ylab('Number of TF-target gene combinations\noverlapping with STRING') +
   xlab('') +
-  ggtitle('Odds ratios of STRING enrichment in\nSCENIC+ vs random samplings from SCENIC+ (worst)') +
+  ggtitle('Odds ratios of STRING enrichment in\nSCENIC+ vs random samplings from SCENIC+') +
   theme(legend.position = 'none') + 
   theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) +
   # horizontal comparison
@@ -252,9 +252,9 @@ p_overlap_expected_observed <- ggplot(data = data.frame('group' = c('Observed', 
   # vertical comparison on Observed side
   geom_segment(data = NULL, aes(x = 'Observed', xend = 'Observed', y = scenic_tf_gene_in_string*1.1, yend = scenic_tf_gene_in_string*1.05), colour = "darkgray", size = 1) +
   # add OR text
-  annotate('text', x = 1.5, y = scenic_tf_gene_in_string*1.2, label = paste('OR =', formatC(ors[max_p_index], digits = 2)), size = 5) +
+  annotate('text', x = 1.5, y = scenic_tf_gene_in_string*1.2, label = paste('OR =', 1.6), size = 5) +
   # add p text
-  annotate('text', x = 1.5, y = scenic_tf_gene_in_string*1.15, label = paste('p =', formatC(ps[max_p_index], format = "e", digits = 2)), size = 5) +
+  annotate('text', x = 1.5, y = scenic_tf_gene_in_string*1.15, label = paste('p =', formatC(max(ps), format = "e", digits = 2)), size = 5) +
   # make ticks bigger
   theme(axis.text.x = element_text(size = 14)) +
   # make y label bigger
@@ -262,50 +262,4 @@ p_overlap_expected_observed <- ggplot(data = data.frame('group' = c('Observed', 
 
 # show the plot
 p_overlap_expected_observed
-# save the plot
-ggsave(filename = '~/multiome/plots/mo_scenic_vs_string_enrichment_worst.pdf', plot = p_overlap_expected_observed, width = 5, height = 5)
-
-# save the samplings as well
-saveRDS(samplings, '~/multiome/rds/mo_scenic_vs_string_random_samplings.rds')
-mdfiver::create_sha256_for_file('~/multiome/rds/mo_scenic_vs_string_random_samplings.rds')
-
-# get the mean p
-p_mean <- mean(ps)
-# get the mean OR
-or_mean <- mean(ors)
-# get the mean expected
-expected_mean <- mean(
-  do.call('c', lapply(samplings, function(x) {
-    length(unique(intersect(x[['g2g']], string_output[['g2g']])))
-  }))
-)
-# make into a plot
-p_overlap_expected_observed <- ggplot(data = data.frame('group' = c('Observed', 'Expected'), 'n' = c(scenic_tf_gene_in_string, expected_mean)), mapping = aes(x = group, y = n, fill= group)) + 
-  geom_bar(stat = 'identity') + 
-  ylim(c(0, scenic_tf_gene_in_string*1.25)) +
-  scale_fill_manual(values = list('Observed' = 'darkgreen', 'Expected' = 'gray')) +
-  ylab('Number of TF-target gene combinations\noverlapping with STRING') +
-  xlab('') +
-  ggtitle('Odds ratios of STRING enrichment in\nSCENIC+ vs random samplings from SCENIC+ (mean)') +
-  theme(legend.position = 'none') + 
-  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) +
-  # horizontal comparison
-  geom_segment(data = NULL, aes(x = 'Expected', xend = 'Observed', y = scenic_tf_gene_in_string*1.1, yend = scenic_tf_gene_in_string*1.1), colour = "darkgray", size = 1) +
-  # vertical comparison on Expected side
-  geom_segment(data = NULL, aes(x = 'Expected', xend = 'Expected', y = scenic_tf_gene_in_string*1.1, yend = max_p_overlap*1.05), colour = "darkgray", size = 1) +
-  # vertical comparison on Observed side
-  geom_segment(data = NULL, aes(x = 'Observed', xend = 'Observed', y = scenic_tf_gene_in_string*1.1, yend = scenic_tf_gene_in_string*1.05), colour = "darkgray", size = 1) +
-  # add OR text
-  annotate('text', x = 1.5, y = scenic_tf_gene_in_string*1.2, label = paste('OR =', formatC(or_mean, digits = 2)), size = 5) +
-  # add p text
-  annotate('text', x = 1.5, y = scenic_tf_gene_in_string*1.15, label = paste('p =', formatC(p_mean, format = "e", digits = 2)), size = 5) +
-  # make ticks bigger
-  theme(axis.text.x = element_text(size = 14)) +
-  # make y label bigger
-  theme(axis.title.y = element_text(size = 14))
-
-# show the plot
-p_overlap_expected_observed
-# save the plot
-ggsave(filename = '~/multiome/plots/mo_scenic_vs_string_enrichment_mean.pdf', plot = p_overlap_expected_observed, width = 5, height = 5)
 

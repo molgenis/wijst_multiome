@@ -974,6 +974,8 @@ n_any_qtl_to_ieqtl <- merge(n_any_qtl_to_ieqtl, n_any_qtl_tier_totals, on = 'tie
 n_any_qtl_to_ieqtl[['total']] <- sum(n_any_qtl_to_ieqtl[['Freq']])
 # add percentage
 n_any_qtl_to_ieqtl[['frac_total']] <- n_any_qtl_to_ieqtl[['Freq']] / n_any_qtl_to_ieqtl[['total']]
+# and category total
+n_any_qtl_to_ieqtl[['cat_total']] <- n_any_qtl_to_ieqtl[['Freq']] / n_any_qtl_to_ieqtl[['cat_total']]
 # add combination of tier and ieqtl
 n_any_qtl_to_ieqtl[['tier_ieqtl']] <- paste(n_any_qtl_to_ieqtl[['tier']], n_any_qtl_to_ieqtl[['is_tf_or_accessibility_ieqtl']])
 # and opposite direction
@@ -1037,12 +1039,53 @@ p_triplet_cat1to3_wieqtl <- plot_grid(
   get_legend(
     ggplot(data = data.frame(x = c('neither', 'only ca-i-eQTL', 'only TFa-i-eQTL', 'both TFa- and ca-i-eQTL'), y = c(1,1,1,1)), mapping = aes(x = x, y = y, fill = x)) + 
       geom_bar(stat = 'identity') + 
-      scale_fill_manual(values = c('#F5F5F5', 'lightgray', 'black', 'darkgray')) +
+      scale_fill_manual(values = c('lightgray', '#F5F5F5', 'black', 'darkgray')) +
       labs(fill = 'i-eQTL')
   )
 )
-
 p_triplet_cat1to3_wieqtl
+
+# plot
+p_triplet_cat1to3_wieqtl_ofcat <- plot_grid(
+  ggplot(
+  data = n_any_qtl_to_ieqtl[n_any_qtl_to_ieqtl[['tier']] != '4. no QTL', ], 
+  mapping = aes(x = tier, y = cat_total, fill = tier_ieqtl) 
+) +
+    geom_bar(stat = 'identity') +
+    scale_fill_manual(values = any_qtl_to_ieqtl_plot_cols) +
+    xlab('Tier') + 
+    ylab('Proportion of triplets') +
+    theme(legend.position = 'none') + 
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+    theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")), 
+  get_legend(
+    ggplot(data = data.frame(x = c('neither', 'only ca-i-eQTL', 'only TFa-i-eQTL', 'both TFa- and ca-i-eQTL'), y = c(1,1,1,1)), mapping = aes(x = x, y = y, fill = x)) + 
+      geom_bar(stat = 'identity') + 
+      scale_fill_manual(values = c('lightgray', '#F5F5F5', 'black', 'darkgray')) +
+      labs(fill = 'i-eQTL')
+  )
+)
+p_triplet_cat1to3_wieqtl_ofcat
 
 ```
 
+```{r check_percentages_any_qtls, include=TRUE, fig.width=5, fig.height=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# funnel
+nrow(scenic_output)
+# [1] 62932
+nrow(scenic_output[scenic_output[['tier']] != '4. no QTL', ])
+# [1] 11160
+nrow(scenic_output[scenic_output[['tier']] != '4. no QTL' & scenic_output[['is_tf_or_accessibility_ieqtl_and_tfqtl']] != 'neither', ])
+# [1] 3847
+
+# how much genetics involved
+nrow(scenic_output[scenic_output[['tier']] != '4. no QTL', ]) / nrow(scenic_output)
+# [1] 0.1773343
+nrow(scenic_output[scenic_output[['tier']] != '4. no QTL' & scenic_output[['is_tf_or_accessibility_ieqtl']] != 'neither', ]) / nrow(scenic_output[scenic_output[['tier']] != '4. no QTL', ])
+# [1] 0.3447133
+nrow(scenic_output[scenic_output[['tier']] != '4. no QTL' & scenic_output[['is_tf_or_accessibility_ieqtl']] != 'neither', ]) / nrow(scenic_output)
+# [1] 0.06112947
+
+```
