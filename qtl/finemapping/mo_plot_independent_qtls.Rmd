@@ -755,6 +755,34 @@ p_eqtl_cs_each
 
 ```
 
+```{r count_additional_cs, include=TRUE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# add ct to each result
+for (ct in names(eqtl_outputs_filtered)) {
+  eqtl_outputs_filtered[[ct]][['cell_type']] <- ct
+}
+# get the unique combinations of credible set, genes and cell type
+eqtl_cs_gene_ct <- unique(do.call('rbind', eqtl_outputs_filtered)[, c('feature_id', 'CS', 'cell_type')])
+# just set the CS to be L1 when missing
+eqtl_cs_gene_ct[is.na(eqtl_cs_gene_ct[['CS']]), ][['CS']] <- 'L1'
+# now get the unique combinations of the CS to gene
+eqtl_cs_gene <- unique(eqtl_cs_gene_ct[, c('CS', 'feature_id')])
+# get the total of genes
+n_gene <- length(unique(eqtl_cs_gene[['feature_id']]))
+# get the total number of effects
+n_gene_cs <- nrow(eqtl_cs_gene)
+# the difference is the number of additional effects
+n_gene_additional <- n_gene_cs - n_gene
+# show the number of effects
+n_gene
+# [1] 1571
+# and the number of additional
+n_gene_additional
+# [1] 178
+
+```
+
 ```{r read_caqtl_outputs, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
@@ -986,7 +1014,7 @@ p_n_peak_per_gene
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # location of the eQTL to caQTL coloc output
-qtl_coloc_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/colocalization/eqtl_caqtl/'
+qtl_coloc_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/colocalization/eqtl_caqtl/ut_and_24hca_significant/'
 # read this data
 qtl_coloc <- get_output_per_celltype_coloc(qtl_coloc_loc)
 

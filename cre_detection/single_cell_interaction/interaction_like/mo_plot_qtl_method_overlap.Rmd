@@ -1077,15 +1077,33 @@ nrow(scenic_output)
 # [1] 62932
 nrow(scenic_output[scenic_output[['tier']] != '4. no QTL', ])
 # [1] 11160
-nrow(scenic_output[scenic_output[['tier']] != '4. no QTL' & scenic_output[['is_tf_or_accessibility_ieqtl_and_tfqtl']] != 'neither', ])
+nrow(scenic_output[scenic_output[['tier']] != '4. no QTL' & scenic_output[['is_tf_or_accessibility_ieqtl']] != 'neither', ])
 # [1] 3847
+nrow(scenic_output[scenic_output[['tier']] != '4. no QTL' & scenic_output[['is_tf_ieqtl']], ])
+# [1] 2873
+nrow(scenic_output[scenic_output[['tier']] != '4. no QTL' & scenic_output[['is_accessibility_ieqtl']], ])
+# [1] 1693
 
 # how much genetics involved
 nrow(scenic_output[scenic_output[['tier']] != '4. no QTL', ]) / nrow(scenic_output)
 # [1] 0.1773343
+# how much any i-eQTL
 nrow(scenic_output[scenic_output[['tier']] != '4. no QTL' & scenic_output[['is_tf_or_accessibility_ieqtl']] != 'neither', ]) / nrow(scenic_output[scenic_output[['tier']] != '4. no QTL', ])
 # [1] 0.3447133
+# how much TF-i-eQTL
+nrow(scenic_output[scenic_output[['tier']] != '4. no QTL' & scenic_output[['is_tf_ieqtl']], ]) / nrow(scenic_output[scenic_output[['tier']] != '4. no QTL', ])
+# [1] 0.2574373
+nrow(scenic_output[scenic_output[['tier']] != '4. no QTL' & scenic_output[['is_accessibility_ieqtl']], ]) / nrow(scenic_output[scenic_output[['tier']] != '4. no QTL', ])
+# [1] 0.1517025
+
+# how much any i-eQTL from all triplets
 nrow(scenic_output[scenic_output[['tier']] != '4. no QTL' & scenic_output[['is_tf_or_accessibility_ieqtl']] != 'neither', ]) / nrow(scenic_output)
 # [1] 0.06112947
+# how much any CRE-i-eQTL from all triplets
+nrow(scenic_output[scenic_output[['tier']] != '4. no QTL' & scenic_output[['is_accessibility_ieqtl']], ]) / nrow(scenic_output)
+# [1] 0.02690205
+# how much any TFa-i-eQTL from all triplets
+nrow(scenic_output[scenic_output[['tier']] != '4. no QTL' & scenic_output[['is_tf_ieqtl']], ]) / nrow(scenic_output)
+# [1] 0.04565245
 
 ```
