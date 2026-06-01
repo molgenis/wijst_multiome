@@ -84,14 +84,12 @@ scenic_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/
 # string_output_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/string_database/StringPairsEnsemblGenes.txt.gz'
 string_output_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/string_database/9606.protein.links.v12.0.txt.gz'
 # location of alias
-string_alias_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/string_database/'
+string_alias_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/string_database/9606.protein.aliases.v12.0.txt.gz'
 
 # read the tables
 scenic_output <- fread(scenic_output_loc, header = T, sep = '\t')
 # string_output <- fread(string_output_loc, header = T, sep = '\t')
 string_output <- fread(string_output_loc, header = T, sep = ' ')
-# keep only high scores
-string_output <- string_output[string_output$combined_score >= 400, ]
 # load aliases
 string_alias <- fread(string_alias_loc, header = T, sep = '\t')
 # set better colnames
@@ -137,6 +135,11 @@ scenic_output[['g2g']] <- apply(scenic_output, 1, function(x) {
   genes_string <- paste(genes, collapse='_')
   return(genes_string)
 })
+
+# backup the full set
+string_output_full <- string_output
+# keep only high scores
+string_output <- string_output[string_output$combined_score >= 400, ]
 
 # check how many TFs we have, and how many are also in the STRING database
 tf_overlap_df <- data.frame(
@@ -262,4 +265,51 @@ p_overlap_expected_observed <- ggplot(data = data.frame('group' = c('Observed', 
 
 # show the plot
 p_overlap_expected_observed
+# save the plot
+ggsave(filename = '~/multiome/plots/mo_multiome_vs_reunion.pdf', plot = p_overlap_expected_observed, width = 5, height = 5)
 
+# add the score for true set
+scenic_output[['stringscore']] <- string_output_full[match(scenic_output[['g2g']], string_output[['g2g']]), ][['combined_score']]
+# where it is NA, set the minimum score of 149
+scenic_output[is.na(scenic_output[['stringscore']]), ][['stringscore']] <- 149
+# check each of the samplings
+sampling_wilcoxon <- list()
+for (sampling_i in 1 : length(samplings)) {
+  # extract the random sampling
+  sampling_tbl <- samplings[[sampling_i]]
+  # get the score for the true set
+  sampling_tbl[['stringscore']] <- string_output_full[match(sampling_tbl[['g2g']], string_output_full[['g2g']]), ][['combined_score']]
+  # again, set 149 for NA
+  sampling_tbl[is.na(sampling_tbl[['stringscore']]), ][['stringscore']] <- 149
+  # do a wilcoxon rank sum
+  wilcox <- wilcox.test(sampling_tbl[['stringscore']], scenic_output[['stringscore']], alternative = 'less')
+  # add the actual distribution so we can plot it later
+  wilcox[['sampling_scores']] <- sampling_tbl[['stringscore']]
+  # put in the list
+  sampling_wilcoxon[[sampling_i]] <- wilcox
+}
+# and the p-values
+wps <- rep(NA, times = length(sampling_wilcoxon))
+for (wilcox_i in 1:length(sampling_wilcoxon)) {
+  # grab the odds ratio
+  wps[wilcox_i] <- sampling_wilcoxon[[wilcox_i]]$p.value
+}
+# get the average p-value
+wps_mean <- mean(wps)
+# get the index of the p closest do the mean
+wp_closest_i <- which.min(abs(wps - wps_mean))
+# make those into one df
+wilcoxon_score_df <- data.frame(
+  'score' = c(scenic_output[['stringscore']], sampling_wilcoxon[[wp_closest_i]][['sampling_scores']]),
+  'group' = c(rep('observed', times = nrow(scenic_output)), rep('expected', times = nrow(samplings[[wp_closest_i]])))
+)
+# make into a plot
+p_wilcoxon_score_expected_observed <- ggplot(wilcoxon_score_df, mapping = aes(x = score, fill= group)) + 
+  geom_density(alpha = .5) + 
+  scale_fill_manual(values = list('observed' = 'darkgreen', 'expected' = 'gray')) +
+  ylab('Density') +
+  xlab('STRING score') +
+  ggtitle('STRING scores of SCENIC+ vs random samplings') +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+# show plot
+p_wilcoxon_score_expected_observed
