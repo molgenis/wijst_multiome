@@ -13,6 +13,8 @@ library(data.table)
 library(IRanges)
 library(ggplot2)
 library(cowplot)
+library(progress)
+library(pbapply)
 
 
 ####################
@@ -356,13 +358,36 @@ remap_with_label_dict <- function(vector_of_names) {
 }
 
 
+add_significant_celltypes_as_strings_vectorised <- function(overlap_table, variant1_col='hit1', variant2_col='hit2', trait1_col='trait1', trait2_col='trait2', cell_type_column='cell_type') {
+  # convert to dataframe format
+  overlap_table_df <- data.frame(overlap_table)
+  # add overlap 
+  overlap_table_df[['full_overlap']] <- paste(overlap_table_df[[variant1_col]], overlap_table_df[[variant2_col]],
+                                              overlap_table_df[[trait1_col]], overlap_table_df[[trait2_col]])
+  
+  # split into groups
+  split_cts <- split(overlap_table_df[[cell_type_column]], overlap_table_df[['full_overlap']])
+  
+  # summarise to string per group
+  ct_strings <- sapply(split_cts, function(x) {
+    ct_string <- paste(sort(unique(x)), collapse = ",")
+    return(ct_string)
+  })
+  
+  # map back
+  overlap_table_df[['other_ct']] <- ct_strings[overlap_table_df[['full_overlap']]]
+  # back to data table format
+  return(data.table(overlap_table_df))
+}
+
+
 
 ####################
 # Main code        #
 ####################
 
 # location of the eQTL output
-qtl_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/sc-eqtlgen/output/L1/combined/'
+qtl_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/eqtl/sc-eqtlgen/output/L1/combined/'
 # get all the QTL output
 qtl_output <- get_qtls_per_celltype_limix(qtl_output_loc)
 # add the top effect information
@@ -372,7 +397,7 @@ qtl_output_all <- do.call('rbind', qtl_output)
 
 
 # location of openness files
-openness_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/signac_peaks/output/'
+openness_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/signac_peaks/output/'
 # prepend and append
 openness_prepend <- 'mo_peaks_lane1to80_'
 openness_append <- '.bed'
@@ -395,7 +420,7 @@ for (cell_type in openness_cell_types) {
 qtl_output_all[['snp_chromosome']] <- paste0('chr', qtl_output_all[['snp_chromosome']])
 
 # get the cpeaks overlaps for each variant
-qtl_variants_all_cpeaks_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/annotations/mo_qtl_variants_tested_cpeaks_overlap.tsv.gz'
+qtl_variants_all_cpeaks_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/eqtl/annotations/mo_qtl_variants_tested_cpeaks_overlap.tsv.gz'
 qtl_variants_all_cpeaks <- fread(qtl_variants_all_cpeaks_loc, header = T, sep = '\t')
 
 # check each cell type, and add the openness for that cell type
@@ -582,7 +607,7 @@ p_all_variant_openatac_overlap_lead_seplegend <- plot_grid(
   ), 
   ncol = 2, 
   rel_widths = c(0.8, 0.2)
-  )
+)
 # save the plot
 ggsave('~/plots/mo_lead_esnp_chromatin_overlap.pdf', width = 8, height = 8, plot = p_all_variant_openatac_overlap_lead_seplegend)
 
@@ -648,12 +673,12 @@ ggsave('~/plots/mo_lead_esnp_chromatin_overlap_frac.pdf', width = 8, height = 8,
 
 
 # get the screen matches for each variant
-qtl_variants_all_screen_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/annotations/mo_qtl_variants_tested_screen_overlap.tsv.gz'
+qtl_variants_all_screen_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/eqtl/annotations/mo_qtl_variants_tested_screen_overlap.tsv.gz'
 qtl_variants_all_screen <- fread(qtl_variants_all_screen_loc, header = T, sep = '\t')
 # add the matching screen region to the variants
 qtl_output_all_snpsig[['screen_region']] <- qtl_variants_all_screen[match(qtl_output_all_snpsig[['snp_id']], qtl_variants_all_screen[['snp_id']]), ][['overlapping_feature']]
 # get the screen annotations as well
-screen_anno_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/encode_cres/v4/GRCh38-cCREs.bed'
+screen_anno_loc <- '/groups/umcg-franke-scrna/tmp02/external_datasets/encode_cres/v4/GRCh38-cCREs.bed.gz'
 screen_anno <- fread(screen_anno_loc, header = F, sep = '\t')
 colnames(screen_anno) <- c('chromosome', 'start', 'end', 'id1', 'id2', 'type')
 # add name based on the location
@@ -704,3 +729,135 @@ p_all_variant_screen_overlap_lead <- ggplot(data = qtl_output_all_snpsig_screen_
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
   # and set the label for the SCREEN annotation
   labs(fill = "SCREEN annotation")
+
+# add the lineage of each cell
+qtl_output_all_snpsig[['lineage']] <- 'none'
+qtl_output_all_snpsig[qtl_output_all_snpsig[['cell_type']] %in% c('B', 'CD4T', 'CD8T', 'NK'), ][['lineage']] <- 'lymphoid'
+qtl_output_all_snpsig[qtl_output_all_snpsig[['cell_type']] %in% c('DC', 'monocyte'), ][['lineage']] <- 'myeloid'
+# get number of values
+n_qtl <- nrow(qtl_output_all_snpsig)
+# store the matching and non-matching openness
+lineage_openness <- data.frame(
+  matrix(NA, nrow = n_qtl, ncol = 2, dimnames = list(NULL, c('matching_lineage_openness', 'nonmatching_lineage_openness')))
+)
+# # set up progress bar
+# pb <- progress_bar$new(format = "[:bar] :current/:total (:percent)", total = n_qtl)
+# # initialize
+# pb$tick(0)
+# by checking each row
+for (row_i in 1 : n_qtl) {
+  # update pb
+  # pb$tick(row_i)
+  # get the cell type
+  ct <- qtl_output_all_snpsig[row_i, 'cell_type']
+  
+  # get the openness of lymphoid
+  lymphoid_openness <- as.vector(unlist(qtl_output_all_snpsig[row_i, paste('openness', c('B', 'CD4T', 'CD8T', 'NK'), sep = '_')]))
+  # change each NA to 0
+  lymphoid_openness[is.na(lymphoid_openness)] <- 0
+  # then get the average
+  lymphoid_avg_openness <- mean(lymphoid_openness)
+  
+  # get the openness of myeloid
+  myeloid_openness <- as.vector(unlist(qtl_output_all_snpsig[row_i, paste('openness', c('DC', 'monocyte'), sep = '_')]))
+  # change each NA to 0
+  myeloid_openness[is.na(myeloid_openness)] <- 0
+  # then get the average
+  myeloid_avg_openness <- mean(myeloid_openness)
+  
+  # depending on the cell type, we'll set columns
+  if (cell_type %in% c('B', 'CD4T', 'CD8T', 'NK')) {
+    lineage_openness[row_i, 'matching_lineage_openness'] <- lymphoid_avg_openness
+    lineage_openness[row_i, 'nonmatching_lineage_openness'] <- myeloid_avg_openness
+  } else if(cell_type %in% c('DC', 'monocyte')) {
+    lineage_openness[row_i, 'matching_lineage_openness'] <- myeloid_avg_openness
+    lineage_openness[row_i, 'nonmatching_lineage_openness'] <- lymphoid_avg_openness
+  }
+}
+# add this info
+qtl_output_all_snpsig <- cbind(qtl_output_all_snpsig, lineage_openness)
+# add other cell types
+qtl_output_all_snpsig <- add_significant_celltypes_as_strings_vectorised(qtl_output_all_snpsig, trait2_col = 'feature_id', trait1_col = 'feature_id', variant1_col = 'snp_id', variant2_col = 'snp_id')
+# check each to see if they are lineage only
+qtl_output_all_snpsig[['lineage_specific']] <- pbapply(qtl_output_all_snpsig, 1, function(x) {
+  # get the cell type
+  ct <- x[['cell_type']]
+  # get the vectorised cts
+  other_cts_string <- x[['other_ct']]
+  # split to cts
+  other_cts <- strsplit(other_cts_string, split = ',')[[1]]
+  # check these
+  if (ct %in% c('B', 'CD4T', 'CD8T', 'NK') & (
+    length(
+      setdiff(other_cts, c('B', 'CD4T', 'CD8T', 'NK'))
+    ) == 0
+  )) {
+    return(T)
+  } else if (ct %in% c('DC', 'monocyte') & (
+    length(
+      setdiff(other_cts, c('DC', 'monocyte'))
+    ) == 0
+  )) {
+    return(T)
+  } else {
+    return(F)
+  }
+})
+# add lineage openness
+qtl_output_all_snpsig[['nonmatching_lineage_closed']] <- qtl_output_all_snpsig[['nonmatching_lineage_openness']] < 0.001
+qtl_output_all_snpsig[['matching_lineage_open']] <- qtl_output_all_snpsig[['matching_lineage_openness']] >= 0.001
+# get top variants
+qtl_output_all_snpsig_top <- qtl_output_all_snpsig[qtl_output_all_snpsig[['is_top_variant']], ]
+# check if the chromatin is more often closed for lineage-specific eQTLs
+fisher.test(table(qtl_output_all_snpsig[!duplicated(paste(qtl_output_all_snpsig$snp_id, qtl_output_all_snpsig$feature_id)), c('lineage_specific', 'nonmatching_lineage_closed')]))
+# 
+# Fisher's Exact Test for Count Data
+# 
+# data:  table(qtl_output_all_snpsig[!duplicated(paste(qtl_output_all_snpsig$snp_id, qtl_output_all_snpsig$feature_id)), c("lineage_specific", "nonmatching_lineage_closed")])
+# p-value < 2.2e-16
+# alternative hypothesis: true odds ratio is not equal to 1
+# 95 percent confidence interval:
+#  1.082377 1.119715
+# sample estimates:
+# odds ratio 
+#   1.100891 
+# 
+fisher.test(table(qtl_output_all_snpsig_top[!duplicated(paste(qtl_output_all_snpsig_top$snp_id, qtl_output_all_snpsig_top$feature_id)), c('lineage_specific', 'nonmatching_lineage_closed')]))
+# 
+# Fisher's Exact Test for Count Data
+# 
+# data:  table(qtl_output_all_snpsig_top[!duplicated(paste(qtl_output_all_snpsig_top$snp_id, qtl_output_all_snpsig_top$feature_id)), c("lineage_specific", "nonmatching_lineage_closed")])
+# p-value = 0.4128
+# alternative hypothesis: true odds ratio is not equal to 1
+# 95 percent confidence interval:
+#  0.7446661 1.1259998
+# sample estimates:
+# odds ratio 
+#  0.9162631 
+#
+fisher.test(table(qtl_output_all_snpsig_top[qtl_output_all_snpsig_top$in_open_chromatin != 'none', c('lineage_specific', 'nonmatching_lineage_closed')]))
+# 
+# Fisher's Exact Test for Count Data
+# 
+# data:  table(qtl_output_all_snpsig_top[qtl_output_all_snpsig_top$in_open_chromatin != "none", c("lineage_specific", "nonmatching_lineage_closed")])
+# p-value = 1
+# alternative hypothesis: true odds ratio is not equal to 1
+# 95 percent confidence interval:
+#  0.5161865 2.4217166
+# sample estimates:
+# odds ratio 
+#   1.078522 
+#
+fisher.test(table(qtl_output_all_snpsig[qtl_output_all_snpsig$in_open_chromatin != 'none', c('lineage_specific', 'nonmatching_lineage_closed')]))
+# 
+# Fisher's Exact Test for Count Data
+# 
+# data:  table(qtl_output_all_snpsig[qtl_output_all_snpsig$in_open_chromatin != "none", c("lineage_specific", "nonmatching_lineage_closed")])
+# p-value = 0.002326
+# alternative hypothesis: true odds ratio is not equal to 1
+# 95 percent confidence interval:
+#  1.020971 1.101725
+# sample estimates:
+# odds ratio 
+#   1.060526 
+#

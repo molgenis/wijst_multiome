@@ -1,0 +1,45 @@
+######################################################
+# Authors: Roy Oelen
+# Name: mo_hybrid_interactions_template_onek1k.yaml
+# Function: configuration yaml for mo_hybrid_interactions.smk
+#####################################################
+
+# location of the genotype files
+genotype_prefix_template: "/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_oneK1k/genotype_input/EUR_imputed_hg38_varFiltered{chrom}"
+# base location of chunks
+chunk_base: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/onek1k/L1/all/"
+# location to store chunk outputs
+results_base: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/onek1k/L1/all/"
+# absolute confinement file loc
+confinement: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/mo_var_tf_gene_confinement_inclcaqtls_varinregion_significant.tsv.gz"
+# absolute smf file loc
+smf: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/onek1k/L1/all/smf.tsv.gz"
+# absolute covariates file loc
+covariates: "/groups/umcg-franke-scrna/tmp04/external_datasets/onek1k/metadata/onek1k_celllevel_metadata.tsv.gz"
+# barcode column in covariate file
+barcode_column: "barcode"
+# fixed effects to consider
+fixed_effects: "region,genotype,nCount_RNA"
+# random effects to consider
+random_effects: "sample_final,sequencing_run"
+# terms that interact
+interaction_terms: "genotype,region"
+# do gaussnorm on expression data
+expression_gausnorm: true
+# do gausnorm on accessibility data
+accessibility_gausnorm: true
+# do boxcox instead of yeo-johnson on expression data (only works if also gausnorm is true)
+expression_boxcox: false
+# do boxcox instead of yeo-johnson on accessibility data (only works if also gausnorm is true)
+accessibility_boxcox: false
+# path to expression file
+expression_filename: "expression.tsv.gz"
+# path to accessibility file
+accessibility_filename: "/groups/umcg-franke-scrna/tmp04/external_datasets/onek1k/tf_interaction/onek1k_tf_interaction_eregulon_gene_removed_auc_all_nonsparse_transposed.rds"
+
+# R command
+r_command: "~/start_Rscript.sh"
+# script location
+script_loc: "/groups/umcg-franke-scrna/tmp04/users/umcg-roelen/singularity/rstudio-server/simulated_home/mo_hybrid_cre_interaction.R"
+# merging script as well
+merge_script_loc: "/groups/umcg-franke-scrna/tmp04/users/umcg-roelen/singularity/rstudio-server/simulated_home/mo_hybrid_cre_interaction_merge.R"

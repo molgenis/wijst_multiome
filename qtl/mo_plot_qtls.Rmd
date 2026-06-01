@@ -357,16 +357,17 @@ knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 ####################
 
 # location of colocalizing signals of eQTLs and caQTLs
-eqtl_caqtl_coloc_signals_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/output_cis_50kb_updated_features/coloc_ieqtl_iecaql/subset_to_uodated_FDR_annotatin.tsv'
+eqtl_caqtl_coloc_signals_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/output_cis_50kb_updated_features/coloc_ieqtl_iecaql/subset_to_uodated_FDR_annotatin.tsv'
 # location of variants
-variant_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/genotype/imputed_hg38_all_anc'
+variant_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/genotype/imputed_hg38_all_anc_qtl_tested_variants'
 # location of the eQTL inputs
-eqtl_input_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/sc-eqtlgen/input/L1/'
+eqtl_input_split_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/eqtl/sc-eqtlgen/input/L1/'
+eqtl_input_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/input/L1/'
 # location of the caQTL inputs
-caqtl_input_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/L1/'
+caqtl_input_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/input/L1/'
 # and the sample mapping files
-eqtl_smf_loc <- paste('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/input/L1/combined/', '/smf.txt', sep = '/')
-caqtl_smf_loc <- paste('/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_caqtl/sc-eqtlgen/input/L1/', '/smf.txt', sep = '/')
+eqtl_smf_loc <- paste('/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/input/L1/combined/', '/smf.txt', sep = '/')
+caqtl_smf_loc <- paste('/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/interaction_caqtl/sc-eqtlgen/input/L1/', '/smf.txt', sep = '/')
 
 ```
 
@@ -375,8 +376,9 @@ knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # read the eQTL files
 eqtl_files_per_cond <- list(
-  'UT' = read_expression_files_per_celltype(paste(eqtl_input_loc, 'UT/', sep = '/')), 
-  '24hCA' = read_expression_files_per_celltype(paste(eqtl_input_loc, '24hCA/', sep = '/'))
+  'UT' = read_expression_files_per_celltype(paste(eqtl_input_split_loc, 'UT/', sep = '/')), 
+  '24hCA' = read_expression_files_per_celltype(paste(eqtl_input_split_loc, '24hCA/', sep = '/')), 
+  'combined' = read_expression_files_per_celltype(paste(eqtl_input_loc, 'combined/', sep = '/'))
 )
 
 ```
@@ -429,6 +431,21 @@ eqtl_caqtl_coloc_signals[['z_score_diff']] <- abs(eqtl_caqtl_coloc_signals[['z_s
 
 
 ```
+
+```{r geneplot, include=TRUE, fig.height=5, fig.width=10}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+gene <- 'ERAP2'
+variant <- '5:96893521:G:T'
+cell_type <- 'monocyte'
+
+plot_grid(
+  plot_qtls(gene, variant, feature_table = eqtl_files_per_cond[['combined']][[cell_type]][, intersect(colnames(eqtl_files_per_cond[['combined']][[cell_type]]), colnames(eqtl_files_per_cond[['UT']][[cell_type]]))], genotypes = genotypes, sample_mapping = eqtl_smf, better_colors = T, legendless = T) + ggtitle(paste(variant, 'affecting', gene, 'expression\nin', cell_type)) + xlab('genotype') + ylab(paste(gene, 'expression')) + ylim(c(-4, 4)), 
+  plot_qtls(gene, variant, feature_table = eqtl_files_per_cond[['combined']][[cell_type]][, intersect(colnames(eqtl_files_per_cond[['combined']][[cell_type]]), colnames(eqtl_files_per_cond[['24hCA']][[cell_type]]))], genotypes = genotypes, sample_mapping = eqtl_smf, better_colors = T, legendless = T) + ggtitle(paste(variant, 'affecting', gene, 'expression\nin', cell_type)) + xlab('genotype') + ylab(paste(gene, 'expression')) + ylim(c(-4, 4))
+)
+
+```
+
 
 ```{r coloc_plotss, include=TRUE, fig.height=5, fig.width=10}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)

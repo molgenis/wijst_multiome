@@ -76,7 +76,11 @@ option_list <- list(
   make_option(c("-d", "--depth"), type="numeric", default=1000, 
               help="number of consecutive variants to check for LD", metavar="numeric"), 
   make_option(c("-l", "--ld_cutoff"), type="numeric", default=0.0, 
-              help="make values smaller than the cutoff into 0, so the matrix is more sparse", metavar="numeric")
+              help="make values smaller than the cutoff into 0, so the matrix is more sparse", metavar="numeric"), 
+  make_option(c("-n", "--chromosomes"), type="character", default=NULL, 
+              help="comma separacted string of specific chromosomes to calculate LD for", metavar="character"), 
+  make_option(c("-k", "--n_chunks"), type="numeric", default=NULL, 
+              help="chunks to divide work into for l1 vs l2 type of LDs", metavar="numeric")
 )
 
 
@@ -88,14 +92,15 @@ opt <- parse_args(opt_parser)
 if (debug) {
   opt <- list(
     genotypes = '/groups/umcg-franke-scrna/tmp04/external_datasets/sc-eqtlgen-imputation-ref-hg38/ref_panel_QC/30x-GRCh38-EUR-norsid',
-    output_file = '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/annotations/mo_qtl_variants_tested_ld/eurpop/',
-    # output_file = '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/GWAS_enrichment/GWAS_vars/immune-gwas-catalog-download-associations-alt-full-moldpairs',
-    variant_list_file = '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/annotations/mo_qtl_variants_tested_cpeaks_overlap.tsv.gz',
-    variant_list_column = 'snp_id',
-    # second_variant_list_file = '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/caqtl/sc-eqtlgen/GWAS_enrichment/GWAS_vars/immune-gwas-catalog-download-associations-alt-full-chromposrefalt.tsv.gz', 
+    output_file = '/groups/umcg-fg/tmp04/projects/mpra/generate_panel/mo_qtl_1000g_ld/ld_matrices/mpra_top_qtl_1000g_eur_chr',
+    variant_list_file = '/groups/umcg-fg/tmp04/projects/mpra/generate_panel/mo_qtl_1000g_ld/variants_mo/mo_qtl_top_variants_chr1.txt.gz',
+    # variant_list_column = 'snp_id',
+    second_variant_list_file = '/groups/umcg-fg/tmp04/projects/mpra/generate_panel/mo_qtl_1000g_ld/variants_1000g/1000g_all_eur_variants_chr1.txt.gz', 
     # second_variant_list_column = 'chromposaltref',
     depth = 1000, 
-    ld_cutoff = 0
+    ld_cutoff = 0.29, 
+    chromosomes = '1', 
+    n_chunks = 3
   )
 }
 # set non-optional parameters
@@ -125,6 +130,16 @@ if (!is.null(opt[['variant_list_file']])) {
 depth <- as.numeric(opt[['depth']])
 # get ld cutoff
 ld_cutoff <- as.numeric(opt[['ld_cutoff']])
+# set chromosomes string
+chromosomes_string <- opt[['chromosomes']]
+# as vector
+chromosomes_to_do <- NULL
+# then into list
+if (!is.null(chromosomes_string)) {
+  chromosomes_to_do <- strsplit(chromosomes_string, ',')[[1]]
+}
+# number of chunks
+n_chunks <- opt[['n_chunks']]
 
 # load first set of variants
 first_variants <- NULL
@@ -169,6 +184,10 @@ if (!is.null(second_variants)) {
 overlapping_variants <- unique(c(first_variants, second_variants))
 # get the chromosomes present
 chromosomes_gt <- unique(genotypes$map$chromosome)
+# if we defined the chromosome, filter
+if (!is.null(chromosomes_to_do)) {
+  chromosomes_gt <- intersect(chromosomes_gt, chromosomes_to_do)
+}
 
 # check each chromosome
 for (chromosome in chromosomes_gt) {
@@ -199,6 +218,10 @@ for (chromosome in chromosomes_gt) {
   # depending on whether we have a second list, use a different approach
   if (is.null(second_variants)) {
     message(paste('calculating LD between', ncol(genotypes_chr$genotypes), 'variants in list 1'))
+    # let the user know chunking doesn't work
+    if (!is.null(n_chunks)) {
+      warning('chunking is not supported (or required) for full pairwise LD calculation')
+    }
     # calculate all the LD, because we only have the variants in the first list anyway
     ld_mat_chr <- snpStats::ld(genotypes_chr$genotypes, depth = depth, stats = "R.squared", symmetric = T)
     # make more sparse
@@ -218,6 +241,10 @@ for (chromosome in chromosomes_gt) {
     # make checksums
     mdfiver::create_sha256_for_file(output_file_chrom_full_rows_loc)
     mdfiver::create_sha256_for_file(output_file_chrom_full_cols_loc)
+    # set the LD low for where the value does not make sense, remove R2 much larger than 1, as these are the NA values
+    ld_mat_chr@x[ld_mat_chr@x > 1.001] <- -0.0001
+    # and explicit NAs as well
+    ld_mat_chr@x[is.na(ld_mat_chr@x)] <- -0.0001
     # set the output file loc
     output_file_chrom_full <- paste(output_file, chromosome, '.mtx', sep = '')
     Matrix::writeMM(ld_mat_chr, output_file_chrom_full)
@@ -240,7 +267,63 @@ for (chromosome in chromosomes_gt) {
     )
     message(paste('calculating LD between', ncol(genotypes_chr_l1$genotypes), 'variants in list 1 and', ncol(genotypes_chr_l2$genotypes), 'variants in list 2'))
     # calculate the LD between the two lists
-    ld_mat_chr <- snpStats::ld(genotypes_chr_l1$genotypes, genotypes_chr_l2$genotypes, stats = "R.squared")
+    if (is.null(n_chunks)) {
+      ld_mat_chr <- snpStats::ld(genotypes_chr_l1$genotypes, genotypes_chr_l2$genotypes, stats = "R.squared")
+      # now make the matrix sparse
+      ld_mat_chr <- Matrix(ld_mat_chr, sparse = TRUE)
+      # make more sparse
+      if (ld_cutoff > 0) {
+        message(paste('making values smaller than', ld_cutoff, 'into 0'))
+        # ld_mat_chr[ld_mat_chr < ld_cutoff] <- 0
+        ld_mat_chr@x[ld_mat_chr@x < ld_cutoff] <- 0
+        ld_mat_chr <- drop0(ld_mat_chr)
+      }
+    } else {
+      # in chunks if required
+      ld_per_chunk <- list()
+      # get variants in l2
+      l2_variants <- colnames(genotypes_chr$genotypes)
+      # get the size per chunk
+      size_per_chunk <- floor(length(l2_variants) / n_chunks)
+      # start index
+      l2_variant_i <- 1
+      # and check in chunks
+      while(l2_variant_i < length(l2_variants)) {
+        # get the end index
+        end_chunk_i <- l2_variant_i + size_per_chunk - 1
+        # if we go over the max size, just go to max size
+        if (end_chunk_i > length(l2_variants)) {
+          end_chunk_i <- length(l2_variants)
+        }
+        # let the user where we are
+        message(paste('doing chunk from', as.character(l2_variant_i), 'to', as.character(end_chunk_i), 'out of total', length(l2_variants), 'variants'))
+        # extract the variants
+        l2_variants_chunk <- l2_variants[l2_variant_i : end_chunk_i]
+        # subset set number two
+        genotypes_chr_l2_chunk <- list(
+          genotypes = genotypes_chr_l2$genotypes[, colnames(genotypes_chr_l2$genotypes) %in% l2_variants_chunk],
+          map = genotypes_chr_l2$map[rownames(genotypes_chr_l2$map) %in% l2_variants_chunk, ],
+          fam = genotypes_chr_l2$fam
+        )
+        # calculate LD
+        ld_mat_chr_chunk <- snpStats::ld(genotypes_chr_l1$genotypes, genotypes_chr_l2_chunk$genotypes, stats = "R.squared")
+        # then make sparse
+        ld_mat_chr_chunk <- Matrix(ld_mat_chr_chunk, sparse = TRUE)
+        # make more sparse
+        if (ld_cutoff > 0) {
+          message(paste('making values smaller than', ld_cutoff, 'into 0'))
+          ld_mat_chr_chunk@x[ld_mat_chr_chunk@x < ld_cutoff] <- 0
+          ld_mat_chr_chunk <- drop0(ld_mat_chr_chunk)
+        }
+        # put in the list
+        ld_per_chunk[[paste(l2_variant_i, end_chunk_i, sep = '-')]] <- ld_mat_chr_chunk
+        # increase index
+        l2_variant_i <- l2_variant_i + size_per_chunk
+      }
+      # merge all by column
+      ld_mat_chr <- do.call('cbind', ld_per_chunk)
+    }
+    
     # write variants as well
     ld_mat_chr_rows <- rownames(ld_mat_chr)
     ld_mat_chr_cols <- colnames(ld_mat_chr)
@@ -252,15 +335,13 @@ for (chromosome in chromosomes_gt) {
     # make checksums
     mdfiver::create_sha256_for_file(output_file_chrom_full_rows_loc)
     mdfiver::create_sha256_for_file(output_file_chrom_full_cols_loc)
-    # now make the matrix sparse
-    ld_mat_chr <- Matrix(ld_mat_chr, sparse = TRUE)
-    # make more sparse
-    if (ld_cutoff > 0) {
-      message(paste('making values smaller than', ld_cutoff, 'into 0'))
-      ld_mat_chr[ld_mat_chr < ld_cutoff] <- 0
-      ld_mat_chr@x[ld_mat_chr@x < ld_cutoff] <- 0
-      ld_mat_chr <- drop0(ld_mat_chr)
-    }
+
+    # set the LD low for where the value does not make sense, remove R2 much larger than 1, as these are the NA values
+    # ld_mat_chr[ld_mat_chr > 1.001] <- -0.0001
+    ld_mat_chr@x[ld_mat_chr@x > 1.001] <- -0.0001
+    # and explicit NAs as well
+    ld_mat_chr@x[is.na(ld_mat_chr@x)] <- -0.0001
+
     # set the output file loc
     output_file_chrom_full <- paste(output_file, chromosome, '.mtx', sep = '')
     Matrix::writeMM(ld_mat_chr, output_file_chrom_full)

@@ -1,0 +1,306 @@
+---
+title: "mo_plot_scenic_distributions"
+author: "Roy Oelen"
+date: "2026-04-27"
+output: html_document
+---
+
+
+```{r header, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+#!/usr/bin/env Rscript
+############################################################################################################################
+# Authors: Roy Oelen
+# Name: mo_plot_scenic_distributions.Rmd
+# Function: plot SCENIC+ output
+############################################################################################################################
+```
+
+```{r libraries, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+####################
+# libraries        #
+####################
+
+library(data.table)
+library(ggplot2)
+library(cowplot)
+
+
+```
+
+```{r functions, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+####################
+# Functions        #
+####################
+
+
+```
+
+```{r path_setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+####################
+# Main Code        #
+####################
+
+# save this file somewhere
+scenic_output_region_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eRegulon_both.tsv.gz'
+# read the table
+scenic_output <- fread(scenic_output_region_loc, header = T, sep = '\t')
+
+```
+
+```{r scenic_filtering, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# remove what is not likely
+scenic_output <- scenic_output[scenic_output[['Gene_signature_direction']] %in% c('-/+', '+/+'), ]
+# order by the extended
+scenic_output <- scenic_output[order(scenic_output[['is_extended']]), ]
+# get which are non-extended if it was both extended and non-extended
+scenic_eregs <- unique(scenic_output[, c('TF', 'Gene_signature_direction', 'Gene_signature_name', 'source')])
+scenic_eregs <-scenic_eregs[order(scenic_eregs[['source']]), ]
+scenic_eregs_to_keep <- scenic_eregs[!duplicated(paste(scenic_eregs[['TF']], scenic_eregs[['Gene_signature_direction']])), ]
+# then use that to filer
+scenic_output <- scenic_output[scenic_output[['Gene_signature_name']] %in% scenic_eregs_to_keep[['Gene_signature_name']], ]
+
+```
+
+```{r scenic_n_tf_per_gene, include=TRUE, fig.height=5, fig.width=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# get the number of TFs per gene
+n_tfs_per_gene <- data.frame(
+  table(
+    unique(scenic_output[, c('TF', 'Gene')])[['Gene']]
+  )
+)
+# get the median
+n_tfs_per_gene_median <- median(n_tfs_per_gene[['Freq']])
+# get the by
+n_tfs_per_gene_by <- 1
+# get the by max
+n_tfs_per_gene_by_max <- ceiling(max((n_tfs_per_gene[['Freq']]/n_tfs_per_gene_by))) * n_tfs_per_gene_by
+# build the histogram
+n_tfs_per_gene_h <- hist(n_tfs_per_gene[['Freq']], breaks = seq(0, n_tfs_per_gene_by_max, by = n_tfs_per_gene_by), plot = FALSE)
+# extract into df
+n_tfs_per_gene_h_df <- data.frame(
+  # mid value
+  mids = n_tfs_per_gene_h$mids,
+  # actual values
+  counts = n_tfs_per_gene_h$counts,
+  # remove last
+  breaks_starts = n_tfs_per_gene_h$breaks[-length(n_tfs_per_gene_h$breaks)], 
+  # remove first
+  breaks_end = n_tfs_per_gene_h$breaks[-1]
+)
+# get max of the breaks
+n_tfs_per_gene_break_max <- max(n_tfs_per_gene_h_df[['counts']])
+# make it into a plot
+n_tfs_per_gene_p <- ggplot(
+  data = n_tfs_per_gene_h_df, 
+  mapping = aes(
+    x = mids, 
+    y = counts
+  )
+) + geom_bar(stat = 'identity', color = "darkblue", fill = "lightblue") + 
+  # add the median
+  geom_segment(
+    data = NULL, 
+    mapping = aes(x = n_tfs_per_gene_median, xend = n_tfs_per_gene_median, y = 0, yend = n_tfs_per_gene_break_max), 
+    linetype = "dashed",
+    colour = "darkred",
+    linewidth = 1
+  ) +
+  # set plotting style
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) +
+  # and labels
+  xlab('Number of TFs per gene') +
+  ylab('Count')
+# show the plot
+n_tfs_per_gene_p
+
+```
+
+```{r scenic_n_tf_per_gene, include=TRUE, fig.height=5, fig.width=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# set a cap
+n_tfs_per_gene_cap <- 24
+
+# cap to a max
+n_tfs_per_gene_capped <- n_tfs_per_gene
+n_tfs_per_gene_capped[n_tfs_per_gene_capped[['Freq']] > n_tfs_per_gene_cap, ][['Freq']] <- n_tfs_per_gene_cap
+
+# get the median
+n_tfs_per_gene_capped_median <- median(n_tfs_per_gene_capped[['Freq']])
+# get the by
+n_tfs_per_gene_capped_by <- 1
+# get the by max
+n_tfs_per_gene_capped_by_max <- ceiling(max((n_tfs_per_gene_capped[['Freq']]/n_tfs_per_gene_capped_by))) * n_tfs_per_gene_capped_by
+# build the histogram
+n_tfs_per_gene_capped_h <- hist(n_tfs_per_gene_capped[['Freq']], breaks = seq(0, n_tfs_per_gene_capped_by_max, by = n_tfs_per_gene_capped_by), plot = FALSE)
+# extract into df
+n_tfs_per_gene_capped_h_df <- data.frame(
+  # mid value
+  mids = n_tfs_per_gene_capped_h$mids,
+  # actual values
+  counts = n_tfs_per_gene_capped_h$counts,
+  # remove last
+  breaks_starts = n_tfs_per_gene_capped_h$breaks[-length(n_tfs_per_gene_capped_h$breaks)], 
+  # remove first
+  breaks_end = n_tfs_per_gene_capped_h$breaks[-1]
+)
+# get max of the breaks
+n_tfs_per_gene_capped_break_max <- max(n_tfs_per_gene_capped_h_df[['counts']])
+# make it into a plot
+n_tfs_per_gene_capped_p <- ggplot(
+  data = n_tfs_per_gene_capped_h_df, 
+  mapping = aes(
+    x = mids, 
+    y = counts
+  )
+) + geom_bar(stat = 'identity', color = "darkblue", fill = "lightblue") + 
+  # add the median
+  geom_segment(
+    data = NULL, 
+    mapping = aes(x = n_tfs_per_gene_capped_median, xend = n_tfs_per_gene_capped_median, y = 0, yend = n_tfs_per_gene_capped_break_max), 
+    linetype = "dashed",
+    colour = "darkred",
+    linewidth = 1
+  ) +
+  # set a text as well
+  annotate("label", x = n_tfs_per_gene_capped_median * 2, y = n_tfs_per_gene_capped_break_max, label = paste('Median', n_tfs_per_gene_capped_median, sep = ': ')) +
+  # set plotting style
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) +
+  # and labels
+  xlab('Number of TFs per gene') +
+  ylab('Count')
+# show the plot
+n_tfs_per_gene_capped_p
+# save it
+ggsave(filename = paste0('~/multiome/plots/', 'mo_scenic_ntf_pgene_capped25.pdf'), plot = n_tfs_per_gene_capped_p, width = 5, height = 5)
+
+```
+
+```{r scenic_n_region_per_gene, include=TRUE, fig.height=5, fig.width=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# get the number of regions per gene
+n_regions_per_gene <- data.frame(
+  table(
+    unique(scenic_output[, c('Region', 'Gene')])[['Gene']]
+  )
+)
+# get the median
+n_regions_per_gene_median <- median(n_regions_per_gene[['Freq']])
+# get the by
+n_regions_per_gene_by <- 5
+# get the by max
+n_regions_per_gene_by_max <- ceiling(max((n_regions_per_gene[['Freq']]/n_regions_per_gene_by))) * n_regions_per_gene_by
+# build the histogram
+n_regions_per_gene_h <- hist(n_regions_per_gene[['Freq']], breaks = seq(0, n_regions_per_gene_by_max, by = n_regions_per_gene_by), plot = FALSE)
+# extract into df
+n_regions_per_gene_h_df <- data.frame(
+  # mid value
+  mids = n_regions_per_gene_h$mids,
+  # actual values
+  counts = n_regions_per_gene_h$counts,
+  # remove last
+  breaks_starts = n_regions_per_gene_h$breaks[-length(n_regions_per_gene_h$breaks)], 
+  # remove first
+  breaks_end = n_regions_per_gene_h$breaks[-1]
+)
+# get max of the breaks
+n_regions_per_gene_break_max <- max(n_regions_per_gene_h_df[['counts']])
+# make it into a plot
+n_regions_per_gene_p <- ggplot(
+  data = n_regions_per_gene_h_df, 
+  mapping = aes(
+    x = mids, 
+    y = counts
+  )
+) + geom_bar(stat = 'identity', color = "darkblue", fill = "lightblue") + 
+  # add the median
+  geom_segment(
+    data = NULL, 
+    mapping = aes(x = n_regions_per_gene_median, xend = n_regions_per_gene_median, y = 0, yend = n_regions_per_gene_break_max), 
+    linetype = "dashed",
+    colour = "darkred",
+    linewidth = 1
+  ) +
+  # set plotting style
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) +
+  # and labels
+  xlab('Number of regions per gene') +
+  ylab('Count')
+# show the plot
+n_regions_per_gene_p
+
+```
+
+
+```{r scenic_n_region_per_gene, include=TRUE, fig.height=5, fig.width=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# set a cap
+n_regions_per_gene_cap <- 100
+
+# cap to a max
+n_regions_per_gene_capped <- n_regions_per_gene
+n_regions_per_gene_capped[n_regions_per_gene_capped[['Freq']] > n_regions_per_gene_cap, ][['Freq']] <- n_regions_per_gene_cap
+
+# get the median
+n_regions_per_gene_capped_median <- median(n_regions_per_gene_capped[['Freq']])
+# get the by
+n_regions_per_gene_capped_by <- 1
+# get the by max
+n_regions_per_gene_capped_by_max <- ceiling(max((n_regions_per_gene_capped[['Freq']]/n_regions_per_gene_capped_by))) * n_regions_per_gene_capped_by
+# build the histogram
+n_regions_per_gene_capped_h <- hist(n_regions_per_gene_capped[['Freq']], breaks = seq(0, n_regions_per_gene_capped_by_max, by = n_regions_per_gene_capped_by), plot = FALSE)
+# extract into df
+n_regions_per_gene_capped_h_df <- data.frame(
+  # mid value
+  mids = n_regions_per_gene_capped_h$mids,
+  # actual values
+  counts = n_regions_per_gene_capped_h$counts,
+  # remove last
+  breaks_starts = n_regions_per_gene_capped_h$breaks[-length(n_regions_per_gene_capped_h$breaks)], 
+  # remove first
+  breaks_end = n_regions_per_gene_capped_h$breaks[-1]
+)
+# get max of the breaks
+n_regions_per_gene_capped_break_max <- max(n_regions_per_gene_capped_h_df[['counts']])
+# make it into a plot
+n_regions_per_gene_capped_p <- ggplot(
+  data = n_regions_per_gene_capped_h_df, 
+  mapping = aes(
+    x = mids, 
+    y = counts
+  )
+) + geom_bar(stat = 'identity', color = "darkblue", fill = "lightblue") + 
+  # add the median
+  geom_segment(
+    data = NULL, 
+    mapping = aes(x = n_regions_per_gene_capped_median, xend = n_regions_per_gene_capped_median, y = 0, yend = n_regions_per_gene_capped_break_max), 
+    linetype = "dashed",
+    colour = "darkred",
+    linewidth = 1
+  ) +
+  # set a text as well
+  annotate("label", x = n_regions_per_gene_capped_median * 2, y = n_regions_per_gene_capped_break_max, label = paste('Median', n_regions_per_gene_capped_median, sep = ': ')) +
+  # set plotting style
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) +
+  # and labels
+  xlab('Number of regions per gene') +
+  ylab('Count')
+# show the plot
+n_regions_per_gene_capped_p
+# save it
+ggsave(filename = paste0('~/multiome/plots/', 'mo_scenic_nregion_pgene_capped100.pdf'), plot = n_regions_per_gene_capped_p, width = 5, height = 5)
+
+```

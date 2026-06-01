@@ -63,6 +63,8 @@ process_matrix_symmetric <- function(mat, ld_cutoff) {
     'ld_variant' = colnames(mat)[mat@j[keep] + 1],
     'R2' = mat@x[keep]
   )
+  # remove incorrect values
+  ld_pairs <- ld_pairs[ld_pairs[['R2']] < 1.001, ]
   
   return(ld_pairs)
 }
@@ -158,6 +160,8 @@ process_matrix <- function(mat_file, matrix_dir, matrix_append, ld_cutoff, progr
           'ld_variant' = colnames(mat)[cols[mask]],
           'R2' = vals[mask]
         )
+        # remove incorrect values
+        out_row_ld <- out_row_ld[out_row_ld[['R2']] < 1.001, ]
         # put in the list
         ld_pairs[[paste(base, row_i)]] <- out_row_ld
       }
@@ -216,10 +220,10 @@ opt <- parse_args(opt_parser)
 # initialize the options in debug mode
 if (debug) {
   opt <- list(
-    matrix_prepend = '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/annotations/mo_qtl_variants_tested_ld/1000G_HC/eurpop/moresparse/mo_qtl_variants_tested_cpeaks_overlap_chr',
+    matrix_prepend = '/groups/umcg-fg/tmp04/projects/mpra/generate_panel/mo_qtl_1000g_ld/ld_matrices/mpra_top_qtl_1000g_eur_chr',
     matrix_append = '.mtx.gz',
-    output_loc = '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/annotations/mo_qtl_variants_tested_ld/1000G_HC/eurpop/moresparse/mo_qtl_variants_tested_cpeaks_overlap_ld_pairs.tsv.gz',
-    ld_cutoff = 0.8, 
+    output_loc = '/groups/umcg-fg/tmp04/projects/mpra/generate_panel/mo_qtl_1000g_ld/ld_matrices/mpra_top_qtl_1000g_eur_ld_pairs.tsv.gz',
+    ld_cutoff = 0.7, 
     nthreads = 4, 
     transpose_matrix = F
   )
@@ -333,6 +337,8 @@ if (nthreads == 1) {
             'ld_variant' = colnames(mat)[cols[mask]],
             'R2' = vals[mask]
           )
+          # remove incorrect values
+          out_row_ld[out_row_ld[['R2']] < 1.001, ]
           # put in the list
           ld_pairs[[paste(matrix_basenames[i], row_i)]] <- out_row_ld
         }

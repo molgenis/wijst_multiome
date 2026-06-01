@@ -1,0 +1,1109 @@
+---
+title: "mo_plot_qtl_method_overlap"
+author: "Roy Oelen"
+date: "2026-03-23"
+output: html_document
+---
+
+```{r header, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+#!/usr/bin/env Rscript
+############################################################################################################################
+# Authors: Roy Oelen
+# Name: mo_plot_qtl_method_overlap.Rmd
+# Function: compare the QTLs from different methods and how they overlap with SCENIC+
+############################################################################################################################
+
+```
+
+```{r libraries, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+####################
+# libraries        #
+####################
+
+library(data.table)
+library(ggplot2)
+library(roycols)
+library(cowplot)
+library(stringr)
+library(ggpubr)
+
+
+```
+
+```{r functions, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+####################
+# Functions        #
+####################
+
+
+
+#' get the eGenes per cell type from QTL output
+#' 
+#' @param qtl_output_loc base location of the QTL output per cell type
+#' @param output_file which output file to read for the results
+#' @param gene_column which column to use as the gene identifier
+#' @returns a list with the output tables per cell type
+#' 
+get_output_per_celltype_limix <- function(qtl_output_loc, output_file='qtl_results_all_qval_allchroms_fdr005_significant_cs.tsv.gz', gene_column='feature_id', significance_column='feature_q_value', significance_cutoff=0.05, verbose=T, add_nominal_cutoff=T, nominal_p_value_column='p_value') {
+  # get the folders in the directory, which should be the cell types
+  cell_types <- list.dirs(qtl_output_loc, full.names = F, recursive = F)
+  # we will store the results in a list for now
+  egenes_per_celltype <- list()
+  # check each cell type
+  for (cell_type in cell_types) {
+    # paste together the full path
+    full_cell_type_path <- paste(qtl_output_loc, '/', cell_type, '/', output_file, sep = '')
+    # log if requested
+    if (verbose) {
+      print(paste('reading', full_cell_type_path))
+    }
+    # read the file
+    cell_type_output <- read.table(full_cell_type_path, sep = '\t', header = T)
+    # filter the results on significance
+    if (!is.null(significance_column)) {
+      # print progress if requested
+      if (verbose) {
+        print(paste('variant+phenotype before filtering', nrow(cell_type_output)))
+      }
+      # filter
+      cell_type_output <- cell_type_output[
+        !is.na(cell_type_output[[significance_column]]) &
+          cell_type_output[[significance_column]] < significance_cutoff, 
+      ]
+      if (verbose) {
+        print(paste('variant+phenotype after filtering', nrow(cell_type_output)))
+      }
+      # add nominal cutoff by first getting the top effects
+      cell_type_output_top <- cell_type_output[order(cell_type_output[[nominal_p_value_column]]), ]
+      cell_type_output_top <- cell_type_output_top[!duplicated(cell_type_output_top[[gene_column]]), ]
+      # get the highest still significant p value
+      max_sig_p <- max(cell_type_output_top[[nominal_p_value_column]])
+      # and add that to the output
+      cell_type_output[['nominal_p_value_cutoff']] <- max_sig_p
+    }
+    # add to the list
+    egenes_per_celltype[[cell_type]] <- cell_type_output
+  }
+  # turn into a dataframe
+  return(egenes_per_celltype)
+}
+
+
+get_qtls_per_celltype_limix <- function(qtl_output_loc, output_file='qtl_results_all_qval_allchroms_fdr005_significant.txt.gz', gene_column='feature_id', significance_column='feature_q_value', significance_cutoff=0.05, nominal_cutoff_column='pval_nominal_threshold_global', nominal_significance_column='p_value', verbose=T) {
+  # get the folders in the directory, which should be the cell types
+  cell_types <- list.dirs(qtl_output_loc, full.names = F, recursive = F)
+  # we will store the results in a list for now
+  qtls_per_celltype <- list()
+  # check each cell type
+  for (cell_type in cell_types) {
+    # paste together the full path
+    full_cell_type_path <- paste(qtl_output_loc, '/', cell_type, '/', output_file, sep = '')
+    # log if requested
+    if (verbose) {
+      print(paste('reading', full_cell_type_path))
+    }
+    # read the file
+    cell_type_output <- read.table(full_cell_type_path, sep = '\t', header = T)
+    # filter the results on significance
+    if (!is.null(significance_column)) {
+      # print progress if requested
+      if (verbose) {
+        print(paste('variant+phenotype before filtering by significance column', nrow(cell_type_output)))
+      }
+      # filter
+      cell_type_output <- cell_type_output[
+        !is.na(cell_type_output[[significance_column]]) &
+          cell_type_output[[significance_column]] < significance_cutoff, 
+      ]
+      if (verbose) {
+        print(paste('variant+phenotype after filtering by significance column', nrow(cell_type_output)))
+      }
+    }
+    if (!is.null(nominal_cutoff_column) & !is.null(nominal_significance_column)) {
+      # print progress if requested
+      if (verbose) {
+        print(paste('variant+phenotype before filtering by nominal cutoff', nrow(cell_type_output)))
+      }
+      # filter
+      cell_type_output <- cell_type_output[
+        !is.na(cell_type_output[[nominal_cutoff_column]]) & 
+          !is.na(cell_type_output[[nominal_significance_column]]) &
+          cell_type_output[[nominal_significance_column]] <= cell_type_output[[nominal_cutoff_column]], 
+      ]
+      if (verbose) {
+        print(paste('variant+phenotype after filtering by nominal cutoff', nrow(cell_type_output)))
+      }
+    }
+    # add the celltype as a column
+    cell_type_output[['cell_type']] <- cell_type
+    # add to the list
+    qtls_per_celltype[[cell_type]] <- cell_type_output
+  }
+  # turn into a dataframe
+  return(qtls_per_celltype)
+}
+
+
+
+add_associated_region <- function(eqtl_outputs, scenic_output, eqtl_gene_column='feature_id', scenic_gene_column='Gene', scenic_region_column='Region') {
+  # keep a list per cell type
+  cs_output_per_ct_region <- list()
+  # check each cell type
+  for (cell_type in names(eqtl_outputs)) {
+    # extract for cell type
+    cs_output_ct <- eqtl_outputs[[cell_type]]
+    # subset scenic
+    scenic_relevant <- scenic_output[, c(..scenic_gene_column, ..scenic_region_column)]
+    # with standardised columns
+    colnames(scenic_relevant) <- c('feature', 'region')
+    # add associated region to gene
+    cs_output_ct <- merge(
+      cs_output_ct, 
+      scenic_relevant, 
+      by.x = eqtl_gene_column, 
+      by.y = 'feature'
+    )
+    # put back in the list
+    cs_output_per_ct_region[[cell_type]] <- cs_output_ct
+  }
+  return(cs_output_per_ct_region)
+}
+
+
+get_top_effect_per_cs <- function(cs_output_per_ct, feature_column='feature_id', variant_column='snp_id', sort_column='p_value', cs_column='CS', decreasing_sort=F) {
+  # store the variant-feature confinement per ct
+  var_feature_per_ct <- list()
+  # check each cell type
+  for (cell_type in names(cs_output_per_ct)) {
+    # get output for this cell type
+    cs_output_ct <- cs_output_per_ct[[cell_type]]
+    # order
+    cs_output_ct <- cs_output_ct[order(cs_output_ct[[sort_column]], decreasing = decreasing_sort), ]
+    # check if there are entries where the CS is not known
+    cs_output_ct_cs_na <- is.na(cs_output_ct[[cs_column]])
+    # if there are more than zero
+    if (length(cs_output_ct_cs_na) > 0) {
+      # set the CS as 'U'
+      cs_output_ct[cs_output_ct_cs_na, ][[cs_column]] <- 'U'
+      # get the top variant per feature and cs
+      cs_output_ct <- cs_output_ct[!duplicated(paste(cs_output_ct[[feature_column]], cs_output_ct[[cs_column]])), ]
+      # get the entries where the CS is 'U'
+      cs_output_ct_u <- cs_output_ct[cs_output_ct[[cs_column]] == 'U', ]
+      # count the credible sets with unknown credible sets
+      cs_output_ct_u_ct_counts <- data.frame(table(cs_output_ct_u[[feature_column]]))
+      # get the ones that have a credible set in addition to the U one
+      cs_output_ct_u_ct_also_not_u <- cs_output_ct_u_ct_counts[cs_output_ct_u_ct_counts[['Freq']] > 1, ]
+      # check if there are any
+      if (nrow(cs_output_ct_u_ct_also_not_u) > 1) {
+        # get the features
+        cs_output_ct_u_ct_also_not_u_features <- cs_output_ct_u_ct_also_not_u[[feature_id]]
+        # then keep only what is not U and at the same time also not-U
+        cs_output_ct <- cs_output_ct[
+          !(cs_output_ct[[cs_column]] == 'U' & cs_output_ct[[feature_column]] %in% cs_output_ct_u_ct_also_not_u_features), 
+        ]
+      }
+    }
+    # get the variant and feature
+    top_var_feature_per_cs <- data.frame('cell_type' = rep(cell_type, times = nrow(cs_output_ct)), 'variant' = cs_output_ct[[variant_column]], 'feature' = cs_output_ct[[feature_column]])
+    # put in the list
+    var_feature_per_ct[[cell_type]] <- top_var_feature_per_cs
+  }
+  # merge all
+  var_feature_all <- do.call('rbind', var_feature_per_ct)
+  return(var_feature_all)
+}
+
+
+get_closest_flanks <- function(position_table, left_flank_column1, right_flank_column1, left_flank_column2, right_flank_column2) {
+  # get the distance between left flanks
+  dist_left_flank1_to_left_flank2 <- position_table[[left_flank_column1]] - position_table[[left_flank_column2]]
+  # distance between the right flanks
+  dist_right_flank1_to_right_flank2 <- position_table[[right_flank_column1]] - position_table[[right_flank_column2]]
+  # distance between left flank 1 and right flank 2
+  dist_left_flank1_to_right_flank2 <- position_table[[left_flank_column1]] - position_table[[right_flank_column2]]
+  # distance between right flank 1 and left flank 2
+  dist_right_flank1_to_left_flank2 <- position_table[[right_flank_column1]] - position_table[[left_flank_column2]]
+  # put in a table for convenience sake
+  distances_tbl <- data.table(
+    'lf1_to_lf2' = dist_left_flank1_to_left_flank2, 
+    'rf1_to_rf2' = dist_right_flank1_to_right_flank2, 
+    'lf1_to_rf2' = dist_left_flank1_to_right_flank2, 
+    'rf1_to_lf2' = dist_right_flank1_to_left_flank2
+  )
+  # add the minimum absolute distance
+  distances_tbl[['min_dist']] <- apply(distances_tbl, 1, function(x) {
+    return(min(abs(x)))
+  })
+  # but set this to zero if any of the flanks end in the bodies
+  #              -----
+  #                 ++++
+  distances_tbl[(distances_tbl[['lf1_to_lf2']] < 0 & distances_tbl[['lf1_to_rf2']] > 0) |
+                  #                   ----
+                #                 ++++
+                (distances_tbl[['rf1_to_lf2']] > 0 & distances_tbl[['lf1_to_rf2']] < 0) |
+                  #                   ----
+                #                 +++++++++
+                (distances_tbl[['lf1_to_lf2']] > 0 & distances_tbl[['rf1_to_rf2']] < 0) |
+                  #                 ---------
+                #                   ++++
+                (distances_tbl[['lf1_to_lf2']] < 0 & distances_tbl[['rf1_to_rf2']] > 0)
+                , 'min_dist'] <- 0
+  return(distances_tbl)
+}
+
+
+plot_concondance <- function(dataset_to_compare, d1_effect_column='d1_zscore', d2_effect_column='d2_zscore') {
+  # get the minimal significant z for k1
+  min_sig_z_d1 <- min(abs(dataset_to_compare[[d1_effect_column]]))
+  min_sig_z_d2 <- min(abs(dataset_to_compare[[d2_effect_column]]))
+  # and the max z
+  max_sig_z_d1 <- max(abs(dataset_to_compare[[d1_effect_column]]))
+  max_sig_z_d2 <- max(abs(dataset_to_compare[[d2_effect_column]]))
+  
+  # calculate concordance
+  n_significant_both <- nrow(dataset_to_compare)
+  n_significant_directed_both <- sum(sign(dataset_to_compare[[d1_effect_column]]) == sign(dataset_to_compare[[d2_effect_column]]))
+  concordance <- round(n_significant_directed_both / n_significant_both, digits = 3)
+  
+  # plot the concordance of the two
+  p <- ggplot(data = dataset_to_compare, mapping = aes(x = !! rlang::sym(d1_effect_column), y = !! rlang::sym(d2_effect_column))) + 
+    geom_point(size = 0.2) + 
+    xlim(c(max_sig_z_d1 * -1.1, max_sig_z_d1 * 1.1)) +
+    ylim(c(max_sig_z_d2 * -1.1, max_sig_z_d2 * 1.1)) + 
+    # left to right block of non-significant effects
+    geom_rect(aes(xmin = -1 * max_sig_z_d1, xmax = max_sig_z_d1, ymin = -1 * min_sig_z_d2, ymax = min_sig_z_d2), 
+              fill = "white", alpha = 0.005) +
+    # bottom to top block of non-significant effects
+    geom_rect(aes(xmin = -1 * min_sig_z_d1, xmax = min_sig_z_d1, ymin = -1 * max_sig_z_d2, ymax = max_sig_z_d2), 
+              fill = "white", alpha = 0.005) +
+    # bottom left block
+    geom_rect(aes(xmin = -1 * max_sig_z_d1, xmax = -1 *min_sig_z_d1, ymin = -1 * max_sig_z_d2, ymax = -1 * min_sig_z_d2), 
+              fill = "#0072B2", alpha = 0.01) +
+    # bottom right block
+    geom_rect(aes(xmin = min_sig_z_d1, xmax = max_sig_z_d1, ymin = -1 * max_sig_z_d2, ymax = -1 * min_sig_z_d2), 
+              fill = "#D55E00", alpha = 0.01) +
+    # top left block
+    geom_rect(aes(xmin = -1 * max_sig_z_d1, xmax = -1 *min_sig_z_d1, ymin = min_sig_z_d2, ymax = max_sig_z_d2), 
+              fill = "#D55E00", alpha = 0.01) + 
+    # top right block
+    geom_rect(aes(xmin = min_sig_z_d1, xmax = max_sig_z_d1, ymin = max_sig_z_d2, ymax = min_sig_z_d2), 
+              fill = "#0072B2", alpha = 0.01) + 
+    # labels for x and y axis
+    xlab('effect in dataset1') +
+    ylab('effect in dataset2') +
+    # vertical negative z ccombinedoff line
+    geom_vline(xintercept=c(-1 *min_sig_z_d1), color="black", size=0.5, linetype = "dashed") +
+    # horizonal negative z ccombinedoff line
+    geom_hline(yintercept=c(-1 *min_sig_z_d2), color="black", size=0.5, linetype="dashed") +
+    # vertical positive z ccombinedoff line
+    geom_vline(xintercept=c(min_sig_z_d1), color="black", size=0.5, linetype = "dashed") +
+    # horizonal positive z ccombinedoff line
+    geom_hline(yintercept=c(min_sig_z_d2), color="black", size=0.5, linetype="dashed") +
+    # make backgrounds white
+    theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+    # add the concordance
+    annotate("label", x = max_sig_z_d1 * 0.75 , y = max_sig_z_d2 * -0.75, label = paste('concordance', concordance, sep = ':\n')) +
+    # add the names of the concordant and non-concordant blocks
+    annotate("text", x = max_sig_z_d1 * -0.70 , y = max_sig_z_d2 * 0.75, label = 'discordant', colour = '#D55E00', fontface = 'bold') +
+    # add the names of the concordant and non-concordant blocks
+    annotate("text", x = max_sig_z_d1 * 0.70 , y = max_sig_z_d2 * 0.75, label = 'concordant', colour = '#0072B2', fontface = 'bold') +
+    # add the title
+    ggtitle('Concordance of effects between datasets')
+  return(p)
+}
+
+
+get_coloc_output <- function(coloc_output_loc, append='_eqtl_caqtl_coloc.tsv.gz') {
+  # list all of the files in the directory
+  coloc_files <- list.files(coloc_output_loc, recursive = F, full.names = F)
+  # filter to files that fit the pattern
+  coloc_files <- coloc_files[grepl(paste0('.*', append, '$'), coloc_files)]
+  # now store each resulting file into a list
+  coloc_per_ct <- list()
+  # check each file
+  for (coloc_file in coloc_files) {
+    # read the file
+    coloc_file_loc <- paste(coloc_output_loc, coloc_file, sep = '/')
+    coloc_file_output <- fread(coloc_file_loc, header = T, sep = '\t')
+    # grab the cell type from the filename
+    ct <- gsub(append, '', coloc_file)
+    # put that into the table
+    coloc_file_output <- cbind(data.table('cell_type' = rep(ct, times = nrow(coloc_file_output))), coloc_file_output)
+    # put in the list
+    coloc_per_ct[[ct]] <- coloc_file_output
+  }
+  # merge all
+  coloc_all <- do.call('rbind', coloc_per_ct)
+  return(coloc_all)
+}
+
+
+```
+
+```{r settings, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+####################
+# Settings         #
+####################
+
+
+```
+
+```{r path_setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+####################
+# Main Code        #
+####################
+
+# location of the tf-i-ieqtls
+tf_ieqtl_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/sc/all/lane_donor_countrna_inclcaqtls_varinregion/merged/results_fdr.tsv.gz'
+tf_ieqtl_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/sc/all/lane_donor_countrna_inclcaqtls_varinregion/merged/results_fdr_with_replication_significant.tsv.gz'
+tf_ieqtl_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/sc/all/lane_donor_countrna_inclcaqtls_varinregion/merged/results_fdr_with_replication.tsv.gz'
+# location of the region-i-ieqtls
+region_ieqtl_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/region_interaction/sc/all/lane_donor_countrna_inclcaqtls_varinregion/merged/results_fdr.tsv.gz'
+# location of the QTL outputs
+eqtl_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/finemapping/eqtl/sc-eqtlgen/combined_with_qtl/combined/L1/'
+# location of the QTL outputs
+caqtl_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/finemapping/caqtl/sc-eqtlgen/combined_with_qtl/combined/L1/'
+
+
+```
+
+```{r read_tfqtl, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# read the inputs
+tf_ieqtls <- fread(tf_ieqtl_loc, header = T, sep = '\t')
+# # get what is significant
+# tf_ieqtls_sig <- tf_ieqtls[
+#   !is.na(tf_ieqtls[['tf:genotype_bh']]) &
+#   tf_ieqtls[['tf:genotype_bh']] < 0.05 & 
+#     tf_ieqtls[['anova_bh']] < 0.05 & 
+#     # tf_ieqtls[['region_bh']] < 0.05 & 
+#     # tf_ieqtls[['genotype_bh']] < 0.05,
+#     tf_ieqtls[['tf_bh']] < 0.05, 
+# ]
+tf_ieqtls_sig <- tf_ieqtls[tf_ieqtls[['significant']], ]
+
+```
+
+```{r read_regionqtl, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# read the inputs
+region_ieqtls <- fread(region_ieqtl_loc, header = T, sep = '\t')
+# get what is significant
+region_ieqtls_sig <- region_ieqtls[
+  !is.na(region_ieqtls[['region:genotype_bh']]) &
+  region_ieqtls[['region:genotype_bh']] < 0.05 & 
+    region_ieqtls[['anova_bh']] < 0.05 & 
+    # region_ieqtls[['region_bh']] < 0.05 &
+    # region_ieqtls[['genotype_bh']] < 0.05,
+    region_ieqtls[['region_bh']] < 0.05,
+]
+
+```
+
+```{r read_regionqtl, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# location of the SCENIC outout
+scenic_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eRegulon_both_filtered.tsv.gz'
+# read that
+scenic_output <- fread(scenic_output_loc, header = T, sep = '\t')
+# order by the extended
+scenic_output <- scenic_output[order(scenic_output[['is_extended']]), ]
+# get which are non-extended if it was both extended and non-extended
+scenic_eregs <- unique(scenic_output[, c('TF', 'Gene_signature_direction', 'Gene_signature_name', 'source')])
+scenic_eregs <-scenic_eregs[order(scenic_eregs[['source']]), ]
+scenic_eregs_to_keep <- scenic_eregs[!duplicated(paste(scenic_eregs[['TF']], scenic_eregs[['Gene_signature_direction']])), ]
+# then use that to filer
+scenic_output <- scenic_output[scenic_output[['Gene_signature_name']] %in% scenic_eregs_to_keep[['Gene_signature_name']], ]
+# rename the regions
+scenic_output[['region_cpeaks']] <- gsub(':', '-', scenic_output[['Region']])
+
+```
+
+```{r variant_anno, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# location of the variant annotations
+variant_annotation_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/eqtl/annotations/mo_qtl_variants_tested_cpeaks_overlap.tsv.gz'
+variant_annotation <- fread(variant_annotation_loc, header = T, sep = '\t')
+
+```
+
+```{r read_eqtl, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# read the eQTL output
+eqtl_outputs <- get_output_per_celltype_limix(eqtl_output_loc)
+# add cell types
+for (cell_type in names(eqtl_outputs)) {
+  eqtl_outputs[[cell_type]][['cell_type']] <- cell_type
+}
+# get the top effects per credible set
+eqtl_top_var_feature_per_cs <- get_top_effect_per_cs(eqtl_outputs)
+# merge
+eqtl_outputs_all <- rbindlist(eqtl_outputs, fill = T)
+# add the variant region here
+eqtl_outputs_all[['variant_region']] <- variant_annotation[match(eqtl_outputs_all[['snp_id']], variant_annotation[['snp_id']]), ][['overlapping_feature']]
+# filter
+eqtl_outputs_all <- eqtl_outputs_all[eqtl_outputs_all[['p_value']] <= eqtl_outputs_all[['pval_nominal_threshold_global']], ]
+
+
+```
+
+```{r read_caqtl, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# read the eQTL output
+caqtl_outputs <- get_output_per_celltype_limix(caqtl_output_loc)
+# add cell types
+for (cell_type in names(caqtl_outputs)) {
+  caqtl_outputs[[cell_type]][['cell_type']] <- cell_type
+}
+# get the top effects per credible set
+caqtl_top_var_feature_per_cs <- get_top_effect_per_cs(caqtl_outputs)
+# merge
+caqtl_outputs_all <- rbindlist(caqtl_outputs, fill = T)
+# add the variant region here
+caqtl_outputs_all[['variant_region']] <- variant_annotation[match(caqtl_outputs_all[['snp_id']], variant_annotation[['snp_id']]), ][['overlapping_feature']]
+# fix significance column
+caqtl_outputs_all[is.na(caqtl_outputs_all[['pval_nominal_threshold_global']]), ][['pval_nominal_threshold_global']] <- caqtl_outputs_all[is.na(caqtl_outputs_all[['pval_nominal_threshold_global']]), ][['nominal_p_value_cutoff']]
+# filter
+caqtl_outputs_all <- caqtl_outputs_all[caqtl_outputs_all[['p_value']] <= caqtl_outputs_all[['pval_nominal_threshold_global']], ]
+
+
+```
+
+```{r qtl_overlap_loc, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# location of the finemapped results
+finemapped_colocs_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/colocalization/eqtl_caqtl/ut_and_24hca_significant/'
+# read the tabel
+finemapped_colocs <- get_coloc_output(finemapped_colocs_loc)
+# add the way that we merged these
+finemapped_colocs[['method']] <- 'coloc'
+# filter the colocs
+finemapped_colocs <- finemapped_colocs[!is.na(finemapped_colocs[['PP.H4.abf']]) & finemapped_colocs[['PP.H4.abf']] >= 0.75, ]
+# backup original tables
+eqtl_outputs_cs_all_formerge <- eqtl_outputs_all
+caqtl_outputs_cs_all_formerge <- caqtl_outputs_all
+# get variants for each
+eqtl_outputs_cs_all_variants <- eqtl_outputs_cs_all_formerge[['snp_id']]
+caqtl_outputs_cs_all_variants <- caqtl_outputs_cs_all_formerge[['snp_id']]
+# and cell types
+eqtl_outputs_cs_all_cts <- eqtl_outputs_cs_all_formerge[['cell_type']]
+caqtl_outputs_cs_all_cts <- caqtl_outputs_cs_all_formerge[['cell_type']]
+# remove the columns
+eqtl_outputs_cs_all_formerge[['snp_id']] <- NULL
+caqtl_outputs_cs_all_formerge[['snp_id']] <- NULL
+eqtl_outputs_cs_all_formerge[['cell_type']] <- NULL
+caqtl_outputs_cs_all_formerge[['cell_type']] <- NULL
+# rename so that the e and ca are added to the names
+colnames(eqtl_outputs_cs_all_formerge) <- paste('e', colnames(eqtl_outputs_cs_all_formerge), sep = '_')
+colnames(caqtl_outputs_cs_all_formerge) <- paste('ca', colnames(caqtl_outputs_cs_all_formerge), sep = '_')
+# add variants back
+eqtl_outputs_cs_all_formerge <- cbind(data.table('cell_type' = eqtl_outputs_cs_all_cts, 'variant_id' = eqtl_outputs_cs_all_variants), eqtl_outputs_cs_all_formerge)
+caqtl_outputs_cs_all_formerge <- cbind(data.table('cell_type' = caqtl_outputs_cs_all_cts, 'variant_id' = caqtl_outputs_cs_all_variants), caqtl_outputs_cs_all_formerge)
+# merge the outputs based on overlapping variant (for that cell type)
+qtl_outputs_cs_overlapping <- merge(x = caqtl_outputs_cs_all_formerge, y = eqtl_outputs_cs_all_formerge, by = c('cell_type', 'variant_id'))
+
+```
+
+```{r scenic_region_overlap, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# add scenic region info
+eqtl_outputs_scenic_regions <- add_associated_region(eqtl_outputs, scenic_output, scenic_region_column = 'region_cpeaks')
+# read the cpeaks annotation
+cpeaks_anno_loc <- '/groups/umcg-franke-scrna/tmp02/external_datasets/cPeaks/cPeaks_wscreenv4.tsv.gz'
+cpeaks_anno <- fread(cpeaks_anno_loc, header = T, sep = '\t')
+# add the Signac style name
+cpeaks_anno[['signac_hg38']] <- paste(cpeaks_anno[['chr_hg38']], cpeaks_anno[['start_hg38']], cpeaks_anno[['end_hg38']], sep = '-')
+# as well as the SCENIC+ style name
+cpeaks_anno[['scenic_hg38']] <- paste0(cpeaks_anno[['chr_hg38']], ':', cpeaks_anno[['start_hg38']], '-', cpeaks_anno[['end_hg38']])
+# set names
+colnames(cpeaks_anno) <- paste('atac', colnames(cpeaks_anno), sep = '_')
+# store filtered regions
+eqtl_outputs_scenic_regions_filtered <- list()
+# the region location for each cpeaks region
+for (ct in names(eqtl_outputs_scenic_regions)) {
+  # get the table
+  eqtl_outputs_scenic_regions_ct <- eqtl_outputs_scenic_regions[[ct]]
+  # add to the overlap table
+  eqtl_outputs_scenic_regions_ct <- cbind(eqtl_outputs_scenic_regions_ct, cpeaks_anno[match(eqtl_outputs_scenic_regions_ct[['region']], cpeaks_anno[['atac_signac_hg38']]), c('atac_chr_hg38', 'atac_start_hg38', 'atac_end_hg38', 'atac_housekeeping', 'atac_screen_all')])
+  # get the distances
+  eqtl_outputs_scenic_regions_ct_gene_distances <- get_closest_flanks(eqtl_outputs_scenic_regions_ct, 'atac_start_hg38', 'atac_end_hg38', 'feature_start', 'feature_end')
+  # add that to the original table
+  eqtl_outputs_scenic_regions_ct[['region_gene_distance']] <- eqtl_outputs_scenic_regions_ct_gene_distances[['min_dist']]
+  # get the distances
+  eqtl_outputs_scenic_regions_ct_esnp_distances <- get_closest_flanks(eqtl_outputs_scenic_regions_ct, 'atac_start_hg38', 'atac_end_hg38', 'snp_position', 'snp_position')
+  # add that to the original table
+  eqtl_outputs_scenic_regions_ct[['region_esnp_distance']] <- eqtl_outputs_scenic_regions_ct_esnp_distances[['min_dist']]
+  # now keep only where the variant is in the chromatin region, and the chromatin region does not overlap the gene
+  eqtl_outputs_scenic_regions_ct <- eqtl_outputs_scenic_regions_ct[
+    !is.na(eqtl_outputs_scenic_regions_ct[['region_gene_distance']]) &
+      !is.na(eqtl_outputs_scenic_regions_ct[['region_esnp_distance']]) &
+      eqtl_outputs_scenic_regions_ct[['region_gene_distance']] > 0 &
+      eqtl_outputs_scenic_regions_ct[['region_esnp_distance']] == 0,  
+  ]
+  # put that back into the list
+  eqtl_outputs_scenic_regions_filtered[[ct]] <- eqtl_outputs_scenic_regions_ct
+}
+
+# merge all
+eqtl_outputs_scenic_regions_all <- rbindlist(eqtl_outputs_scenic_regions, fill = T)
+# then filter
+eqtl_outputs_scenic_regions_all <- eqtl_outputs_scenic_regions_all[eqtl_outputs_scenic_regions_all[['p_value']] <= eqtl_outputs_scenic_regions_all[['pval_nominal_threshold_global']], ]
+
+```
+
+```{r scenic_qtl_overlap, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# overlap if there is a dual QTL
+scenic_output[['dual_qtl']] <- paste(scenic_output[['region_cpeaks']], scenic_output[['Gene']]) %in% paste(qtl_outputs_cs_overlapping[['ca_feature_id']], qtl_outputs_cs_overlapping[['e_feature_id']])
+# if there is an eQTL in the region of the gene
+scenic_output[['eqtl_in_region']] <- paste(scenic_output[['region_cpeaks']], scenic_output[['Gene']]) %in% paste(eqtl_outputs_scenic_regions_all[['region']], eqtl_outputs_scenic_regions_all[['feature_id']])
+# if there was a caQTL on the region
+scenic_output[['has_caqtl']] <- scenic_output[['region_cpeaks']] %in% caqtl_outputs_all[['feature_id']]
+
+# now put this in a tier system
+scenic_output[['tier']] <- '4. no QTL'
+scenic_output[scenic_output[['has_caqtl']], ][['tier']] <- '3. has caQTL'
+scenic_output[scenic_output[['eqtl_in_region']], ][['tier']] <- '2. has eQTL in region'
+scenic_output[scenic_output[['dual_qtl']], ][['tier']] <- '1. has dual acting QTL'
+
+```
+
+```{r plot_qtl_overlap, include=TRUE, fig.width=5, fig.height=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# get number in each category
+scenic_qtl_categories_n <- data.table(table(scenic_output[['tier']]))
+# set column names
+colnames(scenic_qtl_categories_n) <- c('category', 'n')
+# get percentage
+scenic_qtl_categories_n[['pct']] <- scenic_qtl_categories_n[['n']] / sum(scenic_qtl_categories_n[['n']])
+# plot
+p_triplet_cat1to3 <- ggplot(
+  data = scenic_qtl_categories_n[scenic_qtl_categories_n[['category']] != '4. no QTL', ], 
+  mapping = aes(x = category, y = pct, fill = category) 
+) +
+  geom_bar(stat = 'identity') +
+  scale_fill_manual(values = roycols::get_color_list(unique(scenic_qtl_categories_n[['category']]), color_indices = c(47,63,56,16))) +
+  xlab('Tier') + 
+  ylab('Proportion of triplets') +
+  theme(legend.position = 'none') + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+p_triplet_cat1to4 <- ggplot(
+  data = scenic_qtl_categories_n,  
+  mapping = aes(x = category, y = pct, fill = category) 
+) +
+  geom_bar(stat = 'identity') +
+  scale_fill_manual(values = roycols::get_color_list(unique(scenic_qtl_categories_n[['category']]), color_indices = c(47,63,56,16))) +
+  xlab('Tier') + 
+  ylab('Proportion of triplets') +
+  theme(legend.position = 'none') + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+
+# show plots
+p_triplet_cat1to3
+p_triplet_cat1to4
+# and save them
+# save that
+ggsave(filename = '~/multiome/plots/mo_scenic_triplet_qtl_overlap_simple_cat1to3.pdf', plot = p_triplet_cat1to3, width = 5, height = 5)
+ggsave(filename = '~/multiome/plots/mo_scenic_triplet_qtl_overlap_simple_cat1to4.pdf', plot = p_triplet_cat1to4, width = 5, height = 5)
+
+
+```
+
+```{r plot_qtl_overlap, include=TRUE, fig.width=5, fig.height=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# get number in each category
+scenic_r2g_qtl_categories_n <- data.table(table(scenic_output[!duplicated(scenic_output[['Region']], scenic_output[['Gene']]), ][['tier']]))
+# set column names
+colnames(scenic_r2g_qtl_categories_n) <- c('category', 'n')
+# get percentage
+scenic_r2g_qtl_categories_n[['pct']] <- scenic_r2g_qtl_categories_n[['n']] / sum(scenic_r2g_qtl_categories_n[['n']])
+# plot
+p_r2g_cat1to3 <- ggplot(
+  data = scenic_r2g_qtl_categories_n[scenic_r2g_qtl_categories_n[['category']] != '4. no QTL', ], 
+  mapping = aes(x = category, y = pct, fill = category) 
+) +
+  geom_bar(stat = 'identity') +
+  scale_fill_manual(values = roycols::get_color_list(unique(scenic_r2g_qtl_categories_n[['category']]))) +
+  xlab('Tier') + 
+  ylab('Proportion of region-gene pairs') +
+  theme(legend.position = 'none') + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+p_r2g_cat1to4 <- ggplot(
+  data = scenic_r2g_qtl_categories_n,  
+  mapping = aes(x = category, y = pct, fill = category) 
+) +
+  geom_bar(stat = 'identity') +
+  scale_fill_manual(values = roycols::get_color_list(unique(scenic_r2g_qtl_categories_n[['category']]))) +
+  xlab('Tier') + 
+  ylab('Proportion of region-gene pairs') +
+  theme(legend.position = 'none') + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+
+# show plots
+p_r2g_cat1to3
+p_r2g_cat1to4
+
+```
+
+```{r plot_region_overlap, include=TRUE, fig.width=5, fig.height=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# set an order for these region-gene
+scenic_output[['tier_ordered']] <- factor(scenic_output[['tier']], levels = c('1. has dual acting QTL', '2. has eQTL in region', '3. has caQTL', '4. no QTL'))
+# order the scenic output
+scenic_output_regions_only <- scenic_output[order(scenic_output[['tier_ordered']]), ]
+# get number in each category
+scenic_region_qtl_categories_n <- data.table(table(scenic_output_regions_only[!duplicated(scenic_output_regions_only[['Region']]), ][['tier']]))
+# set column names
+colnames(scenic_region_qtl_categories_n) <- c('category', 'n')
+# get percentage
+scenic_region_qtl_categories_n[['pct']] <- scenic_region_qtl_categories_n[['n']] / sum(scenic_region_qtl_categories_n[['n']])
+# plot
+p_region_cat1to3 <- ggplot(
+  data = scenic_region_qtl_categories_n[scenic_region_qtl_categories_n[['category']] != '4. no QTL', ], 
+  mapping = aes(x = category, y = pct, fill = category) 
+) +
+  geom_bar(stat = 'identity') +
+  scale_fill_manual(values = roycols::get_color_list(unique(scenic_region_qtl_categories_n[['category']]))) +
+  xlab('Tier') + 
+  ylab('Proportion of regions') +
+  theme(legend.position = 'none') + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+p_region_cat1to4 <- ggplot(
+  data = scenic_region_qtl_categories_n,  
+  mapping = aes(x = category, y = pct, fill = category) 
+) +
+  geom_bar(stat = 'identity') +
+  scale_fill_manual(values = roycols::get_color_list(unique(scenic_region_qtl_categories_n[['category']]))) +
+  xlab('Tier') + 
+  ylab('Proportion of regions') +
+  theme(legend.position = 'none') + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+
+
+# show plots
+p_region_cat1to3
+p_region_cat1to4
+
+# get the total number of regions
+n_regions <- nrow(scenic_output_regions_only)
+# 62932
+# and the ones with any effect
+n_regions_genetic <- nrow(scenic_output_regions_only[scenic_output_regions_only[['tier']] != '4. no QTL', ])
+# 10338
+# total fraction
+frac_regions_genetic <- n_regions_genetic / n_regions
+# 0.1642725
+
+# show exact fractions
+scenic_region_qtl_categories_n
+#                  category     n        pct
+#                    <char> <int>      <num>
+# 1: 1. has dual acting QTL   527 0.01262396
+# 2:  2. has eQTL in region  2856 0.06841374
+# 3:           3. has caQTL  3723 0.08918220
+# 4:              4. no QTL 34640 0.82978010
+
+# we want to save the plot as well
+ggsave(filename = '~/multiome/plots/mo_scenic_geneticcontrol_regions.pdf', plot = p_region_cat1to3, width = 5, height = 5)
+
+```
+
+```{r add_tfi_ri_overlap, include=TRUE, fig.width=5, fig.height=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# check if in TF-i-eQTLs
+scenic_output[['is_tf_ieqtl']] <- paste(scenic_output[['Gene_signature_name']], scenic_output[['Gene']]) %in% paste(tf_ieqtls_sig[['tf']], tf_ieqtls_sig[['gene']])
+# check if in accessibility-i-eQTLs
+scenic_output[['is_accessibility_ieqtl']] <- paste(scenic_output[['region_cpeaks']], scenic_output[['Gene']]) %in% paste(region_ieqtls_sig[['region']], region_ieqtls_sig[['gene']])
+
+```
+
+```{r add_tfi_ri_column, include=TRUE, fig.width=5, fig.height=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# add assignment that captures both TF and accessibility i-eQTLs
+scenic_output[['is_tf_or_accessibility_ieqtl']] <- 'neither'
+scenic_output[scenic_output[['is_tf_ieqtl']] & !(scenic_output[['is_accessibility_ieqtl']]), ][['is_tf_or_accessibility_ieqtl']] <- 'only TF-i-eQTL'
+scenic_output[scenic_output[['is_accessibility_ieqtl']] & !(scenic_output[['is_tf_ieqtl']]), ][['is_tf_or_accessibility_ieqtl']] <- 'only accessibility-i-eQTL'
+scenic_output[scenic_output[['is_accessibility_ieqtl']] & scenic_output[['is_tf_ieqtl']], ][['is_tf_or_accessibility_ieqtl']] <- 'TF- and accessibility-i-eQTL'
+
+```
+
+```{r plot_qtl_overlap, include=TRUE, fig.width=5, fig.height=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# get number in each category
+scenic_interaction_categories_n <- data.table(table(scenic_output[['is_tf_or_accessibility_ieqtl']]))
+# set column names
+colnames(scenic_interaction_categories_n) <- c('category', 'n')
+# get percentage
+scenic_interaction_categories_n[['pct']] <- scenic_interaction_categories_n[['n']] / sum(scenic_interaction_categories_n[['n']])
+# plot
+p_triplet_interaction <- ggplot(
+  data = scenic_interaction_categories_n,  
+  mapping = aes(x = category, y = pct, fill = category) 
+) +
+  geom_bar(stat = 'identity') +
+  scale_fill_manual(values = roycols::get_color_list(unique(scenic_interaction_categories_n[['category']]), color_indices = c(56,57,58,59))) +
+  xlab('Interaction type') + 
+  ylab('Proportion of triplets') +
+  theme(legend.position = 'none') + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+# show plot
+p_triplet_interaction
+# save that
+ggsave(filename = '~/multiome/plots/mo_scenic_triplet_tf_cre_i_eqtl_overlap_simple.pdf', plot = p_triplet_interaction, width = 5, height = 5)
+
+# again for category 1 to 3
+p_triplet_interaction_cat1to3 <- ggplot(
+  data = scenic_interaction_categories_n[scenic_interaction_categories_n[['category']] != 'neither'],  
+  mapping = aes(x = category, y = pct, fill = category) 
+) +
+  geom_bar(stat = 'identity') +
+  scale_fill_manual(values = roycols::get_color_list(unique(scenic_interaction_categories_n[['category']]), color_indices = c(56,57,58,59))) +
+  xlab('Interaction type') + 
+  ylab('Proportion of triplets') +
+  theme(legend.position = 'none') + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+# show that plot
+p_triplet_interaction_cat1to3
+# save that
+ggsave(filename = '~/multiome/plots/mo_scenic_triplet_tf_cre_i_eqtl_overlap_simple_cat1to3.pdf', plot = p_triplet_interaction_cat1to3, width = 5, height = 5)
+
+
+```
+
+```{r add_tfqtl_column, include=TRUE, fig.width=5, fig.height=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# add assignment that captures both TF and accessibility i-eQTLs
+scenic_output[['is_also_tfqtl']] <- 'untested'
+if (nrow(scenic_output[scenic_output[['Gene_signature_name']] %in% tf_ieqtls[tf_ieqtls[['is_tfqtl']] == F, ][['tf']]]) > 0) {
+  scenic_output[scenic_output[['Gene_signature_name']] %in% tf_ieqtls[tf_ieqtls[['is_tfqtl']] == F, ][['tf']]][['is_also_tfqtl']] <- 'no TF-QTL'
+}
+if (nrow(scenic_output[scenic_output[['Gene_signature_name']] %in% tf_ieqtls[tf_ieqtls[['is_tfqtl']] == T, ][['tf']]]) > 0) {
+  scenic_output[scenic_output[['Gene_signature_name']] %in% tf_ieqtls[tf_ieqtls[['is_tfqtl']] == T, ][['tf']]][['is_also_tfqtl']] <- 'TF-QTL'
+}
+
+# now add a column that has the combination of the TF-QTL and the interaction type
+scenic_output[['is_tf_or_accessibility_ieqtl_and_tfqtl']] <- paste(scenic_output[['is_tf_or_accessibility_ieqtl']], scenic_output[['is_also_tfqtl']])
+# but keep the original neither separate
+scenic_output[scenic_output[['is_tf_or_accessibility_ieqtl']] == 'neither', ][['is_tf_or_accessibility_ieqtl_and_tfqtl']] <- 'neither'
+scenic_output[scenic_output[['is_tf_or_accessibility_ieqtl']] == 'only accessibility-i-eQTL', ][['is_tf_or_accessibility_ieqtl_and_tfqtl']] <- 'only accessibility-i-eQTL'
+
+```
+
+```{r plot_qtl_overlap, include=TRUE, fig.width=5, fig.height=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# get number in each category
+scenic_interaction_categories_wtfqtl_n <- data.table(table(scenic_output[, c('is_tf_or_accessibility_ieqtl', 'is_tf_or_accessibility_ieqtl_and_tfqtl')]))
+# set column names
+colnames(scenic_interaction_categories_wtfqtl_n) <- c('category_interaction', 'category_tfqtl', 'n')
+# get original colour list
+scenic_interaction_categories_wtfqtl_colours <- roycols::get_color_list(unique(scenic_interaction_categories_wtfqtl_n[['category_interaction']]), color_indices = c(56,57,58,59))
+# and add specific gradients for TFQTLs
+for (cat in names(scenic_interaction_categories_wtfqtl_colours)) {
+  # TF will be added to, we need a whitening percentage
+	pct_whitening <- 40
+	# the up color is the same as the regular one
+	scenic_interaction_categories_wtfqtl_colours[[paste(cat, 'untested')]] <- scenic_interaction_categories_wtfqtl_colours[[cat]]
+	# but the down one will have a more faded colour
+	scenic_interaction_categories_wtfqtl_colours[[paste(cat, 'no TF-QTL')]] <- colorRampPalette(c(scenic_interaction_categories_wtfqtl_colours[[cat]], "white"))(100)[pct_whitening]
+	scenic_interaction_categories_wtfqtl_colours[[paste(cat, 'TF-QTL')]] <- colorRampPalette(c(scenic_interaction_categories_wtfqtl_colours[[cat]], "black"))(100)[pct_whitening]
+}
+# get percentage
+scenic_interaction_categories_wtfqtl_n[['pct']] <- scenic_interaction_categories_wtfqtl_n[['n']] / sum(scenic_interaction_categories_wtfqtl_n[['n']])
+# plot
+p_triplet_interaction_wtfqtl <- ggplot(
+  data = scenic_interaction_categories_wtfqtl_n,  
+  mapping = aes(x = category_interaction, y = pct, fill = category_tfqtl) 
+) +
+  geom_bar(stat = 'identity', position = 'stack') +
+  scale_fill_manual(values = scenic_interaction_categories_wtfqtl_colours) +
+  xlab('Interaction type') + 
+  ylab('Proportion of triplets') +
+  theme(legend.position = 'none') + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+# show plot
+p_triplet_interaction_wtfqtl
+
+# again for category 1 to 3
+p_triplet_interaction_wtfqtl_cat1to3 <- ggplot(
+  data = scenic_interaction_categories_wtfqtl_n[scenic_interaction_categories_wtfqtl_n[['category_interaction']] != 'neither'],  
+  mapping = aes(x = category_interaction, y = pct, fill = category_tfqtl) 
+) +
+  geom_bar(stat = 'identity', position = 'stack') +
+  scale_fill_manual(values = scenic_interaction_categories_wtfqtl_colours) +
+  xlab('Interaction type') + 
+  ylab('Proportion of triplets') +
+  theme(legend.position = 'none') + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+# show that plot
+p_triplet_interaction_wtfqtl_cat1to3
+# get a legend as well
+p_triplet_interaction_wtfqtl_cat1to3_legend <- as_ggplot(get_legend(ggplot(
+  data = scenic_interaction_categories_wtfqtl_n[scenic_interaction_categories_wtfqtl_n[['category_interaction']] != 'neither'],  
+  mapping = aes(x = category_interaction, y = pct, fill = category_tfqtl) 
+) +
+  geom_bar(stat = 'identity', position = 'stack') +
+  scale_fill_manual(values = scenic_interaction_categories_wtfqtl_colours)))
+# show the legend
+p_triplet_interaction_wtfqtl_cat1to3_legend
+
+# save these as well
+ggsave(filename = '~/multiome/plots/mo_scenic_triplet_tf_cre_i_eqtl_overlap.pdf', plot = p_triplet_interaction_wtfqtl_cat1to3, width = 5, height = 5)
+ggsave(filename = '~/multiome/plots/mo_scenic_triplet_tf_cre_i_eqtl_overlap_legend.pdf', plot = p_triplet_interaction_wtfqtl_cat1to3_legend, width = 5, height = 5)
+
+
+```
+
+```{r plot_qtl_overlap, include=TRUE, fig.width=5, fig.height=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# get number in each category
+scenic_interaction_categories_onlqtl_n <- data.table(table(scenic_output[scenic_output[['tier']] != '4. no QTL', c('is_tf_or_accessibility_ieqtl')]))
+# set column names
+colnames(scenic_interaction_categories_onlqtl_n) <- c('category', 'n')
+# get percentage
+scenic_interaction_categories_onlqtl_n[['pct']] <- scenic_interaction_categories_onlqtl_n[['n']] / sum(scenic_interaction_categories_onlqtl_n[['n']])
+sum(scenic_interaction_categories_n[['n']])
+# plot
+p_triplet_interaction_onlqtl <- ggplot(
+  data = scenic_interaction_categories_onlqtl_n,  
+  mapping = aes(x = category, y = pct, fill = category) 
+) +
+  geom_bar(stat = 'identity') +
+  scale_fill_manual(values = roycols::get_color_list(unique(scenic_interaction_categories_onlqtl_n[['category']]), color_indices = c(56,57,58,59))) +
+  xlab('Interaction type') + 
+  ylab('Proportion of triplets with QTL') +
+  theme(legend.position = 'none') + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+# show plot
+p_triplet_interaction_onlqtl
+
+# plot without 'neither' category
+p_triplet_interaction_onlqtlcat1to3 <- ggplot(
+  data = scenic_interaction_categories_onlqtl_n[scenic_interaction_categories_onlqtl_n[['category']] != 'neither', ],  
+  mapping = aes(x = category, y = pct, fill = category) 
+) +
+  geom_bar(stat = 'identity') +
+  scale_fill_manual(values = roycols::get_color_list(unique(scenic_interaction_categories_onlqtl_n[['category']]), color_indices = c(56,57,58,59))) +
+  xlab('Interaction type') + 
+  ylab('Proportion of triplets with QTL') +
+  theme(legend.position = 'none') + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+p_triplet_interaction_onlqtlcat1to3
+# we want to save the plot as well
+ggsave(filename = '~/multiome/plots/mo_scenic_geneticcontrol_ieqtls.pdf', plot = p_triplet_interaction_onlqtlcat1to3, width = 5, height = 5)
+
+
+```
+
+```{r get_ieqtl_results, include=TRUE, fig.width=5, fig.height=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# location of the i-eqtl output
+iqtl_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/output/ut_and_24hca_significant/L1/'
+# get all the QTL output
+iqtl_output <- get_qtls_per_celltype_limix(iqtl_output_loc, output_file = 'inflammation_final/iqtl_results_all_eigenmt_qval.tsv.gz', gene_column='feature', significance_column='feature_q_value', significance_cutoff=0.05, nominal_cutoff_column=NULL, nominal_significance_column=NULL)
+# merge all the results
+iqtl_output_all <- do.call('rbind', iqtl_output)
+# filter on signifiacnce
+iqtl_output_all_sig <- iqtl_output_all[iqtl_output_all[['feature_q_value']] < 0.05 &
+                                         iqtl_output_all[['feature_bf_eigen']] < 0.05, ]
+
+```
+
+```{r merge_ieqtl_results, include=TRUE, fig.width=5, fig.height=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# add directions
+iqtl_output_all_sig[['direction']] <- 'none'
+iqtl_output_all_sig[!is.na(iqtl_output_all_sig[['beta']]) & iqtl_output_all_sig[['beta']] > 0, 'direction'] <- 'stronger'
+iqtl_output_all_sig[!is.na(iqtl_output_all_sig[['beta']]) & iqtl_output_all_sig[['beta']] < 0, 'direction'] <- 'weaker'
+# merge with tf-i-eqtls
+tf_stim_ieqtls_sig <- merge(iqtl_output_all_sig, tf_ieqtls_sig, by.x = c('snp_id', 'feature'), by.y = c('variant', 'gene'))
+
+```
+
+```{r check_percentages_any_qtls, include=TRUE, fig.width=5, fig.height=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# get the occurences of i-eQTLs in the QTLs
+n_any_qtl_to_ieqtl <- data.frame(table(scenic_output[scenic_output[['tier']] != '4. no QTL', c('tier', 'is_tf_or_accessibility_ieqtl')]))
+# get the totals for the tiers
+n_any_qtl_tier_totals <- aggregate(as.formula('Freq ~ tier'), data = n_any_qtl_to_ieqtl[, c('tier', 'Freq')], FUN = 'sum')
+# rename that Freq to 'total'
+colnames(n_any_qtl_tier_totals) <- c('tier', 'cat_total')
+# then add that to the original
+n_any_qtl_to_ieqtl <- merge(n_any_qtl_to_ieqtl, n_any_qtl_tier_totals, on = 'tier')
+# also add full total
+n_any_qtl_to_ieqtl[['total']] <- sum(n_any_qtl_to_ieqtl[['Freq']])
+# add percentage
+n_any_qtl_to_ieqtl[['frac_total']] <- n_any_qtl_to_ieqtl[['Freq']] / n_any_qtl_to_ieqtl[['total']]
+# and category total
+n_any_qtl_to_ieqtl[['cat_total']] <- n_any_qtl_to_ieqtl[['Freq']] / n_any_qtl_to_ieqtl[['cat_total']]
+# add combination of tier and ieqtl
+n_any_qtl_to_ieqtl[['tier_ieqtl']] <- paste(n_any_qtl_to_ieqtl[['tier']], n_any_qtl_to_ieqtl[['is_tf_or_accessibility_ieqtl']])
+# and opposite direction
+n_any_qtl_to_ieqtl[['ieqtl_tier']] <- paste(n_any_qtl_to_ieqtl[['is_tf_or_accessibility_ieqtl']], n_any_qtl_to_ieqtl[['tier']])
+# the plot colors
+any_qtl_to_ieqtl_plot_cols <-roycols::get_color_list(unique(n_any_qtl_to_ieqtl[['tier']]), color_indices = c(47,63,56,16))
+# add colouring
+for (tier in names(any_qtl_to_ieqtl_plot_cols)) {
+  # percentage of whitening 
+  pct_whitening=40
+  any_qtl_to_ieqtl_plot_cols[[paste(tier, 'only TF-i-eQTL')]] <- colorRampPalette(c(any_qtl_to_ieqtl_plot_cols[[tier]], "white"))(100)[pct_whitening]
+  any_qtl_to_ieqtl_plot_cols[[paste(tier, 'only accessibility-i-eQTL')]] <- colorRampPalette(c(any_qtl_to_ieqtl_plot_cols[[tier]], "black"))(100)[pct_whitening]
+  any_qtl_to_ieqtl_plot_cols[[paste(tier, 'TF- and accessibility-i-eQTL')]] <- any_qtl_to_ieqtl_plot_cols[[tier]]
+  any_qtl_to_ieqtl_plot_cols[[paste(tier, 'neither')]] <- colorRampPalette(c(any_qtl_to_ieqtl_plot_cols[[tier]], "white"))(100)[pct_whitening*2]
+}
+# the plot colors but opposite
+ieqtl_to_any_qtl_plot_cols <-roycols::get_color_list(unique(n_any_qtl_to_ieqtl[['is_tf_or_accessibility_ieqtl']]), color_indices = c(56,59,58,57))
+# add colouring
+for (ieqtl in names(ieqtl_to_any_qtl_plot_cols)) {
+  # percentage of whitening 
+  pct_whitening=40
+  ieqtl_to_any_qtl_plot_cols[[paste(ieqtl, '1. has dual acting QTL')]] <- colorRampPalette(c(ieqtl_to_any_qtl_plot_cols[[ieqtl]], "white"))(100)[pct_whitening]
+  ieqtl_to_any_qtl_plot_cols[[paste(ieqtl, '2. has eQTL in region')]] <- colorRampPalette(c(ieqtl_to_any_qtl_plot_cols[[ieqtl]], "black"))(100)[pct_whitening]
+  ieqtl_to_any_qtl_plot_cols[[paste(ieqtl, '3. has caQTL')]] <- ieqtl_to_any_qtl_plot_cols[[ieqtl]]
+  ieqtl_to_any_qtl_plot_cols[[paste(ieqtl, '4. no QTL')]] <- colorRampPalette(c(ieqtl_to_any_qtl_plot_cols[[ieqtl]], "gray"))(100)[pct_whitening]
+}
+p_triplet_interaction_onlqtlcat1to3_wtiers <- plot_grid(
+  ggplot(
+  data = n_any_qtl_to_ieqtl[n_any_qtl_to_ieqtl[['is_tf_or_accessibility_ieqtl']] != 'neither', ],  
+  mapping = aes(x = is_tf_or_accessibility_ieqtl, y = frac_total, fill = ieqtl_tier) 
+) +
+  geom_bar(stat = 'identity') +
+  scale_fill_manual(values = ieqtl_to_any_qtl_plot_cols) +
+  xlab('Interaction type') + 
+  ylab('Proportion of triplets with QTL') +
+  theme(legend.position = 'none') + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")), 
+  get_legend(
+    ggplot(data = data.frame(x = c('1. has dual acting QTL', '2. has eQTL in region', '3. has caQTL'), y = c(1,1,1)), mapping = aes(x = x, y = y, fill = x)) + 
+      geom_bar(stat = 'identity') + 
+      scale_fill_manual(values = c('lightgray', 'black', 'darkgray')) +
+      labs(fill = 'tier')
+  )
+)
+p_triplet_interaction_onlqtlcat1to3_wtiers
+
+# plot
+p_triplet_cat1to3_wieqtl <- plot_grid(
+  ggplot(
+  data = n_any_qtl_to_ieqtl[n_any_qtl_to_ieqtl[['tier']] != '4. no QTL', ], 
+  mapping = aes(x = tier, y = frac_total, fill = tier_ieqtl) 
+) +
+    geom_bar(stat = 'identity') +
+    scale_fill_manual(values = any_qtl_to_ieqtl_plot_cols) +
+    xlab('Tier') + 
+    ylab('Proportion of triplets') +
+    theme(legend.position = 'none') + 
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+    theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")), 
+  get_legend(
+    ggplot(data = data.frame(x = c('neither', 'only ca-i-eQTL', 'only TFa-i-eQTL', 'both TFa- and ca-i-eQTL'), y = c(1,1,1,1)), mapping = aes(x = x, y = y, fill = x)) + 
+      geom_bar(stat = 'identity') + 
+      scale_fill_manual(values = c('lightgray', '#F5F5F5', 'black', 'darkgray')) +
+      labs(fill = 'i-eQTL')
+  )
+)
+p_triplet_cat1to3_wieqtl
+
+# plot
+p_triplet_cat1to3_wieqtl_ofcat <- plot_grid(
+  ggplot(
+  data = n_any_qtl_to_ieqtl[n_any_qtl_to_ieqtl[['tier']] != '4. no QTL', ], 
+  mapping = aes(x = tier, y = cat_total, fill = tier_ieqtl) 
+) +
+    geom_bar(stat = 'identity') +
+    scale_fill_manual(values = any_qtl_to_ieqtl_plot_cols) +
+    xlab('Tier') + 
+    ylab('Proportion of triplets') +
+    theme(legend.position = 'none') + 
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+    theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")), 
+  get_legend(
+    ggplot(data = data.frame(x = c('neither', 'only ca-i-eQTL', 'only TFa-i-eQTL', 'both TFa- and ca-i-eQTL'), y = c(1,1,1,1)), mapping = aes(x = x, y = y, fill = x)) + 
+      geom_bar(stat = 'identity') + 
+      scale_fill_manual(values = c('lightgray', '#F5F5F5', 'black', 'darkgray')) +
+      labs(fill = 'i-eQTL')
+  )
+)
+p_triplet_cat1to3_wieqtl_ofcat
+
+```
+
+```{r check_percentages_any_qtls, include=TRUE, fig.width=5, fig.height=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# funnel
+nrow(scenic_output)
+# [1] 62932
+nrow(scenic_output[scenic_output[['tier']] != '4. no QTL', ])
+# [1] 11160
+nrow(scenic_output[scenic_output[['tier']] != '4. no QTL' & scenic_output[['is_tf_or_accessibility_ieqtl']] != 'neither', ])
+# [1] 3847
+nrow(scenic_output[scenic_output[['tier']] != '4. no QTL' & scenic_output[['is_tf_ieqtl']], ])
+# [1] 2873
+nrow(scenic_output[scenic_output[['tier']] != '4. no QTL' & scenic_output[['is_accessibility_ieqtl']], ])
+# [1] 1693
+
+# how much genetics involved
+nrow(scenic_output[scenic_output[['tier']] != '4. no QTL', ]) / nrow(scenic_output)
+# [1] 0.1773343
+# how much any i-eQTL
+nrow(scenic_output[scenic_output[['tier']] != '4. no QTL' & scenic_output[['is_tf_or_accessibility_ieqtl']] != 'neither', ]) / nrow(scenic_output[scenic_output[['tier']] != '4. no QTL', ])
+# [1] 0.3447133
+# how much TF-i-eQTL
+nrow(scenic_output[scenic_output[['tier']] != '4. no QTL' & scenic_output[['is_tf_ieqtl']], ]) / nrow(scenic_output[scenic_output[['tier']] != '4. no QTL', ])
+# [1] 0.2574373
+nrow(scenic_output[scenic_output[['tier']] != '4. no QTL' & scenic_output[['is_accessibility_ieqtl']], ]) / nrow(scenic_output[scenic_output[['tier']] != '4. no QTL', ])
+# [1] 0.1517025
+
+# how much any i-eQTL from all triplets
+nrow(scenic_output[scenic_output[['tier']] != '4. no QTL' & scenic_output[['is_tf_or_accessibility_ieqtl']] != 'neither', ]) / nrow(scenic_output)
+# [1] 0.06112947
+# how much any CRE-i-eQTL from all triplets
+nrow(scenic_output[scenic_output[['tier']] != '4. no QTL' & scenic_output[['is_accessibility_ieqtl']], ]) / nrow(scenic_output)
+# [1] 0.02690205
+# how much any TFa-i-eQTL from all triplets
+nrow(scenic_output[scenic_output[['tier']] != '4. no QTL' & scenic_output[['is_tf_ieqtl']], ]) / nrow(scenic_output)
+# [1] 0.04565245
+
+```

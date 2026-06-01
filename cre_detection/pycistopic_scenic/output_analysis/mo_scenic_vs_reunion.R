@@ -12,6 +12,7 @@
 
 library(data.table)
 library(ggplot2)
+library(ggrastr)
 library(ggvenn)
 library(cowplot)
 library(stringr)
@@ -202,15 +203,16 @@ scenic_output <- cbind(scenic_output, gene_anno[match(scenic_output[['Gene']], g
 scenic_distances <- get_closest_flanks(scenic_output, 'start_hg38', 'end_hg38', 'start', 'end')
 # add that to the original table
 scenic_output[['distance']] <- scenic_distances[['min_dist']]
-# remove the entries that are more likely to be false positives
-scenic_output_unfiltered <- scenic_output
-scenic_output <- scenic_output_unfiltered[scenic_output_unfiltered[['Gene_signature_direction']] %in% c('+/+', '-/+'), ]
-# and region-gene overlaps
-scenic_output <- scenic_output[scenic_output[['distance']] > 0 & scenic_output[['distance']] <= 150000, ]
-# sort by which are direct or extended
-scenic_output <- scenic_output[order(scenic_output[['source']]), ]
-# and keep the first entry
-scenic_output <- scenic_output[!duplicated(paste(scenic_output[['Region']], scenic_output[['Gene']], scenic_output[['TF']])), ]
+# keep only +/-
+scenic_output <- scenic_output[scenic_output[['Gene_signature_direction']] %in% c('+/+', '-/+'), ]
+# order by the extended
+scenic_output <- scenic_output[order(scenic_output[['is_extended']]), ]
+# get which are non-extended if it was both extended and non-extended
+scenic_eregs <- unique(scenic_output[, c('TF', 'Gene_signature_direction', 'Gene_signature_name', 'source')])
+scenic_eregs <-scenic_eregs[order(scenic_eregs[['source']]), ]
+scenic_eregs_to_keep <- scenic_eregs[!duplicated(paste(scenic_eregs[['TF']], scenic_eregs[['Gene_signature_direction']])), ]
+# then use that to filer
+scenic_output <- scenic_output[scenic_output[['Gene_signature_name']] %in% scenic_eregs_to_keep[['Gene_signature_name']], ]
 
 # add location for SCENIC+
 reunion_output <- cbind(reunion_output, cpeaks_annotation[match(reunion_output[['overlapping_feature']], cpeaks_annotation[['scenic_hg38']]), c('chr_hg38', 'start_hg38', 'end_hg38')])
@@ -244,12 +246,12 @@ write.table(reunion_output_unfiltered, gzfile('/groups/umcg-franke-scrna/tmp02/e
 mdfiver::create_md5_for_file('/groups/umcg-franke-scrna/tmp02/external_datasets/reunion_yang2024_cres/df_pbmc_region_tf_gene_link.2_2_cpeaksmatched.tsv.gz')
 
 # add columns that are region-to-gene
-reunion_output[['r2g']] <- paste(reunion_output[['overlapping_feature']], reunion_output[['gene_id']], reunion_output[['motif_id']])
-scenic_output[['r2g']] <- paste(scenic_output[['Region']], scenic_output[['Gene']], scenic_output[['TF']])
+reunion_output[['r2g2tf']] <- paste(reunion_output[['overlapping_feature']], reunion_output[['gene_id']], reunion_output[['motif_id']])
+scenic_output[['r2g2tf']] <- paste(scenic_output[['Region']], scenic_output[['Gene']], scenic_output[['TF']])
 # merge these
-matched_output <- merge(reunion_output[, c('r2g', 'peak_gene_corr')], scenic_output[, c('r2g', 'rho_R2G')], by = 'r2g')
+matched_output <- merge(reunion_output[, c('r2g2tf', 'peak_gene_corr', 'gene_tf_corr')], scenic_output[, c('r2g2tf', 'rho_R2G', 'rho_TF2G')], by = 'r2g2tf')
 # rename columns
-colnames(matched_output) <- c('r2g', 'cor_reunion', 'cor_scenic')
+colnames(matched_output) <- c('r2g2tf', 'cor_reunion', 'tfcor_reunion', 'cor_scenic', 'tfcor_scenic')
 # and make unique
 matched_output <- unique(matched_output)
 
@@ -262,7 +264,7 @@ max_sig_rho_10x <- max(abs(matched_output[['cor_reunion']]))
 max_sig_rho_mo <- max(abs(matched_output[['cor_scenic']]))
 # plot the correlations
 p_mo_vs_reunion <- ggplot(data = matched_output, mapping = aes(x = cor_scenic, y = cor_reunion)) + 
-  geom_point(size = .1) +
+  geom_point_rast(size = .1) +
   xlab('R2G Rho in multiome') + 
   ylab('R2G Rho in reunion') + 
   ggtitle('R2G correlations in multiome vs reunion (matched TF only)') + 
@@ -295,4 +297,63 @@ p_mo_vs_reunion <- ggplot(data = matched_output, mapping = aes(x = cor_scenic, y
 # show the plot
 p_mo_vs_reunion
 # save the plot
-ggsave(filename = '~/multiome/plots/mo_multiome_vs_reunion.pdf', plot = p_mo_vs_reunion, width = 5, height = 5)
+ggsave(filename = '~/multiome/plots/mo_multiome_vs_reunion_r2g.pdf', plot = p_mo_vs_reunion, width = 5, height = 5)
+
+
+# calculate the concordance of TF
+mo_reunion_rhotf_concordance <- sum(sign(matched_output[['tfcor_scenic']]) == sign(matched_output[['tfcor_reunion']])) / nrow(matched_output)
+# get the minimal and maximum correlations
+min_sig_rhotf_10x <- min(abs(matched_output[['tfcor_reunion']]))
+min_sig_rhotf_mo <- min(abs(matched_output[['tfcor_scenic']]))
+max_sig_rhotf_10x <- max(abs(matched_output[['tfcor_reunion']]))
+max_sig_rhotf_mo <- max(abs(matched_output[['tfcor_scenic']]))
+# plot the correlations
+p_mo_vs_reunion_tf <- ggplot(data = matched_output, mapping = aes(x = tfcor_scenic, y = tfcor_reunion)) + 
+  geom_point_rast(size = .1) +
+  xlab('TF2G Rho in multiome') + 
+  ylab('TF2G Rho in reunion') + 
+  ggtitle('TF2G correlations in multiome vs reunion (matched TF only)') + 
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+  # left to right block of non-significant effects
+  geom_rect(aes(xmin = -1 * max_sig_rhotf_mo, xmax = max_sig_rhotf_mo, ymin = -1 * min_sig_rhotf_10x, ymax = min_sig_rhotf_10x), 
+            fill = "white", alpha = 0.005) +
+  # bottom to top block of non-significant effects
+  geom_rect(aes(xmin = -1 * min_sig_rhotf_mo, xmax = min_sig_rhotf_mo, ymin = -1 * max_sig_rhotf_10x, ymax = max_sig_rhotf_10x), 
+            fill = "white", alpha = 0.005) +
+  # bottom left block
+  geom_rect(aes(xmin = -1 * max_sig_rhotf_mo, xmax = -1 *min_sig_rhotf_mo, ymin = -1 * max_sig_rhotf_10x, ymax = -1 * min_sig_rhotf_10x), 
+            fill = "#0072B2", alpha = 0.01) +
+  # bottom right block
+  geom_rect(aes(xmin = min_sig_rhotf_mo, xmax = max_sig_rhotf_mo, ymin = -1 * max_sig_rhotf_10x, ymax = -1 * min_sig_rhotf_10x), 
+            fill = "#D55E00", alpha = 0.01) +
+  # top left block
+  geom_rect(aes(xmin = -1 * max_sig_rhotf_mo, xmax = -1 *min_sig_rhotf_mo, ymin = min_sig_rhotf_10x, ymax = max_sig_rhotf_10x), 
+            fill = "#D55E00", alpha = 0.01) + 
+  # top right block
+  geom_rect(aes(xmin = min_sig_rhotf_mo, xmax = max_sig_rhotf_mo, ymin = max_sig_rhotf_10x, ymax = min_sig_rhotf_10x), 
+            fill = "#0072B2", alpha = 0.01) + 
+  # add the concordance
+  annotate("label", x = max_sig_rhotf_mo * 0.75 , y = max_sig_rhotf_10x * -0.75, label = paste('concordance', round(mo_reunion_rhotf_concordance, digits = 2), sep = ':\n')) +
+  # add the names of the concordant and non-concordant blocks
+  annotate("text", x = max_sig_rhotf_mo * -0.70 , y = max_sig_rhotf_10x * 0.75, label = 'discordant', colour = '#D55E00', fontface = 'bold') +
+  # add the names of the concordant and non-concordant blocks
+  annotate("text", x = max_sig_rhotf_mo * 0.70 , y = max_sig_rhotf_10x * 0.75, label = 'concordant', colour = '#0072B2', fontface = 'bold')
+
+# show the plot
+p_mo_vs_reunion_tf
+# save the plot
+ggsave(filename = '~/multiome/plots/mo_multiome_vs_reunion_tf2g.pdf', plot = p_mo_vs_reunion_tf, width = 5, height = 5)
+
+# now add only r2g columns
+reunion_output[['r2g']] <- paste(reunion_output[['overlapping_feature']], reunion_output[['gene_id']])
+scenic_output[['r2g']] <- paste(scenic_output[['Region']], scenic_output[['Gene']])
+# merge these on only the r2g
+matched_output_r2gonly <- merge(unique(reunion_output[, c('r2g', 'peak_gene_corr')]), unique(scenic_output[, c('r2g', 'rho_R2G')]), by = 'r2g')
+# rename columns
+colnames(matched_output_r2gonly) <- c('r2g', 'cor_reunion', 'cor_scenic')
+# and make unique
+matched_output_r2gonly <- unique(matched_output_r2gonly)
+# calculate the concordance
+mo_reunion_rho_concordance_r2gonly <- sum(sign(matched_output_r2gonly[['cor_scenic']]) == sign(matched_output_r2gonly[['cor_reunion']])) / nrow(matched_output_r2gonly)
+# [1] 0.9234896
+

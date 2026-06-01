@@ -477,7 +477,7 @@ b_diff_avglfc <- -log2(mean(auc_dt[auc_dt[['celltype_condition_ordered']] %in% c
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # plot eregs for major cell types
-eregs_vector <- c("KLF10_direct_+/+_(59g)", "KLF12_direct_+/+_(1093g)", "KLF12_direct_-/+_(464g)", "KLF3_direct_+/+_(256g)", "KLF3_direct_-/+_(18g)", "KLF6_direct_+/+_(419g)", "KLF6_direct_-/+_(27g)", "KLF9_direct_+/+_(14g)", "PLAG1_direct_+/+_(25g)")
+eregs_vector <- c("KLF10_direct_+/+_(59g)", "KLF12_direct_+/+_(1093g)", "KLF12_direct_-/+_(464g)", "KLF3_direct_+/+_(256g)", "KLF3_direct_-/+_(18g)", "KLF6_direct_+/+_(419g)", "KLF6_direct_-/+_(27g)", "KLF9_direct_+/+_(14g)", "PLAG1_direct_+/+_(25g)", "REL_direct_-/+_(35g)")
 for (ereg in eregs_vector) {
   p_specific_ereg <- ggplot(data = NULL, mapping = aes(x = auc_dt[auc_dt[['cell_type_nice_ordered']] %in% major_cts, ][['cell_type_nice_ordered']], y = auc_dt[auc_dt[['cell_type_nice_ordered']] %in% major_cts, ][[ereg]], fill= auc_dt[auc_dt[['cell_type_nice_ordered']] %in% major_cts, ][['cell_type_nice_ordered']])) +
   geom_boxplot(outlier.shape = NA) + 
@@ -493,6 +493,58 @@ for (ereg in eregs_vector) {
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) + 
   scale_fill_manual(values = get_color_coding_dict())
   print(p_specific_ereg)
+}
+
+```
+
+```{r plot_activity_repl_cond, include=TRUE, fig.width=5, fig.height=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# plot eregs for major cell types
+eregs_vector <- c("KLF10_direct_+/+_(59g)", "KLF12_direct_+/+_(1093g)", "KLF12_direct_-/+_(464g)", "KLF3_direct_+/+_(256g)", "KLF3_direct_-/+_(18g)", "KLF6_direct_+/+_(419g)", "KLF6_direct_-/+_(27g)", "KLF9_direct_+/+_(14g)", "PLAG1_direct_+/+_(25g)", "REL_direct_-/+_(35g)")
+for (ereg in eregs_vector) {
+  p_specific_ereg <- ggplot(data = NULL, mapping = aes(x = auc_dt[auc_dt[['cell_type_nice_ordered']] %in% major_cts, ][['celltype_condition_ordered']], y = auc_dt[auc_dt[['cell_type_nice_ordered']] %in% major_cts, ][[ereg]], fill = auc_dt[auc_dt[['cell_type_nice_ordered']] %in% major_cts, ][['celltype_condition_ordered']])) +
+  geom_boxplot(outlier.shape = NA) + 
+  # and add jitter
+  geom_jitter(size = 0.5, alpha = 0.1) +
+  # and labels
+  xlab('Cell type and condition') + 
+  ylab(paste(ereg, 'TF activity')) +
+  theme(axis.text.x=element_blank(), 
+        axis.ticks = element_blank()) + 
+  theme(legend.position = 'none') + 
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) + 
+  scale_fill_manual(values = get_color_coding_dict())
+  # show plot
+  print(p_specific_ereg)
+  # save plot
+  ggsave(file = paste0('~/multiome/plots/tf_activity/', gsub('/', '_', ereg), '.pdf'), plot = p_specific_ereg, width = 5, height = 5)
+}
+
+```
+
+```{r plot_activity_repl_cond, include=TRUE, fig.width=5, fig.height=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# plot eregs for major cell types
+eregs_vector <- c("KLF10_direct_+/+_(59g)", "KLF12_direct_+/+_(1093g)", "KLF12_direct_-/+_(464g)", "KLF3_direct_+/+_(256g)", "KLF3_direct_-/+_(18g)", "KLF6_direct_+/+_(419g)", "KLF6_direct_-/+_(27g)", "KLF9_direct_+/+_(14g)", "PLAG1_direct_+/+_(25g)", "REL_direct_-/+_(35g)")
+for (ereg in eregs_vector) {
+  p_specific_ereg <- ggplot(data = NULL, mapping = aes(x = auc_dt[auc_dt[['cell_type_nice_ordered']] %in% major_cts, ][['celltype_condition_ordered']], y = auc_dt[auc_dt[['cell_type_nice_ordered']] %in% major_cts, ][[ereg]], fill = auc_dt[auc_dt[['cell_type_nice_ordered']] %in% major_cts, ][['celltype_condition_ordered']])) +
+  geom_boxplot(outlier.shape = NA) + 
+  # and labels
+  xlab('Cell type and condition') + 
+  ylab(paste(ereg, 'TF activity')) +
+  theme(axis.text.x=element_blank(), 
+        axis.ticks = element_blank()) + 
+  theme(legend.position = 'none') + 
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")) + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) + 
+  scale_fill_manual(values = get_color_coding_dict())
+  # show plot
+  print(p_specific_ereg)
+  # save plot
+  ggsave(file = paste0('~/multiome/plots/tf_activity/', gsub('/', '_', ereg), '_nodot.pdf'), plot = p_specific_ereg, width = 5, height = 5)
 }
 
 ```
