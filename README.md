@@ -6,16 +6,13 @@ This is the github repository of the Multiome (snRNA+snATAC) study containing un
 
 Here we will list the software used to generate the data
 
-Cellranger 7.1.0\
 Cellranger-arc 2.0.0\
 R 4.4.2\
 plink2-20230707\
 CellBender v3\
 Seurat 5.2.1\
 Signac 1.14.0\
-ArchR 1.0.3\
-Souporcell v2\
-Demuxlet v2
+Souporcell v2
 
 ## Custom code
 
@@ -50,10 +47,9 @@ Below we will outline the steps taken to process and analyse the data
 
 ### demultiplexing and doublet detection
 '*demultiplexing/mo_subset_for_genotype_correlations.sh*'   script to subset genotypes for each 10x experiment, using the individuals in present in that experiment\
-'*demultiplexing/mo_subset_for_genotype_correlations.sh*'   script to subset genotypes for each 10x experiment, using the individuals in present in that experiment as job\
+'*demultiplexing/mo_subset_for_genotype_correlations_SBATCH.sh*'   script to subset genotypes for each 10x experiment, using the individuals in present in that experiment as job\
 '*demultiplexing/mo_subset_gex_bams_snp_regions.sh*'    script to create jobs to subset the gene expression alignment files, to only have reads overlapping variants we genotyped\
-'*demultiplexing/mo_create_popscle_sort_vcfs_jobs.sh*' s    cript to create jobs to sort the per-lane VCF files by the order of chromosomes in the alignment files\
-'*demultiplexing/mo_create_demuxlet_jobs.sh*'   script to create jobs to run Demuxlet on the gene expression alignments\
+'*demultiplexing/mo_create_popscle_sort_vcfs_jobs.sh*'  script to create jobs to sort the per-lane VCF files by the order of chromosomes in the alignment files\
 '*demultiplexing/mo_create_souping_samples_jobs_externalbarcodes.sh*'   script to create jobs that perform Souporcell on each 10x lane while allowing external barcode files\
 '*demultiplexing/mo_correlate_genotypes.R*'     correlate the Souporcell cluster genotypes to the genotypes generated for the individuals, to do sample assignment\
 '*demultiplexing/mo_plot_demultiplexing_assignments.Rmd*'   plot the demultiplexing assignments\
@@ -124,18 +120,6 @@ Below we will outline the steps taken to process and analyse the data
 '*cpeaks_preprocess_samples/mo_merge_cpeaks_with_screenv4.R*'    merge cpeaks defined regions with screen v4 annotations of regions
 
 
-### ArchR ATAC data processing
-'*archr_preprocess_samples/build-arrowfiles.R*' create Arrow files to use in archR\
-'*archr_preprocess_samples/build-project.R*'  create ArchR project from Arrow chunk_files\
-'*archr_preprocess_samples/batch_correction.R*'  do batch correction over all lanes (unfortunately names 'sample' in ArchR)\
-'*archr_preprocess_samples/preprocess.R*'  perform preprocesing to remove low-quality nuclei and doublets\
-'*archr_preprocess_samples/iterative-LSI.R*'  perform dimension reduction and clustering\
-'*archr_preprocess_samples/iterative-LSI.R*'  perform dimension reduction and clustering\
-'*archr_preprocess_samples/addMetadata_subset_celltypes.R*' add celltype annotation from Seurat to ArchR project\
-'*archr_preprocess_samples/imputeCelltypes.R*' impute missing celltypes for nuclei, based on Seurat annotation clusters (majority vote)\
-'*archr_preprocess_samples/peakCalling.R*' perform peak calling based on celltypes assigned
-
-
 ### ATAC data versus other datasets
 '*atac_replication/mo_download_ihec.sh*'    download data from ihec to compare ATAC data from this dataset against other ones\
 '*atac_replication/mo_ihec_bigbed_to_bed.sh*'   convert bigbed files to bed files from ihec
@@ -170,56 +154,6 @@ Below we will outline the steps taken to process and analyse the data
 
 
 ### CRE detection
-
-#### comparisons
-'*cre_detection/comparisons/mo_check_opposite_cre_effects.R'* check CRE-gene pairs that have opposite effects in different methods\
-'*cre_detection/comparisons/mo_cre_method_outputs_comparison.R*'  compare SCENIC to pseudobulk and regression-based models\
-'*cre_detection/comparisons/mo_create_creqtl_plots.R*'  plot CRE-i-eQTL effects\
-'*cre_detection/comparisons/mo_do_full_cre_overlap_check.R*'  check overlap and concordance of TF-CRE-gene sets across CRE detection methods\
-'*cre_detection/comparisons/mo_get_encode_cre_genes_to_cpeaks.R*'  add encode region-gene link information to cpeaks\
-'*cre_detection/comparisons/mo_merge_cpeaks_with_screenv4.R*'  add encode screen v4 information to cpeaks defined regions\
-'*cre_detection/comparisons/mo_overlap_qtl_with_cres.R*'  add information on cpeaks regions to where variants might be located in
-
-
-#### LIMIX/single-cell method
-'*cre_detection/limix_hybrid/mo_create_frac_exp_acc_files.R*'  create annotations for how prevalent regions are accessible across samples\
-'*cre_detection/limix_hybrid/mo_create_frac_exp_files.R*'  create annotations for how prevalent genes are expressed are accessible across samples\
-'*cre_detection/limix_hybrid/mo_create_hybrid_cre_inputs_atac.R*'  create chunked accessiblity tables for all data at once\
-'*cre_detection/limix_hybrid/mo_create_hybrid_cre_inputs_rna.R*'  create chunked expression tables for all data at once\
-'*cre_detection/limix_hybrid/mo_create_hybrid_cre_cov_matrix.R*'  create binary covariate and kinship data per cell\
-'*cre_detection/limix_hybrid/mo_merge_hybrid_cres.R*'  merge the chunked CRE mappings\
-'*cre_detection/limix_hybrid/mo_sample_hybrid_cre_inputs.R*'  randomly sample CRE inputs to check stability
-
-
-##### LIMIX output analysis
-'*cre_detection/limix_hybrid/output_analysis/mo_hybrid_vs_hic_comparison.R*'  overlap LIMIX CRE-gene links with Hi-C data from encode\
-'*cre_detection/limix_hybrid/output_analysis/mo_limix_cre_celltype_replication.Rmd.R*'  plot replication of LIMIX CRE-gene links across cell types\
-'*cre_detection/limix_hybrid/output_analysis/mo_limix_hybrid_vs_reunion.R.R*'  overlap LIMIX CRE-gene links with CRE-gene pairs in REUNION paper\
-'*cre_detection/limix_hybrid/output_analysis/mo_plot_sccres.R*'  plot LIMIX CRE-gene links
-
-
-##### single-cell CRE interaction analysis
-'*cre_detection/limix_hybrid/interaction_analysis/mo_hybrid_cre_interaction_overlaps.R*'  plot interaction-eQTL at single-cell level with TF or ATAC as interaction terms overlaps across methods
-'*cre_detection/limix_hybrid/interaction_analysis/mo_hybrid_cre_plot_interaction.R*'  plot specific interaction-eQTLs from chunk\
-'*cre_detection/limix_hybrid/interaction_analysis/interaction_like/mo_hybrid_cre_interaction.R*'  perform single-cell interaction-eQTL analysis\
-'*cre_detection/limix_hybrid/interaction_analysis/interaction_like/mo_hybrid_interactions.smk*'  merge single-cell interaction-eQTL analysis chunks\
-'*cre_detection/limix_hybrid/interaction_analysis/interaction_like/mo_hybrid_cre_interaction_merge.R*'  snakemake to run single-cell interaction-eQTL analysis chunks\
-'*cre_detection/limix_hybrid/interaction_analysis/interaction_like/mo_plot_qtl_method_overlap.Rmd*'  overlap interaction-eQTLs with eQTL/caQTL/SCENIC+\
-'*cre_detection/limix_hybrid/interaction_analysis/interaction_like/region_interaction/mo_cre_sccre_interaction_confinement_r2g.R*'  create CRE-i-eQTL confinement file\
-'*cre_detection/limix_hybrid/interaction_analysis/interaction_like/region_interaction/mo_hybrid_interactions_regions_template.yaml*'  yaml configuration for CRE-i-eQTL run\
-'*cre_detection/limix_hybrid/interaction_analysis/interaction_like/tf_interaction/mo_add_pseudobulked_tf_activities.R*'  calculate pseudobulked TF activities\
-'*cre_detection/limix_hybrid/interaction_analysis/interaction_like/tf_interaction/mo_calc_auc_eregulons.R*'  calculate gene AUC based TF activities\
-'*cre_detection/limix_hybrid/interaction_analysis/interaction_like/tf_interaction/mo_compare_tf_to_region_ieqtls.Rmd*'  compare TF-i-eQTLs to CRE-i-eQTLs\
-'*cre_detection/limix_hybrid/interaction_analysis/interaction_like/tf_interaction/mo_cre_sccre_interaction_confinement.R*'  create TF-i-eQTLs confinement\
-'*cre_detection/limix_hybrid/interaction_analysis/interaction_like/tf_interaction/mo_hybrid_interations_template.yaml*'  yaml configuration for TF-i-eQTLs run\
-'*cre_detection/limix_hybrid/interaction_analysis/interaction_like/tf_interaction/mo_recalc_tf_i_eqtl_auc_eregulons.R*'  recalculate TF-i-eQTL TF activities excluding TF-i-eGenes\
-'*cre_detection/limix_hybrid/interaction_analysis/interaction_like/tf_interaction/mo_hybrid_interations_template_replication.yaml*'  yaml configuration for TF-i-eQTLs validation run that removed TF-i-eGenes from TF activities\
-'*cre_detection/limix_hybrid/interaction_analysis/interaction_like/tf_interaction/viacheslav_replication/mo_hybrid_interations_template_viacheslavrep.yaml*'  yaml configuration for TF-i-eQTLs replication from Viacheslav paper\
-'*cre_detection/limix_hybrid/interaction_analysis/interaction_like/tf_interaction/coeqtl_replication/mo_sccre_coeqtl_tf_interaction_confinement.R*'  create confinement for replicating co-eQTL TF-gene pairs\
-'*cre_detection/limix_hybrid/interaction_analysis/interaction_like/tf_interaction/coeqtl_replication/mo_hybrid_interations_template_coeqtlrep.yaml*'  yaml configuration for TF-i-eQTLs replication from coeqtl paper\
-'*cre_detection/limix_hybrid/interaction_analysis/coeqtl_like/mo_hybrid_cre_coeqtl_replication.R*'  perform co-eQTL style TF-i-eQTL analysis for chunk\
-'*cre_detection/limix_hybrid/interaction_analysis/coeqtl_like/mo_hybrid_interactions_coeqtl.smk*'  perform co-eQTL style TF-i-eQTL analysis across chunks\
-'*cre_detection/limix_hybrid/interaction_analysis/coeqtl_like/mo_hybrid_interations_coeqtl_template.yaml*'  configuration to perform co-eQTL style TF-i-eQTL analysis across chunks
 
 #### PyCistop/SCENIC+ method
 
@@ -283,6 +217,40 @@ Below we will outline the steps taken to process and analyse the data
 '*cre_detection/pycistopic_scenic/output_analysis/mo_scenic_vs_string_comparison.R*'  check overlap and concordance of TF-gene combinations in SCENIC+ and STRING database
 
 
+#### comparisons
+'*cre_detection/comparisons/mo_check_opposite_cre_effects.R'* check CRE-gene pairs that have opposite effects in different methods\
+'*cre_detection/comparisons/mo_cre_method_outputs_comparison.R*'  compare SCENIC to pseudobulk and regression-based models\
+'*cre_detection/comparisons/mo_create_creqtl_plots.R*'  plot CRE-i-eQTL effects\
+'*cre_detection/comparisons/mo_do_full_cre_overlap_check.R*'  check overlap and concordance of TF-CRE-gene sets across CRE detection methods\
+'*cre_detection/comparisons/mo_get_encode_cre_genes_to_cpeaks.R*'  add encode region-gene link information to cpeaks\
+'*cre_detection/comparisons/mo_merge_cpeaks_with_screenv4.R*'  add encode screen v4 information to cpeaks defined regions\
+'*cre_detection/comparisons/mo_overlap_qtl_with_cres.R*'  add information on cpeaks regions to where variants might be located in
+
+
+##### single-cell CRE interaction analysis
+'*cre_detection/single_cell_interaction/mo_hybrid_cre_interaction_overlaps.R*'  plot interaction-eQTL at single-cell level with TF or ATAC as interaction terms overlaps across methods
+'*cre_detection/single_cell_interaction/mo_hybrid_cre_plot_interaction.R*'  plot specific interaction-eQTLs from chunk\
+'*cre_detection/single_cell_interaction/interaction_like/mo_hybrid_cre_interaction.R*'  perform single-cell interaction-eQTL analysis\
+'*cre_detection/single_cell_interaction/interaction_like/mo_hybrid_interactions.smk*'  merge single-cell interaction-eQTL analysis chunks\
+'*cre_detection/single_cell_interaction/interaction_like/mo_hybrid_cre_interaction_merge.R*'  snakemake to run single-cell interaction-eQTL analysis chunks\
+'*cre_detection/single_cell_interaction/interaction_like/mo_plot_qtl_method_overlap.Rmd*'  overlap interaction-eQTLs with eQTL/caQTL/SCENIC+\
+'*cre_detection/single_cell_interaction/interaction_like/region_interaction/mo_cre_sccre_interaction_confinement_r2g.R*'  create CRE-i-eQTL confinement file\
+'*cre_detection/single_cell_interaction/interaction_like/region_interaction/mo_hybrid_interactions_regions_template.yaml*'  yaml configuration for CRE-i-eQTL run\
+'*cre_detection/single_cell_interaction/interaction_like/tf_interaction/mo_add_pseudobulked_tf_activities.R*'  calculate pseudobulked TF activities\
+'*cre_detection/single_cell_interaction/interaction_like/tf_interaction/mo_calc_auc_eregulons.R*'  calculate gene AUC based TF activities\
+'*cre_detection/single_cell_interaction/interaction_like/tf_interaction/mo_compare_tf_to_region_ieqtls.Rmd*'  compare TF-i-eQTLs to CRE-i-eQTLs\
+'*cre_detection/single_cell_interaction/interaction_like/tf_interaction/mo_cre_sccre_interaction_confinement.R*'  create TF-i-eQTLs confinement\
+'*cre_detection/single_cell_interaction/interaction_like/tf_interaction/mo_hybrid_interations_template.yaml*'  yaml configuration for TF-i-eQTLs run\
+'*cre_detection/single_cell_interaction/interaction_like/tf_interaction/mo_recalc_tf_i_eqtl_auc_eregulons.R*'  recalculate TF-i-eQTL TF activities excluding TF-i-eGenes\
+'*cre_detection/single_cell_interaction/interaction_like/tf_interaction/mo_hybrid_interations_template_replication.yaml*'  yaml configuration for TF-i-eQTLs validation run that removed TF-i-eGenes from TF activities\
+'*cre_detection/single_cell_interaction/interaction_like/tf_interaction/viacheslav_replication/mo_hybrid_interations_template_viacheslavrep.yaml*'  yaml configuration for TF-i-eQTLs replication from Viacheslav paper\
+'*cre_detection/single_cell_interaction/interaction_like/tf_interaction/coeqtl_replication/mo_sccre_coeqtl_tf_interaction_confinement.R*'  create confinement for replicating co-eQTL TF-gene pairs\
+'*cre_detection/single_cell_interaction/interaction_like/tf_interaction/coeqtl_replication/mo_hybrid_interations_template_coeqtlrep.yaml*'  yaml configuration for TF-i-eQTLs replication from coeqtl paper\
+'*cre_detection/single_cell_interaction/coeqtl_like/mo_hybrid_cre_coeqtl_replication.R*'  perform co-eQTL style TF-i-eQTL analysis for chunk\
+'*cre_detection/single_cell_interaction/coeqtl_like/mo_hybrid_interactions_coeqtl.smk*'  perform co-eQTL style TF-i-eQTL analysis across chunks\
+'*cre_detection/single_cell_interaction/coeqtl_like/mo_hybrid_interations_coeqtl_template.yaml*'  configuration to perform co-eQTL style TF-i-eQTL analysis across chunks
+
+
 ### eQTL mapping
 '*qtl/eqtl/LIMIX/mo_create_limix_qtl_input.R*'  create input for LIMIX eQTL mapping\
 '*qtl/eqtl/LIMIX/mo_annotation_to_chunking_file.R*' create chunking file for eQTL mapping in LIMIX\
@@ -318,14 +286,6 @@ Below we will outline the steps taken to process and analyse the data
 '*qtl/interaction_caqtl/mo_create_limix_chromatin_interaction_input.R*'    create interaction-caQTL input files\
 '*qtl/interaction_caqtl/mo_interaction_caqtls.yaml*'    LIMIX-QTL interaction yaml file for interaction-caQTL\
 '*qtl/interaction_caqtl/mo_compare_icaqtls_vs_non_icaqtls.R*'    compare interacting vs non interacting caQTLs
-
-
-### QTL mediation
-'*qtl/mediation/mo_create_mediation_confinements.R*'    create confinement files for eQTL-by-caQTL mediation analyses\
-'*qtl/mediation/mo_create_mediation_metadata.R*'    create metadata for eQTL-by-caQTL mediation analyses\
-'*qtl/mediation/mo_perform_qtl_mediation_analysis.R*'    run eQTL-by-caQTL mediaton analysis script\
-'*qtl/mediation/mo_create_mediation_jobs.sh*'    create run eQTL-by-caQTL mediaton analysis jobs\
-'*qtl/mediation/mo_merge_mediation_results.R*'    merge mediation results
 
 
 ### QTL finemapping
@@ -451,13 +411,52 @@ Below we will outline the steps taken to process and analyse the data
 '*fungus_metaanalysis/funmeta_lookup_funmeta_variants.R*'   look up fungal meta-analysis variants in our QTL data
 
 ## scripts no longer used
+
+#### demultiplexing
 '*demultiplexing/mo_run_scrublet.py*'   python script to run Scrublet on a CellBender corrected 10x lane\
 '*demultiplexing/mo_test_scrublet.ipynb*'   jupyter notebook to test Scrublet on individual 10x lanes\
+'*demultiplexing/mo_create_demuxlet_jobs.sh*'   script to create jobs to run Demuxlet on the gene expression alignments
+
+#### ArchR ATAC data processing
+'*archr_preprocess_samples/build-arrowfiles.R*' create Arrow files to use in archR\
+'*archr_preprocess_samples/build-project.R*'  create ArchR project from Arrow chunk_files\
+'*archr_preprocess_samples/batch_correction.R*'  do batch correction over all lanes (unfortunately names 'sample' in ArchR)\
+'*archr_preprocess_samples/preprocess.R*'  perform preprocesing to remove low-quality nuclei and doublets\
+'*archr_preprocess_samples/iterative-LSI.R*'  perform dimension reduction and clustering\
+'*archr_preprocess_samples/iterative-LSI.R*'  perform dimension reduction and clustering\
+'*archr_preprocess_samples/addMetadata_subset_celltypes.R*' add celltype annotation from Seurat to ArchR project\
+'*archr_preprocess_samples/imputeCelltypes.R*' impute missing celltypes for nuclei, based on Seurat annotation clusters (majority vote)\
+'*archr_preprocess_samples/peakCalling.R*' perform peak calling based on celltypes assigned
+
+#### Differential Accessibility
 '*differential_accessibility/mo_differential_accessibility_kimma_parameterised.R*'  check differential accessible regions using kimma on the stimulation status
 
+#### LIMIX CRE detection
+'*cre_detection/limix_hybrid/mo_create_frac_exp_acc_files.R*'  create annotations for how prevalent regions are accessible across samples\
+'*cre_detection/limix_hybrid/mo_create_frac_exp_files.R*'  create annotations for how prevalent genes are expressed are accessible across samples\
+'*cre_detection/limix_hybrid/mo_create_hybrid_cre_inputs_atac.R*'  create chunked accessiblity tables for all data at once\
+'*cre_detection/limix_hybrid/mo_create_hybrid_cre_inputs_rna.R*'  create chunked expression tables for all data at once\
+'*cre_detection/limix_hybrid/mo_create_hybrid_cre_cov_matrix.R*'  create binary covariate and kinship data per cell\
+'*cre_detection/limix_hybrid/mo_merge_hybrid_cres.R*'  merge the chunked CRE mappings\
+'*cre_detection/limix_hybrid/mo_sample_hybrid_cre_inputs.R*'  randomly sample CRE inputs to check stability
+
+
+#### LIMIX output analysis
+'*cre_detection/limix_hybrid/output_analysis/mo_hybrid_vs_hic_comparison.R*'  overlap LIMIX CRE-gene links with Hi-C data from encode\
+'*cre_detection/limix_hybrid/output_analysis/mo_limix_cre_celltype_replication.Rmd.R*'  plot replication of LIMIX CRE-gene links across cell types\
+'*cre_detection/limix_hybrid/output_analysis/mo_limix_hybrid_vs_reunion.R.R*'  overlap LIMIX CRE-gene links with CRE-gene pairs in REUNION paper\
+'*cre_detection/limix_hybrid/output_analysis/mo_plot_sccres.R*'  plot LIMIX CRE-gene links
+
+
+#### QTL mediation
+'*qtl/mediation/mo_create_mediation_confinements.R*'    create confinement files for eQTL-by-caQTL mediation analyses\
+'*qtl/mediation/mo_create_mediation_metadata.R*'    create metadata for eQTL-by-caQTL mediation analyses\
+'*qtl/mediation/mo_perform_qtl_mediation_analysis.R*'    run eQTL-by-caQTL mediaton analysis script\
+'*qtl/mediation/mo_create_mediation_jobs.sh*'    create run eQTL-by-caQTL mediaton analysis jobs\
+'*qtl/mediation/mo_merge_mediation_results.R*'    merge mediation results
 
 
 ## License
 
-The code availabe in this repository is available under GPLv2 License:
-https://www.gnu.org/licenses/old-licenses/gpl-2.0.html
+The code availabe in this repository is available under GPLv3 License:
+https://www.gnu.org/licenses/gpl-3.0.html
