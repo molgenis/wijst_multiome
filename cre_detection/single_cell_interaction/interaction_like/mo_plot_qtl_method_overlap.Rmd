@@ -30,6 +30,7 @@ library(roycols)
 library(cowplot)
 library(stringr)
 library(ggpubr)
+library(VennDiagram)
 
 
 ```
@@ -1107,3 +1108,73 @@ nrow(scenic_output[scenic_output[['tier']] != '4. no QTL' & scenic_output[['is_t
 # [1] 0.04565245
 
 ```
+
+```{r venn_scenic_ieqtls, include=TRUE, fig.width=5, fig.height=5}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# remove the 'neither category'
+scenic_interaction_categories_onlqtl_n_noneither <- scenic_interaction_categories_onlqtl_n[scenic_interaction_categories_onlqtl_n[['category']] != 'neither', ]
+# add an extra category name with the percentage
+scenic_interaction_categories_onlqtl_n_noneither[['category_pct']] <- paste0(
+  scenic_interaction_categories_onlqtl_n_noneither[['category']], 
+  ' (', 
+  round(100*scenic_interaction_categories_onlqtl_n_noneither[['pct']], digits = 1), 
+  '%)'
+)
+# make the plot
+scenic_interaction_categories_onlqtl_v <- draw.pairwise.venn(
+  # get the number for CRE-i-eQTL
+  area1 = 
+    scenic_interaction_categories_onlqtl_n_noneither[scenic_interaction_categories_onlqtl_n_noneither[['category']] == 'only accessibility-i-eQTL', ][['n']] + 
+    scenic_interaction_categories_onlqtl_n_noneither[scenic_interaction_categories_onlqtl_n_noneither[['category']] == 'TF- and accessibility-i-eQTL', ][['n']],
+  # get the number for TFa-i-eQTL
+  area2 = 
+    scenic_interaction_categories_onlqtl_n_noneither[scenic_interaction_categories_onlqtl_n_noneither[['category']] == 'only TF-i-eQTL', ][['n']] + 
+    scenic_interaction_categories_onlqtl_n_noneither[scenic_interaction_categories_onlqtl_n_noneither[['category']] == 'TF- and accessibility-i-eQTL', ][['n']],
+  # get the number for the intersect
+  cross.area = scenic_interaction_categories_onlqtl_n_noneither[scenic_interaction_categories_onlqtl_n_noneither[['category']] == 'TF- and accessibility-i-eQTL', ][['n']],
+  category = c(
+    # get the name for CRE-i-eQTL
+    #scenic_interaction_categories_onlqtl_n_noneither[scenic_interaction_categories_onlqtl_n_noneither[['category']] == 'only accessibility-i-eQTL', ][['category_pct']], 
+    '', 
+    # get the name for the TFa-i-eQTL
+    #scenic_interaction_categories_onlqtl_n_noneither[scenic_interaction_categories_onlqtl_n_noneither[['category']] == 'only TF-i-eQTL', ][['category_pct']]
+    ''
+    ), 
+  fill = c(
+    # get the color for the CRE-i-eQTL
+    roycols::get_color_list(unique(scenic_interaction_categories_onlqtl_n[['category']]), color_indices = c(56,57,58,59))[[2]], 
+    # get the color for the TFa-i-eQTL
+    roycols::get_color_list(unique(scenic_interaction_categories_onlqtl_n[['category']]), color_indices = c(56,57,58,59))[[3]]
+  ), 
+  alpha = c(.7, .7)
+)
+
+# we'll write the plot to pdf
+pdf("~/multiome/plots/mo_scenic_geneticcontrol_ieqtls_venn.pdf", width = 5, height = 5)
+
+# perform plotting for the Venn diagram
+grid.newpage()
+grid.draw(scenic_interaction_categories_onlqtl_v)
+
+# set intersection name
+grid.text(
+  scenic_interaction_categories_onlqtl_n_noneither[scenic_interaction_categories_onlqtl_n_noneither[['category']] == 'TF- and accessibility-i-eQTL', ][['category_pct']]
+  , x = 0.6, y = 0.4, gp = gpar(fontsize = 14)
+)
+# set CRE only
+grid.text(
+  scenic_interaction_categories_onlqtl_n_noneither[scenic_interaction_categories_onlqtl_n_noneither[['category']] == 'only accessibility-i-eQTL', ][['category_pct']]
+  , x = 0.7, y = 0.8, gp = gpar(fontsize = 14)
+)
+# set TFa only
+grid.text(
+  scenic_interaction_categories_onlqtl_n_noneither[scenic_interaction_categories_onlqtl_n_noneither[['category']] == 'only TF-i-eQTL', ][['category_pct']]
+  , x = 0.3, y = 0.1, gp = gpar(fontsize = 14)
+)
+
+# close device connection
+dev.off()
+
+```
+
