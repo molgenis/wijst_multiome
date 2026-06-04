@@ -576,6 +576,16 @@ ieqtl_output_all_sig <- ieqtl_output_all[ieqtl_output_all[['feature_q_value']] <
                                          ieqtl_output_all[['feature_bf_eigen']] < 0.05, ]
 # rename the columns
 colnames(ieqtl_output_all_sig) <- c('i_beta', 'i_beta_se', 'i_empirical_feature_p_value', 'i_p_value', 'snp_id', 'feature_id', 'i_n_tests_feature', 'i_feature_bf_eigen', 'i_total_bf_eigen', 'i_feature_q_value', 'i_cell_type', 'i_top_effect')
+# get QTLs per cell type
+eqtl_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/sc-eqtlgen/output/L1/combined/'
+# get all the QTL output
+eqtl_output <- get_qtls_per_celltype_limix(eqtl_output_loc)
+# merge
+eqtl_output_all <- rbindlist(eqtl_output, fill = T)
+# add the baseline beta and se as well
+ieqtl_output_all_sig <- cbind(ieqtl_output_all_sig, 
+                              eqtl_output_all[match(paste(ieqtl_output_all_sig[['snp_id']], ieqtl_output_all_sig[['feature_id']], ieqtl_output_all_sig[['cell_type']]), paste(ieqtl_output_all_sig[['snp_id']], ieqtl_output_all_sig[['feature_id']], ieqtl_output_all_sig[['cell_type']])), c('beta', 'beta_se')])
+
 # keep only top
 ieqtl_output_all_sig_top <- ieqtl_output_all_sig[ieqtl_output_all_sig[['i_top_effect']], ]
 # add the signs
@@ -603,7 +613,7 @@ for (ct in c(names(de_mo_up), names(de_mo_down))) {
 # merge all
 de_genes_df <- do.call('rbind', de_genes_df_ct)
 # merge this with the QTL input
-ieqtl_vs_de <- merge(de_genes_df, ieqtl_output_all_sig_top[, c('feature_id', 'i_cell_type', 'i_direction')], by.x = c('gene', 'cell_type'), by.y = c('feature_id', 'i_cell_type'), all = T)
+ieqtl_vs_de <- merge(de_genes_df, ieqtl_output_all_sig_top[, c('feature_id', 'i_cell_type', 'i_direction', 'i_beta', 'i_beta_se', 'beta', 'beta_se')], by.x = c('gene', 'cell_type'), by.y = c('feature_id', 'i_cell_type'), all = T)
 # fill NAs
 ieqtl_vs_de[is.na(ieqtl_vs_de[['de_direction']]), ][['de_direction']] <- 'none'
 ieqtl_vs_de[is.na(ieqtl_vs_de[['i_direction']]), ][['i_direction']] <- 'none'
@@ -650,3 +660,57 @@ p_ieqtl_vs_de_counts_ieonly <- ggplot(data = ieqtl_vs_de_counts[ieqtl_vs_de_coun
 p_ieqtl_vs_de_counts_ieonly
 # save plot
 ggsave('~/plots/mo_multiome_de_vs_ieqtl_overlap_numbers_ieqtlonly.pdf', width = 8, height = 6, plot = p_ieqtl_vs_de_counts_ieonly)
+
+# get the interaction z score
+ieqtl_vs_de[['i_z']] <- ieqtl_vs_de[['i_beta']] / ieqtl_vs_de[['i_beta_se']]
+ieqtl_vs_de[['z']] <- ieqtl_vs_de[['beta']] / ieqtl_vs_de[['beta_se']]
+# now sort by that Z
+#ieqtl_vs_de <- ieqtl_vs_de[order(abs(ieqtl_vs_de[['i_z']]), decreasing = T), ]
+ieqtl_vs_de <- ieqtl_vs_de[order(ieqtl_vs_de[['i_z']], decreasing = F), ]
+# add the top variant
+ieqtl_vs_de[['variant']] <- ieqtl_output_all_sig_top[match(paste(ieqtl_vs_de[['cell_type']], ieqtl_vs_de[['gene']]), paste(ieqtl_output_all_sig_top[['i_cell_type']], ieqtl_output_all_sig_top[['feature_id']])), ][['snp_id']]
+# get the top that are also a DE
+# head(ieqtl_vs_de[ieqtl_vs_de[['de_direction']] != 'none' & sign(ieqtl_vs_de[['beta']]) == sign(ieqtl_vs_de[['i_beta']]), c('cell_type', 'variant', 'gene', 'de_direction', 'i_z')], n = 20)
+head(ieqtl_vs_de[ieqtl_vs_de[['de_direction']] != 'none', c('cell_type', 'variant', 'gene', 'de_direction', 'i_z')], n = 20)
+
+#       cell_type              variant       gene de_direction        i_z
+# 33372        DC       6:39317081:G:A     KCNK17           up -10.904938
+# 27436  monocyte      3:69543099:G:GA     FRMD4B           up -10.338186
+# 19653  monocyte      12:92419305:T:G    CLLU1OS         down -10.152830
+# 25782      CD8T      22:45370605:G:A    FAM118A           up -10.084846
+# 6522         DC      1:205720679:T:G AC119673.2         down  -9.398334
+# 20158        DC      7:101348121:G:C    COL26A1           up  -9.033809
+# 12382        NK    11:120914188:T:TA AP004147.1           up  -8.941465
+# 46287         B       4:83221735:G:A      PLAC8         down  -8.724722
+# 36576  monocyte      10:62239504:G:A  LINC02621         down  -8.561970
+# 25781      CD4T      22:45370605:G:A    FAM118A           up  -8.541001
+# 37533  monocyte        6:6577895:A:G       LY86           up  -8.378011
+# 19652  monocyte      12:92419305:T:G      CLLU1         down  -8.116236
+# 39074  monocyte       1:12013728:C:A       MFN2           up  -8.032880
+# 16943      CD4T 10:113679022:CGTGT:C      CASP7         down  -8.028701
+# 55502      CD4T     17:35196206:A:AT      SLFN5         down  -7.990769
+# 28117         B       1:89186388:T:C       GBP7         down  -7.721173
+# 55501         B     17:35234146:C:CT      SLFN5         down  -7.537919
+# 9391       CD4T      6:118862912:A:G AL137009.1         down  -7.366418
+# 22043  monocyte      1:15616099:CT:C       DDI2         down  -7.309310
+# 32968  monocyte      1:185439929:G:A   IVNS1ABP           up  -7.151220
+
+# save these as well
+write.table(
+  data.frame(
+    # 'cell_type' = ieqtl_vs_de[ieqtl_vs_de[['de_direction']] != 'none' & sign(ieqtl_vs_de[['beta']]) == sign(ieqtl_vs_de[['i_beta']]), c('cell_type', 'variant', 'gene', 'de_direction', 'i_z')][['cell_type']][1:50], 
+    # 'variant' = ieqtl_vs_de[ieqtl_vs_de[['de_direction']] != 'none' & sign(ieqtl_vs_de[['beta']]) == sign(ieqtl_vs_de[['i_beta']]), c('cell_type', 'variant', 'gene', 'de_direction', 'i_z')][['variant']][1:50],
+    # 'gene' = ieqtl_vs_de[ieqtl_vs_de[['de_direction']] != 'none' & sign(ieqtl_vs_de[['beta']]) == sign(ieqtl_vs_de[['i_beta']]), c('cell_type', 'variant', 'gene', 'de_direction', 'i_z')][['gene']][1:50]
+    'cell_type' = ieqtl_vs_de[ieqtl_vs_de[['de_direction']] != 'none', c('cell_type', 'variant', 'gene', 'de_direction', 'i_z')][['cell_type']][1:50], 
+    'variant' = ieqtl_vs_de[ieqtl_vs_de[['de_direction']] != 'none', c('cell_type', 'variant', 'gene', 'de_direction', 'i_z')][['variant']][1:50],
+    'gene' = ieqtl_vs_de[ieqtl_vs_de[['de_direction']] != 'none', c('cell_type', 'variant', 'gene', 'de_direction', 'i_z')][['gene']][1:50]
+    
+  ), 
+  gzfile('~/tables/mo_ieqtl_plot_tbl.tsv.gz'), 
+  row.names = F, 
+  col.names = T, 
+  sep = '\t', 
+  quote = T
+)
+# make checksum
+mdfiver::create_sha256_for_file('~/tables/mo_ieqtl_plot_tbl.tsv.gz')
