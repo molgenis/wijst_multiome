@@ -27,8 +27,8 @@ mv /groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoi
 
 # add 'S' prefix to sample IDs
 R --slave -e '
-fam <- read.table("/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_oneK1k/genotype_input/EUR_imputed_hg38_varFiltered.fam.original", header = T, sep = "\t");
-fam[["X1"]] <- paste0("S", fam[["X1"]]);
+fam <- read.table("/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_oneK1k/genotype_input/EUR_imputed_hg38_varFiltered.fam.original", header = F, sep = "\t");
+fam[["V2"]] <- paste0("S", fam[["V2"]]);
 write.table(fam, "/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_oneK1k/genotype_input/EUR_imputed_hg38_varFiltered.fam", row.names = F, col.names = F, sep = "\t", quote = F);
 mdfiver::create_sha256_for_file("/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_oneK1k/genotype_input/EUR_imputed_hg38_varFiltered.fam");
 '
