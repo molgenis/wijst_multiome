@@ -114,11 +114,14 @@ tfa_ieqtls[tfa_ieqtls[['tfa_gene_direction']] == '-/+', ][['tfa:genotype_beta_di
 tfa_ieqtls[['tfa:genotype_z']] <- tfa_ieqtls[['tfa:genotype_beta']] / tfa_ieqtls[['tfa:genotype_se']]
 tfa_ieqtls[['tfa:genotype_rep_z']] <- tfa_ieqtls[['tfa:genotype_beta_rep']] / tfa_ieqtls[['tfa:genotype_se_rep']]
 tfa_ieqtls[['tfa:genotype_z_directed']] <- tfa_ieqtls[['tfa:genotype_beta_directed']] / tfa_ieqtls[['tfa:genotype_se']]
-tfa_ieqtls <- tfa_ieqtls[tfa_ieqtls[['tfa:genotype_bh']] < 0.05, ]
 tfa_ieqtls[['genotype_z']] <- tfa_ieqtls[['genotype_beta']] / tfa_ieqtls[['genotype_se']]
+# backup original
+tfa_ieqtls_full <- tfa_ieqtls
+# filter by BH
+tfa_ieqtls <- tfa_ieqtls[tfa_ieqtls[['tfa:genotype_bh']] < 0.05, ]
 
 # all
-tfa_lcl_all <- merge(tfa_ieqtls[, c('variant', 'tf', 'gene', 'tfa:genotype_z', 'genotype_z', 'tfa:genotype_z_directed', 'tfa_gene_direction')], lcl[, c('variant', 'eregulon', 'feature', 'interaction_z_score_LCL', 'interaction_p_value_LCL')], by.x = c('variant', 'tf', 'gene'), by.y = c('variant', 'eregulon', 'feature'))
+tfa_lcl_all <- merge(tfa_ieqtls[, c('variant', 'tf', 'gene', 'tfa_gene_direction', 'tfa:genotype_z', 'genotype_z', 'tfa:genotype_z_directed')], lcl[, c('variant', 'eregulon', 'feature', 'interaction_z_score_LCL', 'interaction_p_value_LCL')], by.x = c('variant', 'tf', 'gene'), by.y = c('variant', 'eregulon', 'feature'))
 tfa_lcl_all <- tfa_lcl_all[complete.cases(tfa_lcl_all), ]
 # redo MTC
 tfa_lcl_all[['interaction_bh_LCL']] <- p.adjust(tfa_lcl_all[['interaction_p_value_LCL']], method = 'BH')
@@ -131,7 +134,7 @@ sum(sign(tfa_lcl_bh[['tfa:genotype_z']]) != sign(tfa_lcl_bh[['interaction_z_scor
 # filter LCL
 lcl <- lcl[lcl[['interaction_p_value_LCL']] < 0.05, ]
 # merge the two
-tfa_lcl_nominal <- merge(tfa_ieqtls[, c('variant', 'tf', 'gene', 'tfa:genotype_z', 'genotype_z', 'tfa:genotype_z_directed', 'tfa_gene_direction')], lcl[, c('variant', 'eregulon', 'feature', 'interaction_z_score_LCL')], by.x = c('variant', 'tf', 'gene'), by.y = c('variant', 'eregulon', 'feature'))
+tfa_lcl_nominal <- merge(tfa_ieqtls[, c('variant', 'tf', 'gene', 'tfa_gene_direction', 'tfa:genotype_z', 'genotype_z', 'tfa:genotype_z_directed')], lcl[, c('variant', 'eregulon', 'feature', 'interaction_z_score_LCL')], by.x = c('variant', 'tf', 'gene'), by.y = c('variant', 'eregulon', 'feature'))
 # show the concordance
 sum(sign(tfa_lcl_nominal[['tfa:genotype_z']]) != sign(tfa_lcl_nominal[['interaction_z_score_LCL']])) / nrow(tfa_lcl_nominal)
 # [1] 0.5496599
@@ -139,7 +142,7 @@ sum(sign(tfa_lcl_nominal[['tfa:genotype_z']]) != sign(tfa_lcl_nominal[['interact
 # filter with qvalue
 lcl <- lcl[lcl[['interaction_q_value_LCL']] < 0.05, ]
 # merge again
-tfa_lcl_emperical <- merge(tfa_ieqtls[, c('variant', 'tf', 'gene', 'tfa:genotype_z', 'genotype_z', 'tfa:genotype_z_directed', 'tfa_gene_direction')], lcl[, c('variant', 'eregulon', 'feature', 'interaction_z_score_LCL')], by.x = c('variant', 'tf', 'gene'), by.y = c('variant', 'eregulon', 'feature'))
+tfa_lcl_emperical <- merge(tfa_ieqtls[, c('variant', 'tf', 'gene', 'tfa_gene_direction', 'tfa:genotype_z', 'genotype_z', 'tfa:genotype_z_directed')], lcl[, c('variant', 'eregulon', 'feature', 'interaction_z_score_LCL')], by.x = c('variant', 'tf', 'gene'), by.y = c('variant', 'eregulon', 'feature'))
 # show the concordance
 sum(sign(tfa_lcl_emperical[['tfa:genotype_z']]) != sign(tfa_lcl_emperical[['interaction_z_score_LCL']])) / nrow(tfa_lcl_emperical)
 # [1] 0.8461538
@@ -149,8 +152,16 @@ tfa_lcl_bh[['tfa:genotype_z_sameallele']] <- -1 * tfa_lcl_bh[['tfa:genotype_z']]
 # plot the replication
 plot_concondance(tfa_lcl_bh, d1_effect_column = 'tfa:genotype_z_sameallele', d2_effect_column = 'interaction_z_score_LCL') + xlab('TFa-i-eQTL interaction-Z') + ylab('LCL interaction-Z') + ggtitle('Concordance of TFa-i-eQTL interactions with LCL TF-i-eQTL')
 
+# try the same as
+tfa_lcl_bh[['tfa:genotype_z_sameallele']] <- -1 * tfa_lcl_bh[['tfa:genotype_z_directed']]
+tfa_lcl_bh[['interaction_z_score_LCL_sameallele']] <- tfa_lcl_bh[['interaction_z_score_LCL']]
+tfa_lcl_bh[tfa_lcl_bh[['tfa_gene_direction']] == '-/+', ][['interaction_z_score_LCL_sameallele']] <- -1 * tfa_lcl_bh[tfa_lcl_bh[['tfa_gene_direction']] == '-/+', ][['interaction_z_score_LCL']]
+tfa_lcl_bh[['interaction_z_score_LCL_sameallele']] <- -1 * tfa_lcl_bh[['interaction_z_score_LCL_sameallele']]
+plot_concondance(tfa_lcl_bh, d1_effect_column = 'tfa:genotype_z_directed', d2_effect_column = 'interaction_z_score_LCL_sameallele') + xlab('TFa-i-eQTL interaction-Z') + ylab('LCL interaction-Z') + ggtitle('Concordance of TFa-i-eQTL interactions with LCL TF-i-eQTL')
+
+
 # all
-tfa_bios_all <- merge(tfa_ieqtls[, c('variant', 'tf', 'gene', 'tfa:genotype_z', 'genotype_z', 'tfa:genotype_z_directed', 'tfa_gene_direction')], bios[, c('variant', 'eregulon', 'feature', 'interaction_z_score_BIOS', 'interaction_p_value_BIOS')], by.x = c('variant', 'tf', 'gene'), by.y = c('variant', 'eregulon', 'feature'))
+tfa_bios_all <- merge(tfa_ieqtls[, c('variant', 'tf', 'gene', 'tfa_gene_direction', 'tfa:genotype_z', 'genotype_z', 'tfa:genotype_z_directed')], bios[, c('variant', 'assessed_allele', 'eregulon', 'feature', 'interaction_z_score_BIOS', 'interaction_p_value_BIOS')], by.x = c('variant', 'tf', 'gene'), by.y = c('variant', 'eregulon', 'feature'))
 tfa_bios_all <- tfa_bios_all[complete.cases(tfa_bios_all), ]
 # redo MTC
 tfa_bios_all[['interaction_bh_BIOS']] <- p.adjust(tfa_bios_all[['interaction_p_value_BIOS']], method = 'BH')
@@ -163,13 +174,46 @@ sum(sign(tfa_bios_bh[['tfa:genotype_z_directed']]) != sign(tfa_bios_bh[['interac
 # filter with qvalue
 bios <- bios[bios[['interaction_q_value_BIOS']] < 0.05, ]
 # merge again
-tfa_bios_emperical <- merge(tfa_ieqtls[, c('variant', 'tf', 'gene', 'tfa:genotype_z', 'genotype_z', 'tfa:genotype_z_directed', 'tfa_gene_direction')], bios[, c('variant', 'eregulon', 'feature', 'interaction_z_score_BIOS')], by.x = c('variant', 'tf', 'gene'), by.y = c('variant', 'eregulon', 'feature'))
+tfa_bios_emperical <- merge(tfa_ieqtls[, c('variant', 'tf', 'gene', 'tfa_gene_direction', 'tfa:genotype_z', 'genotype_z', 'tfa:genotype_z_directed')], bios[, c('variant', 'assessed_allele', 'eregulon', 'feature', 'interaction_z_score_BIOS')], by.x = c('variant', 'tf', 'gene'), by.y = c('variant', 'eregulon', 'feature'))
 # show the concordance
 sum(sign(tfa_bios_emperical[['tfa:genotype_z_directed']]) != sign(tfa_bios_emperical[['interaction_z_score_BIOS']])) / nrow(tfa_bios_emperical)
 # [1] 0.7225077
 
 # swap alleles
 tfa_bios_bh[['tfa:genotype_z_sameallele']] <- -1 * tfa_bios_bh[['tfa:genotype_z_directed']]
+tfa_bios_bh[['interaction_z_score_BIOS_z_sameallele']] <- -1 * tfa_bios_bh[['interaction_z_score_BIOS']]
 # plot the replication
 plot_concondance(tfa_bios_bh, d1_effect_column = 'tfa:genotype_z_sameallele', d2_effect_column = 'interaction_z_score_BIOS') + xlab('TFa-i-eQTL interaction-Z') + ylab('BIOS interaction-Z') + ggtitle('Concordance of TFa-i-eQTL interactions with BIOS TF-i-eQTL')
+plot_concondance(tfa_bios_bh, d1_effect_column = 'tfa:genotype_z_directed', d2_effect_column = 'interaction_z_score_BIOS_z_sameallele') + xlab('TFa-i-eQTL interaction-Z') + ylab('BIOS interaction-Z') + ggtitle('Concordance of TFa-i-eQTL interactions with BIOS TF-i-eQTL')
+
+
+# get top only
+tfa_bios_bh_top <- tfa_bios_bh[order(abs(tfa_bios_bh[['interaction_z_score_BIOS']])), ]
+tfa_bios_bh_top <- tfa_bios_bh_top[!duplicated(tfa_bios_bh_top[, c('tf', 'gene')]), ]
+# plot the replication
+plot_concondance(tfa_bios_bh_top, d1_effect_column = 'tfa:genotype_z_sameallele', d2_effect_column = 'interaction_z_score_BIOS') + xlab('TFa-i-eQTL interaction-Z') + ylab('BIOS interaction-Z') + ggtitle('Concordance of TFa-i-eQTL interactions with BIOS TF-i-eQTL (top variants)')
+
+# get top gene only
+tfa_bios_bh_top_gene <- tfa_bios_bh_top[!duplicated(tfa_bios_bh_top[, c('gene')]), ]
+# plot the replication
+plot_concondance(tfa_bios_bh_top_gene, d1_effect_column = 'tfa:genotype_z_sameallele', d2_effect_column = 'interaction_z_score_BIOS') + xlab('TFa-i-eQTL interaction-Z') + ylab('BIOS interaction-Z') + ggtitle('Concordance of TFa-i-eQTL interactions with BIOS TF-i-eQTL (top genes)')
+
+# get the bios overlapping set
+tfa_bios_bh_formerge <- tfa_bios_bh[, c('variant', 'tf', 'gene', 'interaction_z_score_BIOS_z_sameallele', 'interaction_p_value_BIOS', 'interaction_bh_BIOS')]
+# rename those
+colnames(tfa_bios_bh_formerge) <- c('variant', 'tf', 'gene', 'i_z_bios', 'i_p_value_bios', 'i_bh_bios')
+# merge with the tfa ieqtls
+tfa_ieqtls_full <- merge(tfa_ieqtls_full, tfa_bios_bh_formerge, by = c('variant', 'tf', 'gene'), all.x = T)
+
+# get the lcl overlapping set
+tfa_lcl_bh_formerge <- tfa_lcl_bh[, c('variant', 'tf', 'gene', 'interaction_z_score_LCL_sameallele', 'interaction_p_value_LCL', 'interaction_bh_LCL')]
+# rename those
+colnames(tfa_lcl_bh_formerge) <- c('variant', 'tf', 'gene', 'i_z_lcl', 'i_p_value_lcl', 'i_bh_lcl')
+# merge with the tfa ieqtls
+tfa_ieqtls_full <- merge(tfa_ieqtls_full, tfa_lcl_bh_formerge, by = c('variant', 'tf', 'gene'), all.x = T)
+
+# save result
+tfa_with_bulk_rep_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/replication/lcl/mo_var_tfexpression_gene_confinement_inclcaqtls_varinregion_lclbios.tsv.gz'
+write.table(tfa_ieqtls_full, gzfile(tfa_with_bulk_rep_loc), row.names = F, col.names = T, sep = '\t')
+mdfiver::create_sha256_for_file(tfa_with_bulk_rep_loc)
 
