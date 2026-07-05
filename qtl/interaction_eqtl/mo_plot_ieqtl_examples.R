@@ -346,6 +346,14 @@ confinement <- fread(confinement_loc, header = T, sep = '\t')
 
 # keep complete cases
 confinement <- confinement[complete.cases(confinement), ]
+# get some more
+confinement <- rbind(
+  confinement, 
+  data.frame('cell_type' = rep(c('B', 'CD4T', 'CD8T', 'DC', 'monocyte', 'NK'), times = 2), 
+             'variant' = c(rep('6:88443758:C:T', times = 6), rep('3:126511500:C:T', times = 6)), 
+             'gene' = c(rep('AL139042.1', times = 6), rep('CHST13', times = 6))
+  )
+)
 
 # the variant data
 genotype_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/genotype/imputed_hg38_all_anc_qtl_tested_variants'
