@@ -1,0 +1,751 @@
+#!/usr/bin/env Rscript
+############################################################################################################################
+# Authors: Roy Oelen
+# Name: mo_hybrid_cre_mapping.R
+# Function: perform interaction-eQTL analysis at single-cell level with TF or ATAC as interaction terms
+# Example: 
+# ~/start_Rscript.sh \
+#   /groups/umcg-franke-scrna/tmp02/users/umcg-roelen/singularity/rstudio-server/simulated_home/mo_hybrid_cre_mapping.R \
+#   --in /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/all/chr12-8899578-9674043 \
+#   --out /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_gene/sc/all/lane_donor_countrna/chr12-8899578-9674043 \
+#   --confinement /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/mo_var_tf_gene_confinement.tsv.gz \
+#   --smf_loc /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/all/smf.tsv.gz \
+#   --covariates_file /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/metadata/mo_celllevel_metadata.tsv.gz \
+#   --accessibility_file /groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eregulon_gene_auc_monocyte_nonsparse_transposed.tsv.gz \
+#   --fixed_effects region \
+#   --random_effects sample_final,lane \
+#   --barcode_column barcode_lane \
+#   --expression_gausnorm \
+#   --accessibility_gausnorm
+# 
+############################################################################################################################
+
+####################
+# libraries        #
+####################
+
+# table format
+library(data.table)
+# load command line parameters
+library(optparse)
+# transformation into gaussian normal distribution
+library(bestNormalize)
+# for the model
+library(lme4)
+library(lmerTest)
+# progress
+library(progress)
+
+
+####################
+# Functions        #
+####################
+
+#' Create a formula for mixed-effects models
+#'
+#' This function generates a formula for mixed-effects models based on the specified variable of interest, fixed effects, and random effects.
+#'
+#' @param var_of_interest A character string representing the dependent variable.
+#' @param fixed_effects A character vector of fixed effect variables.
+#' @param random_effects A character vector of random effect variables.
+#' @return A formula object for use in mixed-effects models.
+#' @examples
+#' get_formula("y", c("x1", "x2"), c("group"))
+get_formula <- function(var_of_interest, fixed_effects=NULL, random_effects=NULL) {
+  # make the formula
+  formula_string <- paste(var_of_interest, '~ 0 ', sep = ' ')
+  # do the random effects
+  if (!is.null(random_effects) & length(random_effects) > 0) {
+    # style of R formulas
+    random_effects_formula_style <- paste('(1|', random_effects, ')', sep = '')
+    formula_string <- paste(formula_string, paste(random_effects_formula_style, collapse = '+'), sep = '+')
+  }
+  # do the fixed effects
+  if (!is.null(fixed_effects) & length(fixed_effects) > 0) {
+    formula_string <- paste(formula_string, paste(fixed_effects, collapse = '+'), sep = '+')
+  }
+  # turn into formula
+  form <- as.formula(formula_string)
+  return(form)
+}
+
+
+#' Transform Independent Variable Matrix Using Yeo-Johnson Transformation
+#'
+#' This function applies the Yeo-Johnson transformation to the numeric columns of an independent variable matrix.
+#' The feature ID column is preserved and reattached to the transformed data.
+#'
+#' @param independent_variable_matrix A data.table containing the independent variables. The columns represent different donors.
+#' @param feature_id_column A character string specifying the column name that contains the feature IDs. Default is 'feature'.
+#'
+#' @return A data.table with the transformed numeric columns and the feature ID column reattached.
+#'
+#' @examples
+#' \dontrun{
+#' library(data.table)
+#' library(car)
+#' dt <- data.table(feature = c('A', 'B', 'C'), donor1 = c(1, 2, 3), donor2 = c(4, 5, 6))
+#' transformed_dt <- gausnorm_independent_variable_matrix(dt, 'feature')
+#' print(transformed_dt)
+#' }
+#'
+gausnorm_independent_variable_matrix <- function(independent_variable_matrix, feature_id_column='feature', boxcox=F, min_value=1e-6) {
+  # take the features
+  features <- independent_variable_matrix[[feature_id_column]]
+  # remove the feature ID
+  independent_variable_matrix[[feature_id_column]] <- NULL
+  # take the donor names, as they are the columns
+  colnames_original <- colnames(independent_variable_matrix)
+  # transpose the matrix, as we'll do this on a per-column basis
+  independent_variable_matrix_t <- t(as.matrix(independent_variable_matrix))
+  # transform the data
+  transformed_data <- apply(independent_variable_matrix_t, 2, function(x) {
+    if (is.numeric(x)) {
+      if (!is.null(min_value)) {
+        x[x < min_value] <- min_value
+      }
+      if (boxcox) {
+        boxcox(x)$x.t
+      } else {
+        yeojohnson(x)$x.t
+      }
+    }
+    else {
+      x
+    }
+  })
+  # make into table
+  transformed_data <- do.call('cbind', transformed_data)
+  # transform back and make datatable
+  transformed_data <- as.data.table(t(transformed_data))
+  # add back the donor names
+  colnames(transformed_data) <- colnames_original
+  # make the features as a data.table as well
+  features_column <- data.table(x = features)
+  # with the right column name
+  colnames(features_column) <- feature_id_column
+  # and merge the feature column back onto the data
+  transformed_data <- cbind(features_column, transformed_data)
+  return(transformed_data)
+}
+
+
+gausnorm_independent_variable <- function(x, boxcox=F, min_value=1e-6) {
+  # initialize value 
+  y <- NULL
+  # only if numeric we can convert
+  if (is.numeric(x)) {
+    if (!is.null(min_value) && boxcox) {
+      x[x < min_value] <- min_value
+    }
+    if (boxcox) {
+      y <- boxcox(x)$x.t
+    } else {
+      y <- yeojohnson(x)$x.t
+    }
+  }
+  else {
+    y <- x
+  }
+  return(y)
+}
+
+
+model_to_row <- function(model) {
+  # make summary of model
+  model_summary <- summary(model)
+  # extract coeficients
+  model_coefficients <- model_summary[['coefficients']]
+  # get the values we have metrics for
+  covariates <- rownames(model_coefficients)
+  # create rename dictionary
+  rename_dict <- list(
+    '^Estimate$' = 'beta', 
+    '^Std. Error$' = 'se', 
+    '^t value$' = 'tval', 
+    '^Pr\\(>\\|t\\|\\)$' = 'p'
+  )
+  # rename all
+  for (original in names(rename_dict)) {
+    colnames(model_coefficients) <- gsub(original, rename_dict[[original]], colnames(model_coefficients))
+  }
+  # get the type of values
+  stats <- colnames(model_coefficients)
+  # create a df of one row, with columns that are a combination of covariates and their stats
+  row_created <- data.frame(matrix(, nrow = 1, ncol = length(covariates) * length(covariates)))
+  # set index
+  i <- 1
+  # check each variable
+  for (covariate in covariates) {
+    # and the value
+    for (stat in stats) {
+      # extract value
+      row_created[1, i] <- model_coefficients[covariate, stat]
+      # update column name
+      colnames(row_created)[[i]] <- paste(covariate, stat, sep = '_')
+      # update index
+      i <- i + 1
+    }
+  }
+  return(row_created)
+}
+
+
+do_interaction_analysis <- function(expression_data, 
+                                    accessibility_data, 
+                                    smf, 
+                                    confinement,
+                                    covariates_data=NULL, 
+                                    fixed_effects=c('lane','region'), 
+                                    random_effects=c('sample_final'), 
+                                    family = 'gaussian', 
+                                    accessibility_gausnorm=T, 
+                                    expression_gausnorm=T, 
+                                    accessibility_boxcox=F, 
+                                    expression_boxcox=F) {
+  # create formula
+  base_formula <- get_formula(var_of_interest = 'expression', fixed_effects = fixed_effects, random_effects = random_effects)
+  base_formula_string <- (Reduce(paste, deparse(base_formula)))
+  message(paste('Using base formula:', base_formula_string, ''))
+  # conver to dataframes
+  expression_data <- data.frame(expression_data)
+  accessibility_data <- data.frame(accessibility_data)
+  smf <- data.frame(smf)
+  confinement <- data.frame(confinement)
+  if (!is.null(covariates_data)) {
+    covariates_data <- data.frame(covariates_data)
+    # get which things we need from that dataframe
+    covariate_columns <- setdiff(c(fixed_effects, random_effects), c('expression', 'region'))
+    # and subset the covariates data to that
+    covariates_data <- covariates_data[, c('cell', covariate_columns)]
+  }
+  # put all results in a list
+  res_per_comparison <- list()
+  # count the number of regions
+  unique_regions <- unique(confinement[['region']])
+  n_regions <- length(unique_regions)
+  # show the user how many we have
+  message(paste('processing', as.character(n_regions), 'regions/TFs'))
+  # set a progress bar
+  pb <- progress_bar$new(total = n_regions)
+  # initialize the progress bar
+  pb$tick(0)
+  # check each region
+  for (region_i in 1 : n_regions) {
+    # check whether we gausnormed
+    gausnormed_region <- F
+    # update the progress bar
+    pb$tick()
+    # get the region
+    region <- unique_regions[region_i]
+    #print(region)
+    # extract the genes and variants
+    confinement_region <- confinement[confinement[['region']] == region, ]
+    # the specific genes then
+    genes_region <- unique(confinement_region[['gene']])
+    # subset to these genes
+    expression_data_region <- expression_data[
+      expression_data[['gene']] %in% genes_region, 
+    ]
+    # extract the region values
+    region_values <- as.vector(unlist(accessibility_data[accessibility_data[['region']] == region, 2:ncol(accessibility_data)]))
+    # add values
+    covariates_data[['region']] <- region_values
+    # check each gene
+    for (gene in unique(genes_region)) {
+      #print(gene)
+      # check whether we gausnormed the gene
+      gausnormed_gene <- F
+      # extract the gene
+      gene_values <- as.vector(unlist(expression_data_region[expression_data_region[['gene']] == gene, 2:ncol(expression_data_region)]))
+      # add values
+      covariates_data[['expression']] <- gene_values
+        #print(variant)
+        # gausnorm them if requested (only do it if we get to this step to save time)
+        if (accessibility_gausnorm & !(gausnormed_region)) {
+          covariates_data[['region']] <- gausnorm_independent_variable(covariates_data[['region']], accessibility_boxcox)
+          gausnormed_region <- T
+        }
+        if(expression_gausnorm & !(gausnormed_gene)) {
+          covariates_data[['expression']] <- gausnorm_independent_variable(covariates_data[['expression']], expression_boxcox)
+          gausnormed_gene <- T
+        }
+        # get participants in sample mapping file
+        participants_smf <- unique(smf[['participant']])
+        # keep only complete cases
+        covariates_data_complete <- covariates_data[complete.cases(covariates_data), ]
+        # and only finite values
+        covariates_data_complete <- covariates_data_complete[is.finite(covariates_data_complete[['expression']]) & is.finite(covariates_data_complete[['region']]), ]
+        # check if there is any data left
+        if (nrow(covariates_data_complete) > 0) {
+          # initialize variables
+          base_model <- NULL
+          interaction_model <- NULL
+          ftest_res <- NULL
+          anova_test_used <- NULL
+          # try to do 
+          tryCatch({
+            # depending on the family, the calls and anovas are different
+            if (family == 'poisson') {
+              # model without interaction
+              base_model <- lme4::glmer(formula = base_formula, data = covariates_data_complete, family = poisson)
+            }
+            else if (family == 'gaussian') {
+              # base model
+              base_model <- lmerTest::lmer(formula = base_formula, data = covariates_data_complete)
+            }
+            else {
+              stop(paste0('unknown family ', family, ', only valid families are gaussian and poisson'))
+            }
+            
+          }, error = function(e) {
+            warning(paste('Error in model fitting', region, gene, ':', e$message, '. This can happen if the model fails to converge'))
+          })
+          # initialize the dataframe to add model to
+          interaction_model_df_base <- data.frame('region' = c(region), 'gene' = c(gene))
+          # initialize the model df
+          interaction_model_df <- NULL
+          # if we have a model, we can convert to a df
+          if(!is.null(base_model)) {
+            # if we at least have a base model, we can still convert that to a df
+            interaction_model_df <- model_to_row(base_model)
+            # and what we actually tested
+          } else {
+            # if the model failed to fit, we still want to have a row for this combination
+            interaction_model_df <- interaction_model_df_base
+          }
+          # add the family used
+          interaction_model_df[['family']] <- family
+          # keep the number of cells we have
+          interaction_model_df[['ncell']] <- nrow(covariates_data_complete)
+          # and participants
+          interaction_model_df[['nparticipant']] <- length(unique(smf[smf[['cell']] %in% covariates_data_complete[['cell']], ][['participant']]))
+          # store result
+          res_per_comparison[[paste(region, gene)]] <- data.table(interaction_model_df)
+        }
+    }
+  }
+  # merge all results
+  res_all <- rbindlist(res_per_comparison, fill = T)
+  return(res_all)
+}
+
+
+write_empty_result <- function(output_loc) {
+  # gz file ends with .gz
+  if (grepl('.gz$', output_loc)) {
+    # gzip if ends with .gz
+    con <- gzfile(output_loc, 'w')
+    close(con)
+  }
+  else {
+    file.create(output_loc)
+  }
+}
+
+####################
+# Settings         #
+####################
+
+# luck seed
+set.seed(7777)
+# whether we are in debug mode
+debug <- F
+
+
+####################
+# Main code        #
+####################
+
+# make command line options
+option_list <- list(
+  make_option(c("-i", "--in"), type="character", default=NULL, 
+              help="input directory of chunks", metavar="character"),
+  make_option(c("-o", "--out"), type="character", default=NULL, 
+              help="output directory", metavar="character"), 
+  make_option(c("-c", "--confinement"), type="character", default=NULL, 
+              help="confinement file of tf-region-gene triplets to test", metavar="character"),
+  make_option(c("-s", "--smf_loc"), type="character", default=NULL, 
+              help="sample mapping file", metavar="character"), 
+  make_option(c("-e", "--expression_file"), type="character", default='expression.tsv.gz', 
+              help="expression filename for chunk", metavar="character"), 
+  make_option(c("-a", "--accessibility_file"), type="character", default='accessibility.tsv.gz', 
+              help="accessibility filename for chunk", metavar="character"), 
+  make_option(c("-v", "--covariates_file"), type="character", default=NULL, 
+              help="accessibility filename for chunk", metavar="character"), 
+  make_option(c("-f", "--fixed_effects"), type="character", default=NULL,
+              help="comman separated list of fixed effects to correct for [default= %default]", metavar="character"),
+  make_option(c("-r", "--random_effects"), type="character", default=NULL,
+              help="comma separated list of random effects to correct for [default= %default]", metavar="character"),
+  make_option(c("-n", "--accessibility_gausnorm"), action="store_true", default=FALSE,
+              help="Apply the yeo-johnson transformation on accessibility before modelling [default: %default]"), 
+  make_option(c("-z", "--accessibility_boxcox"), action="store_true", default=FALSE,
+              help="Apply the boxcox transformation on accessibility instead of yeo-johnson [default: %default]"), 
+  make_option(c("-y", "--expression_gausnorm"), action="store_true", default=FALSE,
+              help="Apply the yeo-johnson transformation on expression before modelling [default: %default]"), 
+  make_option(c("-x", "--expression_boxcox"), action="store_true", default=FALSE,
+              help="Apply the boxcox transformation on expression instead of yeo-johnson [default: %default]"), 
+  make_option(c("-b", "--barcode_column"), type="character", default='barcode_lane', 
+              help="barcode column for metadata", metavar="character")
+)
+
+
+# initialize optparser
+opt_parser <- OptionParser(option_list=option_list)
+opt <- parse_args(opt_parser)
+
+# initialize variables
+# input directory
+in_dir <- NULL
+# location of the output
+output_loc <- NULL
+# location of the region-to-gene files
+confinement_loc <- NULL
+# location of SMF
+smf_loc <- NULL
+# expression filename
+expression_file <- NULL
+# expression filename
+accessibility_file <- NULL
+# whether to gausnorm the expression data
+expression_gausnorm <- T
+# whether to gausnorm the accessibility/TF data
+accessibility_gausnorm <- T
+# whether to gausnorm the expression data
+expression_boxcox <- F
+# whether to gausnorm the accessibility/TF data
+accessibility_boxcox <- F
+# fixed effects string
+fixed_effects_string <- NULL
+# random effects string
+random_effects_string <- NULL
+# covariates file
+covariates_file <- NULL
+# barcode column in the covariates data
+barcode_column <- NULL
+
+if (debug) {
+  # set all of the variables hardcoded for a testing debug run
+  confinement_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/mo_var_tf_gene_confinement.tsv.gz'
+  in_dir <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/CD4T/chr1-150515244-151166478/'
+  smf_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/CD4T/smf.tsv.gz'
+  output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/CD4T/chr1-150515244-151166478/'
+  expression_file <- 'expression.tsv.gz'
+  accessibility_file <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eregulon_gene_auc_CD4T_nonsparse_transposed.tsv.gz'
+  covariates_file <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/metadata/mo_celllevel_metadata.tsv.gz'
+  fixed_effects_string <- 'region'
+  random_effects_string <- 'sample_final,lane'
+  barcode_column <- 'barcode_lane'
+  
+  confinement_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/mo_var_tf_gene_confinement.tsv.gz'
+  in_dir <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/pseudobulked/L1/CD8T/'
+  smf_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/pseudobulked/L1//smf.tsv.gz'
+  output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/pseudobulked/CD8T/'
+  expression_file <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/input/L1/combined/CD8T.qtlInput.txt.gz'
+  accessibility_file <- 'eregulons.tsv.gz'
+  covariates_file <- 'covariates.tsv.gz'
+  fixed_effects_string <- 'region'
+  random_effects_string <- 'sample_final,lane'
+  barcode_column <- 'ps_column'
+  
+  confinement_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/mo_var_tf_gene_confinement_inclcaqtls_varinregion_significant.tsv.gz'
+  in_dir <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/onek1k/L1/all/chr1-150515244-151166478/'
+  in_dir <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/onek1k/L1/all/chr2-137963866-143149194/'
+  in_dir <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/onek1k/L1/all/chr6-158079997-158870311/'
+  smf_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/onek1k/L1/all/smf.tsv.gz'
+  output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/onek1k/L1/all/chunk_1_1000/chr1-150515244-151166478/'
+  output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/onek1k/L1/all/chr2-137963866-143149194/'
+  output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/sccre/onek1k/L1/all/chr6-158079997-158870311/'
+  expression_file <- 'expression.tsv.gz'
+  accessibility_file <- '/groups/umcg-franke-scrna/tmp02/external_datasets/onek1k/tf_interaction/onek1k_tf_interaction_eregulon_gene_removed_auc_all_nonsparse_transposed_1_1000.tsv.gz'
+  accessibility_file <- '/groups/umcg-franke-scrna/tmp02/external_datasets/onek1k/tf_interaction/onek1k_tf_interaction_eregulon_gene_removed_auc_all_nonsparse_transposed.rds'
+  covariates_file <- '/groups/umcg-franke-scrna/tmp02/external_datasets/onek1k/metadata/onek1k_celllevel_metadata.tsv.gz'
+  fixed_effects_string <- 'region,nCount_RNA'
+  random_effects_string <- 'sample_final,sequencing_run'
+  barcode_column <- 'barcode'
+  
+} else {
+  # obligatory parameters without a default
+  if (is.null(opt[['in']])) {
+    error("i/--in is an obligatory parameter")
+  } else {
+    in_dir <- opt[['in']]
+  }
+  if (is.null(opt[['out']])) {
+    error("o/--out is an obligatory parameter")
+  } else {
+    output_loc <- opt[['out']]
+  }
+  if (is.null(opt[['confinement']])) {
+    error("c/--confinement is an obligatory parameter")
+  } else {
+    confinement_loc <- opt[['confinement']]
+  }
+  if (is.null(opt[['smf_loc']])) {
+    error("s/--smf_loc is an obligatory parameter")
+  } else {
+    smf_loc <- opt[['smf_loc']]
+  }
+  # if (is.null(opt[['covariates_file']])) {
+  #   error("v/--covariates_file is an obligatory parameter")
+  # } else {
+  #   covariates_file <- opt[['covariates_file']]
+  # }
+  if (is.null(opt[['fixed_effects']])) {
+    error("f/--fixed_effects is an obligatory parameter")
+  } else {
+    fixed_effects_string <- opt[['fixed_effects']]
+  }
+  # parameters that have a sane default
+  random_effects_string <- opt[['random_effects']]
+  barcode_column <- opt[['barcode_column']]
+  expression_file <- opt[['expression_file']]
+  accessibility_file <- opt[['accessibility_file']]
+  covariates_file <- opt[['covariates_file']]
+  accessibility_gausnorm <- opt[['accessibility_gausnorm']]
+  expression_gausnorm <- opt[['expression_gausnorm']]
+  accessibility_boxcox <- opt[['accessibility_boxcox']]
+  expression_boxcox <- opt[['expression_boxcox']]
+}
+
+# make the full path to the expression data
+full_exp_path <- NULL
+# depending on if it is an absolute path, we do things differently
+if (startsWith(expression_file, '/')) {
+  full_exp_path <- expression_file
+} else {
+  full_exp_path <- paste(in_dir, expression_file, sep = '/')
+}
+# same for the accessibility/TF data
+full_acc_path <- NULL
+if (startsWith(accessibility_file, '/')) {
+  full_acc_path <- accessibility_file
+} else {
+  full_acc_path <- paste(in_dir, accessibility_file, sep = '/')
+}
+# and for covariates
+full_covariates_path <- NULL
+if (!is.null(covariates_file) & !is.na(covariates_file) & startsWith(covariates_file, '/')) {
+  full_covariates_path <- covariates_file
+} else if (!is.null(covariates_file) & !is.na(covariates_file)){
+  full_covariates_path <- paste(in_dir, covariates_file, sep = '/')
+}
+# read the confinement file
+confinement <- fread(confinement_loc, header = T, sep = '\t', )
+# set harmonized column names to make it easier for ourselves
+colnames(confinement) <- c('variant', 'region', 'gene')
+
+# initialize variables
+expression_data <- NULL
+accessibility_data <- NULL
+# check if there is expression data
+if (length(count.fields(full_exp_path)) > 1) {
+  # read the expression file
+  # expression_data <- read.table(full_exp_path, header = T, sep = '\t', check.names = F, row.names = 1)
+  expression_data <- fread(full_exp_path, header = T, sep = '\t', check.names = F, skip = 1)
+  # read the header
+  expression_data_header_line <- readLines(full_exp_path, n = 1)
+  # split by sep
+  expression_data_header <- strsplit(expression_data_header_line, '\t')[[1]]
+  # add this header
+  if (length(expression_data_header) == ncol(expression_data)) {
+    colnames(expression_data) <- expression_data_header
+  } else {
+    # otherwise we need an extra column
+    colnames(expression_data) <- c('gene', expression_data_header)
+  }
+  # also set the first column name so we can refer to it later
+  colnames(expression_data)[[1]] <- 'gene'
+} else {
+  warning('no data fields for expression data, will do no further work')
+  # to avoid further nesting, we'll make a dummy entry that makes it so that we dont continue further
+  expression_data <- data.table('gene' = c())
+}
+# check if there is TF/accessibility data
+if (endsWith(full_acc_path, 'rds') | length(count.fields(full_acc_path)) > 1) {
+  # read the TF/accessibility data
+  accessibility_data <- NULL
+  # if it is an RDS, we can just load that
+  if (endsWith(full_acc_path, 'rds')) {
+    accessibility_data <- readRDS(full_acc_path)
+  } else {
+    # otherwise it has to be (gzipped) text
+    # accessibility_data <- read.table(full_acc_path, header = T, sep = '\t', check.names = F, row.names = 1)
+    accessibility_data <- fread(full_acc_path, header = T, sep = '\t', check.names = F, skip = 1)
+    # read the header
+    accessibility_data_header_line <- readLines(full_acc_path, n = 1)
+    # split by sep
+    accessibility_data_header <- strsplit(accessibility_data_header_line, '\t')[[1]]
+    # add this header
+    if (length(accessibility_data_header) == ncol(accessibility_data)) {
+      colnames(accessibility_data) <- accessibility_data_header
+    } else {
+      # otherwise we need an extra column
+      colnames(accessibility_data) <- c('region', accessibility_data_header)
+    }
+  }
+  # set same colnames always
+  colnames(accessibility_data)[[1]] <- 'region'
+} else {
+  warning('no data fields for accessibility data, will do no further work')
+  # to avoid further nesting, we'll make a dummy entry that makes it so that we dont continue further
+  accessibility_data <- data.table('region' = c())
+}
+
+
+
+# expression_data <- cbind(data.frame('gene' = rownames(expression_data)), expression_data)
+# accessibility_data <- cbind(data.frame('region' = rownames(accessibility_data)), accessibility_data)
+# subset both sets
+expression_data_confined <- expression_data[!is.na(expression_data[['gene']]) & expression_data[['gene']] %in% confinement[['gene']], ]
+accessibility_data_confined <- accessibility_data[!is.na(accessibility_data[['region']]) & accessibility_data[['region']] %in% confinement[['region']], ]
+
+# format output loc
+tsv_output_loc_full <- paste(output_loc, 'result.tsv.gz', sep = '/')
+# set output loc as the tsv
+output_loc_full <- tsv_output_loc_full
+# gz file ends with .gz
+if (grepl('.gz$', tsv_output_loc_full)) {
+  # gzip if ends with .gz
+  output_loc_full <- gzfile(tsv_output_loc_full)
+}
+# initialize the result
+interaction_result <- NULL
+
+# check if we have any data left
+if (nrow(expression_data) > 0) {
+  # check if we have any data left
+  if (nrow(accessibility_data) > 0) {
+    # and the genes we have
+    confinement <- confinement[confinement[['gene']] %in% expression_data_confined[['gene']], ]
+    # and regions or TFs we have
+    confinement <- confinement[confinement[['region']] %in% accessibility_data_confined[['region']], ]
+    # check if we have any data left
+    if (nrow(confinement) > 0) {
+      # read smf
+      smf <- fread(smf_loc, header = T, sep = '\t')
+      # harmonize names
+      colnames(smf) <- c('participant', 'cell')
+      # intersect the smf with the expression data and accessibility/TF data
+      intersecting_cells <- intersect(smf[['cell']], colnames(expression_data))
+      intersecting_cells <- intersect(intersecting_cells, colnames(accessibility_data))
+      
+      # check if there is any data left
+      if (length(intersecting_cells) > 0) {
+        # subset the matrices
+        smf <- smf[smf[['cell']] %in% intersecting_cells, ]
+        # get the columns
+        accessibility_columns <- c('region', intersecting_cells)
+        expression_columns <- c('gene', intersecting_cells)
+        accessibility_data <- accessibility_data[, ..accessibility_columns]
+        expression_data <- expression_data[, ..expression_columns]
+        
+        # split the fixed effects
+        fixed_effects <- c()
+        if (!is.null(fixed_effects_string) & !is.na(fixed_effects_string) & fixed_effects_string != '') {
+          fixed_effects <- strsplit(fixed_effects_string, ',')[[1]]
+        }
+        # split random effects
+        random_effects <- c()
+        if (!is.null(random_effects_string) & !is.na(random_effects_string) & random_effects_string != '') {
+          random_effects <- strsplit(random_effects_string, ',')[[1]]
+        }
+        # if a covariate matrix was supplied, we'll load it
+        if (!is.null(full_covariates_path)) {
+          covariates_data <- fread(full_covariates_path, header = T, sep = '\t')
+          # the first column should be the cell
+          covariates_data <- cbind(data.frame('cell' = covariates_data[[barcode_column]]), covariates_data)
+          # intersect this
+          intersecting_cells <- intersect(intersecting_cells, covariates_data[['cell']])
+          # subset the covariates
+          covariates_data <- covariates_data[covariates_data[['cell']] %in% intersecting_cells, ]
+          # get the expression and accessibility/TF columns again
+          accessibility_columns <- c('region', intersecting_cells)
+          expression_columns <- c('gene', intersecting_cells)
+          # and subset
+          accessibility_data <- accessibility_data[, ..accessibility_columns]
+          expression_data <- expression_data[, ..expression_columns]
+        }
+        # check if we have any data left
+        if (length(intersecting_cells) > 0) {
+          # do gaussnorm if so requested
+          if (expression_gausnorm) {
+            if (expression_boxcox) {
+              message('Yeo-Johnson gausnorm on expression data...')
+              # expression_data <- gausnorm_independent_variable_matrix(independent_variable_matrix = expression_data, feature_id_column = 'gene', boxcox = T)
+            } else {
+              message('Yeo-Johnson gausnorm on expression data...')
+              # expression_data <- gausnorm_independent_variable_matrix(independent_variable_matrix = expression_data, feature_id_column = 'gene')
+            }
+          }
+          if (accessibility_gausnorm) {
+            if (accessibility_boxcox) {
+              message('Yeo-Johnson gausnorm on accessibility/TF data...')
+              # accessibility_data <- gausnorm_independent_variable_matrix(independent_variable_matrix = accessibility_data, feature_id_column = 'region', boxcox = T)
+            } else {
+              message('Yeo-Johnson gausnorm on accessibility/TF data...')
+              # accessibility_data <- gausnorm_independent_variable_matrix(independent_variable_matrix = accessibility_data, feature_id_column = 'region')
+            }
+          }
+          # order cells
+          intersecting_cells <- intersecting_cells[order(intersecting_cells)]
+          # make columns again
+          accessibility_columns <- c('region', intersecting_cells)
+          expression_columns <- c('gene', intersecting_cells)
+          # and use this order
+          accessibility_data <- accessibility_data[, ..accessibility_columns]
+          expression_data <- expression_data[, ..expression_columns]
+          covariates_data <- covariates_data[match(intersecting_cells, covariates_data[['cell']]), ]
+          smf <- smf[match(intersecting_cells, smf[['cell']])]
+          # perform the analysis
+          message('Starting analysis..')
+          # into a variable
+          interaction_result <- do_interaction_analysis(
+            expression_data = expression_data,
+            accessibility_data = accessibility_data,
+            smf = smf,
+            confinement = confinement,
+            covariates_data = covariates_data,
+            fixed_effects = fixed_effects,
+            random_effects = random_effects,
+            accessibility_gausnorm = accessibility_gausnorm,
+            expression_gausnorm = expression_gausnorm,
+            accessibility_boxcox = accessibility_boxcox,
+            expression_boxcox = expression_boxcox
+          )
+          # extract the last part of the folder
+          chunk_name <- basename(in_dir)
+          # if there were any results, we'll write one
+          if ((!is.null(interaction_result)) && (!is.null(nrow(interaction_result))) && (nrow(interaction_result) > 0)) {
+            # add the chunk as a column
+            interaction_result[['chunk']] <- rep(chunk_name, times = nrow(interaction_result))
+            # write result
+            write.table(interaction_result, output_loc_full, sep = '\t', row.names = F, col.names = T, quote = F)
+            # make a checksum
+            mdfiver::create_sha256_for_file(tsv_output_loc_full)
+          } else {
+            # just make the result null again
+            interaction_result <- NULL
+          }
+        } else {
+          message('No cells left after intersecting with covariates matrix. No more work to be done')
+        }
+      } else {
+        message('No cells left after intersecting smf with expression and accessibility/TF. No more work to be done')
+      }
+    } else {
+      message('No triplets left after intersecting confinement with data. No more work to be done')
+    }
+  } else {
+    message('No regions/TFs left after filtering confinement. No more work to be done')
+  }
+} else {
+  message('No genes left after filtering confinement. No more work to be done')
+}
+
+# if the interaction result is still null, we didn't end up doing anything
+if (is.null(interaction_result)) {
+  # so we'll store an empty file
+  write_empty_result(tsv_output_loc_full)
+}
+
