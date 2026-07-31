@@ -130,8 +130,6 @@ rule run_interaction:
         fixed_effects     = config["fixed_effects"],
         random_effects    = config["random_effects"],
         barcode_column    = config["barcode_column"],
-        # genotype prefix (precomputed in Python)
-        genotype_prefix   = lambda wc: GENO_TMPL.format(chrom=chrom_from_chunk(wc.chunk)),
         # get the flags for expression or accessibility
         EXPR_FLAG = "--expression_gausnorm"    if bool(config.get("expression_gausnorm", False)) else "",
         ACC_FLAG  = "--accessibility_gausnorm" if bool(config.get("accessibility_gausnorm", False)) else "",

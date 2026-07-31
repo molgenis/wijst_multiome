@@ -1,25 +1,25 @@
 ######################################################
 # Authors: Roy Oelen
-# Name: mo_hybrid_cre_mapping_template.yaml
+# Name: mo_hybrid_cre_mapping_template_okada.yaml
 # Function: configuration yaml for mo_hybrid_cre_mapping.smk
 #####################################################
 
 # base location of chunks
-chunk_base: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/all/"
+chunk_base: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/okada/L1/all/"
 # location to store chunk outputs
-results_base: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/tfa_gene/okada/all/combined/lane_donor_countrna/"
+results_base: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_gene/okada/all/combined/pool_donor_countrna/"
 # absolute confinement file loc
 confinement: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/mo_var_tf_gene_confinement_inclcaqtls_varinregion_significant.tsv.gz"
 # absolute smf file loc
-smf: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/all/smf.tsv.gz"
+smf: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/okada/L1/all/smf.tsv.gz"
 # absolute covariates file loc
-covariates: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/mo_celllevel_metadata_nounannotated.tsv.gz"
+covariates: "/groups/umcg-franke-scrna/tmp04/external_datasets/okada/seurat_objects/okada_mtdt.tsv.gz"
 # barcode column in covariate file
-barcode_column: "barcode_lane"
+barcode_column: "bc"
 # fixed effects to consider
-fixed_effects: "region,genotype"
+fixed_effects: "region,nCount_RNA"
 # random effects to consider
-random_effects: "sample_final,lane"
+random_effects: "Assignment,Donor_Pool"
 # do gaussnorm on expression data
 expression_gausnorm: true
 # do gausnorm on accessibility data
@@ -31,7 +31,7 @@ accessibility_boxcox: false
 # path to expression file
 expression_filename: "expression.tsv.gz"
 # path to accessibility file
-accessibility_filename: "/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/mo_tf_interaction_eregulon_gene_removed_auc_all_nonsparse_transposed.tsv.gz"
+accessibility_filename: "/groups/umcg-franke-scrna/tmp04/external_datasets/okada//tf_interaction/okada_tf_interaction_eregulon_gene_removed_auc_all_nonsparse_transposed.tsv.gz"
 
 # R command
 r_command: "~/start_Rscript.sh"
