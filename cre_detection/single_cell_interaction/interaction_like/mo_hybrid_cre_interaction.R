@@ -615,22 +615,37 @@ if (debug) {
 full_exp_path <- NULL
 # depending on if it is an absolute path, we do things differently
 if (startsWith(expression_file, '/')) {
+  # use absolute path
+  full_exp_path <- expression_file
+} else if (startsWith(expression_file, './')) {
+  # use relative path
   full_exp_path <- expression_file
 } else {
+  # construct full path
   full_exp_path <- paste(in_dir, expression_file, sep = '/')
 }
 # same for the accessibility/TF data
 full_acc_path <- NULL
 if (startsWith(accessibility_file, '/')) {
+  # use absolute path
+  full_acc_path <- accessibility_file
+} else if (startsWith(accessibility_file, './')) {
+  # use relative path
   full_acc_path <- accessibility_file
 } else {
+  # construct full path
   full_acc_path <- paste(in_dir, accessibility_file, sep = '/')
 }
 # and for covariates
 full_covariates_path <- NULL
 if (!is.null(covariates_file) & !is.na(covariates_file) & startsWith(covariates_file, '/')) {
+  # use absolute path
+  full_covariates_path <- covariates_file
+} else if (!is.null(covariates_file) & !is.na(covariates_file) & startsWith(covariates_file, './')){
+  # use relative path
   full_covariates_path <- covariates_file
 } else if (!is.null(covariates_file) & !is.na(covariates_file)){
+  # construct full path
   full_covariates_path <- paste(in_dir, covariates_file, sep = '/')
 }
 # read the confinement file

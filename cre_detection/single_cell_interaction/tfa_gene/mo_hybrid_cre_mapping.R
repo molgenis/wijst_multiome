@@ -308,7 +308,7 @@ do_interaction_analysis <- function(expression_data,
           # if we have a model, we can convert to a df
           if(!is.null(base_model)) {
             # if we at least have a base model, we can still convert that to a df
-            interaction_model_df <- model_to_row(base_model)
+            interaction_model_df <- cbind(interaction_model_df_base, model_to_row(base_model))
             # and what we actually tested
           } else {
             # if the model failed to fit, we still want to have a row for this combination
@@ -426,43 +426,43 @@ barcode_column <- NULL
 
 if (debug) {
   # set all of the variables hardcoded for a testing debug run
-  confinement_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/mo_var_tf_gene_confinement.tsv.gz'
-  in_dir <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/CD4T/chr1-150515244-151166478/'
-  smf_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/CD4T/smf.tsv.gz'
-  output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/CD4T/chr1-150515244-151166478/'
-  expression_file <- 'expression.tsv.gz'
-  accessibility_file <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eregulon_gene_auc_CD4T_nonsparse_transposed.tsv.gz'
-  covariates_file <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/metadata/mo_celllevel_metadata.tsv.gz'
-  fixed_effects_string <- 'region'
-  random_effects_string <- 'sample_final,lane'
-  barcode_column <- 'barcode_lane'
-  
-  confinement_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/mo_var_tf_gene_confinement.tsv.gz'
-  in_dir <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/pseudobulked/L1/CD8T/'
-  smf_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/pseudobulked/L1//smf.tsv.gz'
-  output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/pseudobulked/CD8T/'
-  expression_file <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/input/L1/combined/CD8T.qtlInput.txt.gz'
-  accessibility_file <- 'eregulons.tsv.gz'
-  covariates_file <- 'covariates.tsv.gz'
-  fixed_effects_string <- 'region'
-  random_effects_string <- 'sample_final,lane'
-  barcode_column <- 'ps_column'
-  
   confinement_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/mo_var_tf_gene_confinement_inclcaqtls_varinregion_significant.tsv.gz'
-  in_dir <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/onek1k/L1/all/chr1-150515244-151166478/'
-  in_dir <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/onek1k/L1/all/chr2-137963866-143149194/'
-  in_dir <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/onek1k/L1/all/chr6-158079997-158870311/'
+  in_dir <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/onek1k/L1/all/chr11-3787568-4577820/'
   smf_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/onek1k/L1/all/smf.tsv.gz'
-  output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/onek1k/L1/all/chunk_1_1000/chr1-150515244-151166478/'
-  output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/onek1k/L1/all/chr2-137963866-143149194/'
-  output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/sccre/onek1k/L1/all/chr6-158079997-158870311/'
+  output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/tfa_gene/onek1k/all/UT/run_donor_countrna/chr11-3787568-4577820/'
   expression_file <- 'expression.tsv.gz'
-  accessibility_file <- '/groups/umcg-franke-scrna/tmp02/external_datasets/onek1k/tf_interaction/onek1k_tf_interaction_eregulon_gene_removed_auc_all_nonsparse_transposed_1_1000.tsv.gz'
   accessibility_file <- '/groups/umcg-franke-scrna/tmp02/external_datasets/onek1k/tf_interaction/onek1k_tf_interaction_eregulon_gene_removed_auc_all_nonsparse_transposed.rds'
   covariates_file <- '/groups/umcg-franke-scrna/tmp02/external_datasets/onek1k/metadata/onek1k_celllevel_metadata.tsv.gz'
-  fixed_effects_string <- 'region,nCount_RNA'
+  fixed_effects_string <- 'region'
   random_effects_string <- 'sample_final,sequencing_run'
-  barcode_column <- 'barcode'
+  barcode_column <- 'barcode_lane'
+  
+  # confinement_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/mo_var_tf_gene_confinement.tsv.gz'
+  # in_dir <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/pseudobulked/L1/CD8T/'
+  # smf_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/pseudobulked/L1//smf.tsv.gz'
+  # output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/pseudobulked/CD8T/'
+  # expression_file <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/input/L1/combined/CD8T.qtlInput.txt.gz'
+  # accessibility_file <- 'eregulons.tsv.gz'
+  # covariates_file <- 'covariates.tsv.gz'
+  # fixed_effects_string <- 'region'
+  # random_effects_string <- 'sample_final,lane'
+  # barcode_column <- 'ps_column'
+  # 
+  # confinement_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/mo_var_tf_gene_confinement_inclcaqtls_varinregion_significant.tsv.gz'
+  # in_dir <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/onek1k/L1/all/chr1-150515244-151166478/'
+  # in_dir <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/onek1k/L1/all/chr2-137963866-143149194/'
+  # in_dir <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/onek1k/L1/all/chr6-158079997-158870311/'
+  # smf_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/onek1k/L1/all/smf.tsv.gz'
+  # output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/onek1k/L1/all/chunk_1_1000/chr1-150515244-151166478/'
+  # output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/onek1k/L1/all/chr2-137963866-143149194/'
+  # output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/sccre/onek1k/L1/all/chr6-158079997-158870311/'
+  # expression_file <- 'expression.tsv.gz'
+  # accessibility_file <- '/groups/umcg-franke-scrna/tmp02/external_datasets/onek1k/tf_interaction/onek1k_tf_interaction_eregulon_gene_removed_auc_all_nonsparse_transposed_1_1000.tsv.gz'
+  # accessibility_file <- '/groups/umcg-franke-scrna/tmp02/external_datasets/onek1k/tf_interaction/onek1k_tf_interaction_eregulon_gene_removed_auc_all_nonsparse_transposed.rds'
+  # covariates_file <- '/groups/umcg-franke-scrna/tmp02/external_datasets/onek1k/metadata/onek1k_celllevel_metadata.tsv.gz'
+  # fixed_effects_string <- 'region,nCount_RNA'
+  # random_effects_string <- 'sample_final,sequencing_run'
+  # barcode_column <- 'barcode'
   
 } else {
   # obligatory parameters without a default
@@ -512,24 +512,40 @@ if (debug) {
 full_exp_path <- NULL
 # depending on if it is an absolute path, we do things differently
 if (startsWith(expression_file, '/')) {
+  # use absolute path
+  full_exp_path <- expression_file
+} else if (startsWith(expression_file, './')) {
+  # use relative path
   full_exp_path <- expression_file
 } else {
+  # construct full path
   full_exp_path <- paste(in_dir, expression_file, sep = '/')
 }
 # same for the accessibility/TF data
 full_acc_path <- NULL
 if (startsWith(accessibility_file, '/')) {
+  # use absolute path
+  full_acc_path <- accessibility_file
+} else if (startsWith(accessibility_file, './')) {
+  # use relative path
   full_acc_path <- accessibility_file
 } else {
+  # construct full path
   full_acc_path <- paste(in_dir, accessibility_file, sep = '/')
 }
 # and for covariates
 full_covariates_path <- NULL
 if (!is.null(covariates_file) & !is.na(covariates_file) & startsWith(covariates_file, '/')) {
+  # use absolute path
+  full_covariates_path <- covariates_file
+} else if (!is.null(covariates_file) & !is.na(covariates_file) & startsWith(covariates_file, './')){
+  # use relative path
   full_covariates_path <- covariates_file
 } else if (!is.null(covariates_file) & !is.na(covariates_file)){
+  # construct full path
   full_covariates_path <- paste(in_dir, covariates_file, sep = '/')
 }
+
 # read the confinement file
 confinement <- fread(confinement_loc, header = T, sep = '\t', )
 # set harmonized column names to make it easier for ourselves
