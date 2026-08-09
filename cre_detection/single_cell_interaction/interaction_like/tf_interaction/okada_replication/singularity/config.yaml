@@ -1,0 +1,2 @@
+use-singularity: true
+singularity-args: "--bind /groups/umcg-franke-scrna/tmp04/"
