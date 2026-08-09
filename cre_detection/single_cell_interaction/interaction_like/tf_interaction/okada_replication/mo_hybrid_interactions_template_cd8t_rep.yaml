@@ -1,0 +1,49 @@
+######################################################
+# Authors: Roy Oelen
+# Name: mo_hybrid_interactions_template.yaml
+# Function: configuration yaml for mo_hybrid_interactions.smk
+#####################################################
+
+# location of the genotype files
+genotype_prefix_template: "./input/genotype/EUR_imputed_hg38_varFiltered_chr{chrom}"
+# base location of chunks
+chunk_base: "./input/expression/L1/all/"
+# location to store chunk outputs
+results_base: "./output/tf_interaction/CD8T/lane_donor_countrna_inclcaqtls_varinregion_significant/"
+# absolute confinement file loc
+confinement: "./confinement/mo_var_tf_gene_confinement_inclcaqtls_varinregion_split_significant_rep.tsv.gz"
+# absolute smf file loc
+smf: "./input/smf/smf_cd8t.tsv.gz"
+# absolute covariates file loc
+covariates: "./input/metadata/okada_mtdt.tsv.gz"
+# barcode column in covariate file
+barcode_column: "bc"
+# fixed effects to consider
+fixed_effects: "region,genotype,nCount_RNA"
+# random effects to consider
+random_effects: "Assignment,Donor_Pool"
+# terms that interact
+interaction_terms: "genotype,region"
+# do gaussnorm on expression data
+expression_gausnorm: true
+# do gausnorm on accessibility data
+accessibility_gausnorm: true
+# do boxcox instead of yeo-johnson on expression data (only works if also gausnorm is true)
+expression_boxcox: false
+# do boxcox instead of yeo-johnson on accessibility data (only works if also gausnorm is true)
+accessibility_boxcox: false
+# path to expression file
+expression_filename: "expression.tsv.gz"
+# path to accessibility file
+accessibility_filename: "./input/tfa/okada_tf_interaction_eregulon_gene_removed_auc_all_nonsparse_transposed.rds"
+
+# R command
+r_command: "Rscript"
+# script location
+#script_loc: "./scripts/mo_hybrid_cre_mapping.R"
+script_loc: "./scripts/mo_hybrid_cre_interaction.R"
+# merging script as well
+merge_script_loc: "./scripts/mo_hybrid_cre_interaction_merge.R"
+
+# container
+container: "singularity/tfaiqtl.simg"
