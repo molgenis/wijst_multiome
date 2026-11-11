@@ -30,7 +30,6 @@ library(roycols)
 library(cowplot)
 library(stringr)
 library(ggpubr)
-library(VennDiagram)
 
 
 ```
@@ -93,62 +92,6 @@ get_output_per_celltype_limix <- function(qtl_output_loc, output_file='qtl_resul
   # turn into a dataframe
   return(egenes_per_celltype)
 }
-
-
-get_qtls_per_celltype_limix <- function(qtl_output_loc, output_file='qtl_results_all_qval_allchroms_fdr005_significant.txt.gz', gene_column='feature_id', significance_column='feature_q_value', significance_cutoff=0.05, nominal_cutoff_column='pval_nominal_threshold_global', nominal_significance_column='p_value', verbose=T) {
-  # get the folders in the directory, which should be the cell types
-  cell_types <- list.dirs(qtl_output_loc, full.names = F, recursive = F)
-  # we will store the results in a list for now
-  qtls_per_celltype <- list()
-  # check each cell type
-  for (cell_type in cell_types) {
-    # paste together the full path
-    full_cell_type_path <- paste(qtl_output_loc, '/', cell_type, '/', output_file, sep = '')
-    # log if requested
-    if (verbose) {
-      print(paste('reading', full_cell_type_path))
-    }
-    # read the file
-    cell_type_output <- read.table(full_cell_type_path, sep = '\t', header = T)
-    # filter the results on significance
-    if (!is.null(significance_column)) {
-      # print progress if requested
-      if (verbose) {
-        print(paste('variant+phenotype before filtering by significance column', nrow(cell_type_output)))
-      }
-      # filter
-      cell_type_output <- cell_type_output[
-        !is.na(cell_type_output[[significance_column]]) &
-          cell_type_output[[significance_column]] < significance_cutoff, 
-      ]
-      if (verbose) {
-        print(paste('variant+phenotype after filtering by significance column', nrow(cell_type_output)))
-      }
-    }
-    if (!is.null(nominal_cutoff_column) & !is.null(nominal_significance_column)) {
-      # print progress if requested
-      if (verbose) {
-        print(paste('variant+phenotype before filtering by nominal cutoff', nrow(cell_type_output)))
-      }
-      # filter
-      cell_type_output <- cell_type_output[
-        !is.na(cell_type_output[[nominal_cutoff_column]]) & 
-          !is.na(cell_type_output[[nominal_significance_column]]) &
-          cell_type_output[[nominal_significance_column]] <= cell_type_output[[nominal_cutoff_column]], 
-      ]
-      if (verbose) {
-        print(paste('variant+phenotype after filtering by nominal cutoff', nrow(cell_type_output)))
-      }
-    }
-    # add the celltype as a column
-    cell_type_output[['cell_type']] <- cell_type
-    # add to the list
-    qtls_per_celltype[[cell_type]] <- cell_type_output
-  }
-  # turn into a dataframe
-  return(qtls_per_celltype)
-}
-
 
 
 add_associated_region <- function(eqtl_outputs, scenic_output, eqtl_gene_column='feature_id', scenic_gene_column='Gene', scenic_region_column='Region') {
@@ -363,15 +306,21 @@ knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 ####################
 
 # location of the tf-i-ieqtls
-tf_ieqtl_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/sc/all/lane_donor_countrna_inclcaqtls_varinregion/merged/results_fdr.tsv.gz'
-tf_ieqtl_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/sc/all/lane_donor_countrna_inclcaqtls_varinregion/merged/results_fdr_with_replication_significant.tsv.gz'
-tf_ieqtl_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/sc/all/lane_donor_countrna_inclcaqtls_varinregion/merged/results_fdr_with_replication.tsv.gz'
+tf_ieqtl_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/sc/all/lane_donor_countrna_inclcaqtls_varinregion/merged/results_fdr.tsv.gz'
+tf_ieqtl_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/sc/all/lane_donor_countrna_inclcaqtls_varinregion/merged/results_fdr_with_replication_significant.tsv.gz'
+tf_ieqtl_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/sc/all/lane_donor_countrna_inclcaqtls_varinregion/merged/results_fdr_with_replication.tsv.gz'
+# newer per cell type
+tf_ieqtl_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/sc/either/lane_donor_countrna_inclcaqtls_varinregion/merged/results_fdr_allct.tsv.gz'
+
 # location of the region-i-ieqtls
-region_ieqtl_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/region_interaction/sc/all/lane_donor_countrna_inclcaqtls_varinregion/merged/results_fdr.tsv.gz'
+region_ieqtl_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/region_interaction/sc/all/lane_donor_countrna_inclcaqtls_varinregion/merged/results_fdr.tsv.gz'
+# newer per cell type
+region_ieqtl_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/region_interaction/sc/either/lane_donor_countrna_inclcaqtls_varinregion/merged/results_fdr_allct.tsv.gz'
+
 # location of the QTL outputs
-eqtl_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/finemapping/eqtl/sc-eqtlgen/combined_with_qtl/combined/L1/'
+eqtl_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/finemapping/eqtl/sc-eqtlgen/combined_with_qtl/combined/L1/'
 # location of the QTL outputs
-caqtl_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/finemapping/caqtl/sc-eqtlgen/combined_with_qtl/combined/L1/'
+caqtl_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/finemapping/caqtl/sc-eqtlgen/combined_with_qtl/combined/L1/'
 
 
 ```
@@ -390,7 +339,20 @@ tf_ieqtls <- fread(tf_ieqtl_loc, header = T, sep = '\t')
 #     # tf_ieqtls[['genotype_bh']] < 0.05,
 #     tf_ieqtls[['tf_bh']] < 0.05, 
 # ]
-tf_ieqtls_sig <- tf_ieqtls[tf_ieqtls[['significant']], ]
+#tf_ieqtls_sig <- tf_ieqtls[tf_ieqtls[['significant']], ]
+
+# make region TFa
+colnames(tf_ieqtls) <- gsub('region', 'tfa', colnames(tf_ieqtls))
+# filter
+tf_ieqtls_sig <- tf_ieqtls[
+  !is.na(tf_ieqtls[['tfa:genotype_bh']]) &
+  tf_ieqtls[['tfa:genotype_bh']] < 0.05 &
+    tf_ieqtls[['anova_bh']] < 0.05 &
+    tf_ieqtls[['genotype_bh']] < 0.05 &
+    tf_ieqtls[['tfa_bh']] < 0.05,
+]
+# add tf from tfa column
+tf_ieqtls_sig[['tf']] <- tf_ieqtls_sig[['tfa']]
 
 ```
 
@@ -404,8 +366,9 @@ region_ieqtls_sig <- region_ieqtls[
   !is.na(region_ieqtls[['region:genotype_bh']]) &
   region_ieqtls[['region:genotype_bh']] < 0.05 & 
     region_ieqtls[['anova_bh']] < 0.05 & 
-    # region_ieqtls[['region_bh']] < 0.05 &
-    # region_ieqtls[['genotype_bh']] < 0.05,
+    region_ieqtls[['region_bh']] < 0.05 &
+    region_ieqtls[['genotype_bh']] < 0.05 &
+    region_ieqtls[['condition']] %in% c('UT', '24hCA') &
     region_ieqtls[['region_bh']] < 0.05,
 ]
 
@@ -415,7 +378,7 @@ region_ieqtls_sig <- region_ieqtls[
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # location of the SCENIC outout
-scenic_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eRegulon_both_filtered.tsv.gz'
+scenic_output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eRegulon_both_filtered.tsv.gz'
 # read that
 scenic_output <- fread(scenic_output_loc, header = T, sep = '\t')
 # order by the extended
@@ -435,7 +398,7 @@ scenic_output[['region_cpeaks']] <- gsub(':', '-', scenic_output[['Region']])
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # location of the variant annotations
-variant_annotation_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/eqtl/annotations/mo_qtl_variants_tested_cpeaks_overlap.tsv.gz'
+variant_annotation_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/eqtl/annotations/mo_qtl_variants_tested_cpeaks_overlap.tsv.gz'
 variant_annotation <- fread(variant_annotation_loc, header = T, sep = '\t')
 
 ```
@@ -488,7 +451,7 @@ caqtl_outputs_all <- caqtl_outputs_all[caqtl_outputs_all[['p_value']] <= caqtl_o
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # location of the finemapped results
-finemapped_colocs_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/colocalization/eqtl_caqtl/ut_and_24hca_significant/'
+finemapped_colocs_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/colocalization/eqtl_caqtl/ut_and_24hca_significant/'
 # read the tabel
 finemapped_colocs <- get_coloc_output(finemapped_colocs_loc)
 # add the way that we merged these
@@ -526,7 +489,7 @@ knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 # add scenic region info
 eqtl_outputs_scenic_regions <- add_associated_region(eqtl_outputs, scenic_output, scenic_region_column = 'region_cpeaks')
 # read the cpeaks annotation
-cpeaks_anno_loc <- '/groups/umcg-franke-scrna/tmp02/external_datasets/cPeaks/cPeaks_wscreenv4.tsv.gz'
+cpeaks_anno_loc <- '/groups/umcg-franke-scrna/tmp04/external_datasets/cPeaks/cPeaks_wscreenv4.tsv.gz'
 cpeaks_anno <- fread(cpeaks_anno_loc, header = T, sep = '\t')
 # add the Signac style name
 cpeaks_anno[['signac_hg38']] <- paste(cpeaks_anno[['chr_hg38']], cpeaks_anno[['start_hg38']], cpeaks_anno[['end_hg38']], sep = '-')
@@ -601,7 +564,7 @@ p_triplet_cat1to3 <- ggplot(
   mapping = aes(x = category, y = pct, fill = category) 
 ) +
   geom_bar(stat = 'identity') +
-  scale_fill_manual(values = roycols::get_color_list(unique(scenic_qtl_categories_n[['category']]), color_indices = c(47,63,56,16))) +
+  scale_fill_manual(values = roycols::get_color_list(unique(scenic_qtl_categories_n[['category']]))) +
   xlab('Tier') + 
   ylab('Proportion of triplets') +
   theme(legend.position = 'none') + 
@@ -612,7 +575,7 @@ p_triplet_cat1to4 <- ggplot(
   mapping = aes(x = category, y = pct, fill = category) 
 ) +
   geom_bar(stat = 'identity') +
-  scale_fill_manual(values = roycols::get_color_list(unique(scenic_qtl_categories_n[['category']]), color_indices = c(47,63,56,16))) +
+  scale_fill_manual(values = roycols::get_color_list(unique(scenic_qtl_categories_n[['category']]))) +
   xlab('Tier') + 
   ylab('Proportion of triplets') +
   theme(legend.position = 'none') + 
@@ -622,11 +585,6 @@ p_triplet_cat1to4 <- ggplot(
 # show plots
 p_triplet_cat1to3
 p_triplet_cat1to4
-# and save them
-# save that
-ggsave(filename = '~/multiome/plots/mo_scenic_triplet_qtl_overlap_simple_cat1to3.pdf', plot = p_triplet_cat1to3, width = 5, height = 5)
-ggsave(filename = '~/multiome/plots/mo_scenic_triplet_qtl_overlap_simple_cat1to4.pdf', plot = p_triplet_cat1to4, width = 5, height = 5)
-
 
 ```
 
@@ -662,6 +620,9 @@ p_r2g_cat1to4 <- ggplot(
   theme(legend.position = 'none') + 
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
   theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+
+# show numbers
+scenic_r2g_qtl_categories_n
 
 # show plots
 p_r2g_cat1to3
@@ -779,26 +740,6 @@ p_triplet_interaction <- ggplot(
   theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
 # show plot
 p_triplet_interaction
-# save that
-ggsave(filename = '~/multiome/plots/mo_scenic_triplet_tf_cre_i_eqtl_overlap_simple.pdf', plot = p_triplet_interaction, width = 5, height = 5)
-
-# again for category 1 to 3
-p_triplet_interaction_cat1to3 <- ggplot(
-  data = scenic_interaction_categories_n[scenic_interaction_categories_n[['category']] != 'neither'],  
-  mapping = aes(x = category, y = pct, fill = category) 
-) +
-  geom_bar(stat = 'identity') +
-  scale_fill_manual(values = roycols::get_color_list(unique(scenic_interaction_categories_n[['category']]), color_indices = c(56,57,58,59))) +
-  xlab('Interaction type') + 
-  ylab('Proportion of triplets') +
-  theme(legend.position = 'none') + 
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
-  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
-# show that plot
-p_triplet_interaction_cat1to3
-# save that
-ggsave(filename = '~/multiome/plots/mo_scenic_triplet_tf_cre_i_eqtl_overlap_simple_cat1to3.pdf', plot = p_triplet_interaction_cat1to3, width = 5, height = 5)
-
 
 ```
 
@@ -806,16 +747,12 @@ ggsave(filename = '~/multiome/plots/mo_scenic_triplet_tf_cre_i_eqtl_overlap_simp
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # add assignment that captures both TF and accessibility i-eQTLs
-scenic_output[['is_also_tfqtl']] <- 'untested'
-if (nrow(scenic_output[scenic_output[['Gene_signature_name']] %in% tf_ieqtls[tf_ieqtls[['is_tfqtl']] == F, ][['tf']]]) > 0) {
-  scenic_output[scenic_output[['Gene_signature_name']] %in% tf_ieqtls[tf_ieqtls[['is_tfqtl']] == F, ][['tf']]][['is_also_tfqtl']] <- 'no TF-QTL'
-}
-if (nrow(scenic_output[scenic_output[['Gene_signature_name']] %in% tf_ieqtls[tf_ieqtls[['is_tfqtl']] == T, ][['tf']]]) > 0) {
-  scenic_output[scenic_output[['Gene_signature_name']] %in% tf_ieqtls[tf_ieqtls[['is_tfqtl']] == T, ][['tf']]][['is_also_tfqtl']] <- 'TF-QTL'
-}
+scenic_output[['is_tfqtl']] <- 'untested'
+# scenic_output[scenic_output[['Gene_signature_name']] %in% tf_ieqtls[tf_ieqtls[['is_tfqtl']] == F, ][['tf']]][['is_tfqtl']] <- 'no TF-QTL'
+# scenic_output[scenic_output[['Gene_signature_name']] %in% tf_ieqtls[tf_ieqtls[['is_tfqtl']] == T, ][['tf']]][['is_tfqtl']] <- 'TF-QTL'
 
 # now add a column that has the combination of the TF-QTL and the interaction type
-scenic_output[['is_tf_or_accessibility_ieqtl_and_tfqtl']] <- paste(scenic_output[['is_tf_or_accessibility_ieqtl']], scenic_output[['is_also_tfqtl']])
+scenic_output[['is_tf_or_accessibility_ieqtl_and_tfqtl']] <- paste(scenic_output[['is_tf_or_accessibility_ieqtl']], scenic_output[['is_tfqtl']])
 # but keep the original neither separate
 scenic_output[scenic_output[['is_tf_or_accessibility_ieqtl']] == 'neither', ][['is_tf_or_accessibility_ieqtl_and_tfqtl']] <- 'neither'
 scenic_output[scenic_output[['is_tf_or_accessibility_ieqtl']] == 'only accessibility-i-eQTL', ][['is_tf_or_accessibility_ieqtl_and_tfqtl']] <- 'only accessibility-i-eQTL'
@@ -933,248 +870,52 @@ ggsave(filename = '~/multiome/plots/mo_scenic_geneticcontrol_ieqtls.pdf', plot =
 
 ```
 
-```{r get_ieqtl_results, include=TRUE, fig.width=5, fig.height=5}
-knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
-
-# location of the i-eqtl output
-iqtl_output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/output/ut_and_24hca_significant/L1/'
-# get all the QTL output
-iqtl_output <- get_qtls_per_celltype_limix(iqtl_output_loc, output_file = 'inflammation_final/iqtl_results_all_eigenmt_qval.tsv.gz', gene_column='feature', significance_column='feature_q_value', significance_cutoff=0.05, nominal_cutoff_column=NULL, nominal_significance_column=NULL)
-# merge all the results
-iqtl_output_all <- do.call('rbind', iqtl_output)
-# filter on signifiacnce
-iqtl_output_all_sig <- iqtl_output_all[iqtl_output_all[['feature_q_value']] < 0.05 &
-                                         iqtl_output_all[['feature_bf_eigen']] < 0.05, ]
-
-```
-
-```{r merge_ieqtl_results, include=TRUE, fig.width=5, fig.height=5}
-knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
-
-# add directions
-iqtl_output_all_sig[['direction']] <- 'none'
-iqtl_output_all_sig[!is.na(iqtl_output_all_sig[['beta']]) & iqtl_output_all_sig[['beta']] > 0, 'direction'] <- 'stronger'
-iqtl_output_all_sig[!is.na(iqtl_output_all_sig[['beta']]) & iqtl_output_all_sig[['beta']] < 0, 'direction'] <- 'weaker'
-# merge with tf-i-eqtls
-tf_stim_ieqtls_sig <- merge(iqtl_output_all_sig, tf_ieqtls_sig, by.x = c('snp_id', 'feature'), by.y = c('variant', 'gene'))
-
-```
-
-```{r check_percentages_any_qtls, include=TRUE, fig.width=5, fig.height=5}
-knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
-
-# get the occurences of i-eQTLs in the QTLs
-n_any_qtl_to_ieqtl <- data.frame(table(scenic_output[scenic_output[['tier']] != '4. no QTL', c('tier', 'is_tf_or_accessibility_ieqtl')]))
-# get the totals for the tiers
-n_any_qtl_tier_totals <- aggregate(as.formula('Freq ~ tier'), data = n_any_qtl_to_ieqtl[, c('tier', 'Freq')], FUN = 'sum')
-# rename that Freq to 'total'
-colnames(n_any_qtl_tier_totals) <- c('tier', 'cat_total')
-# then add that to the original
-n_any_qtl_to_ieqtl <- merge(n_any_qtl_to_ieqtl, n_any_qtl_tier_totals, on = 'tier')
-# also add full total
-n_any_qtl_to_ieqtl[['total']] <- sum(n_any_qtl_to_ieqtl[['Freq']])
-# add percentage
-n_any_qtl_to_ieqtl[['frac_total']] <- n_any_qtl_to_ieqtl[['Freq']] / n_any_qtl_to_ieqtl[['total']]
-# and category total
-n_any_qtl_to_ieqtl[['cat_total']] <- n_any_qtl_to_ieqtl[['Freq']] / n_any_qtl_to_ieqtl[['cat_total']]
-# add combination of tier and ieqtl
-n_any_qtl_to_ieqtl[['tier_ieqtl']] <- paste(n_any_qtl_to_ieqtl[['tier']], n_any_qtl_to_ieqtl[['is_tf_or_accessibility_ieqtl']])
-# and opposite direction
-n_any_qtl_to_ieqtl[['ieqtl_tier']] <- paste(n_any_qtl_to_ieqtl[['is_tf_or_accessibility_ieqtl']], n_any_qtl_to_ieqtl[['tier']])
-# the plot colors
-any_qtl_to_ieqtl_plot_cols <-roycols::get_color_list(unique(n_any_qtl_to_ieqtl[['tier']]), color_indices = c(47,63,56,16))
-# add colouring
-for (tier in names(any_qtl_to_ieqtl_plot_cols)) {
-  # percentage of whitening 
-  pct_whitening=40
-  any_qtl_to_ieqtl_plot_cols[[paste(tier, 'only TF-i-eQTL')]] <- colorRampPalette(c(any_qtl_to_ieqtl_plot_cols[[tier]], "white"))(100)[pct_whitening]
-  any_qtl_to_ieqtl_plot_cols[[paste(tier, 'only accessibility-i-eQTL')]] <- colorRampPalette(c(any_qtl_to_ieqtl_plot_cols[[tier]], "black"))(100)[pct_whitening]
-  any_qtl_to_ieqtl_plot_cols[[paste(tier, 'TF- and accessibility-i-eQTL')]] <- any_qtl_to_ieqtl_plot_cols[[tier]]
-  any_qtl_to_ieqtl_plot_cols[[paste(tier, 'neither')]] <- colorRampPalette(c(any_qtl_to_ieqtl_plot_cols[[tier]], "white"))(100)[pct_whitening*2]
-}
-# the plot colors but opposite
-ieqtl_to_any_qtl_plot_cols <-roycols::get_color_list(unique(n_any_qtl_to_ieqtl[['is_tf_or_accessibility_ieqtl']]), color_indices = c(56,59,58,57))
-# add colouring
-for (ieqtl in names(ieqtl_to_any_qtl_plot_cols)) {
-  # percentage of whitening 
-  pct_whitening=40
-  ieqtl_to_any_qtl_plot_cols[[paste(ieqtl, '1. has dual acting QTL')]] <- colorRampPalette(c(ieqtl_to_any_qtl_plot_cols[[ieqtl]], "white"))(100)[pct_whitening]
-  ieqtl_to_any_qtl_plot_cols[[paste(ieqtl, '2. has eQTL in region')]] <- colorRampPalette(c(ieqtl_to_any_qtl_plot_cols[[ieqtl]], "black"))(100)[pct_whitening]
-  ieqtl_to_any_qtl_plot_cols[[paste(ieqtl, '3. has caQTL')]] <- ieqtl_to_any_qtl_plot_cols[[ieqtl]]
-  ieqtl_to_any_qtl_plot_cols[[paste(ieqtl, '4. no QTL')]] <- colorRampPalette(c(ieqtl_to_any_qtl_plot_cols[[ieqtl]], "gray"))(100)[pct_whitening]
-}
-p_triplet_interaction_onlqtlcat1to3_wtiers <- plot_grid(
-  ggplot(
-  data = n_any_qtl_to_ieqtl[n_any_qtl_to_ieqtl[['is_tf_or_accessibility_ieqtl']] != 'neither', ],  
-  mapping = aes(x = is_tf_or_accessibility_ieqtl, y = frac_total, fill = ieqtl_tier) 
-) +
-  geom_bar(stat = 'identity') +
-  scale_fill_manual(values = ieqtl_to_any_qtl_plot_cols) +
-  xlab('Interaction type') + 
-  ylab('Proportion of triplets with QTL') +
-  theme(legend.position = 'none') + 
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
-  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")), 
-  get_legend(
-    ggplot(data = data.frame(x = c('1. has dual acting QTL', '2. has eQTL in region', '3. has caQTL'), y = c(1,1,1)), mapping = aes(x = x, y = y, fill = x)) + 
-      geom_bar(stat = 'identity') + 
-      scale_fill_manual(values = c('lightgray', 'black', 'darkgray')) +
-      labs(fill = 'tier')
-  )
-)
-p_triplet_interaction_onlqtlcat1to3_wtiers
-
-# plot
-p_triplet_cat1to3_wieqtl <- plot_grid(
-  ggplot(
-  data = n_any_qtl_to_ieqtl[n_any_qtl_to_ieqtl[['tier']] != '4. no QTL', ], 
-  mapping = aes(x = tier, y = frac_total, fill = tier_ieqtl) 
-) +
-    geom_bar(stat = 'identity') +
-    scale_fill_manual(values = any_qtl_to_ieqtl_plot_cols) +
-    xlab('Tier') + 
-    ylab('Proportion of triplets') +
-    theme(legend.position = 'none') + 
-    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
-    theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")), 
-  get_legend(
-    ggplot(data = data.frame(x = c('neither', 'only ca-i-eQTL', 'only TFa-i-eQTL', 'both TFa- and ca-i-eQTL'), y = c(1,1,1,1)), mapping = aes(x = x, y = y, fill = x)) + 
-      geom_bar(stat = 'identity') + 
-      scale_fill_manual(values = c('lightgray', '#F5F5F5', 'black', 'darkgray')) +
-      labs(fill = 'i-eQTL')
-  )
-)
-p_triplet_cat1to3_wieqtl
-
-# plot
-p_triplet_cat1to3_wieqtl_ofcat <- plot_grid(
-  ggplot(
-  data = n_any_qtl_to_ieqtl[n_any_qtl_to_ieqtl[['tier']] != '4. no QTL', ], 
-  mapping = aes(x = tier, y = cat_total, fill = tier_ieqtl) 
-) +
-    geom_bar(stat = 'identity') +
-    scale_fill_manual(values = any_qtl_to_ieqtl_plot_cols) +
-    xlab('Tier') + 
-    ylab('Proportion of triplets') +
-    theme(legend.position = 'none') + 
-    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
-    theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white")), 
-  get_legend(
-    ggplot(data = data.frame(x = c('neither', 'only ca-i-eQTL', 'only TFa-i-eQTL', 'both TFa- and ca-i-eQTL'), y = c(1,1,1,1)), mapping = aes(x = x, y = y, fill = x)) + 
-      geom_bar(stat = 'identity') + 
-      scale_fill_manual(values = c('lightgray', '#F5F5F5', 'black', 'darkgray')) +
-      labs(fill = 'i-eQTL')
-  )
-)
-p_triplet_cat1to3_wieqtl_ofcat
-
-```
-
 ```{r check_percentages_any_qtls, include=TRUE, fig.width=5, fig.height=5}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 # funnel
 nrow(scenic_output)
-# [1] 62932
+# [1] 109787
 nrow(scenic_output[scenic_output[['tier']] != '4. no QTL', ])
-# [1] 11160
+# [1] 19365
 nrow(scenic_output[scenic_output[['tier']] != '4. no QTL' & scenic_output[['is_tf_or_accessibility_ieqtl']] != 'neither', ])
-# [1] 3847
+# [1] 1981 6876
 nrow(scenic_output[scenic_output[['tier']] != '4. no QTL' & scenic_output[['is_tf_ieqtl']], ])
-# [1] 2873
+# [1] 1907 4972
 nrow(scenic_output[scenic_output[['tier']] != '4. no QTL' & scenic_output[['is_accessibility_ieqtl']], ])
-# [1] 1693
+# [1] 193 3281
 
 # how much genetics involved
 nrow(scenic_output[scenic_output[['tier']] != '4. no QTL', ]) / nrow(scenic_output)
-# [1] 0.1773343
+# [1] 0.176387
 # how much any i-eQTL
 nrow(scenic_output[scenic_output[['tier']] != '4. no QTL' & scenic_output[['is_tf_or_accessibility_ieqtl']] != 'neither', ]) / nrow(scenic_output[scenic_output[['tier']] != '4. no QTL', ])
-# [1] 0.3447133
+# [1] 0.102298 0.3550736
 # how much TF-i-eQTL
 nrow(scenic_output[scenic_output[['tier']] != '4. no QTL' & scenic_output[['is_tf_ieqtl']], ]) / nrow(scenic_output[scenic_output[['tier']] != '4. no QTL', ])
-# [1] 0.2574373
+# [1] 0.09847663 0.2567519
 nrow(scenic_output[scenic_output[['tier']] != '4. no QTL' & scenic_output[['is_accessibility_ieqtl']], ]) / nrow(scenic_output[scenic_output[['tier']] != '4. no QTL', ])
-# [1] 0.1517025
+# [1] 0.009966434 0.1694294
 
 # how much any i-eQTL from all triplets
 nrow(scenic_output[scenic_output[['tier']] != '4. no QTL' & scenic_output[['is_tf_or_accessibility_ieqtl']] != 'neither', ]) / nrow(scenic_output)
-# [1] 0.06112947
+# [1] 0.01804403 0.06263037
 # how much any CRE-i-eQTL from all triplets
 nrow(scenic_output[scenic_output[['tier']] != '4. no QTL' & scenic_output[['is_accessibility_ieqtl']], ]) / nrow(scenic_output)
-# [1] 0.02690205
+# [1] 0.001757949 0.02988514
 # how much any TFa-i-eQTL from all triplets
 nrow(scenic_output[scenic_output[['tier']] != '4. no QTL' & scenic_output[['is_tf_ieqtl']], ]) / nrow(scenic_output)
-# [1] 0.04565245
+# [1] 0.01737 0.04565245
 
 ```
 
-```{r venn_scenic_ieqtls, include=TRUE, fig.width=5, fig.height=5}
+```{r save_scenic, include=TRUE, fig.width=5, fig.height=5}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
-# remove the 'neither category'
-scenic_interaction_categories_onlqtl_n_noneither <- scenic_interaction_categories_onlqtl_n[scenic_interaction_categories_onlqtl_n[['category']] != 'neither', ]
-# add an extra category name with the percentage
-scenic_interaction_categories_onlqtl_n_noneither[['category_pct']] <- paste0(
-  scenic_interaction_categories_onlqtl_n_noneither[['category']], 
-  ' (', 
-  round(100*scenic_interaction_categories_onlqtl_n_noneither[['pct']], digits = 1), 
-  '%)'
-)
-# make the plot
-scenic_interaction_categories_onlqtl_v <- draw.pairwise.venn(
-  # get the number for CRE-i-eQTL
-  area1 = 
-    scenic_interaction_categories_onlqtl_n_noneither[scenic_interaction_categories_onlqtl_n_noneither[['category']] == 'only accessibility-i-eQTL', ][['n']] + 
-    scenic_interaction_categories_onlqtl_n_noneither[scenic_interaction_categories_onlqtl_n_noneither[['category']] == 'TF- and accessibility-i-eQTL', ][['n']],
-  # get the number for TFa-i-eQTL
-  area2 = 
-    scenic_interaction_categories_onlqtl_n_noneither[scenic_interaction_categories_onlqtl_n_noneither[['category']] == 'only TF-i-eQTL', ][['n']] + 
-    scenic_interaction_categories_onlqtl_n_noneither[scenic_interaction_categories_onlqtl_n_noneither[['category']] == 'TF- and accessibility-i-eQTL', ][['n']],
-  # get the number for the intersect
-  cross.area = scenic_interaction_categories_onlqtl_n_noneither[scenic_interaction_categories_onlqtl_n_noneither[['category']] == 'TF- and accessibility-i-eQTL', ][['n']],
-  category = c(
-    # get the name for CRE-i-eQTL
-    #scenic_interaction_categories_onlqtl_n_noneither[scenic_interaction_categories_onlqtl_n_noneither[['category']] == 'only accessibility-i-eQTL', ][['category_pct']], 
-    '', 
-    # get the name for the TFa-i-eQTL
-    #scenic_interaction_categories_onlqtl_n_noneither[scenic_interaction_categories_onlqtl_n_noneither[['category']] == 'only TF-i-eQTL', ][['category_pct']]
-    ''
-    ), 
-  fill = c(
-    # get the color for the CRE-i-eQTL
-    roycols::get_color_list(unique(scenic_interaction_categories_onlqtl_n[['category']]), color_indices = c(56,57,58,59))[[2]], 
-    # get the color for the TFa-i-eQTL
-    roycols::get_color_list(unique(scenic_interaction_categories_onlqtl_n[['category']]), color_indices = c(56,57,58,59))[[3]]
-  ), 
-  alpha = c(.7, .7)
-)
+# save the annotated scenic data
+scenic_annotated_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eRegulon_both_filtered_wgeneticinfo.tsv.gz'
+write.table(scenic_output, gzfile(scenic_annotated_loc), row.names = F, col.names = T, sep = '\t', quote = F)
+mdfiver::create_sha256_for_file(scenic_annotated_loc)
 
-# we'll write the plot to pdf
-pdf("~/multiome/plots/mo_scenic_geneticcontrol_ieqtls_venn.pdf", width = 5, height = 5)
-
-# perform plotting for the Venn diagram
-grid.newpage()
-grid.draw(scenic_interaction_categories_onlqtl_v)
-
-# set intersection name
-grid.text(
-  scenic_interaction_categories_onlqtl_n_noneither[scenic_interaction_categories_onlqtl_n_noneither[['category']] == 'TF- and accessibility-i-eQTL', ][['category_pct']]
-  , x = 0.6, y = 0.4, gp = gpar(fontsize = 14)
-)
-# set CRE only
-grid.text(
-  scenic_interaction_categories_onlqtl_n_noneither[scenic_interaction_categories_onlqtl_n_noneither[['category']] == 'only accessibility-i-eQTL', ][['category_pct']]
-  , x = 0.7, y = 0.8, gp = gpar(fontsize = 14)
-)
-# set TFa only
-grid.text(
-  scenic_interaction_categories_onlqtl_n_noneither[scenic_interaction_categories_onlqtl_n_noneither[['category']] == 'only TF-i-eQTL', ][['category_pct']]
-  , x = 0.3, y = 0.1, gp = gpar(fontsize = 14)
-)
-
-# close device connection
-dev.off()
 
 ```
-

@@ -241,6 +241,7 @@ get_color_coding_dict <- function() {
     color_coding_dict[[paste(cell_type, 'down')]] <- colorRampPalette(c(color_coding_dict[[cell_type]], "white"))(100)[pct_whitening]
     # we'll do something similiar when we have multiple conditions
     color_coding_dict[[paste(cell_type, 'combined')]] <- color_coding_dict[[cell_type]]
+    color_coding_dict[[paste(cell_type, 'shared')]] <- color_coding_dict[[cell_type]]
     color_coding_dict[[paste(cell_type, 'UT')]] <- colorRampPalette(c(color_coding_dict[[cell_type]], "white"))(100)[pct_whitening]
     color_coding_dict[[paste(cell_type, '24hCA')]] <- colorRampPalette(c(color_coding_dict[[cell_type]], "black"))(100)[pct_whitening]
   }
@@ -488,6 +489,55 @@ plot_concondance <- function(dataset_to_compare, d1_effect_column='d1_zscore', d
 }
 
 
+gene_lists_to_overlaps <- function(features_per_celltype_condition, cell_types=c('B', 'CD4T', 'CD8T', 'DC', 'monocyte', 'NK'), conditions=c('UT', '24hCA')) {
+  # initialize a dataframe with results
+  overlaps_df <- data.frame(matrix(, nrow = length(cell_types)*(length(conditions) + 1), ncol = 3))
+  # set the columns names
+  colnames(overlaps_df) <- c('cell_type', 'cell_type_condition', 'number')
+  # keep an index
+  i <- 1
+  # check each of the cell types
+  for (cell_type in cell_types) {
+    # get the features per condition
+    features_per_condition <- list()
+    # check each of the conditions
+    for (condition in conditions) {
+      # get those features
+      features <- features_per_celltype_condition[[paste(cell_type, condition, sep = ' ')]]
+      # put in the list
+      features_per_condition[[condition]] <- features
+    }
+    # get the shared and unique features
+    features_shared_unique <- list()
+    # now check each condition again
+    for (condition in conditions) {
+      # get the features for this condition
+      features <- features_per_condition[[condition]]
+      # get the other condition
+      other_condition <- setdiff(conditions, condition)
+      # get the features for the other condition
+      other_features <- do.call('c', features_per_condition[other_condition])
+      # get the unique features for this condition
+      unique_features <- setdiff(features, other_features)
+      # add to the list
+      features_shared_unique[[paste(cell_type, condition, sep = ' ')]] <- unique_features
+    }
+    # what we don't have yet, is shared
+    features_shared_unique[[paste(cell_type, 'shared', sep = ' ')]] <- setdiff(do.call('c', features_per_condition), do.call('c', features_shared_unique))
+    # now add the numbers to the dataframe
+    for (feature_set in names(features_shared_unique)) {
+      overlaps_df[i, 'cell_type'] <- cell_type
+      overlaps_df[i, 'cell_type_condition'] <- feature_set
+      overlaps_df[i, 'number'] <- length(features_shared_unique[[feature_set]])
+      i <- i + 1
+    }
+  }
+  # sometimes some conditions are not present, so then the table will be smaller
+  overlaps_df <- overlaps_df[!is.na(overlaps_df$cell_type), ]
+  return(overlaps_df)
+}
+
+
 ####################
 # Settings         #
 ####################
@@ -560,6 +610,11 @@ tfaieqtl_combined_out_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/
 write.table(tfaieqtl_combined, gzfile(tfaieqtl_combined_out_loc), sep = '\t', row.names = F, col.names = T)
 mdfiver::create_sha256_for_file(tfaieqtl_combined_out_loc)
 
+# save the result as well
+tfaieqtl_either_out_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/sc/either/lane_donor_countrna_inclcaqtls_varinregion/merged/results_fdr_allct.tsv.gz'
+write.table(tfaieqtl_separate, gzfile(tfaieqtl_either_out_loc), sep = '\t', row.names = F, col.names = T)
+mdfiver::create_sha256_for_file(tfaieqtl_either_out_loc)
+
 # read the old inputs
 tfaieqtl_all <- fread(tfaieqtl_all_loc, header = T, sep = '\t')
 # make tfa
@@ -593,6 +648,38 @@ separate_qtls_tfagene <- get_qtls_per_ct(tfaieqtl_separate_sig, qtl_columns = c(
 separate_qtls_tfagene[['all']] <- paste(tfaieqtl_all_sig[['tfa']], tfaieqtl_all_sig[['gene']])
 plot_sharing_per_celltype(separate_qtls_tfagene, use_color_dict = T, use_label_dict = T)
 
+# get number per ct and condition
+separate_qtls_tfagene_n <- lapply(separate_qtls_tfagene, length)
+# into a df
+separate_qtls_tfagene_n_df <- data.frame('cell_type_condition' = names(separate_qtls_tfagene_n), 'number' = as.vector(unlist(separate_qtls_tfagene_n)))
+# make the condition and cell type a factor
+separate_qtls_tfagene_n_df[['cell_type_condition']] <- factor(separate_qtls_tfagene_n_df[['cell_type_condition']], levels = 
+                                                                   c('B UT', 'B 24hCA', 'CD4T UT', 'CD4T 24hCA', 'CD8T UT', 'CD8T 24hCA', 'DC UT', 'DC 24hCA', 'monocyte UT', 'monocyte 24hCA', 'NK UT', 'NK 24hCA', 'all')
+)
+# now plot
+ggplot(data = separate_qtls_tfagene_n_df[separate_qtls_tfagene_n_df[['cell_type_condition']] != 'all', ], mapping = aes(x = cell_type_condition, y = number, fill = cell_type_condition)) +
+  geom_bar(stat = 'identity') +
+  xlab('Cell type and condition') +
+  ylab('Number of significant TFa-gene pairs') +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_manual(values = get_color_coding_dict()) +
+  theme(legend.position = 'none') + 
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+ggsave('~/mo_tfagene_n.pdf', width = 5, height = 5)
+
+# get with overlap specifically
+separate_qtls_tfagene_n_df_overlap <- gene_lists_to_overlaps(separate_qtls_tfagene)
+# now plot
+ggplot(data = separate_qtls_tfagene_n_df_overlap, mapping = aes(x = cell_type, y = number, fill = cell_type_condition)) +
+  geom_bar(stat = 'identity') +
+  xlab('Cell type and condition') +
+  ylab('Number of significant TFa-gene pairs') +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_manual(values = get_color_coding_dict()) +
+  theme(legend.position = 'none') + 
+  theme(panel.border = element_rect(color="black", fill=NA, size=1.1), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), strip.background = element_rect(colour="white", fill="white"))
+# save that
+ggsave('~/multiome/plots/mo_tfaieqtl_overlap_conditions.pdf', width = 5, height = 5)
 
 # add the sign
 tfaieqtl_combined_sig[['sign']] <- ifelse(tfaieqtl_combined_sig[['tfa:genotype_beta']] > 0, 'up', 'down')
@@ -782,3 +869,8 @@ p_ct_condition_comparisons
 ggsave('~/multiome/plots/mo_ct_tfaieqtl_ct_condition_concordances.pdf', p_ct_condition_comparisons, width = 20, height = 20)
 # show the concordances
 ct_concordances_per_condition_all <- do.call(rbind, ct_concordances_per_condition)
+
+# save this result
+tfaieqtl_separate_and_combined_sig_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/sc/mo_ct_tfaieqtl_ct_condition_all.tsv.gz'
+write.table(tfaieqtl_separate_and_combined_sig, gzfile(tfaieqtl_separate_and_combined_sig_loc), row.names = F, sep = '\t', col.names = T)
+mdfiver::create_md5_for_file(tfaieqtl_separate_and_combined_sig_loc)

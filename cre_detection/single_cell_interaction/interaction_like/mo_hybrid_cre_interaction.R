@@ -34,6 +34,8 @@ library(optparse)
 library(snpStats)
 # transformation into gaussian normal distribution
 library(bestNormalize)
+# to check if it is actually normal
+library(nortest)
 # for the model
 library(lme4)
 library(lmerTest)
@@ -208,7 +210,8 @@ do_interaction_analysis <- function(expression_data,
                                     accessibility_gausnorm=T, 
                                     expression_gausnorm=T, 
                                     accessibility_boxcox=F, 
-                                    expression_boxcox=F) {
+                                    expression_boxcox=F, 
+                                    report_ad=T) {
   # create formula
   base_formula <- get_formula(var_of_interest = 'expression', fixed_effects = fixed_effects, random_effects = random_effects)
   base_formula_string <- (Reduce(paste, deparse(base_formula)))
@@ -292,8 +295,10 @@ do_interaction_analysis <- function(expression_data,
         participants_with_geno <- unique(intersect(rownames(genotype_data$genotypes), participants_smf))
         # get those genotypes
         participants_genotypes <- genotype_data$genotypes[participants_with_geno, variant]
+        # get numeric representation
+        participants_genotypes_numeric <- as.vector(as(participants_genotypes, 'numeric'))
         # make into df
-        participant_to_geno <- data.frame('participant' = participants_with_geno, 'genotype' = as.vector(as(participants_genotypes, 'numeric')))
+        participant_to_geno <- data.frame('participant' = participants_with_geno, 'genotype' = participants_genotypes_numeric)
         # if there are participants not present, add them with NA values
         if (length(participants_with_geno) < length(participants_smf)) {
           # get the missing participants
@@ -394,6 +399,40 @@ do_interaction_analysis <- function(expression_data,
           interaction_model_df[['ncell']] <- nrow(covariates_data_complete)
           # and participants
           interaction_model_df[['nparticipant']] <- length(unique(smf[smf[['cell']] %in% covariates_data_complete[['cell']], ][['participant']]))
+          # get allele frequencies of cells
+          allele_freqs_cells <- data.frame(table(covariates_data_complete[['genotype']]))
+          allele_freqs_cells[['geno2count']] <- paste(allele_freqs_cells[['Var1']], allele_freqs_cells[['Freq']], sep = ':')
+          # add allele frequencies
+          interaction_model_df[['af_cells']] <- paste(allele_freqs_cells[['geno2count']], collapse = '/')
+          # add participant explicitly
+          covariates_data_complete[['participant']] <- smf[match(covariates_data_complete[['cell']], smf[['cell']]), ][['participant']]
+          # get allele frequencies of donors
+          allele_freqs_donors <- data.frame(table(unique(covariates_data_complete[, c('participant', 'genotype')])[['genotype']]))
+          allele_freqs_donors[['geno2count']] <- paste(allele_freqs_donors[['Var1']], allele_freqs_donors[['Freq']], sep = ':')
+          # add allele frequencies
+          interaction_model_df[['af_donors']] <- paste(allele_freqs_donors[['geno2count']], collapse = '/')
+          # add ad info
+          if (report_ad) {
+            # do anderson-darling test
+            tryCatch({
+              ad_region <- nortest::ad.test(covariates_data_complete[['region']])
+              interaction_model_df[['region_ad_a']] <- ad_region$statistic[['A']]
+              interaction_model_df[['region_ad_p']] <- ad_region$p.value
+            }, error = function(e) {
+              warning(paste('AD test failed for', region, ':', e$message))
+              interaction_model_df[['region_ad_a']] <- NA
+              interaction_model_df[['region_ad_p']] <- NA
+            })
+            tryCatch({
+              ad_gene <- nortest::ad.test(covariates_data_complete[['expression']])
+              interaction_model_df[['gene_ad_a']] <- ad_gene$statistic[['A']]
+              interaction_model_df[['gene_ad_p']] <- ad_gene$p.value
+            }, error = function(e) {
+              warning(paste('AD test failed for', gene, ':', e$message))
+              interaction_model_df[['gene_ad_a']] <- NA
+              interaction_model_df[['gene_ad_p']] <- NA
+            })
+          }
           # store result
           res_per_comparison[[paste(region, gene, variant)]] <- data.table(interaction_model_df)
         } else {
@@ -511,51 +550,51 @@ barcode_column <- NULL
 
 if (debug) {
   # set all of the variables hardcoded for a testing debug run
-  confinement_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/mo_var_tf_gene_confinement.tsv.gz'
-  in_dir <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/CD4T/chr1-150515244-151166478/'
-  smf_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/CD4T/smf.tsv.gz'
-  output_loc <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/CD4T/chr1-150515244-151166478/'
+  confinement_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/mo_var_tf_gene_confinement_inclcaqtls_varinregion_split_significant_rep.tsv.gz'
+  in_dir <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/all/chr1-239997532-243288342/'
+  smf_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/all/smf_cd8t_ut.tsv.gz'
+  output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/sc/CD8T/UT/lane_donor_countrna_inclcaqtls_varinregion_significant/chr1-150515244-151166478/'
   expression_file <- 'expression.tsv.gz'
-  accessibility_file <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/scenicplus_workdir/scplus_pipeline_merged_major_and_minor_celltypes/output/eregulon_gene_auc_CD4T_nonsparse_transposed.tsv.gz'
-  genotype_loc <- '/groups/umcg-franke-scrna/tmp02/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/genotype_input/EUR_imputed_hg38_varFiltered_chr1'
-  covariates_file <- '/groups/umcg-franke-scrna/tmp02/projects/multiome/ongoing/metadata/mo_celllevel_metadata.tsv.gz'
-  fixed_effects_string <- 'region,genotype'
+  accessibility_file <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/mo_tf_interaction_eregulon_gene_removed_auc_all_nonsparse_transposed_split_directed.rds'
+  genotype_loc <- '/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/genotype_input/EUR_imputed_hg38_varFiltered_chr1'
+  covariates_file <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/metadata/mo_celllevel_metadata.tsv.gz'
+  fixed_effects_string <- 'region,genotype,nCount_RNA'
   random_effects_string <- 'sample_final,lane'
   interaction_terms_string <- 'genotype,region'
   barcode_column <- 'barcode_lane'
   
-  confinement_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/mo_var_tf_gene_confinement.tsv.gz'
-  in_dir <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/pseudobulked/L1/CD8T/'
-  smf_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/pseudobulked/L1//smf.tsv.gz'
-  output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/pseudobulked/CD8T/'
-  expression_file <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/input/L1/combined/CD8T.qtlInput.txt.gz'
-  accessibility_file <- 'eregulons.tsv.gz'
-  genotype_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/genotype/imputed_hg38_all_anc'
-  covariates_file <- 'covariates.tsv.gz'
-  fixed_effects_string <- 'region,genotype'
-  random_effects_string <- 'sample_final,lane'
-  interaction_terms_string <- 'genotype,region'
-  barcode_column <- 'ps_column'
-  
-  confinement_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/mo_var_tf_gene_confinement_inclcaqtls_varinregion_significant.tsv.gz'
-  in_dir <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/onek1k/L1/all/chr1-150515244-151166478/'
-  in_dir <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/onek1k/L1/all/chr2-137963866-143149194/'
-  in_dir <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/onek1k/L1/all/chr6-158079997-158870311/'
-  smf_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/onek1k/L1/all/smf.tsv.gz'
-  output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/onek1k/L1/all/chunk_1_1000/chr1-150515244-151166478/'
-  output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/onek1k/L1/all/chr2-137963866-143149194/'
-  output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/onek1k/L1/all/chr6-158079997-158870311/'
-  expression_file <- 'expression.tsv.gz'
-  accessibility_file <- '/groups/umcg-franke-scrna/tmp04/external_datasets/onek1k/tf_interaction/onek1k_tf_interaction_eregulon_gene_removed_auc_all_nonsparse_transposed_1_1000.tsv.gz'
-  accessibility_file <- '/groups/umcg-franke-scrna/tmp04/external_datasets/onek1k/tf_interaction/onek1k_tf_interaction_eregulon_gene_removed_auc_all_nonsparse_transposed.rds'
-  genotype_loc <- '/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_oneK1k/genotype_input/EUR_imputed_hg38_varFiltered1'
-  genotype_loc <- '/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_oneK1k/genotype_input/EUR_imputed_hg38_varFiltered2'
-  genotype_loc <- '/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_oneK1k/genotype_input/EUR_imputed_hg38_varFiltered6'
-  covariates_file <- '/groups/umcg-franke-scrna/tmp04/external_datasets/onek1k/metadata/onek1k_celllevel_metadata.tsv.gz'
-  fixed_effects_string <- 'region,genotype,nCount_RNA'
-  random_effects_string <- 'sample_final,sequencing_run'
-  interaction_terms_string <- 'genotype,region'
-  barcode_column <- 'barcode'
+  # confinement_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/mo_var_tf_gene_confinement.tsv.gz'
+  # in_dir <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/pseudobulked/L1/CD8T/'
+  # smf_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/pseudobulked/L1//smf.tsv.gz'
+  # output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/pseudobulked/CD8T/'
+  # expression_file <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/qtl/interaction_eqtl/sc-eqtlgen/input/L1/combined/CD8T.qtlInput.txt.gz'
+  # accessibility_file <- 'eregulons.tsv.gz'
+  # genotype_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/genotype/imputed_hg38_all_anc'
+  # covariates_file <- 'covariates.tsv.gz'
+  # fixed_effects_string <- 'region,genotype'
+  # random_effects_string <- 'sample_final,lane'
+  # interaction_terms_string <- 'genotype,region'
+  # barcode_column <- 'ps_column'
+  # 
+  # confinement_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/mo_var_tf_gene_confinement_inclcaqtls_varinregion_significant.tsv.gz'
+  # in_dir <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/onek1k/L1/all/chr1-150515244-151166478/'
+  # in_dir <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/onek1k/L1/all/chr2-137963866-143149194/'
+  # in_dir <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/onek1k/L1/all/chr6-158079997-158870311/'
+  # smf_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/onek1k/L1/all/smf.tsv.gz'
+  # output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/onek1k/L1/all/chunk_1_1000/chr1-150515244-151166478/'
+  # output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/onek1k/L1/all/chr2-137963866-143149194/'
+  # output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/onek1k/L1/all/chr6-158079997-158870311/'
+  # expression_file <- 'expression.tsv.gz'
+  # accessibility_file <- '/groups/umcg-franke-scrna/tmp04/external_datasets/onek1k/tf_interaction/onek1k_tf_interaction_eregulon_gene_removed_auc_all_nonsparse_transposed_1_1000.tsv.gz'
+  # accessibility_file <- '/groups/umcg-franke-scrna/tmp04/external_datasets/onek1k/tf_interaction/onek1k_tf_interaction_eregulon_gene_removed_auc_all_nonsparse_transposed.rds'
+  # genotype_loc <- '/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_oneK1k/genotype_input/EUR_imputed_hg38_varFiltered1'
+  # genotype_loc <- '/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_oneK1k/genotype_input/EUR_imputed_hg38_varFiltered2'
+  # genotype_loc <- '/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_oneK1k/genotype_input/EUR_imputed_hg38_varFiltered6'
+  # covariates_file <- '/groups/umcg-franke-scrna/tmp04/external_datasets/onek1k/metadata/onek1k_celllevel_metadata.tsv.gz'
+  # fixed_effects_string <- 'region,genotype,nCount_RNA'
+  # random_effects_string <- 'sample_final,sequencing_run'
+  # interaction_terms_string <- 'genotype,region'
+  # barcode_column <- 'barcode'
   
 } else {
   # obligatory parameters without a default

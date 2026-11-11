@@ -202,7 +202,8 @@ do_interaction_analysis <- function(expression_data,
                                     accessibility_gausnorm=T, 
                                     expression_gausnorm=T, 
                                     accessibility_boxcox=F, 
-                                    expression_boxcox=F) {
+                                    expression_boxcox=F, 
+                                    report_ad=T) {
   # create formula
   base_formula <- get_formula(var_of_interest = 'expression', fixed_effects = fixed_effects, random_effects = random_effects)
   base_formula_string <- (Reduce(paste, deparse(base_formula)))
@@ -320,6 +321,28 @@ do_interaction_analysis <- function(expression_data,
           interaction_model_df[['ncell']] <- nrow(covariates_data_complete)
           # and participants
           interaction_model_df[['nparticipant']] <- length(unique(smf[smf[['cell']] %in% covariates_data_complete[['cell']], ][['participant']]))
+          # add ad info
+          if (report_ad) {
+            # do anderson-darling test
+            tryCatch({
+              ad_region <- nortest::ad.test(covariates_data_complete[['region']])
+              interaction_model_df[['region_ad_a']] <- ad_region$statistic[['A']]
+              interaction_model_df[['region_ad_p']] <- ad_region$p.value
+            }, error = function(e) {
+              warning(paste('AD test failed for', region, ':', e$message))
+              interaction_model_df[['region_ad_a']] <- NA
+              interaction_model_df[['region_ad_p']] <- NA
+            })
+            tryCatch({
+              ad_gene <- nortest::ad.test(covariates_data_complete[['expression']])
+              interaction_model_df[['gene_ad_a']] <- ad_gene$statistic[['A']]
+              interaction_model_df[['gene_ad_p']] <- ad_gene$p.value
+            }, error = function(e) {
+              warning(paste('AD test failed for', gene, ':', e$message))
+              interaction_model_df[['gene_ad_a']] <- NA
+              interaction_model_df[['gene_ad_p']] <- NA
+            })
+          }
           # store result
           res_per_comparison[[paste(region, gene)]] <- data.table(interaction_model_df)
         }
