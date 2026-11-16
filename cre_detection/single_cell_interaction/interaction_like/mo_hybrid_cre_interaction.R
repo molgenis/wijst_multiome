@@ -506,7 +506,9 @@ option_list <- list(
   make_option(c("-g", "--genotype_loc"), type="character", default=NULL,
               help="genotype file in plink1 format, without extension", metavar="character"), 
   make_option(c("-b", "--barcode_column"), type="character", default='barcode_lane', 
-              help="barcode column for metadata", metavar="character")
+              help="barcode column for metadata", metavar="character"), 
+  make_option(c("--family"), type="character", default='gaussian', 
+              help="statistical family, options are gaussian or poisson", metavar="character")
 )
 
 
@@ -543,6 +545,8 @@ fixed_effects_string <- NULL
 random_effects_string <- NULL
 # interaction terms string
 interaction_terms_string <- NULL
+# statisticaly family
+family <- 'gaussian'
 # covariates file
 covariates_file <- NULL
 # barcode column in the covariates data
@@ -562,6 +566,7 @@ if (debug) {
   random_effects_string <- 'sample_final,lane'
   interaction_terms_string <- 'genotype,region'
   barcode_column <- 'barcode_lane'
+  family <- 'gaussian'
   
   # confinement_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/mo_var_tf_gene_confinement.tsv.gz'
   # in_dir <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/pseudobulked/L1/CD8T/'
@@ -575,6 +580,7 @@ if (debug) {
   # random_effects_string <- 'sample_final,lane'
   # interaction_terms_string <- 'genotype,region'
   # barcode_column <- 'ps_column'
+  # family <- 'gaussian'
   # 
   # confinement_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/mo_var_tf_gene_confinement_inclcaqtls_varinregion_significant.tsv.gz'
   # in_dir <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/onek1k/L1/all/chr1-150515244-151166478/'
@@ -595,6 +601,24 @@ if (debug) {
   # random_effects_string <- 'sample_final,sequencing_run'
   # interaction_terms_string <- 'genotype,region'
   # barcode_column <- 'barcode'
+  # family <- 'gaussian'
+  
+  # set all of the variables hardcoded for a testing debug run
+  confinement_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/mo_var_tf_gene_confinement_inclcaqtls_varinregion_split_significant_rep.tsv.gz'
+  in_dir <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/L1_int/all/chr1-239997532-243288342/'
+  smf_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/L1/all/smf_cd8t_ut.tsv.gz'
+  output_loc <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/output/tf_interaction/sc_poisson/CD8T/UT/lane_donor_countrna_inclcaqtls_varinregion_significant/chr1-150515244-151166478/'
+  expression_file <- 'expression.tsv.gz'
+  accessibility_file <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/cre_detection/limix_sc/input/tf_interaction/mo_tf_interaction_eregulon_gene_removed_auc_all_nonsparse_transposed_split_directed.rds'
+  genotype_loc <- '/groups/umcg-franke-scrna/tmp04/projects/sc-eqtlgen-consortium-pipeline/ongoing/wg3/wg3_multiome/genotype_input/EUR_imputed_hg38_varFiltered_chr1'
+  covariates_file <- '/groups/umcg-franke-scrna/tmp04/projects/multiome/ongoing/metadata/mo_celllevel_metadata.tsv.gz'
+  fixed_effects_string <- 'region,genotype,nCount_RNA'
+  random_effects_string <- 'sample_final,lane'
+  interaction_terms_string <- 'genotype,region'
+  barcode_column <- 'barcode_lane'
+  family <- 'poisson'
+  expression_gausnorm <- F
+  accessibility_gausnorm <- F
   
 } else {
   # obligatory parameters without a default
@@ -648,6 +672,11 @@ if (debug) {
   expression_gausnorm <- opt[['expression_gausnorm']]
   accessibility_boxcox <- opt[['accessibility_boxcox']]
   expression_boxcox <- opt[['expression_boxcox']]
+  family <- opt[['family']]
+}
+# check if family makes sense
+if (!(family %in% c('gaussian', 'poisson'))) {
+  error("family must be gaussian or poisson")
 }
 
 # make the full path to the expression data
@@ -895,6 +924,7 @@ if (nrow(expression_data) > 0) {
             fixed_effects = fixed_effects,
             random_effects = random_effects,
             interactions = interactions,
+            family = family, 
             accessibility_gausnorm = accessibility_gausnorm,
             expression_gausnorm = expression_gausnorm,
             accessibility_boxcox = accessibility_boxcox,

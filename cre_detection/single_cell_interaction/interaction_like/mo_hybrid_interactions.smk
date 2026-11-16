@@ -151,7 +151,9 @@ rule run_interaction:
         acc_arg = lambda wc: (
             f'--accessibility_file "{optional_chunk_file(config.get("accessibility_filename"), wc.chunk)}"'
             if optional_chunk_file(config.get("accessibility_filename"), wc.chunk) else ""
-        ),
+        ), 
+        # get the family if supplied
+        family = config['family'] if config.get("family") is not None else "gaussian",
         # R invocation
         rscript = RSCRIPT_LOC,
         rcmd    = R_COMMAND
@@ -171,6 +173,7 @@ rule run_interaction:
             --interaction_terms "{params.interaction_terms}" \
             --barcode_column "{params.barcode_column}" \
             --genotype_loc "{params.genotype_prefix}" \
+            --family "{params.family}" \
             {params.EXPR_FLAG} \
             {params.ACC_FLAG} \
             {params.EXPR_FLAG_BC} \
